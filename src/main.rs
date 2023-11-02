@@ -19,7 +19,7 @@ macro_rules! pause {
 
 #[link_section = ".text"]
 #[no_mangle]
-pub extern "C" fn kernel_main(multiboot_info_ptr: u64) -> ! {
+pub extern "C" fn kernel_main(multiboot_info_ptr: usize) -> ! {
     let mut vga_buffer = video_memory::VgaBuffer::new();
 
     println!(vga_buffer, "Multiboot is at: {:x}", multiboot_info_ptr);

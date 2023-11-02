@@ -18,7 +18,7 @@ macro_rules! println {
     ($vga_buffer:ident, $($arg:tt)*) => ($crate::print!($vga_buffer, "{}\n", format_args!($($arg)*)));
 }
 
-pub struct MemSize(pub u64);
+pub struct MemSize(pub usize);
 
 impl fmt::Display for MemSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

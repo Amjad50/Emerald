@@ -97,22 +97,22 @@ pub struct MultiBootInfoRaw {
 impl MultiBootInfoRaw {
     // SAFETY: the caller must assure that the pointer passed is valid and properly aligned
 
-    pub unsafe fn from_ptr(multiboot_info_ptr: u64) -> Self {
+    pub unsafe fn from_ptr(multiboot_info_ptr: usize) -> Self {
         // copy the multiboot info struct from the pointer
         core::ptr::read(multiboot_info_ptr as *const MultiBootInfoRaw)
     }
 
-    pub fn lower_memory_size(&self) -> Option<u64> {
+    pub fn lower_memory_size(&self) -> Option<usize> {
         if self.flags & 0b1 != 0 {
-            Some(self.mem_lower as u64 * 1024)
+            Some(self.mem_lower as usize * 1024)
         } else {
             None
         }
     }
 
-    pub fn upper_memory_size(&self) -> Option<u64> {
+    pub fn upper_memory_size(&self) -> Option<usize> {
         if self.flags & 0b1 != 0 {
-            Some(self.mem_upper as u64 * 1024)
+            Some(self.mem_upper as usize * 1024)
         } else {
             None
         }
@@ -251,7 +251,7 @@ impl fmt::Display for MultiBootInfoRaw {
                     f,
                     "base={:010X}, len={:10}, ty={:?}",
                     map.base_addr,
-                    MemSize(map.length),
+                    MemSize(map.length as usize),
                     map.mem_type
                 )?;
             }
