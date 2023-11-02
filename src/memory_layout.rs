@@ -21,10 +21,10 @@ pub fn kernel_size() -> usize {
     (unsafe { &end } as *const usize as usize) - (unsafe { &begin } as *const usize as usize)
 }
 
-pub const fn align_up(value: usize, alignment: usize) -> usize {
-    (value + (alignment - 1)) & !(alignment - 1)
+pub fn align_up(addr: *mut u8, alignment: usize) -> *mut u8 {
+    ((addr as usize + alignment - 1) & !(alignment - 1)) as *mut u8
 }
 
-pub const fn align_down(value: usize, alignment: usize) -> usize {
-    value & !(alignment - 1)
+pub fn align_down(addr: *mut u8, alignment: usize) -> *mut u8 {
+    (addr as usize & !(alignment - 1)) as *mut u8
 }
