@@ -1,17 +1,13 @@
 #![no_std]
 #![no_main]
 
-use crate::multiboot::MultiBootInfoRaw;
+use crate::{memory_layout::kernel_size, multiboot::MultiBootInfoRaw, video_memory::MemSize};
 
+pub mod memory_layout;
 mod multiboot;
 mod video_memory;
 
 core::arch::global_asm!(include_str!("boot.S"));
-
-// The virtual address of the kernel
-pub static KERNEL_BASE: u64 = 0xFFFFFFFF80000000;
-pub static TEXT_OFFSET: u64 = 0x100000;
-pub static KERNEL_LINK: u64 = KERNEL_BASE + TEXT_OFFSET;
 
 macro_rules! pause {
     () => {
@@ -29,6 +25,17 @@ pub extern "C" fn kernel_main(multiboot_info_ptr: u64) -> ! {
     println!(vga_buffer, "Multiboot is at: {:x}", multiboot_info_ptr);
     let multiboot_info = unsafe { MultiBootInfoRaw::from_ptr(multiboot_info_ptr) };
     println!(vga_buffer, "{multiboot_info}");
+
+    let high_mem_size = multiboot_info.upper_memory_size().unwrap();
+    let kernel_size = kernel_size();
+    let remaining_space = high_mem_size - kernel_size;
+
+    println!(
+        vga_buffer,
+        "Remaining size: {}, kernel size {}",
+        MemSize(remaining_space),
+        MemSize(kernel_size),
+    );
 
     loop {
         pause!();
