@@ -2,7 +2,7 @@
 //! We are using the VGA text mode buffer to print to the screen.
 //! Which is in the memory address 0xb8000.
 
-use core::fmt::Write;
+use core::fmt::{self, Write};
 
 // implement print! and println! macros
 #[macro_export]
@@ -16,6 +16,40 @@ macro_rules! print {
 macro_rules! println {
     ($vga_buffer:ident) => ($crate::print!($vga_buffer, "\n"));
     ($vga_buffer:ident, $($arg:tt)*) => ($crate::print!($vga_buffer, "{}\n", format_args!($($arg)*)));
+}
+
+pub struct MemSize(pub u64);
+
+impl fmt::Display for MemSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // find the best unit
+        let mut size = self.0;
+        let mut unit = "B";
+        if size >= 1024 {
+            size /= 1024;
+            unit = "KB";
+        }
+        if size >= 1024 {
+            size /= 1024;
+            unit = "MB";
+        }
+        if size >= 1024 {
+            size /= 1024;
+            unit = "GB";
+        }
+        if size >= 1024 {
+            size /= 1024;
+            unit = "TB";
+        }
+        size.fmt(f).and_then(|_| write!(f, "{unit}"))?;
+        Ok(())
+    }
+}
+
+impl fmt::Debug for MemSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
 }
 
 pub(crate) fn _print(vga_buffer: &mut VgaBuffer, args: core::fmt::Arguments) {
