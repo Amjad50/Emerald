@@ -1,6 +1,4 @@
-use core::sync::atomic::{AtomicBool, Ordering};
-
-use crate::cpu;
+use core::{sync::atomic::{AtomicBool, Ordering}, hint};
 
 /// A spin lock
 pub(super) struct Lock {
@@ -20,7 +18,7 @@ impl Lock {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            cpu::pause!();
+            hint::spin_loop();
         }
     }
 

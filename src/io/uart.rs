@@ -1,3 +1,5 @@
+use core::hint;
+
 use crate::cpu;
 
 #[repr(u32)]
@@ -116,7 +118,7 @@ impl Uart {
     pub unsafe fn write_byte(&self, byte: u8) {
         // wait until we can send
         while (read_reg(self.port_addr, UartReg::LineStatus) & LINE_TX_EMPTY) == 0 {
-            cpu::pause!();
+            hint::spin_loop();
         }
         // write the byte
         write_reg(self.port_addr, UartReg::Data, byte);
@@ -127,7 +129,7 @@ impl Uart {
     pub unsafe fn read_byte(&self) -> u8 {
         // wait until we can read
         while (read_reg(self.port_addr, UartReg::LineStatus) & LINE_RX_READY) == 0 {
-            cpu::pause!();
+            hint::spin_loop();
         }
         // read the byte
         read_reg(self.port_addr, UartReg::Data)

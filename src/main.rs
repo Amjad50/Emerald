@@ -16,6 +16,8 @@ mod multiboot;
 mod physical_page_allocator;
 mod sync;
 
+use core::hint;
+
 use crate::{
     io::console,
     memory_layout::{kernel_end, kernel_size, PAGE_4K},
@@ -40,14 +42,15 @@ pub extern "C" fn kernel_main(multiboot_info_ptr: usize) -> ! {
     physical_page_allocator::init(kernel_end() as *mut u8, pages_to_use);
 
     loop {
-        cpu::pause!();
+        hint::spin_loop();
     }
 }
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
+    unsafe { cpu::clear_interrupts() };
     println!("{info}");
     loop {
-        cpu::pause!();
+        hint::spin_loop();
     }
 }
