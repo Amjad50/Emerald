@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{ffi, fmt};
 
 use crate::memory_layout::MemSize;
 
@@ -129,12 +129,9 @@ impl MultiBootInfoRaw {
     pub fn cmdline(&self) -> Option<&str> {
         if self.flags & 0b100 != 0 {
             let ptr = self.cmdline as *const u8;
-            let mut len = 0;
-            while unsafe { *ptr.offset(len) } != 0 {
-                len += 1;
-            }
-            let slice = unsafe { core::slice::from_raw_parts(ptr, len as usize) };
-            Some(core::str::from_utf8(slice).unwrap())
+            unsafe { Some(ffi::CStr::from_ptr(ptr as *const i8)
+                .to_str()
+                .expect("invalid utf8")) }
         } else {
             None
         }
@@ -190,12 +187,9 @@ impl MultiBootInfoRaw {
     pub fn bootloader_name(&self) -> Option<&str> {
         if self.flags & 0b1000000000 != 0 {
             let ptr = self.bootloader_name as *const u8;
-            let mut len = 0;
-            while unsafe { *ptr.offset(len) } != 0 {
-                len += 1;
-            }
-            let slice = unsafe { core::slice::from_raw_parts(ptr, len as usize) };
-            Some(core::str::from_utf8(slice).unwrap())
+            unsafe { Some(ffi::CStr::from_ptr(ptr as *const i8)
+                .to_str()
+                .expect("invalid utf8")) }
         } else {
             None
         }
