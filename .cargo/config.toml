@@ -6,4 +6,4 @@ build-std = ["core", "compiler_builtins"]
 target = "x86-64-os.json"
 
 [target.'cfg(target_os = "none")']
-runner = "qemu-system-x86_64 -m 512 -kernel"
+runner = "qemu-system-x86_64 -serial mon:stdio -m 512 -kernel"

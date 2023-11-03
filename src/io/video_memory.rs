@@ -2,46 +2,28 @@
 //! We are using the VGA text mode buffer to print to the screen.
 //! Which is in the memory address 0xb8000.
 
-use core::fmt::Write;
-
-// implement print! and println! macros
-#[macro_export]
-macro_rules! print {
-    ($vga_buffer:ident, $($arg:tt)*) => {
-        $crate::video_memory::_print(&mut $vga_buffer, format_args!($($arg)*))
-    };
-}
-
-#[macro_export]
-macro_rules! println {
-    ($vga_buffer:ident) => ($crate::print!($vga_buffer, "\n"));
-    ($vga_buffer:ident, $($arg:tt)*) => ($crate::print!($vga_buffer, "{}\n", format_args!($($arg)*)));
-}
-
-pub(crate) fn _print(vga_buffer: &mut VgaBuffer, args: core::fmt::Arguments) {
-    vga_buffer.write_fmt(args).unwrap();
-}
-
 const VGA_BUFFER_ADDR: *mut u8 = 0xb8000 as *mut u8;
 const VGA_WIDTH: usize = 80;
 const VGA_HEIGHT: usize = 25;
 
 /// White on black text
-const DEFAULT_ATTRIB: u8 = 0x0f;
+pub(super) const DEFAULT_ATTRIB: u8 = 0x0f;
 
 fn get_index(pos: (usize, usize)) -> isize {
     (pos.0 + pos.1 * VGA_WIDTH) as isize
 }
 
-pub struct VgaBuffer {
+pub(super) struct VgaBuffer {
     pos: (usize, usize),
 }
 
 impl VgaBuffer {
-    pub fn new() -> Self {
-        let mut s = Self { pos: (0, 0) };
-        s.clear();
-        s
+    pub const fn new() -> Self {
+        Self { pos: (0, 0) }
+    }
+
+    pub fn init(&mut self) {
+        self.clear();
     }
 
     fn fix_after_advance(&mut self) {
@@ -69,14 +51,8 @@ impl VgaBuffer {
         }
     }
 
-    pub fn out_str(&mut self, s: &str, attrib: u8) {
-        for c in s.chars() {
-            self.out_char(c, attrib);
-        }
-    }
-
-    pub fn out_char(&mut self, c: char, attrib: u8) {
-        if c == '\n' {
+    pub fn write_byte(&mut self, c: u8, attrib: u8) {
+        if c == b'\n' {
             self.pos.0 = 0;
             self.pos.1 += 1;
             self.fix_after_advance();
@@ -84,14 +60,14 @@ impl VgaBuffer {
         }
         let i = get_index(self.pos);
         unsafe {
-            *VGA_BUFFER_ADDR.offset(i * 2) = c as u8;
+            *VGA_BUFFER_ADDR.offset(i * 2) = c;
             *VGA_BUFFER_ADDR.offset(i * 2 + 1) = attrib;
         }
         self.pos.0 += 1;
         self.fix_after_advance();
     }
 
-    pub fn clear(&mut self) {
+    fn clear(&mut self) {
         for i in 0..VGA_HEIGHT {
             self.clear_line(i);
         }
@@ -106,12 +82,5 @@ impl VgaBuffer {
                 *VGA_BUFFER_ADDR.offset(pos * 2 + 1) = 0x0;
             }
         }
-    }
-}
-
-impl Write for VgaBuffer {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        self.out_str(s, DEFAULT_ATTRIB);
-        Ok(())
     }
 }
