@@ -1,4 +1,4 @@
-use core::{sync::atomic::AtomicI64, cell::UnsafeCell};
+use core::{cell::UnsafeCell, sync::atomic::AtomicI64};
 
 use crate::cpu;
 
@@ -27,7 +27,7 @@ impl<T> Mutex<T> {
         }
     }
 
-    pub fn lock(&mut self) -> MutexGuard<T> {
+    pub fn lock(&self) -> MutexGuard<T> {
         let cpu_id = cpu::cpu_id() as i64;
 
         if self.owner_cpu.load(core::sync::atomic::Ordering::Relaxed) == cpu_id {

@@ -1,4 +1,3 @@
-
 // TODO: implement cpu_id
 pub fn cpu_id() -> u32 {
     0

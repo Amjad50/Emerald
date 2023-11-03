@@ -11,23 +11,25 @@ mod macros;
 
 mod cpu;
 mod io;
-pub mod memory_layout;
+mod memory_management;
 mod multiboot;
-mod physical_page_allocator;
 mod sync;
 
 use core::hint;
 
 use crate::{
     io::console,
-    memory_layout::{kernel_end, kernel_size, PAGE_4K},
+    memory_management::{
+        memory_layout::{kernel_end, kernel_size, PAGE_4K},
+        physical_page_allocator::{self, PAGE_ALLOCATOR_SIZE},
+    },
     multiboot::MultiBootInfoRaw,
-    physical_page_allocator::PAGE_ALLOCATOR_SIZE,
 };
 
 #[link_section = ".text"]
 #[no_mangle]
 pub extern "C" fn kernel_main(multiboot_info_ptr: usize) -> ! {
+    // initialize the console (printing)
     console::init();
 
     println!("Multiboot is at: {:x}", multiboot_info_ptr);
@@ -39,6 +41,8 @@ pub extern "C" fn kernel_main(multiboot_info_ptr: usize) -> ! {
     let remaining_space = high_mem_size - kernel_size;
 
     let pages_to_use = (remaining_space).min(PAGE_ALLOCATOR_SIZE) / PAGE_4K;
+    // initialize the physical page allocator
+    // must be called before any pages can be allocated
     physical_page_allocator::init(kernel_end() as *mut u8, pages_to_use);
 
     loop {

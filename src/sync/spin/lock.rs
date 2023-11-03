@@ -1,4 +1,7 @@
-use core::{sync::atomic::{AtomicBool, Ordering}, hint};
+use core::{
+    hint,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 /// A spin lock
 pub(super) struct Lock {
