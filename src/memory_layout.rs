@@ -1,3 +1,5 @@
+use core::fmt;
+
 extern "C" {
     static begin: usize;
     static end: usize;
@@ -27,4 +29,38 @@ pub fn align_up(addr: *mut u8, alignment: usize) -> *mut u8 {
 
 pub fn align_down(addr: *mut u8, alignment: usize) -> *mut u8 {
     (addr as usize & !(alignment - 1)) as *mut u8
+}
+
+pub struct MemSize(pub usize);
+
+impl fmt::Display for MemSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // find the best unit
+        let mut size = self.0;
+        let mut unit = "B";
+        if size >= 1024 {
+            size /= 1024;
+            unit = "KB";
+        }
+        if size >= 1024 {
+            size /= 1024;
+            unit = "MB";
+        }
+        if size >= 1024 {
+            size /= 1024;
+            unit = "GB";
+        }
+        if size >= 1024 {
+            size /= 1024;
+            unit = "TB";
+        }
+        size.fmt(f).and_then(|_| write!(f, "{unit}"))?;
+        Ok(())
+    }
+}
+
+impl fmt::Debug for MemSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
 }

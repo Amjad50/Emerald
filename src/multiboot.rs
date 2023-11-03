@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::video_memory::MemSize;
+use crate::memory_layout::MemSize;
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq)]
