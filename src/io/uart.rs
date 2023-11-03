@@ -108,12 +108,12 @@ impl Uart {
         Self { port_addr }
     }
 
-    pub fn init(&mut self) {
+    pub fn init(&self) {
         init_port(self.port_addr);
     }
 
     /// SAFETY: `init` must be called before calling this function
-    pub unsafe fn write_byte(&mut self, byte: u8) {
+    pub unsafe fn write_byte(&self, byte: u8) {
         // wait until we can send
         while (read_reg(self.port_addr, UartReg::LineStatus) & LINE_TX_EMPTY) == 0 {
             cpu::pause!();
@@ -124,7 +124,7 @@ impl Uart {
 
     /// SAFETY: `init` must be called before calling this function
     #[allow(dead_code)]
-    pub unsafe fn read_byte(&mut self) -> u8 {
+    pub unsafe fn read_byte(&self) -> u8 {
         // wait until we can read
         while (read_reg(self.port_addr, UartReg::LineStatus) & LINE_RX_READY) == 0 {
             cpu::pause!();

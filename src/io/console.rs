@@ -1,37 +1,37 @@
-use core::fmt::Write;
+use core::{cell::RefCell, fmt::Write};
 
-use crate::sync::spin;
+use crate::sync::spin::remutex::ReMutex;
 
 use super::{
     uart::{Uart, UartPort},
     video_memory::{VgaBuffer, DEFAULT_ATTRIB},
 };
 
-// late init
-pub(super) static mut CONSOLE: Console = Console::empty();
+// SAFETY: the console is only used inside a lock or mutex
+pub(super) static mut CONSOLE: ReMutex<RefCell<Console>> =
+    ReMutex::new(RefCell::new(unsafe { Console::empty() }));
 
 pub fn init() {
     unsafe {
-        CONSOLE.init();
+        CONSOLE.lock().borrow_mut().init();
     }
 }
 
 pub(super) struct Console {
-    lock: spin::Lock,
     uart: Uart,
     video_buffer: VgaBuffer,
 }
 
 impl Console {
-    const fn empty() -> Self {
+    /// SAFETY: the console must be used inside a lock or mutex
+    pub const unsafe fn empty() -> Self {
         Self {
-            lock: spin::Lock::new("Console"),
             uart: Uart::new(UartPort::COM1),
             video_buffer: VgaBuffer::new(),
         }
     }
 
-    fn init(&mut self) {
+    pub fn init(&mut self) {
         self.uart.init();
         self.video_buffer.init();
     }
@@ -48,7 +48,6 @@ impl Console {
     }
 
     fn write(&mut self, src: &[u8]) -> usize {
-        self.lock.lock();
         let mut i = 0;
         for &c in src {
             i += 1;
@@ -56,7 +55,6 @@ impl Console {
                 self.write_byte(c);
             }
         }
-        self.lock.unlock();
         i
     }
 }

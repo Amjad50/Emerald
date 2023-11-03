@@ -1,6 +1,6 @@
 use crate::{
     memory_layout::{align_up, PAGE_4K},
-    sync::spin,
+    sync::spin::mutex::Mutex,
 };
 
 // use 4MB for the page allocator
@@ -11,35 +11,34 @@ struct FreePage {
 }
 
 pub struct PhysicalPageAllocator {
-    lock: spin::Lock,
     free_list_head: *mut FreePage,
     start: *mut u8,
     end: *mut u8,
 }
 
 // late init
-static mut ALLOCATOR: PhysicalPageAllocator = PhysicalPageAllocator::empty();
+static mut ALLOCATOR: Mutex<PhysicalPageAllocator> =
+    Mutex::new(PhysicalPageAllocator::empty());
 
 pub fn init(start: *mut u8, pages: usize) {
     unsafe {
-        ALLOCATOR.init(start, pages);
+        ALLOCATOR.lock().init(start, pages);
     }
 }
 
 #[allow(dead_code)]
 pub fn alloc() -> *mut u8 {
-    unsafe { ALLOCATOR.alloc() }
+    unsafe { ALLOCATOR.lock().alloc() }
 }
 
 #[allow(dead_code)]
 pub fn free(page: *mut u8) {
-    unsafe { ALLOCATOR.free(page) };
+    unsafe { ALLOCATOR.lock().free(page) };
 }
 
 impl PhysicalPageAllocator {
     const fn empty() -> Self {
         Self {
-            lock: spin::Lock::new("PhysicalPageAllocator"),
             free_list_head: core::ptr::null_mut(),
             start: core::ptr::null_mut(),
             end: core::ptr::null_mut(),
@@ -59,8 +58,6 @@ impl PhysicalPageAllocator {
     }
 
     fn alloc(&mut self) -> *mut u8 {
-        self.lock.lock();
-
         if self.free_list_head.is_null() {
             panic!("out of memory");
         }
@@ -69,8 +66,6 @@ impl PhysicalPageAllocator {
         unsafe {
             self.free_list_head = (*page).next;
         }
-
-        self.lock.unlock();
 
         let page = page as *mut u8;
         // fill with random data to catch dangling pointer bugs
@@ -96,13 +91,9 @@ impl PhysicalPageAllocator {
             panic!("freeing invalid page: {:p}", page);
         }
 
-        self.lock.lock();
-
         unsafe {
             (*page).next = self.free_list_head;
             self.free_list_head = page;
         }
-
-        self.lock.unlock();
     }
 }
