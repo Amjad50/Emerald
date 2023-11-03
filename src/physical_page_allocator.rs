@@ -22,14 +22,16 @@ static mut ALLOCATOR: PhysicalPageAllocator = PhysicalPageAllocator::empty();
 
 pub fn init(start: *mut u8, pages: usize) {
     unsafe {
-        ALLOCATOR = PhysicalPageAllocator::new(start, pages);
+        ALLOCATOR.init(start, pages);
     }
 }
 
+#[allow(dead_code)]
 pub fn alloc() -> *mut u8 {
     unsafe { ALLOCATOR.alloc() }
 }
 
+#[allow(dead_code)]
 pub fn free(page: *mut u8) {
     unsafe { ALLOCATOR.free(page) };
 }
@@ -37,29 +39,23 @@ pub fn free(page: *mut u8) {
 impl PhysicalPageAllocator {
     const fn empty() -> Self {
         Self {
-            lock: spin::Lock::new("EmptyPhysicalPageAllocator"),
+            lock: spin::Lock::new("PhysicalPageAllocator"),
             free_list_head: core::ptr::null_mut(),
             start: core::ptr::null_mut(),
             end: core::ptr::null_mut(),
         }
     }
 
-    fn new(start: *mut u8, pages: usize) -> Self {
+    fn init(&mut self, start: *mut u8, pages: usize) {
         let end = unsafe { start.add(pages * PAGE_4K) };
-        let mut s = Self {
-            lock: spin::Lock::new("PhysicalPageAllocator"),
-            free_list_head: core::ptr::null_mut(),
-            start,
-            end,
-        };
+        self.start = start;
+        self.end = end;
 
         let mut page = align_up(start, PAGE_4K);
         for _ in 0..pages {
-            s.free(page);
+            self.free(page);
             page = unsafe { page.add(PAGE_4K) };
         }
-
-        s
     }
 
     fn alloc(&mut self) -> *mut u8 {
