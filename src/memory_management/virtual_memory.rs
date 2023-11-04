@@ -230,7 +230,7 @@ impl VirtualMemoryManager {
                 }
 
                 // Level 1
-                *page_directory_entry = (start_physical_address & 0x00000000FFFFF000)
+                *page_directory_entry = (physical_address & 0x00000000FFFFF000)
                     | flags
                     | flags::PTE_PRESENT
                     | flags::PTE_HUGE_PAGE;
