@@ -3,14 +3,14 @@
 
 use crate::{
     cpu,
-    memory_management::memory_layout::{is_aligned, PAGE_2M, MemSize},
+    memory_management::memory_layout::{is_aligned, MemSize, PAGE_2M},
     sync::spin::mutex::Mutex,
 };
 
 use super::{
     memory_layout::{
         align_down, align_up, kernel_rodata_end, physical2virtual, virtual2physical,
-        EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, PAGE_4K, KERNEL_MAPPED_SIZE,
+        EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, KERNEL_MAPPED_SIZE, PAGE_4K,
     },
     physical_page_allocator,
 };
@@ -60,6 +60,11 @@ pub fn map(entry: &VirtualMemoryMapEntry) {
     unsafe {
         VIRTUAL_MEMORY_MANAGER.lock().map(entry);
     }
+}
+
+#[allow(dead_code)]
+pub fn is_address_mapped(addr: usize) -> bool {
+    unsafe { VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr) }
 }
 
 struct VirtualMemoryManager {
@@ -116,6 +121,10 @@ impl VirtualMemoryManager {
     }
 
     fn switch_vm(&mut self, base: *mut PageDirectoryTable) {
+        eprintln!(
+            "Switching to new page map: {:p}",
+            virtual2physical(base as _) as *const u8
+        );
         unsafe { cpu::set_cr3(virtual2physical(base as _) as _) }
     }
 
@@ -141,7 +150,7 @@ impl VirtualMemoryManager {
 
         assert!(size > 0);
 
-        println!(
+        eprintln!(
             "{} {:08X?}",
             MemSize(size),
             VirtualMemoryMapEntry {
@@ -153,6 +162,10 @@ impl VirtualMemoryManager {
         );
 
         while size > 0 {
+            eprintln!(
+                "[!] Mapping {:p} to {:p}",
+                virtual_address as *const u8, physical_address as *const u8
+            );
             let page_map_l4_index = ((virtual_address >> 39) & 0x1FF) as usize;
             let page_directory_pointer_index = ((virtual_address >> 30) & 0x1FF) as usize;
             let page_directory_index = ((virtual_address >> 21) & 0x1FF) as usize;
@@ -280,5 +293,77 @@ impl VirtualMemoryManager {
 
             eprintln!();
         }
+    }
+
+    fn is_address_mapped(&self, addr: usize) -> bool {
+        // TODO: fix this assumption
+        // assume we are using `self.page_map_l4` as the page map
+
+        let page_map_l4_index = (addr >> 39) & 0x1FF;
+        let page_directory_pointer_index = (addr >> 30) & 0x1FF;
+        let page_directory_index = (addr >> 21) & 0x1FF;
+        let page_table_index = (addr >> 12) & 0x1FF;
+
+        // Level 4
+        let page_map_l4 = unsafe { &mut *self.page_map_l4 };
+        let page_map_l4_entry = &mut page_map_l4.entries[page_map_l4_index];
+
+        if *page_map_l4_entry & flags::PTE_PRESENT == 0 {
+            return false;
+        }
+        eprintln!(
+            "L4[{}]: {:p} = {:x}",
+            page_map_l4_index, page_map_l4_entry, *page_map_l4_entry
+        );
+
+        // Level 3
+        let page_directory_pointer_table = unsafe {
+            &mut *((physical2virtual((*page_map_l4_entry & 0x00000000FFFFF000) as usize))
+                as *mut PageDirectoryTable)
+        };
+        let page_directory_pointer_entry =
+            &mut page_directory_pointer_table.entries[page_directory_pointer_index];
+        if *page_directory_pointer_entry & flags::PTE_PRESENT == 0 {
+            return false;
+        }
+        eprintln!(
+            "L3[{}]: {:p} = {:x}",
+            page_directory_pointer_index,
+            page_directory_pointer_entry,
+            *page_directory_pointer_entry
+        );
+
+        // Level 2
+        let page_directory_table = unsafe {
+            &mut *(physical2virtual((*page_directory_pointer_entry & 0x00000000FFFFF000) as usize)
+                as *mut PageDirectoryTable)
+        };
+        let page_directory_entry = &mut page_directory_table.entries[page_directory_index];
+        if *page_directory_entry & flags::PTE_PRESENT == 0 {
+            return false;
+        }
+        if *page_directory_entry & flags::PTE_HUGE_PAGE != 0 {
+            return true;
+        }
+        eprintln!(
+            "L2[{}]: {:p} = {:x}",
+            page_directory_index, page_directory_entry, *page_directory_entry
+        );
+
+        // Level 1
+        let page_table = unsafe {
+            &mut *(physical2virtual((*page_directory_entry & 0x00000000FFFFF000) as usize)
+                as *mut PageDirectoryTable)
+        };
+        let page_table_entry = &mut page_table.entries[page_table_index];
+        if *page_table_entry & flags::PTE_PRESENT == 0 {
+            return false;
+        }
+        eprintln!(
+            "L1[{}]: {:p} = {:x}",
+            page_table_index, page_table_entry, *page_table_entry
+        );
+
+        true
     }
 }
