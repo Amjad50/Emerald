@@ -12,7 +12,15 @@ pub const KERNEL_BASE: usize = 0xFFFFFFFF80000000;
 // memory extended start (1MB)
 pub const EXTENDED_OFFSET: usize = 0x100000;
 pub const KERNEL_LINK: usize = KERNEL_BASE + EXTENDED_OFFSET;
-pub const KERNEL_MAPPED_SIZE: usize = 0x8000000;    // 128MB (from KERNEL_BASE)
+// 128MB (from KERNEL_BASE), and this indicates the address of the end of the kernel
+pub const KERNEL_MAPPED_SIZE: usize = 0x8000000;
+pub const KERNEL_END: usize = KERNEL_BASE + KERNEL_MAPPED_SIZE;
+
+// The heap of the kernel
+// this is mapped from the physical memory of the kernel
+// so we are using the physical pages from the kernel space.
+pub const KERNEL_HEAP_BASE: usize = KERNEL_END;
+pub const KERNEL_HEAP_SIZE: usize = 0x1000000; // 16MB
 
 pub const PAGE_4K: usize = 0x1000;
 pub const PAGE_2M: usize = 0x200000;

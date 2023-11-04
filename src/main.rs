@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 // boot assembly code
 // starts in protected mode, setup long mode and jumps to kernel_main
 core::arch::global_asm!(include_str!("boot.S"));

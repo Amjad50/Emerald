@@ -18,17 +18,29 @@ pub fn init(start: *mut u8, pages: usize) {
 
 /// SAFETY: this must be called after `init`
 ///
-/// Allocates a 4K page of memory
+/// Allocates a 4K page of memory, the returned address is guaranteed to be aligned to 4K, and is mapped into virtual space
+/// Please use `virtual2physical` to get the physical address
 pub unsafe fn alloc() -> *mut u8 {
     ALLOCATOR.lock().alloc()
 }
 
+/// SAFETY: this must be called after `init`
+///
+/// Allocates a 4K page of memory, the returned address is guaranteed to be aligned to 4K, and is mapped into virtual space
+/// Please use `virtual2physical` to get the physical address
 pub unsafe fn alloc_zeroed() -> *mut u8 {
     let page = alloc();
     page.write_bytes(0, PAGE_4K);
     page
 }
 
+/// SAFETY: this must be called after `init`
+///
+/// panics if:
+/// - `page` is not a valid page
+/// - `page` is already free
+/// - `page` is not in the range of the allocator
+/// - `page` is not aligned to 4K
 pub unsafe fn free(page: *mut u8) {
     ALLOCATOR.lock().free(page);
 }
