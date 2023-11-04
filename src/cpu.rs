@@ -16,3 +16,7 @@ pub unsafe fn inb(port: u16) -> u8 {
 pub unsafe fn clear_interrupts() {
     core::arch::asm!("cli", options(nomem, nostack, preserves_flags));
 }
+
+pub unsafe fn set_cr3(cr3: u64) {
+    core::arch::asm!("mov cr3, rax", in("rax") cr3, options(nomem, nostack, preserves_flags));
+}

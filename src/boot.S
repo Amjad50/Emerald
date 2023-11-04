@@ -81,6 +81,8 @@ entry:
 #         - PML4[511]
 #         - PDPT[510]
 #         - PDT[0..63] # 2MB each (shared with the above)
+#
+# IMPORTANT: This is only for setup, we will change the page tables in the kernel
 
 # zero out 8 pages of memory
     xor eax, eax

@@ -22,6 +22,7 @@ use crate::{
     memory_management::{
         memory_layout::{kernel_end, kernel_size, PAGE_4K},
         physical_page_allocator::{self, PAGE_ALLOCATOR_SIZE},
+        virtual_memory,
     },
     multiboot::MultiBootInfoRaw,
 };
@@ -44,6 +45,7 @@ pub extern "C" fn kernel_main(multiboot_info_ptr: usize) -> ! {
     // initialize the physical page allocator
     // must be called before any pages can be allocated
     physical_page_allocator::init(kernel_end() as *mut u8, pages_to_use);
+    virtual_memory::init_kernel_vm();
 
     loop {
         hint::spin_loop();

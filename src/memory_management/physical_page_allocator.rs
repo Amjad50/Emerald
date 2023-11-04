@@ -1,4 +1,4 @@
-use super::memory_layout::{align_up, PAGE_4K};
+use super::memory_layout::{align_up, is_aligned, PAGE_4K};
 use crate::sync::spin::mutex::Mutex;
 
 // use 4MB for the page allocator
@@ -16,12 +16,19 @@ pub fn init(start: *mut u8, pages: usize) {
     }
 }
 
-#[allow(dead_code)]
+/// SAFETY: this must be called after `init`
+///
+/// Allocates a 4K page of memory
 pub unsafe fn alloc() -> *mut u8 {
     ALLOCATOR.lock().alloc()
 }
 
-#[allow(dead_code)]
+pub unsafe fn alloc_zeroed() -> *mut u8 {
+    let page = alloc();
+    page.write_bytes(0, PAGE_4K);
+    page
+}
+
 pub unsafe fn free(page: *mut u8) {
     ALLOCATOR.lock().free(page);
 }
@@ -85,7 +92,7 @@ impl PhysicalPageAllocator {
         let page = page as *mut FreePage;
 
         if page.is_null()
-            || (page as usize) % PAGE_4K != 0
+            || !is_aligned(page as _, PAGE_4K)
             || page > unsafe { page.add(1) }
             || page >= self.end as _
             || page < self.start as _

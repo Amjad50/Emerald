@@ -25,6 +25,8 @@ SECTIONS {
     /* Adjust the address for the data segment to the next page */
     . = ALIGN(4K);
 
+    PROVIDE(rodata_end = .);
+
     .data :
     {
         *(.data .data.*)

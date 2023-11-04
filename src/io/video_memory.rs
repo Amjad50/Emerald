@@ -2,7 +2,9 @@
 //! We are using the VGA text mode buffer to print to the screen.
 //! Which is in the memory address 0xb8000.
 
-const VGA_BUFFER_ADDR: *mut u8 = 0xb8000 as *mut u8;
+use crate::memory_management::memory_layout::physical2virtual;
+
+const VGA_BUFFER_ADDR: *mut u8 = physical2virtual(0xb8000) as *mut u8;
 const VGA_WIDTH: usize = 80;
 const VGA_HEIGHT: usize = 25;
 
