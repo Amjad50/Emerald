@@ -3,14 +3,14 @@
 
 use crate::{
     cpu,
-    memory_management::memory_layout::{is_aligned, PAGE_2M},
+    memory_management::memory_layout::{is_aligned, PAGE_2M, MemSize},
     sync::spin::mutex::Mutex,
 };
 
 use super::{
     memory_layout::{
         align_down, align_up, kernel_rodata_end, physical2virtual, virtual2physical,
-        EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, PAGE_4K,
+        EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, PAGE_4K, KERNEL_MAPPED_SIZE,
     },
     physical_page_allocator,
 };
@@ -35,8 +35,8 @@ pub mod flags {
 #[derive(Debug, Copy, Clone)]
 pub struct VirtualMemoryMapEntry {
     pub virtual_address: u64,
-    pub physical_address: u64,
-    pub size: usize,
+    pub start_physical_address: u64,
+    pub end_physical_address: u64,
     pub flags: u64,
 }
 
@@ -79,34 +79,27 @@ impl VirtualMemoryManager {
     // but it will be stored
     fn init_kernel_vm(&mut self) {
         let data_start = align_up(kernel_rodata_end() as *mut u8, PAGE_4K) as usize;
-        let read_only_data_size = kernel_rodata_end() - KERNEL_LINK;
-        // TODO: for now we are mapping the first 128MB of memory
-        //       this is not good enough, as it might be less than the actual memory
-        //       also, we are not utilizing the whole memory like this
-        //       find a better way to map memory dynamically using the data from the multiboot info
-        let whole_memory_to_map = 128 * 1024 * 1024; // 128 MB
-        let whole_memory_after_rodata = whole_memory_to_map - read_only_data_size - EXTENDED_OFFSET;
         let kernel_vm = [
             // Low memory (has some BIOS stuff): mapped to kernel space
             VirtualMemoryMapEntry {
                 virtual_address: KERNEL_BASE as u64,
-                physical_address: 0,
-                size: EXTENDED_OFFSET,
+                start_physical_address: 0,
+                end_physical_address: EXTENDED_OFFSET as u64,
                 flags: flags::PTE_WRITABLE,
             },
             // Extended memory: kernel .text and .rodata sections
             VirtualMemoryMapEntry {
                 virtual_address: KERNEL_LINK as u64,
-                physical_address: virtual2physical(KERNEL_LINK) as u64,
-                size: read_only_data_size,
+                start_physical_address: virtual2physical(KERNEL_LINK) as u64,
+                end_physical_address: virtual2physical(data_start) as u64,
                 flags: 0, // read-only
             },
             // Extended memory: kernel .data and .bss sections and the rest of the data for the `whole` memory
             // we decided to use in the kernel
             VirtualMemoryMapEntry {
                 virtual_address: data_start as u64,
-                physical_address: virtual2physical(data_start) as u64,
-                size: whole_memory_after_rodata,
+                start_physical_address: virtual2physical(data_start) as u64,
+                end_physical_address: KERNEL_MAPPED_SIZE as u64,
                 flags: flags::PTE_WRITABLE,
             },
         ];
@@ -129,25 +122,32 @@ impl VirtualMemoryManager {
     fn map(&mut self, entry: &VirtualMemoryMapEntry) {
         let VirtualMemoryMapEntry {
             mut virtual_address,
-            mut physical_address,
-            mut size,
+            mut start_physical_address,
+            mut end_physical_address,
             flags,
         } = entry;
 
         assert!(!self.page_map_l4.is_null());
         assert!(is_aligned(self.page_map_l4 as _, PAGE_4K));
-        assert!(size > 0);
+        assert!(start_physical_address < end_physical_address);
 
         virtual_address = align_down(virtual_address as _, PAGE_4K) as _;
-        physical_address = align_down(physical_address as _, PAGE_4K) as _;
-        size = align_up(size as _, PAGE_4K) as _;
+        start_physical_address = align_down(start_physical_address as _, PAGE_4K) as _;
+        end_physical_address = align_down(end_physical_address as _, PAGE_4K) as _;
 
-        eprintln!(
-            "{:08X?}",
+        // keep track of current address and size
+        let mut physical_address = start_physical_address;
+        let mut size = (end_physical_address - start_physical_address) as usize;
+
+        assert!(size > 0);
+
+        println!(
+            "{} {:08X?}",
+            MemSize(size),
             VirtualMemoryMapEntry {
                 virtual_address: virtual_address as _,
-                physical_address: physical_address as _,
-                size: size as _,
+                start_physical_address: physical_address as _,
+                end_physical_address: end_physical_address as _,
                 flags: *flags,
             }
         );
@@ -230,7 +230,7 @@ impl VirtualMemoryManager {
                 }
 
                 // Level 1
-                *page_directory_entry = (physical_address & 0x00000000FFFFF000)
+                *page_directory_entry = (start_physical_address & 0x00000000FFFFF000)
                     | flags
                     | flags::PTE_PRESENT
                     | flags::PTE_HUGE_PAGE;

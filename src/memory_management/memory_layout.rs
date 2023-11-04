@@ -12,6 +12,7 @@ pub const KERNEL_BASE: usize = 0xFFFFFFFF80000000;
 // memory extended start (1MB)
 pub const EXTENDED_OFFSET: usize = 0x100000;
 pub const KERNEL_LINK: usize = KERNEL_BASE + EXTENDED_OFFSET;
+pub const KERNEL_MAPPED_SIZE: usize = 0x8000000;    // 128MB (from KERNEL_BASE)
 
 pub const PAGE_4K: usize = 0x1000;
 pub const PAGE_2M: usize = 0x200000;
