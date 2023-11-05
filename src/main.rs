@@ -19,6 +19,7 @@ mod sync;
 
 use core::hint;
 
+use cpu::gdt;
 use memory_management::memory_layout::{KERNEL_END, KERNEL_MAPPED_SIZE, ONE_MB};
 
 use crate::{
@@ -55,6 +56,8 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     // must be called before any pages can be allocated
     physical_page_allocator::init(kernel_end() as _, KERNEL_END as _);
     virtual_memory::init_kernel_vm();
+
+    gdt::init_kernel_gdt();
 
     loop {
         hint::spin_loop();

@@ -141,7 +141,7 @@ fill_pdt_loop:
 
 .align 16
 gdtr64:
-    .word gdtr64_end - gdtr64 - 1
+    .word gdtr64_end - gdt64 - 1
     virtual_to_physical_put .quad, gdt64
 
 .align 16
