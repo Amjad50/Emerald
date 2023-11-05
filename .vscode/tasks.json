@@ -1,0 +1,51 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "cargo build",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "run-qemu",
+            "type": "shell",
+            "command": "cargo r -- -s -S",
+            "isBackground": true,
+            "problemMatcher": [
+                // notify launch that qemu has started
+                {
+                    "pattern": [
+                        {
+                            "regexp": "^.*qemu-system.*$",
+                            "file": 1,
+                            "location": 2,
+                            "message": 3
+                        }
+                    ],
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "^.*qemu-system.*$",
+                        "endsPattern": "^.*qemu-system.*$"
+                    }
+                },
+            ],
+            "dependsOn": [
+                "build"
+            ],
+        },
+        {
+            "label": "build and run",
+            "dependsOrder":"sequence",
+            // We split, because there is an error from `rust-analyzer` in the build stage,
+            // which makes debugging annoying because we get an alert
+            "dependsOn": [
+                "build",
+                "run-qemu"
+            ]
+        }
+    ]
+}

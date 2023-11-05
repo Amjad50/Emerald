@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug QEMU",
+            "type": "lldb",
+            "request": "custom",
+            "targetCreateCommands": [
+                "target create ${workspaceFolder}/target/x86-64-os/debug/rust_os",
+                // ignore first interrupt on startup because its annoying, just jump directly into the kernel
+                "process handle -p true -s false SIGTRAP",
+            ],
+            "processCreateCommands": ["gdb-remote localhost:1234"],
+            "preLaunchTask": "build and run",
+        }
+    ]
+}
