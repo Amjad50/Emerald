@@ -6,6 +6,8 @@ extern "C" {
     static rodata_end: usize;
 }
 
+pub const ONE_MB: usize = 1024 * 1024;
+
 // The virtual address of the kernel
 // these are information variables, showing the memory mapping of the kernel
 pub const KERNEL_BASE: usize = 0xFFFFFFFF80000000;
@@ -29,6 +31,7 @@ pub fn kernel_end() -> usize {
     (unsafe { &end } as *const usize as usize)
 }
 
+#[allow(dead_code)]
 pub fn kernel_size() -> usize {
     (unsafe { &end } as *const usize as usize) - (unsafe { &begin } as *const usize as usize)
 }

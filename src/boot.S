@@ -207,6 +207,8 @@ kernel_main_low:
 
     # (first argument) rdi = multiboot info (we haven't toched ebx, so it should have the same value since `entry`)
     mov rdi, rbx
+    # convert to virtual address
+    add rdi, 0xFFFFFFFF80000000
 
     mov rax, offset kernel_main
     jmp rax

@@ -1,8 +1,5 @@
-use super::memory_layout::{align_up, is_aligned, PAGE_4K};
+use super::memory_layout::{align_down, align_up, is_aligned, PAGE_4K};
 use crate::sync::spin::mutex::Mutex;
-
-// use 4MB for the page allocator
-pub const PAGE_ALLOCATOR_SIZE: usize = 4 * 1024 * 1024;
 
 struct FreePage {
     next: *mut FreePage,
@@ -10,9 +7,9 @@ struct FreePage {
 
 static mut ALLOCATOR: Mutex<PhysicalPageAllocator> = Mutex::new(PhysicalPageAllocator::empty());
 
-pub fn init(start: *mut u8, pages: usize) {
+pub fn init(start: *mut u8, end: *mut u8) {
     unsafe {
-        ALLOCATOR.lock().init(start, pages);
+        ALLOCATOR.lock().init(start, end);
     }
 }
 
@@ -60,13 +57,16 @@ impl PhysicalPageAllocator {
         }
     }
 
-    fn init(&mut self, start: *mut u8, pages: usize) {
-        let end = unsafe { start.add(pages * PAGE_4K) };
+    fn init(&mut self, start: *mut u8, end: *mut u8) {
+        let start = align_up(start, PAGE_4K);
+        let end = align_down(end, PAGE_4K);
+        assert!(start < end);
+
         self.start = start;
         self.end = end;
 
-        let mut page = align_up(start, PAGE_4K);
-        for _ in 0..pages {
+        let mut page = start;
+        while page < end {
             unsafe { self.free(page) };
             page = unsafe { page.add(PAGE_4K) };
         }
