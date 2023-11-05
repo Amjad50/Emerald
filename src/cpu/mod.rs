@@ -1,6 +1,8 @@
-use self::gdt::GlobalDescriptorTablePointer;
+use self::{gdt::GlobalDescriptorTablePointer, idt::InterruptDescriptorTablePointer};
 
 pub mod gdt;
+pub mod idt;
+pub mod interrupts;
 
 // TODO: implement cpu_id
 pub fn cpu_id() -> u32 {
@@ -21,6 +23,11 @@ pub unsafe fn clear_interrupts() {
     core::arch::asm!("cli", options(nomem, nostack, preserves_flags));
 }
 
+#[allow(dead_code)]
+pub unsafe fn set_interrupts() {
+    core::arch::asm!("sti", options(nomem, nostack, preserves_flags));
+}
+
 pub unsafe fn set_cr3(cr3: u64) {
     core::arch::asm!("mov cr3, rax", in("rax") cr3, options(nomem, nostack, preserves_flags));
 }
@@ -30,11 +37,15 @@ unsafe fn lgdt(ldtr: &GlobalDescriptorTablePointer) {
     core::arch::asm!("lgdt [rax]", in("rax") ldtr, options(nomem, nostack, preserves_flags));
 }
 
+unsafe fn lidt(ldtr: &InterruptDescriptorTablePointer) {
+    core::arch::asm!("lidt [rax]", in("rax") ldtr, options(nomem, nostack, preserves_flags));
+}
+
 unsafe fn ltr(tr: u16) {
     core::arch::asm!("ltr ax", in("ax") tr, options(nomem, nostack, preserves_flags));
 }
 
-pub unsafe fn set_cs(cs: u16) {
+unsafe fn set_cs(cs: u16) {
     core::arch::asm!(
         "push {:r}",
         // this is not 0x1f, it is `1-forward`,
@@ -44,4 +55,12 @@ pub unsafe fn set_cs(cs: u16) {
         "retfq",
         "1:",
         in(reg) cs as u64, tmp=lateout(reg) _, options(preserves_flags));
+}
+
+fn get_cs() -> u16 {
+    let cs: u16;
+    unsafe {
+        core::arch::asm!("mov {0:r}, cs", out(reg) cs, options(nomem, nostack, preserves_flags));
+    }
+    cs
 }

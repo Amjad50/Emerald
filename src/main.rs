@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 
 extern crate alloc;
 
@@ -19,7 +20,7 @@ mod sync;
 
 use core::hint;
 
-use cpu::gdt;
+use cpu::{gdt, interrupts};
 use memory_management::memory_layout::{KERNEL_END, KERNEL_MAPPED_SIZE, ONE_MB};
 
 use crate::{
@@ -55,9 +56,10 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     check_memory(multiboot_info);
     // must be called before any pages can be allocated
     physical_page_allocator::init(kernel_end() as _, KERNEL_END as _);
+    // must be called next, before GDT, and this must be called before any heap allocations
     virtual_memory::init_kernel_vm();
-
     gdt::init_kernel_gdt();
+    interrupts::init_interrupts();
 
     loop {
         hint::spin_loop();
