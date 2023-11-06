@@ -26,7 +26,7 @@ use memory_management::memory_layout::{KERNEL_END, KERNEL_MAPPED_SIZE, ONE_MB};
 use crate::{
     io::console,
     memory_management::{
-        memory_layout::{kernel_end, MemSize},
+        memory_layout::{kernel_end, MemSize, PAGE_4K},
         physical_page_allocator::{self},
         virtual_memory,
     },
@@ -61,6 +61,16 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();
 
+    let physical_pages_stats = physical_page_allocator::stats();
+    let free_mem = MemSize(physical_pages_stats.0 * PAGE_4K);
+    let used_mem = MemSize(physical_pages_stats.1 * PAGE_4K);
+    println!("Boot finished!");
+    println!("Free memory: {}", free_mem);
+    println!("Used memory: {}", used_mem);
+    println!(
+        "Used %: {:0.2}",
+        used_mem.0 as f64 / (used_mem.0 + free_mem.0) as f64 * 100.0
+    );
     loop {
         hint::spin_loop();
     }

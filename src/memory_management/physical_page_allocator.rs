@@ -42,10 +42,17 @@ pub unsafe fn free(page: *mut u8) {
     ALLOCATOR.lock().free(page);
 }
 
+pub fn stats() -> (usize, usize) {
+    let allocator = unsafe { ALLOCATOR.lock() };
+    (allocator.free_count, allocator.used_count)
+}
+
 struct PhysicalPageAllocator {
     free_list_head: *mut FreePage,
     start: *mut u8,
     end: *mut u8,
+    free_count: usize,
+    used_count: usize,
 }
 
 impl PhysicalPageAllocator {
@@ -54,6 +61,8 @@ impl PhysicalPageAllocator {
             free_list_head: core::ptr::null_mut(),
             start: core::ptr::null_mut(),
             end: core::ptr::null_mut(),
+            free_count: 0,
+            used_count: 0,
         }
     }
 
@@ -86,7 +95,7 @@ impl PhysicalPageAllocator {
         let page = page as *mut u8;
         // fill with random data to catch dangling pointer bugs
         page.write_bytes(1, PAGE_4K);
-
+        self.used_count += 1;
         page
     }
 
@@ -114,5 +123,6 @@ impl PhysicalPageAllocator {
 
         (*page).next = self.free_list_head;
         self.free_list_head = page;
+        self.free_count += 1;
     }
 }
