@@ -1,6 +1,6 @@
 use core::{ffi, fmt};
 
-use crate::memory_management::memory_layout::MemSize;
+use crate::memory_management::memory_layout::{physical2virtual, MemSize};
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq)]
@@ -31,7 +31,8 @@ impl Iterator for MemoryMapIter {
         if self.remaining == 0 {
             return None;
         }
-        let mmap = unsafe { &*self.memory_map_raw };
+        let ptr = physical2virtual(self.memory_map_raw as _) as *const MemoryMapsRaw;
+        let mmap = unsafe { &*ptr };
         let memory_map = MemoryMap {
             base_addr: (mmap.base_addr_high as u64) << 32 | mmap.base_addr_low as u64,
             length: (mmap.length_high as u64) << 32 | mmap.length_low as u64,
@@ -96,7 +97,6 @@ pub struct MultiBootInfoRaw {
 
 impl MultiBootInfoRaw {
     // SAFETY: the caller must assure that the pointer passed is valid and properly aligned
-
     pub unsafe fn from_ptr(multiboot_info_ptr: usize) -> Self {
         // copy the multiboot info struct from the pointer
         core::ptr::read(multiboot_info_ptr as *const MultiBootInfoRaw)
@@ -128,7 +128,7 @@ impl MultiBootInfoRaw {
 
     pub fn cmdline(&self) -> Option<&str> {
         if self.flags & 0b100 != 0 {
-            let ptr = self.cmdline as *const u8;
+            let ptr = physical2virtual(self.cmdline as _) as *const u8;
             unsafe {
                 Some(
                     ffi::CStr::from_ptr(ptr as *const i8)
@@ -190,7 +190,8 @@ impl MultiBootInfoRaw {
 
     pub fn bootloader_name(&self) -> Option<&str> {
         if self.flags & 0b1000000000 != 0 {
-            let ptr = self.bootloader_name as *const u8;
+            let ptr = physical2virtual(self.bootloader_name as _) as *const u8;
+
             unsafe {
                 Some(
                     ffi::CStr::from_ptr(ptr as *const i8)

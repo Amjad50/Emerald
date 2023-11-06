@@ -3,16 +3,17 @@
 
 use crate::{
     cpu,
-    memory_management::memory_layout::{is_aligned, MemSize, PAGE_2M},
-    sync::spin::mutex::Mutex,
-};
-
-use super::{
-    memory_layout::{
-        align_down, align_up, kernel_rodata_end, physical2virtual, virtual2physical,
-        EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, KERNEL_MAPPED_SIZE, PAGE_4K,
+    memory_management::{
+        memory_layout::{
+            align_down, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
+            virtual2physical, MemSize, DEVICE_BASE_PHYSICAL, DEVICE_BASE_VIRTUAL,
+            DEVICE_PHYSICAL_END, EXTENDED_BIOS_BASE_PHYSICAL, EXTENDED_BIOS_BASE_VIRTUAL,
+            EXTENDED_BIOS_SIZE, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, KERNEL_MAPPED_SIZE,
+            PAGE_2M, PAGE_4K,
+        },
+        physical_page_allocator,
     },
-    physical_page_allocator,
+    sync::spin::mutex::Mutex,
 };
 
 // TODO: replace by some sort of bitfield
@@ -29,6 +30,8 @@ pub mod flags {
     pub(super) const PTE_GLOBAL: u64 = 1 << 8;
     pub(super) const PTE_NO_EXECUTE: u64 = 1 << 63;
 }
+
+const ADDR_MASK: u64 = 0x0000_0000_FFFF_F000;
 
 // have a specific alignment so we can fit them in a page
 #[repr(C, align(32))]
@@ -49,10 +52,38 @@ struct PageDirectoryTable {
 static mut VIRTUAL_MEMORY_MANAGER: Mutex<VirtualMemoryManager> =
     Mutex::new(VirtualMemoryManager::empty());
 
-pub fn init_kernel_vm() {
+pub fn init_vm() {
     unsafe {
         VIRTUAL_MEMORY_MANAGER.lock().init_kernel_vm();
     }
+
+    // map the BIOS memory
+    map_bios_memory();
+    map_device_memory();
+}
+
+fn map_bios_memory() {
+    assert!(unsafe { EXTENDED_BIOS_BASE_PHYSICAL } > 0 && unsafe { EXTENDED_BIOS_SIZE } > 0);
+    // the space immediately after the ram is reserved for the BIOS
+    let map_entry = VirtualMemoryMapEntry {
+        virtual_address: EXTENDED_BIOS_BASE_VIRTUAL as u64,
+        start_physical_address: unsafe { EXTENDED_BIOS_BASE_PHYSICAL } as u64,
+        end_physical_address: unsafe { EXTENDED_BIOS_BASE_PHYSICAL + EXTENDED_BIOS_SIZE } as u64,
+        flags: 0,
+    };
+
+    map(&map_entry);
+}
+
+fn map_device_memory() {
+    let map_entry = VirtualMemoryMapEntry {
+        virtual_address: DEVICE_BASE_VIRTUAL as u64,
+        start_physical_address: DEVICE_BASE_PHYSICAL as u64,
+        end_physical_address: DEVICE_PHYSICAL_END as u64,
+        flags: flags::PTE_WRITABLE,
+    };
+
+    map(&map_entry);
 }
 
 #[allow(dead_code)]
@@ -83,7 +114,7 @@ impl VirtualMemoryManager {
     // This replicate what is done in the assembly code
     // but it will be stored
     fn init_kernel_vm(&mut self) {
-        let data_start = align_up(kernel_rodata_end() as *mut u8, PAGE_4K) as usize;
+        let data_start = align_up(kernel_elf_rodata_end() as *mut u8, PAGE_4K) as usize;
         let kernel_vm = [
             // Low memory (has some BIOS stuff): mapped to kernel space
             VirtualMemoryMapEntry {
@@ -179,7 +210,7 @@ impl VirtualMemoryManager {
                 let page_directory_pointer_table =
                     unsafe { physical_page_allocator::alloc_zeroed() as *mut PageDirectoryTable };
                 *page_map_l4_entry = (virtual2physical(page_directory_pointer_table as _) as u64
-                    & 0x00000000FFFFF000)
+                    & ADDR_MASK)
                     | flags::PTE_PRESENT;
             }
             // add new flags if any
@@ -191,7 +222,7 @@ impl VirtualMemoryManager {
 
             // Level 3
             let page_directory_pointer_table = unsafe {
-                &mut *((physical2virtual((*page_map_l4_entry & 0x00000000FFFFF000) as usize))
+                &mut *((physical2virtual((*page_map_l4_entry & ADDR_MASK) as usize))
                     as *mut PageDirectoryTable)
             };
 
@@ -203,7 +234,7 @@ impl VirtualMemoryManager {
                     unsafe { physical_page_allocator::alloc_zeroed() as *mut PageDirectoryTable };
 
                 *page_directory_pointer_entry =
-                    (virtual2physical(page_directory_table as _) as u64 & 0x00000000FFFFF000)
+                    (virtual2physical(page_directory_table as _) as u64 & ADDR_MASK)
                         | flags::PTE_PRESENT;
             }
 
@@ -218,9 +249,8 @@ impl VirtualMemoryManager {
 
             // Level 2
             let page_directory_table = unsafe {
-                &mut *(physical2virtual(
-                    (*page_directory_pointer_entry & 0x00000000FFFFF000) as usize,
-                ) as *mut PageDirectoryTable)
+                &mut *(physical2virtual((*page_directory_pointer_entry & ADDR_MASK) as usize)
+                    as *mut PageDirectoryTable)
             };
             let page_directory_entry = &mut page_directory_table.entries[page_directory_index];
 
@@ -236,14 +266,14 @@ impl VirtualMemoryManager {
                     // if so, we should free the physical page allocation for them
                     if *page_directory_entry & flags::PTE_HUGE_PAGE == 0 {
                         let page_table_ptr =
-                            (*page_directory_entry & 0x00000000FFFFF000) as *mut PageDirectoryTable;
+                            (*page_directory_entry & ADDR_MASK) as *mut PageDirectoryTable;
 
                         unsafe { physical_page_allocator::free(page_table_ptr as _) };
                     }
                 }
 
                 // Level 1
-                *page_directory_entry = (physical_address & 0x00000000FFFFF000)
+                *page_directory_entry = (physical_address & ADDR_MASK)
                     | flags
                     | flags::PTE_PRESENT
                     | flags::PTE_HUGE_PAGE;
@@ -254,6 +284,10 @@ impl VirtualMemoryManager {
                 );
 
                 size -= PAGE_2M;
+                // do not overflow the address
+                if size == 0 {
+                    break;
+                }
                 virtual_address += PAGE_2M as u64;
                 physical_address += PAGE_2M as u64;
             } else {
@@ -262,9 +296,8 @@ impl VirtualMemoryManager {
                     let page_table = unsafe {
                         physical_page_allocator::alloc_zeroed() as *mut PageDirectoryTable
                     };
-                    *page_directory_entry = (virtual2physical(page_table as _) as u64
-                        & 0x00000000FFFFF000)
-                        | flags::PTE_PRESENT;
+                    *page_directory_entry =
+                        (virtual2physical(page_table as _) as u64 & ADDR_MASK) | flags::PTE_PRESENT;
                 }
                 // add new flags
                 *page_directory_entry |= flags;
@@ -275,18 +308,21 @@ impl VirtualMemoryManager {
 
                 // Level 1
                 let page_table = unsafe {
-                    &mut *(physical2virtual((*page_directory_entry & 0x00000000FFFFF000) as usize)
+                    &mut *(physical2virtual((*page_directory_entry & ADDR_MASK) as usize)
                         as *mut PageDirectoryTable)
                 };
                 let page_table_entry = &mut page_table.entries[page_table_index];
-                *page_table_entry =
-                    (physical_address & 0x00000000FFFFF000) | flags | flags::PTE_PRESENT;
+                *page_table_entry = (physical_address & ADDR_MASK) | flags | flags::PTE_PRESENT;
                 eprintln!(
                     "L1[{}]: {:p} = {:x}",
                     page_table_index, page_table_entry, *page_table_entry
                 );
 
                 size -= PAGE_4K;
+                // do not overflow the address
+                if size == 0 {
+                    break;
+                }
                 virtual_address += PAGE_4K as u64;
                 physical_address += PAGE_4K as u64;
             }
@@ -318,7 +354,7 @@ impl VirtualMemoryManager {
 
         // Level 3
         let page_directory_pointer_table = unsafe {
-            &mut *((physical2virtual((*page_map_l4_entry & 0x00000000FFFFF000) as usize))
+            &mut *((physical2virtual((*page_map_l4_entry & ADDR_MASK) as usize))
                 as *mut PageDirectoryTable)
         };
         let page_directory_pointer_entry =
@@ -335,7 +371,7 @@ impl VirtualMemoryManager {
 
         // Level 2
         let page_directory_table = unsafe {
-            &mut *(physical2virtual((*page_directory_pointer_entry & 0x00000000FFFFF000) as usize)
+            &mut *(physical2virtual((*page_directory_pointer_entry & ADDR_MASK) as usize)
                 as *mut PageDirectoryTable)
         };
         let page_directory_entry = &mut page_directory_table.entries[page_directory_index];
@@ -352,7 +388,7 @@ impl VirtualMemoryManager {
 
         // Level 1
         let page_table = unsafe {
-            &mut *(physical2virtual((*page_directory_entry & 0x00000000FFFFF000) as usize)
+            &mut *(physical2virtual((*page_directory_entry & ADDR_MASK) as usize)
                 as *mut PageDirectoryTable)
         };
         let page_table_entry = &mut page_table.entries[page_table_index];
