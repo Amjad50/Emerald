@@ -25,11 +25,13 @@ pub const KERNEL_HEAP_BASE: usize = KERNEL_END;
 pub const KERNEL_HEAP_SIZE: usize = 0x1000000; // 16MB
 
 // The size of the stack for interrupt handlers
-pub const INTR_STACK_SIZE: usize = 0x1000;
+pub const INTR_STACK_SIZE: usize = PAGE_4K * 4;
+pub const INTR_STACK_EMPTY_SIZE: usize = PAGE_4K;
+pub const INTR_STACK_ENTRY_SIZE: usize = INTR_STACK_SIZE + INTR_STACK_EMPTY_SIZE;
 pub const INTR_STACK_BASE: usize = KERNEL_HEAP_BASE + KERNEL_HEAP_SIZE;
 pub const INTR_STACK_COUNT: usize = 7;
 // we are going to setup a spacing at the end of the stack, so that we can detect stack overflows
-pub const INTR_STACK_TOTAL_SIZE: usize = INTR_STACK_SIZE * INTR_STACK_COUNT * 2;
+pub const INTR_STACK_TOTAL_SIZE: usize = INTR_STACK_ENTRY_SIZE * INTR_STACK_COUNT;
 
 pub const PAGE_4K: usize = 0x1000;
 pub const PAGE_2M: usize = 0x200000;

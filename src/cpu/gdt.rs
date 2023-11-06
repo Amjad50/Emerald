@@ -2,7 +2,10 @@ use core::mem::{self, size_of};
 
 use crate::{
     memory_management::{
-        memory_layout::{virtual2physical, INTR_STACK_BASE, INTR_STACK_TOTAL_SIZE, PAGE_4K},
+        memory_layout::{
+            is_aligned, virtual2physical, INTR_STACK_BASE, INTR_STACK_EMPTY_SIZE,
+            INTR_STACK_ENTRY_SIZE, INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, PAGE_4K,
+        },
         physical_page_allocator,
         virtual_memory::{self, VirtualMemoryMapEntry},
     },
@@ -42,19 +45,37 @@ pub fn init_kernel_gdt() {
     // and use as padding between the stacks, so that we can detect stack overflows
     for i in 0..7 {
         unsafe {
-            let stack_start_phy = virtual2physical(physical_page_allocator::alloc_zeroed() as _);
-            // use 2 PAGES per entry (one is safe-space)
-            // allocate the second page, so that it grows downwards to the first page
-            let stack_start_virtual = INTR_STACK_BASE + (i * 2 + 1) * PAGE_4K;
-            let stack_end_virtual = stack_start_virtual + PAGE_4K;
+            // allocate after an empty offset, so that we can detect stack overflows
+            let mut stack_start_virtual =
+                INTR_STACK_BASE + (i * INTR_STACK_ENTRY_SIZE) + INTR_STACK_EMPTY_SIZE;
+            let stack_end_virtual = stack_start_virtual + INTR_STACK_SIZE;
             assert!(stack_end_virtual <= INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
-            virtual_memory::map(&VirtualMemoryMapEntry {
-                virtual_address: stack_start_virtual as u64,
-                start_physical_address: stack_start_phy as u64,
-                end_physical_address: (stack_start_phy + PAGE_4K) as u64,
-                flags: virtual_memory::flags::PTE_WRITABLE,
-            });
-            TSS.ist[i] = stack_end_virtual as u64;
+            if i == 6 {
+                // make sure we have allocated everything
+                assert!(stack_end_virtual == INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
+            }
+            // make sure that the stack is aligned, so we can easily allocate pages
+            assert!(
+                is_aligned(INTR_STACK_SIZE as _, PAGE_4K)
+                    && is_aligned(stack_start_virtual as _, PAGE_4K)
+            );
+
+            // allocate pages and map them
+            // TODO: add a new dynamic virtual allocator and replace this
+            while stack_start_virtual < stack_end_virtual {
+                let stack_start_phy =
+                    virtual2physical(physical_page_allocator::alloc_zeroed() as _);
+                virtual_memory::map(&VirtualMemoryMapEntry {
+                    virtual_address: stack_start_virtual as u64,
+                    start_physical_address: stack_start_phy as u64,
+                    end_physical_address: (stack_start_phy + PAGE_4K) as u64,
+                    flags: virtual_memory::flags::PTE_WRITABLE,
+                });
+                stack_start_virtual += PAGE_4K;
+            }
+            // set the stack pointer
+            // subtract 8, since the boundary is not mapped
+            TSS.ist[i] = stack_end_virtual as u64 - 8;
         }
     }
 
