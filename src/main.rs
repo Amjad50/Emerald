@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
+#![feature(const_mut_refs)]
 
 extern crate alloc;
 
@@ -12,6 +13,7 @@ core::arch::global_asm!(include_str!("boot.S"));
 // import first so that macros are available in other modules
 mod macros;
 
+mod bios;
 mod cpu;
 mod io;
 mod memory_management;
@@ -20,7 +22,10 @@ mod sync;
 
 use core::hint;
 
-use cpu::{gdt, interrupts};
+use cpu::{
+    gdt,
+    interrupts::{self, apic},
+};
 use io::console;
 use memory_management::{
     memory_layout::{
@@ -104,6 +109,8 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();
+    apic::init();
+    unsafe { cpu::set_interrupts() };
 
     finish_boot();
     loop {

@@ -1,3 +1,5 @@
+pub mod apic;
+
 use crate::sync::spin::mutex::Mutex;
 
 use super::idt::InterruptDescriptorTable;

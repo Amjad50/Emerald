@@ -4,6 +4,29 @@ pub mod gdt;
 pub mod idt;
 pub mod interrupts;
 
+const CPUID_FN_FEAT: u32 = 1;
+const MAX_CPUS: usize = 8;
+
+static mut CPUS: [Cpu; MAX_CPUS] = [Cpu::empty(); MAX_CPUS];
+
+// TODO: add thread/cpu local to hold a pointer to the current cpu
+
+#[derive(Debug, Clone, Copy)]
+struct Cpu {
+    // index of myself inside `CPUS`
+    id: usize,
+    apic_id: usize,
+}
+
+impl Cpu {
+    const fn empty() -> Self {
+        Self {
+            id: 0,
+            apic_id: 0,
+        }
+    }
+}
+
 // TODO: implement cpu_id
 pub fn cpu_id() -> u32 {
     0
@@ -64,3 +87,27 @@ fn get_cs() -> u16 {
     }
     cs
 }
+
+pub unsafe fn rdmsr(inp: u32) -> u64 {
+    let (eax, edx): (u32, u32);
+    core::arch::asm!("rdmsr", in("ecx") inp, out("eax") eax, out("edx") edx, options(nomem, nostack, preserves_flags));
+    ((edx as u64) << 32) | (eax as u64)
+}
+
+pub unsafe fn wrmsr(inp: u32, val: u64) {
+    let eax = val as u32;
+    let edx = (val >> 32) as u32;
+    core::arch::asm!("wrmsr", in("ecx") inp, in("eax") eax, in("edx") edx, options(nomem, nostack, preserves_flags));
+}
+
+#[macro_export]
+macro_rules! cpuid {
+    ($rax:expr) => {
+        ::core::arch::x86_64::__cpuid_count($rax, 0)
+    };
+    ($rax:expr, $rcx:expr) => {
+        ::core::arch::x86_64::__cpuid_count($rax, $rcx)
+    };
+}
+#[allow(unused_imports)]
+pub use cpuid;
