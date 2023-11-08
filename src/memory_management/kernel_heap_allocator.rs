@@ -36,6 +36,8 @@ struct KernelHeapAllocator {
     heap_start: usize,
     mapped_pages: usize,
     free_list_addr: *mut HeapFreeBlock,
+    free_size: usize,
+    used_size: usize,
 }
 
 unsafe impl Send for KernelHeapAllocator {}
@@ -46,6 +48,8 @@ impl KernelHeapAllocator {
             heap_start: KERNEL_HEAP_BASE,
             mapped_pages: 0,
             free_list_addr: core::ptr::null_mut(),
+            free_size: 0,
+            used_size: 0,
         }
     }
 
@@ -169,6 +173,7 @@ impl KernelHeapAllocator {
                 self.free_block(last_heap_base as _, pages * PAGE_4K);
             }
         }
+        self.free_size += pages * PAGE_4K;
     }
 
     unsafe fn free_block(&mut self, freeing_block: usize, size: usize) {
@@ -312,6 +317,12 @@ impl LockedKernelHeapAllocator {
     pub fn debug_free_blocks(&self) {
         self.inner.lock().debug_free_blocks();
     }
+
+    #[allow(dead_code)]
+    pub fn stats(&self) -> (usize, usize) {
+        let inner = self.inner.lock();
+        (inner.free_size, inner.used_size)
+    }
 }
 
 unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
@@ -377,6 +388,9 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         (*allocated_block_info).magic = KERNEL_HEAP_MAGIC;
         (*allocated_block_info).size = size_to_allocate;
 
+        inner.free_size -= size_to_allocate;
+        inner.used_size += size_to_allocate;
+
         drop(inner);
 
         unsafe { (allocated_block_info as *mut u8).add(allocated_block_offset) }
@@ -402,5 +416,7 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
 
         let freeing_block = allocated_block_info as *mut HeapFreeBlock;
         inner.free_block(freeing_block as _, size_to_free_from_layout);
+        inner.used_size -= size_to_free_from_layout;
+        inner.free_size += size_to_free_from_layout;
     }
 }
