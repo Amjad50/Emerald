@@ -203,7 +203,7 @@ impl InterruptDescriptorTable {
         }
     }
 
-    pub(super) fn apply(&'static self) {
+    pub(super) fn apply_idt(&'static self) {
         let idt_ptr = InterruptDescriptorTablePointer {
             limit: mem::size_of::<InterruptDescriptorTable>() as u16 - 1,
             base: self,
