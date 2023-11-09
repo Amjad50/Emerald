@@ -1,6 +1,6 @@
 use core::{mem::size_of, slice};
 
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 
 use crate::memory_management::memory_layout::physical2virtual_bios;
 
@@ -183,7 +183,8 @@ impl DescriptorTable {
     pub fn from_physical_ptr(ptr: u32) -> Self {
         let header = unsafe { &*(physical2virtual_bios(ptr as _) as *const DescriptionHeader) };
         let body = match &header.signature {
-            b"APIC" => DescriptorTableBody::Apic(Apic::from_header(header)),
+            b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
+            b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
             _ => DescriptorTableBody::Unknown,
         };
         Self {
@@ -195,7 +196,8 @@ impl DescriptorTable {
 
 #[derive(Debug, Clone)]
 pub enum DescriptorTableBody {
-    Apic(Apic),
+    Apic(Box<Apic>),
+    Facp(Box<Facp>),
     Unknown,
 }
 
@@ -358,6 +360,75 @@ impl InterruptControllerStruct {
                 bytes: bytes.to_vec(),
             },
         }
+    }
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone)]
+pub struct Facp {
+    firmware_control: u32,
+    dsdt: u32,
+    reserved: u8,
+    preferred_pm_profile: u8,
+    sci_interrupt: u16,
+    smi_command_port: u32,
+    acpi_enable: u8,
+    acpi_disable: u8,
+    s4bios_req: u8,
+    pstate_control: u8,
+    pm1a_event_block: u32,
+    pm1b_event_block: u32,
+    pm1a_control_block: u32,
+    pm1b_control_block: u32,
+    pm2_control_block: u32,
+    pm_timer_block: u32,
+    gpe0_block: u32,
+    gpe1_block: u32,
+    pm1_event_length: u8,
+    pm1_control_length: u8,
+    pm2_control_length: u8,
+    pm_timer_length: u8,
+    gpe0_block_length: u8,
+    gpe1_block_length: u8,
+    gpe1_base: u8,
+    cstate_control: u8,
+    p_level2_latency: u16,
+    p_level3_latency: u16,
+    flush_size: u16,
+    flush_stride: u16,
+    duty_offset: u8,
+    duty_width: u8,
+    day_alarm: u8,
+    month_alarm: u8,
+    century: u8,
+    iapc_boot_arch: u16,
+    reserved2: u8,
+    flags: u32,
+    reset_reg: [u8; 12],
+    reset_value: u8,
+    arm_boot_arch: u16,
+    fadt_minor_version: u8,
+    x_firmware_control: u64,
+    x_dsdt: u64,
+    x_pm1a_event_block: [u8; 12],
+    x_pm1b_event_block: [u8; 12],
+    x_pm1a_control_block: [u8; 12],
+    x_pm1b_control_block: [u8; 12],
+    x_pm2_control_block: [u8; 12],
+    x_pm_timer_block: [u8; 12],
+    x_gpe0_block: [u8; 12],
+    x_gpe1_block: [u8; 12],
+    sleep_control_reg: [u8; 12],
+    sleep_status_reg: [u8; 12],
+    hypervisor_vendor_id: u64,
+}
+
+impl Facp {
+    fn from_header(header: &'static DescriptionHeader) -> Self {
+        let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
+        let facp = unsafe { &*(facp_ptr as *const Facp) };
+        // SAFETY: I'm using this to copy from the same struct
+        unsafe { core::mem::transmute_copy(facp) }
     }
 }
 
