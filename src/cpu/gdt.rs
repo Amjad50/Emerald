@@ -12,15 +12,13 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-static mut GDT: GlobalDescriptorTable = GlobalDescriptorTable::empty();
+static GDT: Mutex<GlobalDescriptorTable> = Mutex::new(GlobalDescriptorTable::empty());
+/// SAFETY: TSS is only used when `GDT` is locked, so its safe to use as `static mut`
 static mut TSS: TaskStateSegment = TaskStateSegment::empty();
-// we separated the lock from the object, so that we can have the `'static` lifetime for it
-static mut GDT_LOCK: Mutex<()> = Mutex::new(());
 
 /// This should be called only once, otherwise, it will crash
 pub fn init_kernel_gdt() {
-    let _lock = unsafe { GDT_LOCK.lock() };
-    let gdt = unsafe { &mut GDT };
+    let mut gdt = GDT.lock();
     if gdt.index != 1 {
         panic!("GDT already initialized");
     }
@@ -92,8 +90,10 @@ pub fn init_kernel_gdt() {
             ..SystemDescriptorEntry::empty()
         })
     };
+    drop(gdt);
+    // call the special `run_with` so that we get the `static` lifetime
+    GDT.run_with(|gdt| gdt.apply_lgdt());
 
-    gdt.apply_lgdt();
     unsafe {
         // load the code segment
         // the other segments should be 0 since `boot`, and no need to change them

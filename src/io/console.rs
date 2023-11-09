@@ -8,13 +8,11 @@ use super::{
 };
 
 // SAFETY: the console is only used inside a lock or mutex
-pub(super) static mut CONSOLE: ReMutex<RefCell<Console>> =
+pub(super) static CONSOLE: ReMutex<RefCell<Console>> =
     ReMutex::new(RefCell::new(unsafe { Console::empty() }));
 
 pub fn init() {
-    unsafe {
-        CONSOLE.lock().borrow_mut().init();
-    }
+    CONSOLE.lock().borrow_mut().init();
 }
 
 pub(super) struct Console {

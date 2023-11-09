@@ -9,7 +9,7 @@ static PRINT_ERR: AtomicBool = AtomicBool::new(false);
 pub fn _print(args: ::core::fmt::Arguments) {
     use core::fmt::Write;
 
-    let con = unsafe { console::CONSOLE.lock() };
+    let con = console::CONSOLE.lock();
 
     // if we failed to borrow, it means we are inside panic, and we have paniced inside the lock/console
     // create a new raw console and print to it
