@@ -4,6 +4,9 @@ use core::{
 };
 
 /// A spin lock
+///
+/// This is an unsafe lock, it doesn't have any protection against deadlocks, or multiple locking
+/// A safe wrappers are implemented with `Mutex` and `ReMutex`
 pub(super) struct Lock {
     locked: AtomicBool,
 }
@@ -15,7 +18,8 @@ impl Lock {
         }
     }
 
-    pub fn lock(&self) {
+    /// SAFETY: the caller must assure that there is only one accessor for this lock
+    pub unsafe fn lock(&self) {
         while self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -25,7 +29,8 @@ impl Lock {
         }
     }
 
-    pub fn unlock(&self) {
+    /// SAFETY: the caller must assure that there is only one accessor for this lock
+    pub unsafe fn unlock(&self) {
         self.locked.store(false, Ordering::Release);
     }
 }

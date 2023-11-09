@@ -28,12 +28,15 @@ impl<T> Mutex<T> {
     }
 
     pub fn lock(&self) -> MutexGuard<T> {
-        let cpu_id = cpu::cpu_id() as i64;
+        let cpu = cpu::cpu();
+        cpu.push_cli(); // disable interrupts to avoid deadlock
+        let cpu_id = cpu.id as i64;
 
         if self.owner_cpu.load(core::sync::atomic::Ordering::Relaxed) == cpu_id {
             panic!("Mutex already locked by this CPU");
         } else {
-            self.lock.lock();
+            // SAFETY: the mutex is locked, we are the only accessor
+            unsafe { self.lock.lock() };
             self.owner_cpu
                 .store(cpu_id, core::sync::atomic::Ordering::Relaxed);
             MutexGuard { lock: self }
@@ -88,6 +91,8 @@ impl<T> Drop for MutexGuard<'_, T> {
         self.lock
             .owner_cpu
             .store(-1, core::sync::atomic::Ordering::Relaxed);
-        self.lock.lock.unlock();
+        // SAFETY: the mutex is locked, we are the only accessor
+        unsafe { self.lock.lock.unlock() };
+        cpu::cpu().pop_cli(); // re-enable interrupts
     }
 }

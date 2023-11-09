@@ -7,26 +7,72 @@ pub mod interrupts;
 const CPUID_FN_FEAT: u32 = 1;
 const MAX_CPUS: usize = 8;
 
+pub mod flags {
+    pub const IF: u64 = 1 << 9;
+}
+
 static mut CPUS: [Cpu; MAX_CPUS] = [Cpu::empty(); MAX_CPUS];
 
-// TODO: add thread/cpu local to hold a pointer to the current cpu
-
 #[derive(Debug, Clone, Copy)]
-struct Cpu {
+pub struct Cpu {
     // index of myself inside `CPUS`
-    id: usize,
-    apic_id: usize,
+    pub id: usize,
+    apic_id: u8,
+    old_interrupt_enable: bool,
+    // number of times we have called `cli`
+    n_cli: usize,
 }
 
 impl Cpu {
     const fn empty() -> Self {
-        Self { id: 0, apic_id: 0 }
+        Self {
+            id: 0,
+            apic_id: 0,
+            old_interrupt_enable: false,
+            n_cli: 0,
+        }
+    }
+
+    fn init(&mut self, id: usize, apic_id: u8) {
+        self.id = id;
+        self.apic_id = apic_id;
+    }
+
+    pub fn push_cli(&mut self) {
+        if self.n_cli == 0 {
+            let rflags = unsafe { rflags() };
+            let old_interrupt_flag = rflags & flags::IF != 0;
+            unsafe { clear_interrupts() };
+            self.old_interrupt_enable = old_interrupt_flag;
+        }
+        self.n_cli += 1;
+    }
+
+    pub fn pop_cli(&mut self) {
+        let rflags = unsafe { rflags() };
+        if rflags & flags::IF != 0 {
+            panic!("interrupt shouldn't be set");
+        }
+        if self.n_cli == 0 {
+            panic!("pop_cli called without push_cli");
+        }
+
+        self.n_cli -= 1;
+        if self.n_cli == 0 && self.old_interrupt_enable {
+            unsafe { set_interrupts() };
+        }
     }
 }
 
-// TODO: implement cpu_id
-pub fn cpu_id() -> u32 {
-    0
+pub fn cpu() -> &'static mut Cpu {
+    // TODO: use thread local to get the current cpu
+    unsafe { &mut CPUS[0] }
+}
+
+pub unsafe fn rflags() -> u64 {
+    let rflags: u64;
+    core::arch::asm!("pushfq; pop {0:r}", out(reg) rflags, options(nomem, nostack, preserves_flags));
+    rflags
 }
 
 pub unsafe fn outb(port: u16, val: u8) {

@@ -257,8 +257,7 @@ impl Apic {
                     // initialize the CPUs
                     // SAFETY: this is safe
                     unsafe {
-                        CPUS[self.n_cpus].id = self.n_cpus;
-                        CPUS[self.n_cpus].apic_id = s.apic_id as usize;
+                        CPUS[self.n_cpus].init(self.n_cpus, s.apic_id);
                     }
                     self.n_cpus += 1;
                 }

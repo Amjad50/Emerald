@@ -34,8 +34,10 @@ impl<T> ReMutex<T> {
         }
     }
 
-    pub fn lock(&mut self) -> ReMutexGuard<T> {
-        let cpu_id = cpu::cpu_id() as i64;
+    pub fn lock(&self) -> ReMutexGuard<T> {
+        let cpu = cpu::cpu();
+        cpu.push_cli(); // disable interrupts to avoid deadlock
+        let cpu_id = cpu.id as i64;
 
         if self.owner_cpu.load(core::sync::atomic::Ordering::Relaxed) == cpu_id {
             self.lock_count.set(
@@ -46,7 +48,8 @@ impl<T> ReMutex<T> {
             );
             ReMutexGuard { lock: self }
         } else {
-            self.lock.lock();
+            // SAFETY: the mutex is locked, we are the only accessor
+            unsafe { self.lock.lock() };
             self.owner_cpu
                 .store(cpu_id, core::sync::atomic::Ordering::Relaxed);
             self.lock_count.set(1);
@@ -76,7 +79,9 @@ impl<T> Drop for ReMutexGuard<'_, T> {
             self.lock
                 .owner_cpu
                 .store(-1, core::sync::atomic::Ordering::Relaxed);
-            self.lock.lock.unlock();
+            // SAFETY: the mutex is locked, we are the only accessor
+            unsafe { self.lock.lock.unlock() };
+            cpu::cpu().pop_cli();
         }
     }
 }
