@@ -32,8 +32,118 @@ fn disable_pic() {
     }
 }
 
-#[repr(C, packed)]
-struct ApicMmio {}
+#[repr(C, align(4))]
+struct ApicReg {
+    reg: u32,
+    pad: [u32; 3],
+}
+
+impl ApicReg {
+    fn write(&mut self, value: u32) {
+        self.reg = value;
+    }
+
+    fn read(&self) -> u32 {
+        self.reg
+    }
+}
+
+#[repr(C)]
+struct LocalVectorRegister {
+    reg: ApicReg,
+}
+
+#[allow(dead_code)]
+impl LocalVectorRegister {
+    fn read(&self) -> LocalVectorRegisterBuilder {
+        LocalVectorRegisterBuilder {
+            reg: self.reg.read(),
+        }
+    }
+
+    fn write(&mut self, builder: LocalVectorRegisterBuilder) {
+        self.reg.write(builder.reg)
+    }
+}
+
+const LVT_VECTOR_MASK: u32 = 0xFF;
+const LVT_MESSAGE_TYPE_MASK: u32 = 0x7 << 8;
+const LVT_TRIGGER_MODE_MASK: u32 = 1 << 15;
+const LVT_MASK_MASK: u32 = 1 << 16;
+const LVT_TIMER_MODE_MASK: u32 = 1 << 17;
+
+#[derive(Default)]
+struct LocalVectorRegisterBuilder {
+    reg: u32,
+}
+
+#[allow(dead_code)]
+impl LocalVectorRegisterBuilder {
+    fn with_vector(mut self, vector: u8) -> Self {
+        self.reg = (self.reg & !LVT_VECTOR_MASK) | vector as u32;
+        self
+    }
+
+    fn with_message_type(mut self, message_type: u8) -> Self {
+        self.reg = (self.reg & !LVT_MESSAGE_TYPE_MASK) | ((message_type & 0x7) as u32) << 8;
+        self
+    }
+
+    fn with_trigger_mode(mut self, trigger_mode: bool) -> Self {
+        self.reg = (self.reg & !LVT_TRIGGER_MODE_MASK) | (trigger_mode as u32) << 15;
+        self
+    }
+
+    fn with_mask(mut self, mask: bool) -> Self {
+        self.reg = (self.reg & !LVT_MASK_MASK) | (mask as u32) << 16;
+        self
+    }
+
+    fn with_timer_mode(mut self, timer_mode: bool) -> Self {
+        self.reg = (self.reg & !LVT_TIMER_MODE_MASK) | (timer_mode as u32) << 17;
+        self
+    }
+}
+
+#[repr(C, align(16))]
+struct ApicMmio {
+    _pad1: [ApicReg; 2],
+    id: ApicReg,
+    version: ApicReg,
+    _pad2: [ApicReg; 4],
+    task_priority: ApicReg,
+    arbitration_priority: ApicReg,
+    processor_priority: ApicReg,
+    end_of_interrupt: ApicReg,
+    remote_read: ApicReg,
+    logical_destination: ApicReg,
+    destination_format: ApicReg,
+    spurious_interrupt_vector: ApicReg,
+    in_service: [ApicReg; 8],
+    trigger_mode: [ApicReg; 8],
+    interrupt_request: [ApicReg; 8],
+    error_status: ApicReg,
+    _pad3: [ApicReg; 7],
+    interrupt_command_low: ApicReg,
+    interrupt_command_high: ApicReg,
+    timer_local_vector_table: LocalVectorRegister,
+    thermal_local_vector_table: LocalVectorRegister,
+    performance_local_vector_table: LocalVectorRegister,
+    lint0_local_vector_table: LocalVectorRegister,
+    lint1_local_vector_table: LocalVectorRegister,
+    error_local_vector_table: LocalVectorRegister,
+    timer_initial_count: ApicReg,
+    timer_current_count: ApicReg,
+    _pad4: [ApicReg; 4],
+    timer_divide_configuration: ApicReg,
+    _pad5: ApicReg,
+    extended_apic_features: ApicReg,
+    extended_apic_control: ApicReg,
+    specifc_end_of_interrupt: ApicReg,
+    _pad6: [ApicReg; 5],
+    interrupt_enable: [ApicReg; 8],
+    extended_interrupt_local_vector_tables: [ApicReg; 4],
+}
 
 #[repr(C, packed)]
 struct IoApicMmio {}
@@ -63,7 +173,7 @@ impl From<tables::IoApic> for IoApic {
 }
 
 struct Apic {
-    mmio: &'static mut ApicMmio,
+    mmio: *mut ApicMmio,
     n_cpus: usize,
     io_apics: Vec<IoApic>,
     source_overrides: Vec<InterruptSourceOverride>,
@@ -73,7 +183,7 @@ impl Apic {
     const fn empty() -> Self {
         Self {
             // we should call `init` first, but this is just in case.
-            mmio: unsafe { &mut *(physical2virtual_io(DEFAULT_APIC_BASE) as *mut ApicMmio) },
+            mmio: physical2virtual_io(DEFAULT_APIC_BASE) as *mut ApicMmio,
             n_cpus: 0,
             io_apics: Vec::new(),
             source_overrides: Vec::new(),
@@ -180,6 +290,14 @@ impl Apic {
         );
         assert!(apic_address != 0, "APIC address is 0, cannot continue");
         assert!(apic_address & 0xF == 0, "APIC address is not aligned");
-        self.mmio = unsafe { &mut *(physical2virtual_io(apic_address) as *mut ApicMmio) };
+        self.mmio = physical2virtual_io(apic_address) as *mut ApicMmio;
+
+        self.disable_spurious_interrupt_vector();
+    }
+
+    fn disable_spurious_interrupt_vector(&mut self) {
+        unsafe {
+            (*self.mmio).spurious_interrupt_vector.write(0x1FF);
+        }
     }
 }
