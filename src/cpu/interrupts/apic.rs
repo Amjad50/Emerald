@@ -249,17 +249,18 @@ impl Apic {
                         // this is a disabled processor
                         continue;
                     }
-                    if self.n_cpus > MAX_CPUS {
+                    if self.n_cpus >= MAX_CPUS {
                         println!(
                             "WARNING: too many CPUs, have {MAX_CPUS} already, ignoring the rest"
                         );
+                    } else {
+                        // initialize the CPUs
+                        // SAFETY: this is safe
+                        unsafe {
+                            CPUS[self.n_cpus].init(self.n_cpus, s.apic_id);
+                        }
+                        self.n_cpus += 1;
                     }
-                    // initialize the CPUs
-                    // SAFETY: this is safe
-                    unsafe {
-                        CPUS[self.n_cpus].init(self.n_cpus, s.apic_id);
-                    }
-                    self.n_cpus += 1;
                 }
                 InterruptControllerStruct::IoApic(s) => {
                     self.io_apics.push(s.into());
