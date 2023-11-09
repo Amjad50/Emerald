@@ -1,3 +1,5 @@
+use core::borrow::{BorrowMut, Borrow};
+
 use alloc::vec::Vec;
 
 use crate::{
@@ -48,11 +50,11 @@ struct ApicReg {
 
 impl ApicReg {
     fn write(&mut self, value: u32) {
-        self.reg = value;
+        unsafe { (self.reg.borrow_mut() as *mut u32).write_volatile(value) };
     }
 
     fn read(&self) -> u32 {
-        self.reg
+        unsafe { (self.reg.borrow() as *const u32).read_volatile() }
     }
 }
 
