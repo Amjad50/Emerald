@@ -1,4 +1,4 @@
-use core::borrow::{BorrowMut, Borrow};
+use core::borrow::{Borrow, BorrowMut};
 
 use alloc::vec::Vec;
 
@@ -82,7 +82,9 @@ const LVT_TRIGGER_MODE_MASK: u32 = 1 << 15;
 const LVT_MASK_MASK: u32 = 1 << 16;
 const LVT_TIMER_MODE_MASK: u32 = 1 << 17;
 
-#[derive(Default)]
+const SPURIOUS_ENABLE: u32 = 1 << 8;
+
+#[derive(Default, Clone, Copy)]
 struct LocalVectorRegisterBuilder {
     reg: u32,
 }
@@ -109,7 +111,7 @@ impl LocalVectorRegisterBuilder {
         self
     }
 
-    fn with_timer_mode(mut self, timer_mode: bool) -> Self {
+    fn with_periodic_timer(mut self, timer_mode: bool) -> Self {
         self.reg = (self.reg & !LVT_TIMER_MODE_MASK) | (timer_mode as u32) << 17;
         self
     }
@@ -302,13 +304,36 @@ impl Apic {
         assert!(apic_address & 0xF == 0, "APIC address is not aligned");
         self.mmio = physical2virtual_io(apic_address) as *mut ApicMmio;
 
-        self.disable_spurious_interrupt_vector();
+        self.initialize_spurious_interrupt();
+        self.disable_local_interrupts();
         self.initialize_timer();
+        self.setup_error_interrupt();
+        // ack any pending interrupts
+        self.return_from_interrupt();
     }
 
-    fn disable_spurious_interrupt_vector(&mut self) {
+    fn return_from_interrupt(&self) {
         unsafe {
-            (*self.mmio).spurious_interrupt_vector.write(0x1FF);
+            (*self.mmio).end_of_interrupt.write(0);
+        }
+    }
+
+    fn initialize_spurious_interrupt(&mut self) {
+        let interrupt_num = allocate_user_interrupt(spurious_handler);
+        unsafe {
+            // 1 << 8, to enable spurious interrupts
+            (*self.mmio)
+                .spurious_interrupt_vector
+                .write(SPURIOUS_ENABLE | interrupt_num as u32);
+        }
+    }
+
+    /// disable the Local interrupts 0 and 1
+    fn disable_local_interrupts(&mut self) {
+        unsafe {
+            let vector_table = LocalVectorRegisterBuilder::default().with_mask(true);
+            (*self.mmio).lint0_local_vector_table.write(vector_table);
+            (*self.mmio).lint1_local_vector_table.write(vector_table);
         }
     }
 
@@ -323,20 +348,48 @@ impl Apic {
             (*self.mmio).timer_initial_count.write(0x1000000);
             // periodic mode, not masked, and with the allocated vector number
             let vector_table = LocalVectorRegisterBuilder::default()
-                .with_timer_mode(true)
+                .with_periodic_timer(true)
                 .with_mask(false)
                 .with_vector(interrupt_num);
             (*self.mmio).timer_local_vector_table.write(vector_table);
         }
     }
 
-    fn return_from_interrupt(&self) {
+    fn setup_error_interrupt(&mut self) {
+        // clear the error status and write 0 to it
         unsafe {
-            (*self.mmio).end_of_interrupt.write(0);
+            // 1- clear the error status
+            (*APIC.mmio).error_status.write(0);
+            // 2- write 0 to it (yes, we have to do this twice)
+            (*APIC.mmio).error_status.write(0);
+        }
+
+        let interrupt_num = allocate_user_interrupt(error_interrupt_handler);
+        unsafe {
+            // not masked, and with the allocated vector number
+            let vector_table = LocalVectorRegisterBuilder::default()
+                .with_mask(false)
+                .with_vector(interrupt_num);
+            (*self.mmio).error_local_vector_table.write(vector_table);
         }
     }
 }
 
+extern "x86-interrupt" fn spurious_handler(_frame: InterruptStackFrame64) {
+    println!("Spurious interrupt");
+    return_from_interrupt();
+}
+
 extern "x86-interrupt" fn timer_handler(_frame: InterruptStackFrame64) {
+    return_from_interrupt();
+}
+
+extern "x86-interrupt" fn error_interrupt_handler(_frame: InterruptStackFrame64) {
+    let error_status = unsafe { (*APIC.mmio).error_status.read() };
+    println!("APIC error: {:#X}", error_status);
+    // clear the error
+    unsafe {
+        (*APIC.mmio).error_status.write(0);
+    }
     return_from_interrupt();
 }
