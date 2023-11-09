@@ -20,10 +20,7 @@ struct Cpu {
 
 impl Cpu {
     const fn empty() -> Self {
-        Self {
-            id: 0,
-            apic_id: 0,
-        }
+        Self { id: 0, apic_id: 0 }
     }
 }
 

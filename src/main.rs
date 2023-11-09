@@ -37,8 +37,9 @@ use memory_management::{
 use multiboot::{MemoryMapType, MultiBootInfoRaw};
 
 use crate::memory_management::{
+    kernel_heap_allocator::ALLOCATOR,
     memory_layout::{MemSize, PAGE_4K},
-    physical_page_allocator, kernel_heap_allocator::ALLOCATOR,
+    physical_page_allocator,
 };
 
 /// Checks that we have enough memory, and keep note of where the kernel ends
@@ -93,7 +94,11 @@ fn finish_boot() {
         used_mem.0 as f64 / (used_mem.0 + free_mem.0) as f64 * 100.
     );
     println!("Free heap: {}", MemSize(free_heap));
-    println!("Used heap: {} ({:0.3}%)", MemSize(used_heap), used_heap as f64 / (used_heap + free_heap) as f64 * 100.);
+    println!(
+        "Used heap: {} ({:0.3}%)",
+        MemSize(used_heap),
+        used_heap as f64 / (used_heap + free_heap) as f64 * 100.
+    );
 }
 
 #[link_section = ".text"]

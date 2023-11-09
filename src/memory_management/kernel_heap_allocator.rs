@@ -352,7 +352,7 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         // we have to make sure that the block after us has enough space to write the metadat
         // and we won't corrupt the block that comes after (if there is anys)
         let whole_size = size_to_allocate + mem::size_of::<HeapFreeBlock>();
-        
+
         // store the actual size of the block
         // if we needed to extend (since the next free block is to small)
         // this will include the whole size and not just the size that
