@@ -1,4 +1,4 @@
-use core::alloc::GlobalAlloc;
+use core::{alloc::GlobalAlloc, mem};
 
 use crate::{
     memory_management::{
@@ -343,53 +343,67 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         eprintln!("Got free block at {:x}", free_block as usize);
         if free_block.is_null() {
             return core::ptr::null_mut();
-        } else {
-            let free_block_size = (*free_block).size;
-            let free_block_end = free_block as usize + size_to_allocate;
-            let new_free_block = free_block_end as *mut HeapFreeBlock;
+        }
 
-            // do we have empty space left?
-            if free_block_size > size_to_allocate {
-                // update the previous block to point to this new subblock instead
-                (*new_free_block).prev = (*free_block).prev;
-                (*new_free_block).next = (*free_block).next;
-                (*new_free_block).size = free_block_size - size_to_allocate;
+        let free_block_size = (*free_block).size;
+        let free_block_end = free_block as usize + size_to_allocate;
+        let new_free_block = free_block_end as *mut HeapFreeBlock;
 
-                eprintln!("a: prev_block: [{:x}]", (*new_free_block).prev as usize,);
-                eprintln!("a: next_block: [{:x}]", (*new_free_block).next as usize);
+        // we have to make sure that the block after us has enough space to write the metadat
+        // and we won't corrupt the block that comes after (if there is anys)
+        let whole_size = size_to_allocate + mem::size_of::<HeapFreeBlock>();
+        
+        // store the actual size of the block
+        // if we needed to extend (since the next free block is to small)
+        // this will include the whole size and not just the size that
+        // we were asked to allocate
+        let mut this_allocation_size = size_to_allocate;
 
-                // update the next block to point to this new subblock instead
-                if !(*new_free_block).next.is_null() {
-                    (*(*new_free_block).next).prev = new_free_block;
-                }
+        // do we have empty space left?
+        if free_block_size > whole_size {
+            // update the previous block to point to this new subblock instead
+            (*new_free_block).prev = (*free_block).prev;
+            (*new_free_block).next = (*free_block).next;
+            (*new_free_block).size = free_block_size - size_to_allocate;
 
-                // update the previous block to point to this new subblock instead
-                if !(*new_free_block).prev.is_null() {
-                    (*(*new_free_block).prev).next = new_free_block;
-                } else {
-                    // this is the first block
-                    inner.free_list_addr = new_free_block;
-                }
+            eprintln!("a: prev_block: [{:x}]", (*new_free_block).prev as usize,);
+            eprintln!("a: next_block: [{:x}]", (*new_free_block).next as usize);
+
+            // update the next block to point to this new subblock instead
+            if !(*new_free_block).next.is_null() {
+                (*(*new_free_block).next).prev = new_free_block;
+            }
+
+            // update the previous block to point to this new subblock instead
+            if !(*new_free_block).prev.is_null() {
+                (*(*new_free_block).prev).next = new_free_block;
             } else {
-                // exact size
+                // this is the first block
+                inner.free_list_addr = new_free_block;
+            }
+        } else {
+            // exact size
+            this_allocation_size = free_block_size;
 
-                // update the previous block to point to the next block instead
-                if !(*free_block).prev.is_null() {
-                    (*(*free_block).prev).next = (*free_block).next;
-                } else {
-                    // this is the first block
-                    inner.free_list_addr = (*free_block).next;
-                }
+            // update the previous block to point to the next block instead
+            if !(*free_block).prev.is_null() {
+                (*(*free_block).prev).next = (*free_block).next;
+            } else {
+                // this is the first block
+                inner.free_list_addr = (*free_block).next;
+            }
+            if !(*free_block).next.is_null() {
+                (*(*free_block).next).prev = (*free_block).prev;
             }
         }
 
         // write the info header
         let allocated_block_info = free_block as *mut AllocatedHeapBlockInfo;
         (*allocated_block_info).magic = KERNEL_HEAP_MAGIC;
-        (*allocated_block_info).size = size_to_allocate;
+        (*allocated_block_info).size = this_allocation_size;
 
-        inner.free_size -= size_to_allocate;
-        inner.used_size += size_to_allocate;
+        inner.free_size -= this_allocation_size;
+        inner.used_size += this_allocation_size;
 
         drop(inner);
 
@@ -408,15 +422,22 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
 
         let allocated_block_info = ptr.sub(allocated_block_offset) as *mut AllocatedHeapBlockInfo;
 
-        eprintln!("deallocating {:p}", allocated_block_info);
+        eprintln!(
+            "deallocating {:p}, size={}",
+            allocated_block_info, size_to_free_from_layout
+        );
         assert_eq!((*allocated_block_info).magic, KERNEL_HEAP_MAGIC);
-        assert_eq!((*allocated_block_info).size, size_to_free_from_layout);
+        // This could be more than the layout size, because
+        // we might increase the size of the block a bit to not leave
+        // free blocks that are too small (see `alloc``)
+        assert!((*allocated_block_info).size >= size_to_free_from_layout);
+        let this_allocation_size = (*allocated_block_info).size;
 
         let mut inner = self.inner.lock();
 
         let freeing_block = allocated_block_info as *mut HeapFreeBlock;
-        inner.free_block(freeing_block as _, size_to_free_from_layout);
-        inner.used_size -= size_to_free_from_layout;
-        inner.free_size += size_to_free_from_layout;
+        inner.free_block(freeing_block as _, this_allocation_size);
+        inner.used_size -= this_allocation_size;
+        inner.free_size += this_allocation_size;
     }
 }
