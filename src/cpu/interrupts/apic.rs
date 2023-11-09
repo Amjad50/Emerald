@@ -5,9 +5,11 @@ use crate::{
         self,
         tables::{self, DescriptorTableBody, InterruptControllerStruct, InterruptSourceOverride},
     },
-    cpu::{self, outb, CPUID_FN_FEAT, CPUS, MAX_CPUS},
+    cpu::{self, idt::InterruptStackFrame64, outb, CPUID_FN_FEAT, CPUS, MAX_CPUS},
     memory_management::memory_layout::physical2virtual_io,
 };
+
+use super::allocate_user_interrupt;
 
 const CPUID_FEAT_EDX_APIC: u32 = 1 << 9;
 
@@ -22,6 +24,12 @@ pub fn init() {
     disable_pic();
     unsafe {
         APIC.init();
+    }
+}
+
+pub fn return_from_interrupt() {
+    unsafe {
+        APIC.return_from_interrupt();
     }
 }
 
@@ -293,6 +301,7 @@ impl Apic {
         self.mmio = physical2virtual_io(apic_address) as *mut ApicMmio;
 
         self.disable_spurious_interrupt_vector();
+        self.initialize_timer();
     }
 
     fn disable_spurious_interrupt_vector(&mut self) {
@@ -300,4 +309,32 @@ impl Apic {
             (*self.mmio).spurious_interrupt_vector.write(0x1FF);
         }
     }
+
+    fn initialize_timer(&mut self) {
+        let interrupt_num = allocate_user_interrupt(timer_handler);
+
+        unsafe {
+            // divide by 1
+            (*self.mmio).timer_divide_configuration.write(0b1011);
+            // just random value, this is based on the CPU clock speed
+            // so its not accurate timing.
+            (*self.mmio).timer_initial_count.write(0x1000000);
+            // periodic mode, not masked, and with the allocated vector number
+            let vector_table = LocalVectorRegisterBuilder::default()
+                .with_timer_mode(true)
+                .with_mask(false)
+                .with_vector(interrupt_num);
+            (*self.mmio).timer_local_vector_table.write(vector_table);
+        }
+    }
+
+    fn return_from_interrupt(&self) {
+        unsafe {
+            (*self.mmio).end_of_interrupt.write(0);
+        }
+    }
+}
+
+extern "x86-interrupt" fn timer_handler(_frame: InterruptStackFrame64) {
+    return_from_interrupt();
 }
