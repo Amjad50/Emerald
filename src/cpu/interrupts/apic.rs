@@ -7,8 +7,13 @@ use crate::{
         self,
         tables::{self, DescriptorTableBody, InterruptControllerStruct, InterruptSourceOverride},
     },
-    cpu::{self, idt::InterruptStackFrame64, outb, CPUID_FN_FEAT, CPUS, MAX_CPUS},
+    cpu::{
+        self,
+        idt::{InterruptHandler, InterruptStackFrame64},
+        outb, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS,
+    },
     memory_management::memory_layout::physical2virtual_io,
+    sync::spin::mutex::Mutex,
 };
 
 use super::allocate_user_interrupt;
@@ -20,18 +25,12 @@ const APIC_BAR_ENABLED: u64 = 1 << 11;
 const APIC_BASE_MASK: u64 = 0xFFFF_FFFF_FFFF_F000;
 const DEFAULT_APIC_BASE: usize = 0xFEE0_0000;
 
-static mut APIC: Apic = Apic::empty();
+static mut APIC: Mutex<Apic> = Mutex::new(Apic::empty());
 
 pub fn init() {
     disable_pic();
     unsafe {
-        APIC.init();
-    }
-}
-
-pub fn return_from_interrupt() {
-    unsafe {
-        APIC.return_from_interrupt();
+        APIC.lock().init();
     }
 }
 
@@ -40,6 +39,16 @@ fn disable_pic() {
         outb(0x21, 0xFF);
         outb(0xA1, 0xFF);
     }
+}
+
+pub fn return_from_interrupt() {
+    unsafe {
+        APIC.lock().return_from_interrupt();
+    }
+}
+
+pub fn assign_io_irq(handler: InterruptHandler, interrupt_num: u8, cpu: &Cpu) {
+    unsafe { APIC.lock().assign_io_irq(handler, interrupt_num, cpu) }
 }
 
 #[repr(C, align(4))]
@@ -157,14 +166,140 @@ struct ApicMmio {
     extended_interrupt_local_vector_tables: [ApicReg; 4],
 }
 
-#[repr(C, packed)]
-struct IoApicMmio {}
+#[allow(dead_code)]
+mod io_apic {
+    pub const IO_APIC_ID: u32 = 0;
+    pub const IO_APIC_VERSION: u32 = 1;
+    pub const IO_APIC_ARBITRATION_ID: u32 = 2;
+    pub const IO_APIC_REDIRECTION_TABLE: u32 = 0x10;
+
+    pub const RDR_VECTOR_MASK: u64 = 0xFF;
+    pub const RDR_DELIVERY_MODE_MASK: u64 = 0x7 << 8;
+    pub const RDR_DESTINATION_MODE_MASK: u64 = 1 << 11;
+    pub const RDR_DELIVERY_STATUS_MASK: u64 = 1 << 12;
+    pub const RDR_PIN_POLARITY_MASK: u64 = 1 << 13;
+    pub const RDR_REMOTE_IRR_MASK: u64 = 1 << 14;
+    pub const RDR_TRIGGER_MODE_MASK: u64 = 1 << 15;
+    pub const RDR_MASK_MASK: u64 = 1 << 16;
+    pub const RDR_DESTINATION_PHYSICAL_MASK: u64 = 0x1F << 59;
+    pub const RDR_DESTINATION_LOGICAL_MASK: u64 = 0xFF << 56;
+}
+
+#[allow(dead_code)]
+enum DestinationType {
+    Physical(u8),
+    Logical(u8),
+}
+
+#[derive(Default, Clone, Copy)]
+struct IoApicRedirectionBuilder {
+    reg: u64,
+}
+
+#[allow(dead_code)]
+impl IoApicRedirectionBuilder {
+    fn with_vector(mut self, vector: u8) -> Self {
+        self.reg = (self.reg & !io_apic::RDR_VECTOR_MASK) | vector as u64;
+        self
+    }
+
+    fn with_delivery_mode(mut self, delivery_mode: u8) -> Self {
+        self.reg =
+            (self.reg & !io_apic::RDR_DELIVERY_MODE_MASK) | ((delivery_mode & 0x7) as u64) << 8;
+        self
+    }
+
+    fn with_interrupt_polartiy_low(mut self, polarity: bool) -> Self {
+        self.reg = (self.reg & !io_apic::RDR_PIN_POLARITY_MASK) | (polarity as u64) << 13;
+        self
+    }
+
+    fn with_trigger_mode_level(mut self, trigger_mode: bool) -> Self {
+        self.reg = (self.reg & !io_apic::RDR_TRIGGER_MODE_MASK) | (trigger_mode as u64) << 15;
+        self
+    }
+
+    fn with_mask(mut self, mask: bool) -> Self {
+        self.reg = (self.reg & !io_apic::RDR_MASK_MASK) | (mask as u64) << 16;
+        self
+    }
+
+    fn with_destination(mut self, destination: DestinationType) -> Self {
+        match destination {
+            DestinationType::Physical(d) => {
+                assert!(d < 32, "physical destination is out of range");
+                // clear the destination mode bit
+                self.reg &= !io_apic::RDR_DESTINATION_MODE_MASK;
+                self.reg = (self.reg & !io_apic::RDR_DESTINATION_PHYSICAL_MASK)
+                    | (((d & 0x1F) as u64) << 59);
+            }
+            DestinationType::Logical(d) => {
+                // set the destination mode bit
+                self.reg |= io_apic::RDR_DESTINATION_MODE_MASK;
+                self.reg = (self.reg & !io_apic::RDR_DESTINATION_LOGICAL_MASK) | ((d as u64) << 56);
+            }
+        }
+
+        self
+    }
+}
+
+#[repr(C, align(16))]
+struct IoApicMmio {
+    register_select: ApicReg,
+    data: ApicReg,
+    irq_pin_assersion: ApicReg,
+    _pad: ApicReg,
+    return_of_interrupt: ApicReg,
+}
+
+impl IoApicMmio {
+    pub fn read_register(&mut self, register: u32) -> u32 {
+        self.register_select.write(register);
+        self.data.read()
+    }
+
+    pub fn write_register(&mut self, register: u32, value: u32) {
+        self.register_select.write(register);
+        self.data.write(value);
+    }
+}
 
 #[allow(dead_code)]
 struct IoApic {
     id: u8,
     global_irq_base: u32,
-    mmio: &'static mut IoApicMmio,
+    mmio: *mut IoApicMmio,
+}
+
+impl IoApic {
+    fn reset_all_interrupts(&mut self) {
+        for i in 0..24 {
+            let b = IoApicRedirectionBuilder::default()
+                .with_vector(0)
+                .with_mask(true);
+            self.write_redirect_entry(i, b);
+        }
+    }
+
+    #[allow(dead_code)]
+    fn read_register(&self, register: u32) -> u32 {
+        unsafe { (*self.mmio).read_register(register) }
+    }
+
+    fn write_register(&self, register: u32, value: u32) {
+        unsafe { (*self.mmio).write_register(register, value) }
+    }
+
+    fn write_redirect_entry(&mut self, entry: u8, builder: IoApicRedirectionBuilder) {
+        let lo = builder.reg as u32;
+        let hi = (builder.reg >> 32) as u32;
+        self.write_register(io_apic::IO_APIC_REDIRECTION_TABLE + entry as u32 * 2, lo);
+        self.write_register(
+            io_apic::IO_APIC_REDIRECTION_TABLE + entry as u32 * 2 + 1,
+            hi,
+        );
+    }
 }
 
 impl From<tables::IoApic> for IoApic {
@@ -177,9 +312,7 @@ impl From<tables::IoApic> for IoApic {
         Self {
             id: table.io_apic_id,
             global_irq_base: table.global_system_interrupt_base,
-            mmio: unsafe {
-                &mut *(physical2virtual_io(table.io_apic_address as _) as *mut IoApicMmio)
-            },
+            mmio: physical2virtual_io(table.io_apic_address as _) as *mut IoApicMmio,
         }
     }
 }
@@ -304,6 +437,11 @@ impl Apic {
         assert!(apic_address & 0xF == 0, "APIC address is not aligned");
         self.mmio = physical2virtual_io(apic_address) as *mut ApicMmio;
 
+        // reset all interrupts
+        self.io_apics.iter_mut().for_each(|io_apic| {
+            io_apic.reset_all_interrupts();
+        });
+
         self.initialize_spurious_interrupt();
         self.disable_local_interrupts();
         self.initialize_timer();
@@ -359,9 +497,9 @@ impl Apic {
         // clear the error status and write 0 to it
         unsafe {
             // 1- clear the error status
-            (*APIC.mmio).error_status.write(0);
+            (*self.mmio).error_status.write(0);
             // 2- write 0 to it (yes, we have to do this twice)
-            (*APIC.mmio).error_status.write(0);
+            (*self.mmio).error_status.write(0);
         }
 
         let interrupt_num = allocate_user_interrupt(error_interrupt_handler);
@@ -372,6 +510,44 @@ impl Apic {
                 .with_vector(interrupt_num);
             (*self.mmio).error_local_vector_table.write(vector_table);
         }
+    }
+
+    fn assign_io_irq(&mut self, handler: InterruptHandler, irq_num: u8, cpu: &Cpu) {
+        assert!(cpu.id < self.n_cpus, "CPU ID is out of range");
+        assert!(irq_num < 24, "interrupt number is out of range");
+
+        // if we have override mapping for this interrupt, use it.
+        let int_override = self
+            .source_overrides
+            .iter()
+            .find(|int_override| int_override.source == irq_num);
+        let mut interrupt_num = irq_num as u32;
+        if let Some(int_override) = int_override {
+            interrupt_num = int_override.global_system_interrupt;
+        }
+        let io_apic = self
+            .io_apics
+            .iter_mut()
+            .find(|io_apic| {
+                io_apic.global_irq_base <= interrupt_num
+                    && interrupt_num < io_apic.global_irq_base + 24
+            })
+            .expect("Could not find IO APIC for the interrupt");
+
+        // the location of where we want to
+        let entry_in_ioapic = interrupt_num - io_apic.global_irq_base;
+
+        let vector_num = allocate_user_interrupt(handler);
+
+        let b = IoApicRedirectionBuilder::default()
+            .with_vector(vector_num)
+            .with_delivery_mode(0) // fixed
+            .with_interrupt_polartiy_low(false) // active high
+            .with_trigger_mode_level(false) // edge
+            .with_mask(false) // not masked
+            .with_destination(DestinationType::Physical(cpu.apic_id));
+
+        io_apic.write_redirect_entry(entry_in_ioapic as u8, b);
     }
 }
 
@@ -385,11 +561,11 @@ extern "x86-interrupt" fn timer_handler(_frame: InterruptStackFrame64) {
 }
 
 extern "x86-interrupt" fn error_interrupt_handler(_frame: InterruptStackFrame64) {
-    let error_status = unsafe { (*APIC.mmio).error_status.read() };
+    let error_status = unsafe { (*APIC.lock().mmio).error_status.read() };
     println!("APIC error: {:#X}", error_status);
     // clear the error
     unsafe {
-        (*APIC.mmio).error_status.write(0);
+        (*APIC.lock().mmio).error_status.write(0);
     }
     return_from_interrupt();
 }
