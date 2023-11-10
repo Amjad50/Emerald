@@ -71,17 +71,17 @@ pub fn cpu() -> &'static mut Cpu {
 
 pub unsafe fn rflags() -> u64 {
     let rflags: u64;
-    core::arch::asm!("pushfq; pop {0:r}", out(reg) rflags, options(nomem, nostack, preserves_flags));
+    core::arch::asm!("pushfq; pop {0:r}", out(reg) rflags, options(nostack, preserves_flags));
     rflags
 }
 
 pub unsafe fn outb(port: u16, val: u8) {
-    core::arch::asm!("out dx, al", in("al") val, in("dx") port, options(nomem, nostack, preserves_flags));
+    core::arch::asm!("out dx, al", in("al") val, in("dx") port, options(readonly, nostack, preserves_flags));
 }
 
 pub unsafe fn inb(port: u16) -> u8 {
     let val: u8;
-    core::arch::asm!("in al, dx", out("al") val, in("dx") port, options(nomem, nostack, preserves_flags));
+    core::arch::asm!("in al, dx", out("al") val, in("dx") port, options(readonly, nostack, preserves_flags));
     val
 }
 
@@ -98,13 +98,15 @@ pub unsafe fn set_cr3(cr3: u64) {
     core::arch::asm!("mov cr3, rax", in("rax") cr3, options(nomem, nostack, preserves_flags));
 }
 
-/// SAFETY: the data pointed to by `ldtr` must be static and never change
-unsafe fn lgdt(ldtr: &GlobalDescriptorTablePointer) {
-    core::arch::asm!("lgdt [rax]", in("rax") ldtr, options(nomem, nostack, preserves_flags));
+/// SAFETY: the data pointed to by `gdtr` must be static and never change
+unsafe fn lgdt(gdtr: &GlobalDescriptorTablePointer) {
+    // println!("lgdt: {:p}", gdtr);
+    core::arch::asm!("lgdt [rax]", in("rax") gdtr, options(readonly, nostack, preserves_flags));
 }
 
+/// SAFETY: the data pointed to by `ldtr` must be static and never change
 unsafe fn lidt(ldtr: &InterruptDescriptorTablePointer) {
-    core::arch::asm!("lidt [rax]", in("rax") ldtr, options(nomem, nostack, preserves_flags));
+    core::arch::asm!("lidt [rax]", in("rax") ldtr, options(readonly, nostack, preserves_flags));
 }
 
 unsafe fn ltr(tr: u16) {
@@ -113,7 +115,7 @@ unsafe fn ltr(tr: u16) {
 
 unsafe fn set_cs(cs: u16) {
     core::arch::asm!(
-        "push {:r}",
+        "push {0:r}",
         // this is not 0x1f, it is `1-forward`,
         // which gives the offset of the nearest `1:` label
         "lea {tmp}, [rip + 1f]",
@@ -126,21 +128,21 @@ unsafe fn set_cs(cs: u16) {
 fn get_cs() -> u16 {
     let cs: u16;
     unsafe {
-        core::arch::asm!("mov {0:r}, cs", out(reg) cs, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mov {0:r}, cs", out(reg) cs, options(readonly, nostack, preserves_flags));
     }
     cs
 }
 
 pub unsafe fn rdmsr(inp: u32) -> u64 {
     let (eax, edx): (u32, u32);
-    core::arch::asm!("rdmsr", in("ecx") inp, out("eax") eax, out("edx") edx, options(nomem, nostack, preserves_flags));
+    core::arch::asm!("rdmsr", in("ecx") inp, out("eax") eax, out("edx") edx, options(readonly, nostack, preserves_flags));
     ((edx as u64) << 32) | (eax as u64)
 }
 
 pub unsafe fn wrmsr(inp: u32, val: u64) {
     let eax = val as u32;
     let edx = (val >> 32) as u32;
-    core::arch::asm!("wrmsr", in("ecx") inp, in("eax") eax, in("edx") edx, options(nomem, nostack, preserves_flags));
+    core::arch::asm!("wrmsr", in("ecx") inp, in("eax") eax, in("edx") edx, options(readonly, nostack, preserves_flags));
 }
 
 #[macro_export]
