@@ -14,6 +14,7 @@ core::arch::global_asm!(include_str!("boot.S"));
 mod macros;
 
 mod bios;
+mod collections;
 mod cpu;
 mod io;
 mod memory_management;
