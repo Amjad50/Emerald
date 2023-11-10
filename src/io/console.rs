@@ -1,6 +1,7 @@
 use core::{cell::RefCell, fmt::Write};
 
 use crate::{
+    collections::ring::RingBuffer,
     cpu::{self, idt::InterruptStackFrame64, interrupts::apic},
     sync::spin::remutex::ReMutex,
 };
@@ -27,6 +28,7 @@ pub(super) struct Console {
     uart: Uart,
     keyboard: Keyboard,
     video_buffer: VgaBuffer,
+    write_ring: RingBuffer<u8>,
 }
 
 impl Console {
@@ -36,6 +38,7 @@ impl Console {
             uart: Uart::new(UartPort::COM1),
             video_buffer: VgaBuffer::new(),
             keyboard: Keyboard::empty(),
+            write_ring: RingBuffer::empty(),
         }
     }
 
@@ -69,18 +72,23 @@ impl Console {
     }
 
     fn feed_char_from_interrupt(&mut self, c: u8) {
-        // TODO: implement this
-        println!(
-            "Got char from interrupt: {:X}, mod:{:X}",
-            c,
-            self.keyboard.modifiers()
-        );
+        // convert carriage return to newline (from uart)
+        let c = if c == b'\r' { b'\n' } else { c };
+        // don't force pushing for now
+        // TODO: implement a place where console buffer can be filled
+        let _ = self.write_ring.try_push(c);
     }
 
     #[allow(dead_code)]
-    fn read(&mut self, _dst: &mut [u8]) -> usize {
-        todo!()
+    pub fn read(&mut self, dst: &mut [u8]) -> usize {
+        let mut i = 0;
+        while let Some(c) = self.write_ring.pop() {
+            dst[i] = c;
+            i += 1;
+        }
+        i
     }
+
     /// SAFETY: the caller must assure that this is called from once place at a time
     ///         and should handle synchronization
     unsafe fn write_byte(&mut self, byte: u8) {
@@ -88,15 +96,13 @@ impl Console {
         self.uart.write_byte(byte);
     }
 
-    fn write(&mut self, src: &[u8]) -> usize {
-        let mut i = 0;
+    pub fn write(&mut self, src: &[u8]) -> usize {
         for &c in src {
-            i += 1;
             unsafe {
                 self.write_byte(c);
             }
         }
-        i
+        src.len()
     }
 }
 
