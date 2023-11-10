@@ -1,8 +1,12 @@
 use core::{cell::RefCell, fmt::Write};
 
-use crate::sync::spin::remutex::ReMutex;
+use crate::{
+    cpu::{self, idt::InterruptStackFrame64, interrupts::apic},
+    sync::spin::remutex::ReMutex,
+};
 
 use super::{
+    keyboard::Keyboard,
     uart::{Uart, UartPort},
     video_memory::{VgaBuffer, DEFAULT_ATTRIB},
 };
@@ -15,8 +19,13 @@ pub fn init() {
     CONSOLE.lock().borrow_mut().init();
 }
 
+pub fn setup_interrupts() {
+    CONSOLE.lock().borrow_mut().setup_interrupts();
+}
+
 pub(super) struct Console {
     uart: Uart,
+    keyboard: Keyboard,
     video_buffer: VgaBuffer,
 }
 
@@ -26,12 +35,46 @@ impl Console {
         Self {
             uart: Uart::new(UartPort::COM1),
             video_buffer: VgaBuffer::new(),
+            keyboard: Keyboard::empty(),
         }
     }
 
     pub fn init(&mut self) {
         self.uart.init();
         self.video_buffer.init();
+    }
+
+    pub fn setup_interrupts(&mut self) {
+        // assign keyboard interrupt to this CPU
+        apic::assign_io_irq(
+            keyboard_interrupt,
+            self.keyboard.interrupt_num(),
+            cpu::cpu(),
+        );
+        apic::assign_io_irq(uart_interrupt, self.uart.interrupt_num(), cpu::cpu());
+    }
+
+    fn keyboard_interrupt(&mut self) {
+        if let Some(k) = self.keyboard.try_read_char() {
+            if let Some(c) = k.virtual_char {
+                self.feed_char_from_interrupt(c);
+            }
+        }
+    }
+
+    fn uart_interrupt(&mut self) {
+        if let Some(c) = unsafe { self.uart.try_read_byte() } {
+            self.feed_char_from_interrupt(c);
+        }
+    }
+
+    fn feed_char_from_interrupt(&mut self, c: u8) {
+        // TODO: implement this
+        println!(
+            "Got char from interrupt: {:X}, mod:{:X}",
+            c,
+            self.keyboard.modifiers()
+        );
     }
 
     #[allow(dead_code)]
@@ -42,7 +85,7 @@ impl Console {
     ///         and should handle synchronization
     unsafe fn write_byte(&mut self, byte: u8) {
         self.video_buffer.write_byte(byte, DEFAULT_ATTRIB);
-        unsafe { self.uart.write_byte(byte) };
+        self.uart.write_byte(byte);
     }
 
     fn write(&mut self, src: &[u8]) -> usize {
@@ -62,4 +105,17 @@ impl Write for Console {
         self.write(s.as_bytes());
         Ok(())
     }
+}
+
+extern "x86-interrupt" fn keyboard_interrupt(_frame: InterruptStackFrame64) {
+    let console = CONSOLE.lock();
+    console.borrow_mut().keyboard_interrupt();
+
+    apic::return_from_interrupt();
+}
+
+extern "x86-interrupt" fn uart_interrupt(_frame: InterruptStackFrame64) {
+    let console = CONSOLE.lock();
+    console.borrow_mut().uart_interrupt();
+    apic::return_from_interrupt();
 }

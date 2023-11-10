@@ -126,12 +126,18 @@ impl Uart {
 
     /// SAFETY: `init` must be called before calling this function
     #[allow(dead_code)]
-    pub unsafe fn read_byte(&self) -> u8 {
+    pub unsafe fn try_read_byte(&self) -> Option<u8> {
         // wait until we can read
-        while (read_reg(self.port_addr, UartReg::LineStatus) & LINE_RX_READY) == 0 {
-            hint::spin_loop();
+        if (read_reg(self.port_addr, UartReg::LineStatus) & LINE_RX_READY) == 0 {
+            return None;
         }
         // read the byte
-        read_reg(self.port_addr, UartReg::Data)
+        Some(read_reg(self.port_addr, UartReg::Data))
+    }
+
+    pub fn interrupt_num(&self) -> u8 {
+        match self.port_addr {
+            UartPort::COM1 => 4,
+        }
     }
 }

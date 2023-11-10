@@ -1,6 +1,7 @@
 use core::sync::atomic::AtomicBool;
 
 pub mod console;
+mod keyboard;
 mod uart;
 mod video_memory;
 

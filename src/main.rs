@@ -115,6 +115,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();
     apic::init();
+    console::setup_interrupts();
     unsafe { cpu::set_interrupts() };
 
     finish_boot();
