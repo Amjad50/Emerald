@@ -15,10 +15,13 @@
  * We are going to setup the pages tables in the first 512KB of ram.
  */
 
-.section .multiboot_header
-mb_magic = 0x1BADB002
-mb_flags = 0x10000
-mb_checksum = -mb_magic-mb_flags
+MULTIBOOT_FLAG_ALIGN_4K = 1 << 0
+MULTIBOOT_FLAG_MEM_INFO = 1 << 1
+MULTIBOOT_FLAG_VIDEO_INFO = 1 << 2
+MULTIBOOT_FLAG_CUSTOM_LOAD_INFO = 1 << 16
+
+MULTIBOOT_VIDEO_MODE_GRAPHICS = 0
+MULTIBOOT_VIDEO_MODE_TEXT = 1
 
 PHY_PAGE_SIZE_4K = 0x1000
 PHY_PAGE_SIZE_2M = 0x200000
@@ -40,15 +43,6 @@ CR0_PG   = 1 << 31
 CR4_PAE  = 1 << 5
 EFER_LME = 1 << 8
 
-.long mb_magic
-.long mb_flags
-.long mb_checksum
-.long multiboot_load_addr
-.long multiboot_load_addr
-.long multiboot_load_end
-.long multiboot_bss_end
-.long multiboot_entry_addr
-
 # some helper macros that converts a virtual address to a physical address
 # this should be used when loading any address while paging is disabled
 .macro virtual_to_physical_mov reg:req,  addr:req
@@ -59,8 +53,31 @@ EFER_LME = 1 << 8
     \type \addr - 0xFFFFFFFF80000000
 .endm
 
-.section .text
+
+# Start here
 .code32
+.section .multiboot_header
+mb_magic = 0x1BADB002
+mb_flags = MULTIBOOT_FLAG_VIDEO_INFO | MULTIBOOT_FLAG_CUSTOM_LOAD_INFO | MULTIBOOT_FLAG_MEM_INFO | MULTIBOOT_FLAG_ALIGN_4K
+mb_checksum = -mb_magic-mb_flags
+
+# header
+.long mb_magic
+.long mb_flags
+.long mb_checksum
+# load address
+.long multiboot_load_addr
+.long multiboot_load_addr
+.long multiboot_load_end
+.long multiboot_bss_end
+.long multiboot_entry_addr
+# video info
+.long MULTIBOOT_VIDEO_MODE_TEXT # mode type
+.long 1024                      # width
+.long 768                       # height
+.long 32                        # depth
+
+.section .text
 .global entry
 entry:
     cmp eax, 0x2BADB002
