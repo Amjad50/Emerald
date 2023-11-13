@@ -1,0 +1,48 @@
+[env]
+PROFILE = { source = "${CARGO_MAKE_CARGO_PROFILE}", default_value = "dev", mapping = {"dev" = "debug", "release" = "release" } }
+OUT_DIR = "${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}/${PROFILE}"
+KERNEL_PATH = "${OUT_DIR}/kernel"
+ISO_PATH = "${OUT_DIR}/kernel.iso"
+GRUB_PATH = "${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}/${PROFILE}/grub"
+QEMU_ARGS = "-serial mon:stdio -m 512"
+# UEFI_IMAGE = "" # external: change to a path to a UEFI image to enable UEFI booting (like, /usr/share/edk2-ovmf/x64/OVMF_CODE.fd)
+QEMU_UEFI_ARGS = { value = "-bios ${UEFI_IMAGE}", condition = { env_true = ["UEFI_IMAGE"] } }
+
+[tasks.build]
+command = "cargo"
+args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}"]
+
+[tasks.iso_create_grub]
+private = true
+command = "mkdir"
+args = ["-p", "${GRUB_PATH}/boot/grub"]
+
+[tasks.iso_copy_kernel]
+private = true
+dependencies = ["iso_create_grub", "build"]
+command = "cp"
+args = ["${KERNEL_PATH}", "${GRUB_PATH}/boot/kernel"]
+
+[tasks.iso_copy_grub_cfg]
+private = true
+dependencies = ["iso_create_grub"]
+command = "cp"
+args = ["${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/grub.cfg", "${GRUB_PATH}/boot/grub/grub.cfg"]
+
+[tasks.iso]
+dependencies = ["iso_copy_grub_cfg", "iso_copy_kernel"]
+command = "grub-mkrescue"
+args = ["-o", "${ISO_PATH}", "${GRUB_PATH}"]
+
+[tasks.run_iso]
+dependencies = ["iso"]
+command = "qemu-system-x86_64"
+args =  ["-cdrom", "${ISO_PATH}", "@@split(QEMU_ARGS, )", "@@split(QEMU_UEFI_ARGS, )"]
+
+[tasks.run_iso_gdb]
+dependencies = ["iso"]
+command = "qemu-system-x86_64"
+args = ["-cdrom", "${ISO_PATH}", "-s", "-S", "@@split(QEMU_ARGS, )", "@@split(QEMU_UEFI_ARGS, )"]
+
+[tasks.default]
+alias = "run_iso"

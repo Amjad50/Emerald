@@ -4,7 +4,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "cargo build",
+            "command": "cargo make build",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -13,7 +13,7 @@
         {
             "label": "run-qemu",
             "type": "shell",
-            "command": "cargo r -- -s -S",
+            "command": "cargo make run_iso_gdb",
             "isBackground": true,
             "problemMatcher": [
                 // notify launch that qemu has started
