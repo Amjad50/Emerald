@@ -75,24 +75,74 @@ pub unsafe fn rflags() -> u64 {
     rflags
 }
 
-pub unsafe fn outb(port: u16, val: u8) {
+unsafe fn outb(port: u16, val: u8) {
     core::arch::asm!("out dx, al", in("al") val, in("dx") port, options(readonly, nostack, preserves_flags));
 }
 
-pub unsafe fn inb(port: u16) -> u8 {
+unsafe fn inb(port: u16) -> u8 {
     let val: u8;
     core::arch::asm!("in al, dx", out("al") val, in("dx") port, options(readonly, nostack, preserves_flags));
     val
 }
 
-pub unsafe fn outd(port: u16, val: u32) {
+unsafe fn inw(port: u16) -> u16 {
+    let val: u16;
+    core::arch::asm!("in ax, dx", out("ax") val, in("dx") port, options(readonly, nostack, preserves_flags));
+    val
+}
+
+unsafe fn outw(port: u16, val: u16) {
+    core::arch::asm!("out dx, ax", in("ax") val, in("dx") port, options(readonly, nostack, preserves_flags));
+}
+
+unsafe fn outd(port: u16, val: u32) {
     core::arch::asm!("out dx, eax", in("eax") val, in("dx") port, options(readonly, nostack, preserves_flags));
 }
 
-pub unsafe fn ind(port: u16) -> u32 {
+unsafe fn ind(port: u16) -> u32 {
     let val: u32;
     core::arch::asm!("in eax, dx", out("eax") val, in("dx") port, options(readonly, nostack, preserves_flags));
     val
+}
+
+pub trait IoPortInt {
+    fn io_out(port: u16, val: Self);
+    fn io_in(port: u16) -> Self;
+}
+
+impl IoPortInt for u8 {
+    fn io_out(port: u16, val: Self) {
+        unsafe { outb(port, val) }
+    }
+    fn io_in(port: u16) -> Self {
+        unsafe { inb(port) }
+    }
+}
+
+impl IoPortInt for u16 {
+    fn io_out(port: u16, val: Self) {
+        unsafe { outw(port, val) }
+    }
+    fn io_in(port: u16) -> Self {
+        unsafe { inw(port) }
+    }
+}
+
+impl IoPortInt for u32 {
+    fn io_out(port: u16, val: Self) {
+        unsafe { outd(port, val) }
+    }
+    fn io_in(port: u16) -> Self {
+        unsafe { ind(port) }
+    }
+}
+
+pub unsafe fn io_out<T: IoPortInt>(port: u16, val: T) {
+    T::io_out(port, val);
+}
+
+pub unsafe fn io_in<T: IoPortInt>(port: u16) -> T {
+    T::io_in(port)
 }
 
 pub unsafe fn clear_interrupts() {

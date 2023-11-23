@@ -297,11 +297,11 @@ impl Keyboard {
     }
 
     fn read_status(&self) -> u8 {
-        unsafe { cpu::inb(KEYBOARD_STATUS_PORT) }
+        unsafe { cpu::io_in(KEYBOARD_STATUS_PORT) }
     }
 
     fn read_data(&self) -> u8 {
-        unsafe { cpu::inb(KEYBOARD_DATA_PORT) }
+        unsafe { cpu::io_in(KEYBOARD_DATA_PORT) }
     }
 
     pub fn modifiers(&self) -> u8 {

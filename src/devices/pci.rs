@@ -1,26 +1,26 @@
-use crate::cpu;
+use crate::cpu::{self, IoPortInt};
 
-fn read_pci_config(bus: u8, dev: u8, func: u8, offset: u8) -> u32 {
+fn read_pci_config<T: IoPortInt>(bus: u8, dev: u8, func: u8, offset: u8) -> T {
     let address = 0x80000000
         | ((bus as u32) << 16)
         | ((dev as u32) << 11)
         | ((func as u32) << 8)
         | (offset as u32);
     unsafe {
-        cpu::outd(0xCF8, address);
-        cpu::ind(0xCFC)
+        cpu::io_out(0xCF8, address);
+        cpu::io_in(0xCFC)
     }
 }
 
-fn write_pci_config(bus: u8, dev: u8, func: u8, offset: u8, value: u32) {
+fn write_pci_config<T: IoPortInt>(bus: u8, dev: u8, func: u8, offset: u8, value: T) {
     let address = 0x80000000
         | ((bus as u32) << 16)
         | ((dev as u32) << 11)
         | ((func as u32) << 8)
         | (offset as u32);
     unsafe {
-        cpu::outd(0xCF8, address);
-        cpu::outd(0xCFC, value);
+        cpu::io_out(0xCF8, address);
+        cpu::io_out(0xCFC, value);
     }
 }
 
@@ -187,17 +187,16 @@ pub struct PciDeviceConfig {
 
 impl PciDeviceConfig {
     pub fn probe(bus: u8, dev: u8, func: u8) -> Option<PciDeviceConfig> {
-        let vendor_device_id = read_pci_config(bus, dev, func, regs::VENDOR_ID);
-        if vendor_device_id == 0xFFFF {
+        let vendor_id = read_pci_config(bus, dev, func, regs::VENDOR_ID);
+        if vendor_id == 0xFFFF {
             return None;
         }
-        let vendor_id = (vendor_device_id & 0xFFFF) as u16;
-        let device_id = (vendor_device_id >> 16) as u16;
+        let device_id = read_pci_config(bus, dev, func, regs::DEVICE_ID);
 
         let class_dword = read_pci_config(bus, dev, func, regs::CLASS_DWORD);
         let device_type = PciDeviceType::new(class_dword);
 
-        let header_type = (read_pci_config(bus, dev, func, regs::HEADER_TYPE - 2) >> 16) as u8;
+        let header_type = read_pci_config(bus, dev, func, regs::HEADER_TYPE);
         // make sure first we are reading the intended header type
         if header_type & 0x7F != 0x00 {
             return None;
@@ -206,7 +205,7 @@ impl PciDeviceConfig {
         let mut base_address = [PciBar::empty(); 6];
         let mut i = 0;
         while i < 6 {
-            let bar_v = read_pci_config(bus, dev, func, regs::BAR_START + i * 4);
+            let bar_v = read_pci_config::<u32>(bus, dev, func, regs::BAR_START + i * 4);
             if bar_v == 0 {
                 i += 1;
                 continue;
@@ -216,8 +215,8 @@ impl PciDeviceConfig {
                 // IO
                 let old_bar = bar_v & 0xFFFF_FFFC;
 
-                write_pci_config(bus, dev, func, regs::BAR_START + i * 4, 0xFFFF_FFFC);
-                let bar = read_pci_config(bus, dev, func, regs::BAR_START + i * 4);
+                write_pci_config(bus, dev, func, regs::BAR_START + i * 4, 0xFFFF_FFFCu32);
+                let bar = read_pci_config::<u32>(bus, dev, func, regs::BAR_START + i * 4);
                 write_pci_config(bus, dev, func, regs::BAR_START + i * 4, old_bar);
                 let size = (!(bar & 0xFFFF_FFFC) + 1) as u64;
 
@@ -229,8 +228,8 @@ impl PciDeviceConfig {
                 // Memory
                 let old_bar = bar_v & 0xFFFF_FFF0;
 
-                write_pci_config(bus, dev, func, regs::BAR_START + i * 4, 0xFFFF_FFF0);
-                let bar = read_pci_config(bus, dev, func, regs::BAR_START + i * 4);
+                write_pci_config(bus, dev, func, regs::BAR_START + i * 4, 0xFFFF_FFF0u32);
+                let bar = read_pci_config::<u32>(bus, dev, func, regs::BAR_START + i * 4);
                 write_pci_config(bus, dev, func, regs::BAR_START + i * 4, old_bar);
                 let size = (!(bar & 0xFFFF_FFF0) + 1) as u64;
 
@@ -244,7 +243,8 @@ impl PciDeviceConfig {
                     0x2 => {
                         // 64-bit
                         assert!(i < 5);
-                        let bar_2 = read_pci_config(bus, dev, func, regs::BAR_START + (i + 1) * 4);
+                        let bar_2 =
+                            read_pci_config::<u32>(bus, dev, func, regs::BAR_START + (i + 1) * 4);
                         i += 1;
 
                         let whole_bar = (bar_2 as u64) << 32 | (old_bar as u64);
@@ -257,19 +257,18 @@ impl PciDeviceConfig {
             }
             i += 1;
         }
-        let interrupt_info = read_pci_config(bus, dev, func, regs::INTERRUPT_LINE);
+        let interrupt_info = read_pci_config::<u16>(bus, dev, func, regs::INTERRUPT_LINE);
         let interrupt_line = interrupt_info as u8;
         let interrupt_pin = (interrupt_info >> 8) as u8;
 
-        let capabilities_ptr =
-            (read_pci_config(bus, dev, func, regs::CAPABILITIES_PTR) & 0xFF) as u8;
+        let capabilities_ptr = read_pci_config(bus, dev, func, regs::CAPABILITIES_PTR);
         let capabilities_ptr = if capabilities_ptr == 0 {
             None
         } else {
             Some(capabilities_ptr)
         };
 
-        return Some(PciDeviceConfig {
+        Some(PciDeviceConfig {
             bus,
             dev,
             func,
@@ -281,6 +280,6 @@ impl PciDeviceConfig {
             interrupt_line,
             interrupt_pin,
             capabilities_ptr,
-        });
+        })
     }
 }

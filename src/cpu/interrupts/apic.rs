@@ -10,7 +10,7 @@ use crate::{
     cpu::{
         self,
         idt::{InterruptHandler, InterruptStackFrame64},
-        outb, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS,
+        Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS,
     },
     memory_management::memory_layout::physical2virtual_io,
     sync::spin::mutex::Mutex,
@@ -36,8 +36,8 @@ pub fn init() {
 
 fn disable_pic() {
     unsafe {
-        outb(0x21, 0xFF);
-        outb(0xA1, 0xFF);
+        cpu::io_out::<u8>(0x21, 0xFF);
+        cpu::io_out::<u8>(0xA1, 0xFF);
     }
 }
 

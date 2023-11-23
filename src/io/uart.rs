@@ -45,11 +45,11 @@ const LINE_RX_READY: u8 = 1 << 0;
 const LINE_TX_EMPTY: u8 = 1 << 5;
 
 fn write_reg(port_addr: UartPort, reg: UartReg, val: u8) {
-    unsafe { cpu::outb(port_addr as u16 + reg as u16, val) }
+    unsafe { cpu::io_out(port_addr as u16 + reg as u16, val) }
 }
 
 fn read_reg(port_addr: UartPort, reg: UartReg) -> u8 {
-    unsafe { cpu::inb(port_addr as u16 + reg as u16) }
+    unsafe { cpu::io_in(port_addr as u16 + reg as u16) }
 }
 
 fn init_port(port_addr: UartPort) {
