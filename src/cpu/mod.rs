@@ -85,6 +85,16 @@ pub unsafe fn inb(port: u16) -> u8 {
     val
 }
 
+pub unsafe fn outd(port: u16, val: u32) {
+    core::arch::asm!("out dx, eax", in("eax") val, in("dx") port, options(readonly, nostack, preserves_flags));
+}
+
+pub unsafe fn ind(port: u16) -> u32 {
+    let val: u32;
+    core::arch::asm!("in eax, dx", out("eax") val, in("dx") port, options(readonly, nostack, preserves_flags));
+    val
+}
+
 pub unsafe fn clear_interrupts() {
     core::arch::asm!("cli", options(nomem, nostack, preserves_flags));
 }

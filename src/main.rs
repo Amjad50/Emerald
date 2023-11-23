@@ -16,6 +16,7 @@ mod macros;
 mod bios;
 mod collections;
 mod cpu;
+mod devices;
 mod io;
 mod memory_management;
 mod multiboot;
@@ -27,6 +28,7 @@ use cpu::{
     gdt,
     interrupts::{self, apic},
 };
+use devices::pci::PciDevicePropeIterator;
 use io::console;
 use memory_management::{
     memory_layout::{
@@ -119,8 +121,12 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     console::setup_interrupts();
     unsafe { cpu::set_interrupts() };
 
-    finish_boot();
+    let pci_device_iter = PciDevicePropeIterator::new();
+    for device in pci_device_iter {
+        println!("{:#X?}", device);
+    }
 
+    finish_boot();
     // -- BOOT FINISHED --
 
     let mut chars = [0u8; 16];
