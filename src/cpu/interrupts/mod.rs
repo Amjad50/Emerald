@@ -50,6 +50,6 @@ pub fn init_interrupts() {
 }
 
 /// Puts the handler in the IDT and returns the interrupt/vector number
-pub fn allocate_user_interrupt(handler: InterruptHandler) -> u8 {
+pub(super) fn allocate_user_interrupt(handler: InterruptHandler) -> u8 {
     INTERRUPTS.lock().allocate_user_interrupt(handler)
 }

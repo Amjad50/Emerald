@@ -18,6 +18,9 @@ mod flags {
     pub const GATE_TYPE: u8 = 0b1110;
     pub const KEEP_INTERRUPTS: u8 = 1 << 0;
     pub const PRESENT: u8 = 1 << 7;
+    pub const fn dpl(ring: u8) -> u8 {
+        ring << 5
+    }
 }
 
 #[repr(C, align(16))]
@@ -72,6 +75,18 @@ impl<T> InterruptDescriptorTableEntry<T> {
         } else {
             self.flags |= flags::KEEP_INTERRUPTS;
         }
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn override_code_segment(&mut self, cs: u16) -> &mut Self {
+        self.selector = cs;
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn set_privilege_level(&mut self, ring: u8) -> &mut Self {
+        self.flags = (self.flags & !flags::dpl(0b11)) | flags::dpl(ring);
         self
     }
 }

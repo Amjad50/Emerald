@@ -12,30 +12,40 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-static GDT: Mutex<GlobalDescriptorTable> = Mutex::new(GlobalDescriptorTable::empty());
+static GDT: Mutex<GlobalDescriptorManager> = Mutex::new(GlobalDescriptorManager::empty());
 /// SAFETY: TSS is only used when `GDT` is locked, so its safe to use as `static mut`
 static mut TSS: TaskStateSegment = TaskStateSegment::empty();
 
+const KERNEL_RING: u8 = 0;
+const USER_RING: u8 = 3;
+
 /// This should be called only once, otherwise, it will crash
 pub fn init_kernel_gdt() {
-    let mut gdt = GDT.lock();
-    if gdt.index != 1 {
+    let mut manager = GDT.lock();
+    if manager.gdt.index != 1 {
         panic!("GDT already initialized");
     }
 
-    let code_segment_index = unsafe {
-        gdt.push_user(UserDescriptorEntry {
-            access: flags::PRESENT | flags::CODE | flags::USER,
+    manager.kernel_code_seg_index = unsafe {
+        manager.gdt.push_user(UserDescriptorEntry {
+            access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(KERNEL_RING),
             flags_and_limit: flags::LONG_MODE,
             ..UserDescriptorEntry::empty()
         })
     };
-    unsafe {
-        gdt.push_user(UserDescriptorEntry {
+    manager.data_seg_index = unsafe {
+        manager.gdt.push_user(UserDescriptorEntry {
             access: flags::PRESENT | flags::USER,
             ..UserDescriptorEntry::empty()
-        });
-    }
+        })
+    };
+    manager.user_code_seg_index = unsafe {
+        manager.gdt.push_user(UserDescriptorEntry {
+            access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(USER_RING),
+            flags_and_limit: flags::LONG_MODE,
+            ..UserDescriptorEntry::empty()
+        })
+    };
 
     // setup TSS
 
@@ -79,8 +89,8 @@ pub fn init_kernel_gdt() {
 
     let tss_ptr = (unsafe { &TSS } as *const _) as u64;
 
-    let tss_segment_index = unsafe {
-        gdt.push_system(SystemDescriptorEntry {
+    manager.tss_seg_index = unsafe {
+        manager.gdt.push_system(SystemDescriptorEntry {
             limit: (mem::size_of::<TaskStateSegment>() - 1) as u16,
             access: flags::PRESENT | flags::TSS_TYPE,
             base_low: (tss_ptr & 0xFFFF) as u16,
@@ -90,26 +100,28 @@ pub fn init_kernel_gdt() {
             ..SystemDescriptorEntry::empty()
         })
     };
-    drop(gdt);
+    drop(manager);
     // call the special `run_with` so that we get the `static` lifetime
-    GDT.run_with(|gdt| gdt.apply_lgdt());
+    GDT.run_with(|manager| {
+        manager.gdt.apply_lgdt();
 
-    unsafe {
-        // load the code segment
-        // the other segments should be 0 since `boot`, and no need to change them
-        super::set_cs((code_segment_index * size_of::<u64>()) as u16);
-        super::ltr((tss_segment_index * size_of::<u64>()) as u16);
-    }
+        manager.load_kernel_segments();
+        manager.load_tss();
+    });
 }
 
 mod flags {
+    // this is in the flags byte
+    pub const LONG_MODE: u8 = 1 << 5;
+
     // these are in the access byte
     pub const PRESENT: u8 = 1 << 7;
     pub const CODE: u8 = 1 << 3;
     pub const USER: u8 = 1 << 4;
     pub const TSS_TYPE: u8 = 0b1001;
-    // this is in the flags byte
-    pub const LONG_MODE: u8 = 1 << 5;
+    pub const fn dpl(dpl: u8) -> u8 {
+        dpl << 5
+    }
 }
 
 /// User Descriptor Entry for GDT
@@ -204,7 +216,45 @@ pub(super) struct GlobalDescriptorTablePointer {
     base: *const GlobalDescriptorTable,
 }
 
-#[repr(C, packed(4))]
+struct GlobalDescriptorManager {
+    gdt: GlobalDescriptorTable,
+    kernel_code_seg_index: usize,
+    user_code_seg_index: usize,
+    // there is only one data segment and its not even used, as we are using
+    // segments 0 for ds, ss, es, and others.
+    data_seg_index: usize,
+    tss_seg_index: usize,
+}
+
+impl GlobalDescriptorManager {
+    pub const fn empty() -> Self {
+        Self {
+            gdt: GlobalDescriptorTable::empty(),
+            kernel_code_seg_index: 0,
+            data_seg_index: 0,
+            user_code_seg_index: 0,
+            tss_seg_index: 0,
+        }
+    }
+
+    pub fn load_kernel_segments(&self) {
+        assert!(self.kernel_code_seg_index != 0);
+        unsafe {
+            // load the code segment
+            super::set_cs((self.kernel_code_seg_index * size_of::<u64>()) as u16);
+        }
+    }
+
+    pub fn load_tss(&self) {
+        assert!(self.tss_seg_index != 0);
+        unsafe {
+            // load the tss segment
+            super::ltr((self.tss_seg_index * size_of::<u64>()) as u16);
+        }
+    }
+}
+
+#[repr(C, packed(16))]
 struct GlobalDescriptorTable {
     data: [u64; 8],
     index: usize,
