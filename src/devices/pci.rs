@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::cpu::{self, IoPortInt};
 
 fn read_pci_config<T: IoPortInt>(bus: u8, dev: u8, func: u8, offset: u8) -> T {
@@ -90,7 +92,8 @@ impl Iterator for PciDevicePropeIterator {
     }
 }
 
-#[derive(Debug)]
+#[repr(u8)]
+#[derive(Debug, Clone)]
 pub enum PciDeviceType {
     Unclassified(u8, u8, u8),
     MassStorageController(u8, u8, u8),
@@ -113,7 +116,7 @@ pub enum PciDeviceType {
     ProcessingAccelerator(u8, u8, u8),
     NonEssentialInstrumentation(u8, u8, u8),
     CoProcessor(u8, u8, u8),
-    Reserved(u8, u8, u8),
+    Reserved(u8, u8, u8, u8),
     Unassigned(u8, u8, u8),
 }
 
@@ -145,51 +148,181 @@ impl PciDeviceType {
             0x11 => Self::SignalProcessingController(subclass_id, prog_if, revision_id),
             0x12 => Self::ProcessingAccelerator(subclass_id, prog_if, revision_id),
             0x13 => Self::NonEssentialInstrumentation(subclass_id, prog_if, revision_id),
-            0x14..=0x3F => Self::Reserved(subclass_id, prog_if, revision_id),
+            0x14..=0x3F => Self::Reserved(class_id, subclass_id, prog_if, revision_id),
             0x40 => Self::CoProcessor(subclass_id, prog_if, revision_id),
-            0x41..=0xFE => Self::Reserved(subclass_id, prog_if, revision_id),
+            0x41..=0xFE => Self::Reserved(class_id, subclass_id, prog_if, revision_id),
             0xFF => Self::Unassigned(subclass_id, prog_if, revision_id),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum PciBarAddress {
-    Memory(u64, bool),
-    Io(u16),
-    None,
-}
+impl fmt::Display for PciDeviceType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Reserved(class, subclass, prog, rev) => {
+                write!(
+                    f,
+                    "Reserved({:02X}.{:02X}.{:02X}.{:02X})",
+                    class, subclass, prog, rev
+                )
+            }
+            Self::Unassigned(subclass, prog, rev) => {
+                write!(f, "Unassigned({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::Unclassified(subclass, prog, rev) => {
+                write!(f, "Unclassified({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::MassStorageController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "MassStorageController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::NetworkController(subclass, prog, rev) => {
+                write!(f, "NetworkController({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::DisplayController(subclass, prog, rev) => {
+                write!(f, "DisplayController({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::MultimediaController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "MultimediaController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::MemoryController(subclass, prog, rev) => {
+                write!(f, "MemoryController({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::BridgeDevice(subclass, prog, rev) => {
+                write!(f, "BridgeDevice({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::SimpleCommunicationController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "SimpleCommunicationController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::BaseSystemPeripheral(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "BaseSystemPeripheral({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::InputDeviceController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "InputDeviceController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::DockingStation(subclass, prog, rev) => {
+                write!(f, "DockingStation({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::Processor(subclass, prog, rev) => {
+                write!(f, "Processor({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::SerialBusController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "SerialBusController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub struct PciBar {
-    address: PciBarAddress,
-    size: u64,
-}
-
-impl PciBar {
-    pub const fn empty() -> PciBar {
-        PciBar {
-            address: PciBarAddress::None,
-            size: 0,
+            Self::WirelessController(subclass, prog, rev) => {
+                write!(f, "WirelessController({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
+            Self::IntelligentController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "IntelligentController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::SatelliteCommunicationController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "SatelliteCommunicationController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::EncryptionController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "EncryptionController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::SignalProcessingController(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "SignalProcessingController({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::ProcessingAccelerator(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "ProcessingAccelerator({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::NonEssentialInstrumentation(subclass, prog, rev) => {
+                write!(
+                    f,
+                    "NonEssentialInstrumentation({subclass:02X}.{prog:02X}.{rev:02X})"
+                )
+            }
+            Self::CoProcessor(subclass, prog, rev) => {
+                write!(f, "CoProcessor({subclass:02X}.{prog:02X}.{rev:02X})")
+            }
         }
     }
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
+pub enum PciBar {
+    Memory {
+        addr: u64,
+        size: u64,
+        prefetchable: bool,
+    },
+    Io {
+        addr: u16,
+        size: u64,
+    },
+    None,
+}
+
+#[allow(dead_code)]
+impl PciBar {
+    pub fn get_io(&self) -> Option<(u16, u64)> {
+        match self {
+            Self::Io { addr, size } => Some((*addr, *size)),
+            _ => None,
+        }
+    }
+
+    pub fn get_memory(&self) -> Option<(u64, u64, bool)> {
+        match self {
+            Self::Memory {
+                addr,
+                size,
+                prefetchable,
+            } => Some((*addr, *size, *prefetchable)),
+            _ => None,
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct PciDeviceConfig {
-    bus: u8,
-    dev: u8,
-    func: u8,
-    vendor_id: u16,
-    device_id: u16,
-    device_type: PciDeviceType,
-    header_type: u8,
-    base_address: [PciBar; 6],
-    interrupt_line: u8,
-    interrupt_pin: u8,
-    capabilities_ptr: Option<u8>,
+    pub(super) bus: u8,
+    pub(super) dev: u8,
+    pub(super) func: u8,
+    pub(super) vendor_id: u16,
+    pub(super) device_id: u16,
+    pub(super) device_type: PciDeviceType,
+    pub(super) header_type: u8,
+    pub(super) base_address: [PciBar; 6],
+    pub(super) interrupt_line: u8,
+    pub(super) interrupt_pin: u8,
+    pub(super) capabilities_ptr: Option<u8>,
 }
 
 impl PciDeviceConfig {
@@ -209,7 +342,7 @@ impl PciDeviceConfig {
             return None;
         }
         // standard header
-        let mut base_address = [PciBar::empty(); 6];
+        let mut base_address = [PciBar::None; 6];
         let mut i = 0;
         while i < 6 {
             let bar_v = read_pci_config::<u32>(bus, dev, func, reg::BAR0 + i * 4);
@@ -227,8 +360,8 @@ impl PciDeviceConfig {
                 write_pci_config(bus, dev, func, reg::BAR0 + i * 4, old_bar);
                 let size = (!(bar & 0xFFFF_FFFC) + 1) as u64;
 
-                base_address[i as usize] = PciBar {
-                    address: PciBarAddress::Io(old_bar as u16),
+                base_address[i as usize] = PciBar::Io {
+                    addr: old_bar as u16,
                     size,
                 };
             } else {
@@ -245,8 +378,11 @@ impl PciDeviceConfig {
                 match ty {
                     0x0 => {
                         // 32-bit
-                        let address = PciBarAddress::Memory(old_bar as u64, prefetchable);
-                        base_address[i as usize] = PciBar { address, size };
+                        base_address[i as usize] = PciBar::Memory {
+                            addr: old_bar as u64,
+                            size,
+                            prefetchable,
+                        }
                     }
                     0x2 => {
                         // 64-bit
@@ -255,10 +391,13 @@ impl PciDeviceConfig {
                         i += 1;
 
                         let whole_bar = (bar_2 as u64) << 32 | (old_bar as u64);
-                        let address = PciBarAddress::Memory(whole_bar, prefetchable);
+                        base_address[i as usize] = PciBar::Memory {
+                            addr: whole_bar,
+                            size,
+                            prefetchable,
+                        };
                         // store it in the two bars
-                        base_address[(i - 1) as usize] = PciBar { address, size };
-                        base_address[i as usize] = PciBar { address, size };
+                        base_address[(i - 1) as usize] = base_address[i as usize];
                     }
                     _ => panic!("Reserved bar memory type 1, BAR{i}=0x{bar_v:08X}"),
                 };
@@ -318,4 +457,11 @@ impl PciDeviceConfig {
     pub fn read_status(&self) -> u16 {
         self.read_config(reg::STATUS)
     }
+}
+
+pub trait PciDevice {
+    fn probe_init(config: &PciDeviceConfig) -> Option<Self>
+    where
+        Self: Sized;
+    fn device_name(&self) -> &'static str;
 }

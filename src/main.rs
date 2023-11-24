@@ -28,7 +28,6 @@ use cpu::{
     gdt,
     interrupts::{self, apic},
 };
-use devices::pci::PciDevicePropeIterator;
 use io::console;
 use memory_management::{
     memory_layout::{
@@ -120,11 +119,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     apic::init();
     console::setup_interrupts();
     unsafe { cpu::set_interrupts() };
-
-    let pci_device_iter = PciDevicePropeIterator::new();
-    for device in pci_device_iter {
-        println!("{:#X?}", device);
-    }
+    devices::register_devices();
 
     finish_boot();
     // -- BOOT FINISHED --
