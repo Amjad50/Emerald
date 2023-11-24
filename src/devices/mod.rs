@@ -1,5 +1,6 @@
 use self::pci::{PciDeviceConfig, PciDevicePropeIterator};
 
+pub mod ide;
 pub mod pci;
 
 pub fn register_devices() {
@@ -19,7 +20,7 @@ pub fn register_devices() {
     }
 }
 
-pub fn probe_driver(_pci_device: &PciDeviceConfig) -> bool {
+pub fn probe_driver(pci_device: &PciDeviceConfig) -> bool {
+    ide::try_register_ide_device(pci_device)
     // add more devices here
-    false
 }
