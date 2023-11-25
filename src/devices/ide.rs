@@ -81,6 +81,21 @@ mod ata {
     // sepcific to SCSI
     pub const ERROR_SENSE_KEY: u8 = 0xF << 4;
 
+    pub const SENSE_OK: u8 = 0x0;
+    pub const SENSE_RECOVERED_ERROR: u8 = 0x1;
+    pub const SENSE_NOT_READY: u8 = 0x2;
+    pub const SENSE_MEDIUM_ERROR: u8 = 0x3;
+    pub const SENSE_HARDWARE_ERROR: u8 = 0x4;
+    pub const SENSE_ILLEGAL_REQUEST: u8 = 0x5;
+    pub const SENSE_UNIT_ATTENTION: u8 = 0x6;
+    pub const SENSE_DATA_PROTECT: u8 = 0x7;
+    pub const SENSE_BLANK_CHECK: u8 = 0x8;
+    pub const SENSE_VENDOR_SPECIFIC: u8 = 0x9;
+    pub const SENSE_COPY_ABORTED: u8 = 0xA;
+    pub const SENSE_ABORTED_COMMAND: u8 = 0xB;
+    pub const SENSE_VOLUME_OVERFLOW: u8 = 0xD;
+    pub const SENSE_MISCOMPARE: u8 = 0xE;
+
     pub const STATUS_ERR: u8 = 1 << 0;
     pub const STATUS_SENSE_DATA: u8 = 1 << 1;
     pub const STATUS_ALIGN_ERR: u8 = 1 << 2;
@@ -99,6 +114,16 @@ mod ata {
     pub const PACKET_FEAT_DMA: u8 = 1 << 0;
     pub const PACKET_FEAT_DMA_DIR_FROM_DEVICE: u8 = 1 << 2;
 
+    pub const PACKET_CMD_READ_10: u8 = 0x28;
+    pub const PACKET_CMD_INQUIRY: u8 = 0x12;
+    pub const PACKET_CMD_TEST_UNIT_READY: u8 = 0x00;
+
+    pub const PACKET_INQUIRY_VITAL_DATA: u8 = 0x1;
+    pub const PACKET_VITAL_PAGE_SUPPORTED_PAGES: u8 = 0x00;
+    pub const PACKET_VITAL_PAGE_DEVICE_IDENTIFY: u8 = 0x83;
+    pub const PACKET_VITAL_PAGE_BLOCK_LIMITS: u8 = 0xB0;
+    pub const PACKET_VITAL_PAGE_BLOCK_LIMITS_SIZE: u16 = 64;
+
     // size of a sector in bytes
     pub const DEFAULT_SECTOR_SIZE: u32 = 512;
 }
@@ -112,18 +137,18 @@ pub struct IdeIo {
 impl IdeIo {
     // until not busy
     pub fn wait_until_free(&self) {
-        let mut status = self.read_command_block(ata::STATUS);
+        let mut status = self.read_status();
         while status & ata::STATUS_BUSY != 0 {
             hint::spin_loop();
-            status = self.read_command_block(ata::STATUS);
+            status = self.read_status();
         }
     }
 
     pub fn wait_until_can_command(&self) {
-        let mut status = self.read_command_block(ata::STATUS);
+        let mut status = self.read_status();
         while status & (ata::STATUS_BUSY | ata::STATUS_DATA_REQUEST) != 0 {
             hint::spin_loop();
-            status = self.read_command_block(ata::STATUS);
+            status = self.read_status();
         }
     }
 
@@ -134,6 +159,19 @@ impl IdeIo {
     #[allow(dead_code)]
     pub fn write_data(&self, value: u16) {
         unsafe { cpu::io_out(self.command_block + ata::DATA, value) }
+    }
+
+    pub fn read_status(&self) -> u8 {
+        self.read_command_block(ata::STATUS)
+    }
+
+    pub fn read_error(&self) -> u8 {
+        self.read_command_block(ata::ERROR)
+    }
+
+    // ATAPI only
+    pub fn read_sense_key(&self) -> u8 {
+        self.read_error() >> 4
     }
 
     pub fn read_command_block(&self, offset: u16) -> u8 {
@@ -306,11 +344,11 @@ pub enum IdeDeviceType {
 
 #[derive(Debug, Clone, Copy)]
 struct AtaCommand {
-    pub command: u8,
-    pub drive: u8,
-    pub lba: u64,
-    pub sector_count: u16,
-    pub features: u8,
+    command: u8,
+    drive: u8,
+    lba: u64,
+    sector_count: u16,
+    features: u8,
 }
 
 impl AtaCommand {
@@ -369,9 +407,9 @@ impl AtaCommand {
         self.write(io_port);
         io_port.wait_until_free();
 
-        if io_port.read_command_block(ata::STATUS) & ata::STATUS_ERR != 0 {
+        if io_port.read_status() & ata::STATUS_ERR != 0 {
             // error
-            return Err(io_port.read_command_block(ata::ERROR));
+            return Err(io_port.read_error());
         }
 
         // read data
@@ -381,7 +419,7 @@ impl AtaCommand {
             data[i * 2 + 1] = ((word >> 8) & 0xFF) as u8;
 
             // TODO: maybe not best to check on every read, but when reading multiple sectors
-            if io_port.read_command_block(ata::STATUS) & ata::STATUS_BUSY != 0 {
+            if io_port.read_status() & ata::STATUS_BUSY != 0 {
                 io_port.wait_until_free();
             }
         }
@@ -390,7 +428,157 @@ impl AtaCommand {
     }
 }
 
-#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+enum AtapiDmaDirection {
+    FromDevice,
+    ToDevice,
+    None,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AtapiPacketCommand {
+    drive: u8,
+    dma: AtapiDmaDirection,
+    lba: u64,
+    params: [u8; 32],
+
+    params_index: usize,
+}
+
+impl AtapiPacketCommand {
+    pub fn new(command: u8) -> Self {
+        let mut params = [0; 32];
+        params[0] = command;
+        Self {
+            drive: 0x40, // always have the 6th bit set (LBA mode)
+            dma: AtapiDmaDirection::None,
+            lba: 0xFFFF00, // byte count limit of 0xFFFF (should be ignored if not needed)
+            params,
+            params_index: 1,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn with_dma(mut self, dma: AtapiDmaDirection) -> Self {
+        self.dma = dma;
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn with_second_drive(mut self, is_second: bool) -> Self {
+        if is_second {
+            self.drive |= 1 << 4;
+        } else {
+            self.drive &= !(1 << 4);
+        }
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn with_byte_count_limit(mut self, byte_count_limit: u16) -> Self {
+        self.lba = (byte_count_limit as u64) << 8;
+        self
+    }
+
+    pub fn push_param(mut self, param: u8) -> Self {
+        self.params[self.params_index] = param;
+        self.params_index += 1;
+        self
+    }
+
+    // msb first, lsb last
+    #[allow(dead_code)]
+    pub fn push_param_u16(self, param: u16) -> Self {
+        self.push_param((param >> 8) as u8)
+            .push_param((param & 0xFF) as u8)
+    }
+
+    // msb first, lsb last
+    #[allow(dead_code)]
+    pub fn push_param_u32(self, param: u32) -> Self {
+        self.push_param((param >> 24) as u8)
+            .push_param((param >> 16) as u8)
+            .push_param((param >> 8) as u8)
+            .push_param((param & 0xFF) as u8)
+    }
+
+    pub fn write_packet_command(&self, io_port: &IdeIo) {
+        let features = match self.dma {
+            AtapiDmaDirection::FromDevice => {
+                ata::PACKET_FEAT_DMA | ata::PACKET_FEAT_DMA_DIR_FROM_DEVICE
+            }
+            AtapiDmaDirection::ToDevice => ata::PACKET_FEAT_DMA,
+            AtapiDmaDirection::None => 0,
+        };
+
+        io_port.write_command_block(ata::FEATURES, features);
+        io_port.write_command_block(ata::SECTOR_COUNT, 0);
+        io_port.write_command_block(ata::LBA_LO, (self.lba & 0xFF) as u8);
+        io_port.write_command_block(ata::LBA_MID, ((self.lba >> 8) & 0xFF) as u8);
+        io_port.write_command_block(ata::LBA_HI, ((self.lba >> 16) & 0xFF) as u8);
+        io_port.write_command_block(ata::DRIVE, self.drive);
+        io_port.write_command_block(ata::COMMAND, ata::COMMAND_PACKET);
+    }
+
+    pub fn execute(&self, io_port: &IdeIo, data: &mut [u8]) -> Result<(), u8> {
+        // must be even since we are receiving 16 bit words
+        assert!(data.len() % 2 == 0);
+        io_port.wait_until_can_command();
+        self.write_packet_command(io_port);
+        io_port.wait_until_free();
+
+        if io_port.read_status() & ata::STATUS_ERR != 0 {
+            // ATAPI uses SENSE key
+            return Err(io_port.read_sense_key());
+        }
+
+        // write command
+        let mut param_count = self.params_index;
+        // make sure its even
+        if param_count & 1 == 1 {
+            param_count += 1;
+        }
+        // SAFETY: we are sure that the params are aligned to u16
+        for &param in unsafe { self.params[..param_count].align_to::<u16>().1 } {
+            io_port.write_data(param);
+        }
+        // if for some reason it expects more data
+        // push until satisfied
+        // since `DATA_REQUEST` is also used to denote that there is data present
+        // we might miss that the device is sending us data and not waiting for more data from us
+        // we should break if that's the case
+        let mut max = 32;
+        while io_port.read_status() & ata::STATUS_DATA_REQUEST != 0 {
+            io_port.write_data(0);
+            max -= 1;
+            if max == 0 {
+                break;
+            }
+        }
+
+        if io_port.read_status() & ata::STATUS_ERR != 0 {
+            return Err(io_port.read_sense_key());
+        }
+        io_port.wait_until_free();
+
+        // read data
+        for i in 0..data.len() / 2 {
+            let word = io_port.read_data();
+            data[i * 2] = (word & 0xFF) as u8;
+            data[i * 2 + 1] = ((word >> 8) & 0xFF) as u8;
+
+            // TODO: maybe not best to check on every read, but when reading multiple sectors
+            if io_port.read_status() & ata::STATUS_BUSY != 0 {
+                io_port.wait_until_free();
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[repr(C, packed(2))]
 #[derive(Debug)]
 struct CommandIdentifyDataRaw {
     general_config: u16,
@@ -457,7 +645,9 @@ struct CommandIdentifyDataRaw {
     obsolete10: u16,
     logical_sector_size: u32,
     command_set_supported_or_enabled2: [u16; 2],
-    reserved4: [u16; 6],
+    reserved4: [u16; 4],
+    atapi_byte_count_behavior: u16,
+    reserved5: u16,
     obsolete11: u16,
     security_status: u16,
     vendor_specific: [u16; 31],
@@ -465,26 +655,26 @@ struct CommandIdentifyDataRaw {
     device_nominal_form_factor: u16,
     data_set_management_trim_support: u16,
     additional_product_id: [u16; 4],
-    reserved5: [u16; 2],
+    reserved6: [u16; 2],
     current_media_serial_number: [u16; 30],
     sct_command_transport: u16,
-    reserved6: [u16; 2],
+    reserved7: [u16; 2],
     logical_sectors_alignment: u16,
     write_read_verify_sector_count_mode3: u32,
     write_read_verify_sector_count_mode2: u32,
     obsolete12: [u16; 3],
     nominal_media_rotation_rate: u16,
-    reserved7: u16,
+    reserved8: u16,
     obsolete13: u16,
     write_read_verify_feature_set_current_mode: u16,
-    reserved8: u16,
+    reserved9: u16,
     transport_major_version: u16,
     transport_minor_version: u16,
-    reserved9: [u16; 6],
+    reserved10: [u16; 6],
     extended_user_addressable_sectors: u64,
     min_blocks_per_download_microcode: u16,
     max_blocks_per_download_microcode: u16,
-    reserved10: [u16; 19],
+    reserved11: [u16; 19],
     integrity_word: u16,
 }
 
@@ -569,19 +759,33 @@ impl IdeDevice {
 
             // ATAPI
             if lbalo == 0x1 && lbamid == 0x14 && lbahi == 0xEB {
-                let command = AtaCommand::new(ata::COMMAND_PACKET_IDENTIFY)
+                // check that the device is running
+                let command = AtapiPacketCommand::new(ata::PACKET_CMD_TEST_UNIT_READY)
                     .with_second_drive(second_device_select);
-                if let Err(err) = command.execute(&io, &mut identify_data) {
-                    println!("Error: unknown ATAPI device aborted: Err={err:02x}",);
-                    return None;
+                if let Err(err) = command.execute(&io, &mut []) {
+                    if err == ata::SENSE_NOT_READY {
+                        // device not ready (i.e. not present)
+                        return None;
+                    } else {
+                        println!("Error: unknown ATAPI device error: Err={err:02x}");
+                        return None;
+                    }
                 }
-                device_type = IdeDeviceType::Atapi;
             } else {
                 println!(
                     "Error: unknown IDE device aborted: LBA={lbalo:02x}:{lbamid:02x}:{lbahi:02x}",
                 );
                 return None;
             }
+
+            // here we know we are running an ATAPI device
+            let command = AtaCommand::new(ata::COMMAND_PACKET_IDENTIFY)
+                .with_second_drive(second_device_select);
+            if let Err(err) = command.execute(&io, &mut identify_data) {
+                println!("Error: unknown ATAPI device aborted: Err={err:02x}",);
+                return None;
+            }
+            device_type = IdeDeviceType::Atapi;
         }
 
         assert!(mem::size_of::<CommandIdentifyDataRaw>() == identify_data.len());
