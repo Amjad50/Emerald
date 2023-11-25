@@ -8,19 +8,20 @@ use crate::{
 
 use super::pci::{self, PciDevice, PciDeviceConfig};
 
-static mut IDE_DEVICES: [Option<Mutex<IdeDevice>>; 4] = [None, None, None, None];
+static mut IDE_DEVICES: [Option<IdeDevicePair>; 4] = [None, None, None, None];
 static INTERRUPTS_SETUP: AtomicBool = AtomicBool::new(false);
 
 pub fn try_register_ide_device(pci_device: &PciDeviceConfig) -> bool {
-    let Some(ide_device) = IdeDevice::probe_init(pci_device) else {
+    let Some(ide_device) = IdeDevicePair::probe_init(pci_device) else {
         return false;
     };
 
+    // SAFETY: we are muting only to add elements, and we are not accessing the old elements or changing thems
     let ide_devices = unsafe { &mut IDE_DEVICES };
     let slot = ide_devices.iter_mut().find(|x| x.is_none());
 
     if let Some(slot) = slot {
-        *slot = Some(Mutex::new(ide_device));
+        *slot = Some(ide_device);
         true
     } else {
         panic!("No more IDE devices can be registered!");
@@ -90,7 +91,13 @@ mod ata {
     pub const STATUS_BUSY: u8 = 1 << 7;
 
     pub const COMMAND_IDENTIFY: u8 = 0xEC;
+    pub const COMMAND_PACKET_IDENTIFY: u8 = 0xA1;
     pub const COMMAND_READ_SECTORS: u8 = 0x20;
+    pub const COMMAND_DEVICE_RESET: u8 = 0x08;
+    pub const COMMAND_PACKET: u8 = 0xA0;
+
+    pub const PACKET_FEAT_DMA: u8 = 1 << 0;
+    pub const PACKET_FEAT_DMA_DIR_FROM_DEVICE: u8 = 1 << 2;
 
     // size of a sector in bytes
     pub const DEFAULT_SECTOR_SIZE: u32 = 512;
@@ -148,8 +155,157 @@ impl IdeIo {
     }
 }
 
+#[allow(dead_code)]
+pub struct IdeDevicePair {
+    // two devices per io port (selected from the DEVICE register)
+    primary: [Option<Mutex<IdeDevice>>; 2],
+    secondary: [Option<Mutex<IdeDevice>>; 2],
+}
+
+impl PciDevice for IdeDevicePair {
+    fn probe_init(config: &PciDeviceConfig) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if let super::pci::PciDeviceType::MassStorageController(0x1, prog_if, ..) =
+            config.device_type
+        {
+            let support_dma = prog_if & pci_cfg::PROG_IF_MASTER != 0;
+            let mut command = config.read_command();
+            command |= pci_cfg::CMD_IO_SPACE;
+            if support_dma {
+                // enable bus master
+                command |= pci_cfg::CMD_BUS_MASTER;
+            }
+            config.write_command(command);
+            let command = config.read_command();
+            // make sure we have at least IO space enabled
+            if command & pci_cfg::CMD_IO_SPACE == 0 {
+                return None;
+            }
+            // get the IO ports to use
+            let primary_io = if prog_if & pci_cfg::PROG_IF_PRIMARY != 0 {
+                if let Some(primary_io) = config.base_address[0].get_io() {
+                    let control_block_io = config.base_address[1].get_io().unwrap().0;
+                    (primary_io.0, control_block_io)
+                } else {
+                    // the IO ports are not set
+                    if prog_if & pci_cfg::PROG_IF_PRIMARY_PROGRAMMABLE != 0 {
+                        // we can program them to the default
+                        let (bar0, bar1) = pci_cfg::DEFAULT_PRIMARY_IO;
+                        // 1 means IO space
+                        // FIXME: this makes the `config` has inconsistent state
+                        config.write_config(pci::reg::BAR0, bar0 | 1);
+                        config.write_config(pci::reg::BAR1, bar1 | 1);
+                    }
+                    pci_cfg::DEFAULT_PRIMARY_IO
+                }
+            } else {
+                pci_cfg::DEFAULT_PRIMARY_IO
+            };
+            let secondary_io = if prog_if & pci_cfg::PROG_IF_SECONDARY != 0 {
+                if let Some(secondary_io) = config.base_address[2].get_io() {
+                    let control_block_io = config.base_address[3].get_io().unwrap().0;
+                    (secondary_io.0, control_block_io)
+                } else {
+                    // the IO ports are not set
+                    if prog_if & pci_cfg::PROG_IF_SECONDARY_PROGRAMMABLE != 0 {
+                        // we can program them to the default
+                        let (bar2, bar3) = pci_cfg::DEFAULT_SECONDARY_IO;
+                        // 1 means IO space
+                        // FIXME: this makes the `config` has inconsistent state
+                        config.write_config(pci::reg::BAR2, bar2 | 1);
+                        config.write_config(pci::reg::BAR3, bar3 | 1);
+                    }
+                    pci_cfg::DEFAULT_SECONDARY_IO
+                }
+            } else {
+                pci_cfg::DEFAULT_SECONDARY_IO
+            };
+            let master_io = if support_dma {
+                if let Some(master_io) = config.base_address[4].get_io() {
+                    Some(master_io.0)
+                } else {
+                    // the IO ports are not set
+                    panic!("DMA is supported but the IO ports are not set")
+                }
+            } else {
+                None
+            };
+
+            // setup interrupts if not already done
+            if !INTERRUPTS_SETUP.swap(true, core::sync::atomic::Ordering::SeqCst) {
+                // setup ide interrupt
+                // TODO: we are assuming that this is the interrupt address.
+                //       at least, can't find a specific place on all specs for to know for sure if its using
+                //       legacy interrupts or something else
+                apic::assign_io_irq(
+                    ide_interrupt_primary,
+                    pci_cfg::DEFAULT_PRIMARY_INTERRUPT,
+                    cpu::cpu(),
+                );
+                apic::assign_io_irq(
+                    ide_interrupt_secondary,
+                    pci_cfg::DEFAULT_SECONDARY_INTERRUPT,
+                    cpu::cpu(),
+                );
+            }
+
+            let primary_io = IdeIo {
+                command_block: primary_io.0,
+                control_block: primary_io.1,
+            };
+            let secondary_io = IdeIo {
+                command_block: secondary_io.0,
+                control_block: secondary_io.1,
+            };
+
+            Some(Self {
+                primary: [
+                    IdeDevice::init_new(master_io, primary_io, config, false).map(Mutex::new),
+                    IdeDevice::init_new(master_io, primary_io, config, true).map(Mutex::new),
+                ],
+                secondary: [
+                    IdeDevice::init_new(master_io, secondary_io, config, false).map(Mutex::new),
+                    IdeDevice::init_new(master_io, secondary_io, config, true).map(Mutex::new),
+                ],
+            })
+        } else {
+            None
+        }
+    }
+
+    fn device_name(&self) -> &'static str {
+        "IDE"
+    }
+}
+
+impl IdeDevicePair {
+    pub fn primary_interrupt_handler(&self) {
+        self.primary.iter().for_each(|x| {
+            if let Some(primary) = x {
+                primary.lock().interrupt();
+            }
+        });
+    }
+
+    pub fn secondary_interrupt_handler(&self) {
+        self.secondary.iter().for_each(|x| {
+            if let Some(secondary) = x {
+                secondary.lock().interrupt();
+            }
+        });
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
-struct IdeCommand {
+pub enum IdeDeviceType {
+    Ata,
+    Atapi,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AtaCommand {
     pub command: u8,
     pub drive: u8,
     pub lba: u64,
@@ -157,11 +313,11 @@ struct IdeCommand {
     pub features: u8,
 }
 
-impl IdeCommand {
+impl AtaCommand {
     pub fn new(command: u8) -> Self {
         Self {
             command,
-            drive: 0xA0, // always have the 6th bit set (LBA mode)
+            drive: 0x40, // always have the 6th bit set (LBA mode)
             lba: 0,
             sector_count: 0,
             features: 0,
@@ -206,7 +362,7 @@ impl IdeCommand {
         io_port.write_command_block(ata::COMMAND, self.command);
     }
 
-    pub fn execute(&self, io_port: &IdeIo, data: &mut [u8]) {
+    pub fn execute(&self, io_port: &IdeIo, data: &mut [u8]) -> Result<(), u8> {
         // must be even since we are receiving 16 bit words
         assert!(data.len() % 2 == 0);
         io_port.wait_until_can_command();
@@ -214,8 +370,8 @@ impl IdeCommand {
         io_port.wait_until_free();
 
         if io_port.read_command_block(ata::STATUS) & ata::STATUS_ERR != 0 {
-            // TODO: pass errors better
-            panic!("IDE error: {:02X}", io_port.read_command_block(ata::ERROR));
+            // error
+            return Err(io_port.read_command_block(ata::ERROR));
         }
 
         // read data
@@ -229,6 +385,8 @@ impl IdeCommand {
                 io_port.wait_until_free();
             }
         }
+
+        Ok(())
     }
 }
 
@@ -382,135 +540,49 @@ impl CommandIdentifyDataRaw {
 pub struct IdeDevice {
     // if this is None, then DMA is not supported
     master_io: Option<u16>,
-    primary_io: IdeIo,
-    secondary_io: IdeIo,
+    io: IdeIo,
     pci_device: PciDeviceConfig,
 
     identify_data: CommandIdentifyDataRaw,
-}
-
-impl PciDevice for IdeDevice {
-    fn probe_init(config: &PciDeviceConfig) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        if let super::pci::PciDeviceType::MassStorageController(0x1, prog_if, ..) =
-            config.device_type
-        {
-            let support_dma = prog_if & pci_cfg::PROG_IF_MASTER != 0;
-            let mut command = config.read_command();
-            command |= pci_cfg::CMD_IO_SPACE;
-            if support_dma {
-                // enable bus master
-                command |= pci_cfg::CMD_BUS_MASTER;
-            }
-            config.write_command(command);
-            let command = config.read_command();
-            // make sure we have at least IO space enabled
-            if command & pci_cfg::CMD_IO_SPACE == 0 {
-                return None;
-            }
-            // get the IO ports to use
-            let primary_io = if prog_if & pci_cfg::PROG_IF_PRIMARY != 0 {
-                if let Some(primary_io) = config.base_address[0].get_io() {
-                    let control_block_io = config.base_address[1].get_io().unwrap().0;
-                    (primary_io.0, control_block_io)
-                } else {
-                    // the IO ports are not set
-                    if prog_if & pci_cfg::PROG_IF_PRIMARY_PROGRAMMABLE != 0 {
-                        // we can program them to the default
-                        let (bar0, bar1) = pci_cfg::DEFAULT_PRIMARY_IO;
-                        // 1 means IO space
-                        // FIXME: this makes the `config` has inconsistent state
-                        config.write_config(pci::reg::BAR0, bar0 | 1);
-                        config.write_config(pci::reg::BAR1, bar1 | 1);
-                    }
-                    pci_cfg::DEFAULT_PRIMARY_IO
-                }
-            } else {
-                pci_cfg::DEFAULT_PRIMARY_IO
-            };
-            let secondary_io = if prog_if & pci_cfg::PROG_IF_SECONDARY != 0 {
-                if let Some(secondary_io) = config.base_address[2].get_io() {
-                    let control_block_io = config.base_address[3].get_io().unwrap().0;
-                    (secondary_io.0, control_block_io)
-                } else {
-                    // the IO ports are not set
-                    if prog_if & pci_cfg::PROG_IF_SECONDARY_PROGRAMMABLE != 0 {
-                        // we can program them to the default
-                        let (bar2, bar3) = pci_cfg::DEFAULT_SECONDARY_IO;
-                        // 1 means IO space
-                        // FIXME: this makes the `config` has inconsistent state
-                        config.write_config(pci::reg::BAR2, bar2 | 1);
-                        config.write_config(pci::reg::BAR3, bar3 | 1);
-                    }
-                    pci_cfg::DEFAULT_SECONDARY_IO
-                }
-            } else {
-                pci_cfg::DEFAULT_SECONDARY_IO
-            };
-            let master_io = if support_dma {
-                if let Some(master_io) = config.base_address[4].get_io() {
-                    Some(master_io.0)
-                } else {
-                    // the IO ports are not set
-                    panic!("DMA is supported but the IO ports are not set")
-                }
-            } else {
-                None
-            };
-
-            // setup interrupts if not already done
-            if !INTERRUPTS_SETUP.swap(true, core::sync::atomic::Ordering::SeqCst) {
-                // setup ide interrupt
-                // TODO: we are assuming that this is the interrupt address.
-                //       at least, can't find a specific place on all specs for to know for sure if its using
-                //       legacy interrupts or something else
-                apic::assign_io_irq(
-                    ide_interrupt_primary,
-                    pci_cfg::DEFAULT_PRIMARY_INTERRUPT,
-                    cpu::cpu(),
-                );
-                apic::assign_io_irq(
-                    ide_interrupt_secondary,
-                    pci_cfg::DEFAULT_SECONDARY_INTERRUPT,
-                    cpu::cpu(),
-                );
-            }
-
-            Self::init_new(
-                master_io,
-                IdeIo {
-                    command_block: primary_io.0,
-                    control_block: primary_io.1,
-                },
-                IdeIo {
-                    command_block: secondary_io.0,
-                    control_block: secondary_io.1,
-                },
-                config.clone(),
-            )
-        } else {
-            None
-        }
-    }
-
-    fn device_name(&self) -> &'static str {
-        "IDE"
-    }
+    device_type: IdeDeviceType,
 }
 
 impl IdeDevice {
     pub fn init_new(
         mut master_io: Option<u16>,
-        primary_io: IdeIo,
-        secondary_io: IdeIo,
-        pci_device: PciDeviceConfig,
+        io: IdeIo,
+        pci_device: &PciDeviceConfig,
+        second_device_select: bool,
     ) -> Option<Self> {
         // identify device
         let mut identify_data = [0u8; 512];
-        let command = IdeCommand::new(ata::COMMAND_IDENTIFY);
-        command.execute(&primary_io, &mut identify_data);
+        let command =
+            AtaCommand::new(ata::COMMAND_IDENTIFY).with_second_drive(second_device_select);
+
+        let mut device_type = IdeDeviceType::Ata;
+
+        if let Err(err) = command.execute(&io, &mut identify_data) {
+            assert_eq!(err, ata::ERROR_ABORTED);
+            let lbalo = io.read_command_block(ata::LBA_LO);
+            let lbamid = io.read_command_block(ata::LBA_MID);
+            let lbahi = io.read_command_block(ata::LBA_HI);
+
+            // ATAPI
+            if lbalo == 0x1 && lbamid == 0x14 && lbahi == 0xEB {
+                let command = AtaCommand::new(ata::COMMAND_PACKET_IDENTIFY)
+                    .with_second_drive(second_device_select);
+                if let Err(err) = command.execute(&io, &mut identify_data) {
+                    println!("Error: unknown ATAPI device aborted: Err={err:02x}",);
+                    return None;
+                }
+                device_type = IdeDeviceType::Atapi;
+            } else {
+                println!(
+                    "Error: unknown IDE device aborted: LBA={lbalo:02x}:{lbamid:02x}:{lbahi:02x}",
+                );
+                return None;
+            }
+        }
 
         assert!(mem::size_of::<CommandIdentifyDataRaw>() == identify_data.len());
         let identify_data: CommandIdentifyDataRaw = unsafe { core::mem::transmute(identify_data) };
@@ -530,16 +602,16 @@ impl IdeDevice {
         }
 
         println!(
-            "Initialized IDE device: size={}",
+            "Initialized IDE device({device_type:?}): size={}",
             identify_data.size_of_device()
         );
 
         Some(Self {
             master_io,
-            primary_io,
-            secondary_io,
-            pci_device,
+            io,
+            pci_device: pci_device.clone(),
             identify_data,
+            device_type,
         })
     }
 
@@ -548,22 +620,21 @@ impl IdeDevice {
         self.identify_data.size_of_device()
     }
 
-    pub fn primary_interrupt_handler(&mut self) {}
-    pub fn secondary_interrupt_handler(&mut self) {}
+    pub fn interrupt(&mut self) {}
 }
 
 extern "x86-interrupt" fn ide_interrupt_primary(_stack_frame: InterruptStackFrame64) {
-    let ide_devices = unsafe { &mut IDE_DEVICES };
+    let ide_devices = unsafe { &IDE_DEVICES };
     for ide_device in ide_devices.iter().filter_map(Option::as_ref) {
-        ide_device.lock().primary_interrupt_handler();
+        ide_device.primary_interrupt_handler();
     }
     apic::return_from_interrupt();
 }
 
 extern "x86-interrupt" fn ide_interrupt_secondary(_stack_frame: InterruptStackFrame64) {
-    let ide_devices = unsafe { &mut IDE_DEVICES };
+    let ide_devices = unsafe { &IDE_DEVICES };
     for ide_device in ide_devices.iter().filter_map(Option::as_ref) {
-        ide_device.lock().secondary_interrupt_handler();
+        ide_device.secondary_interrupt_handler();
     }
     apic::return_from_interrupt();
 }
