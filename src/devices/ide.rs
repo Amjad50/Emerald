@@ -117,6 +117,7 @@ mod ata {
     pub const PACKET_CMD_READ_10: u8 = 0x28;
     pub const PACKET_CMD_INQUIRY: u8 = 0x12;
     pub const PACKET_CMD_TEST_UNIT_READY: u8 = 0x00;
+    pub const PACKET_CMD_READ_CAPACITY: u8 = 0x25;
 
     pub const PACKET_INQUIRY_VITAL_DATA: u8 = 0x1;
     pub const PACKET_VITAL_PAGE_SUPPORTED_PAGES: u8 = 0x00;
@@ -190,6 +191,32 @@ impl IdeIo {
     #[allow(dead_code)]
     pub fn write_control_block(&self, offset: u16, value: u8) {
         unsafe { cpu::io_out(self.control_block + offset, value) }
+    }
+
+    pub fn read_data_block(&self, data: &mut [u8]) -> Result<(), u8> {
+        self.wait_until_free();
+
+        if self.read_status() & ata::STATUS_ERR != 0 {
+            // error
+            return Err(self.read_error());
+        }
+
+        // read data
+        for i in 0..data.len() / 2 {
+            let word = self.read_data();
+            data[i * 2] = (word & 0xFF) as u8;
+            data[i * 2 + 1] = ((word >> 8) & 0xFF) as u8;
+
+            // TODO: maybe not best to check on every read, but when reading multiple sectors
+            if self.read_status() & ata::STATUS_BUSY != 0 {
+                self.wait_until_free();
+            }
+        }
+
+        // TODO: replace with error
+        assert!(self.read_status() & ata::STATUS_DATA_REQUEST == 0);
+
+        Ok(())
     }
 }
 
@@ -336,7 +363,7 @@ impl IdeDevicePair {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IdeDeviceType {
     Ata,
     Atapi,
@@ -405,26 +432,8 @@ impl AtaCommand {
         assert!(data.len() % 2 == 0);
         io_port.wait_until_can_command();
         self.write(io_port);
-        io_port.wait_until_free();
 
-        if io_port.read_status() & ata::STATUS_ERR != 0 {
-            // error
-            return Err(io_port.read_error());
-        }
-
-        // read data
-        for i in 0..data.len() / 2 {
-            let word = io_port.read_data();
-            data[i * 2] = (word & 0xFF) as u8;
-            data[i * 2 + 1] = ((word >> 8) & 0xFF) as u8;
-
-            // TODO: maybe not best to check on every read, but when reading multiple sectors
-            if io_port.read_status() & ata::STATUS_BUSY != 0 {
-                io_port.wait_until_free();
-            }
-        }
-
-        Ok(())
+        io_port.read_data_block(data)
     }
 }
 
@@ -557,24 +566,8 @@ impl AtapiPacketCommand {
             }
         }
 
-        if io_port.read_status() & ata::STATUS_ERR != 0 {
-            return Err(io_port.read_sense_key());
-        }
-        io_port.wait_until_free();
-
-        // read data
-        for i in 0..data.len() / 2 {
-            let word = io_port.read_data();
-            data[i * 2] = (word & 0xFF) as u8;
-            data[i * 2 + 1] = ((word >> 8) & 0xFF) as u8;
-
-            // TODO: maybe not best to check on every read, but when reading multiple sectors
-            if io_port.read_status() & ata::STATUS_BUSY != 0 {
-                io_port.wait_until_free();
-            }
-        }
-
-        Ok(())
+        // convert error to sense key
+        io_port.read_data_block(data).map_err(|e| e >> 4)
     }
 }
 
@@ -735,6 +728,9 @@ pub struct IdeDevice {
 
     identify_data: CommandIdentifyDataRaw,
     device_type: IdeDeviceType,
+
+    number_of_sectors: u64,
+    sector_size: u32,
 }
 
 impl IdeDevice {
@@ -805,9 +801,43 @@ impl IdeDevice {
             panic!("IDE device does not support LBA mode");
         }
 
+        let number_of_sectors;
+        let sector_size;
+        match device_type {
+            IdeDeviceType::Ata => {
+                number_of_sectors = identify_data.user_addressable_sectors();
+                sector_size = identify_data.sector_size();
+            }
+            IdeDeviceType::Atapi => {
+                let mut capacity_data = [0u8; 8];
+                let command = AtapiPacketCommand::new(ata::PACKET_CMD_READ_CAPACITY)
+                    .with_second_drive(second_device_select);
+                command.execute(&io, &mut capacity_data).unwrap();
+
+                // data returned is in big endian
+
+                // the number of sectors is the last 4 bytes
+                // this denotes the maximum addressable sector, so we add 1
+                number_of_sectors = u32::from_be_bytes([
+                    capacity_data[0],
+                    capacity_data[1],
+                    capacity_data[2],
+                    capacity_data[3],
+                ]) as u64
+                    + 1;
+
+                sector_size = u32::from_be_bytes([
+                    capacity_data[4],
+                    capacity_data[5],
+                    capacity_data[6],
+                    capacity_data[7],
+                ]);
+            }
+        }
+
         println!(
-            "Initialized IDE device({device_type:?}): size={}",
-            identify_data.size_of_device()
+            "Initialized IDE device({device_type:?}): size={} ({number_of_sectors} x {sector_size})",
+            MemSize((number_of_sectors * sector_size as u64) as usize),
         );
 
         Some(Self {
@@ -816,6 +846,8 @@ impl IdeDevice {
             pci_device: pci_device.clone(),
             identify_data,
             device_type,
+            number_of_sectors,
+            sector_size,
         })
     }
 
