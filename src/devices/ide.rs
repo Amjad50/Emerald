@@ -1,5 +1,7 @@
 use core::{hint, mem, sync::atomic::AtomicBool};
 
+use alloc::sync::Arc;
+
 use crate::{
     cpu::{self, idt::InterruptStackFrame64, interrupts::apic},
     memory_management::memory_layout::MemSize,
@@ -8,7 +10,7 @@ use crate::{
 
 use super::pci::{self, PciDevice, PciDeviceConfig, PropeExtra};
 
-static mut IDE_DEVICES: [Option<Mutex<IdeDevice>>; 4] = [None, None, None, None];
+static mut IDE_DEVICES: [Option<Arc<IdeDevice>>; 4] = [None, None, None, None];
 static INTERRUPTS_SETUP: AtomicBool = AtomicBool::new(false);
 
 pub fn try_register_ide_device(pci_device: &PciDeviceConfig) -> bool {
@@ -29,7 +31,8 @@ pub fn try_register_ide_device(pci_device: &PciDeviceConfig) -> bool {
             let slot = ide_devices.iter_mut().find(|x| x.is_none());
 
             if let Some(slot) = slot {
-                *slot = Some(Mutex::new(ide_device));
+                // must be done after initializing the heap, i.e. after virtual memory
+                *slot = Some(Arc::new(ide_device));
                 found_device = true;
             } else {
                 panic!("No more IDE devices can be registered!");
@@ -38,6 +41,37 @@ pub fn try_register_ide_device(pci_device: &PciDeviceConfig) -> bool {
     }
 
     found_device
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdeDeviceType {
+    Ata,
+    Atapi,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
+pub struct IdeDeviceIndex {
+    pub ty: IdeDeviceType,
+    pub index: usize,
+}
+
+#[allow(dead_code)]
+pub fn get_ide_device(index: IdeDeviceIndex) -> Option<Arc<IdeDevice>> {
+    let ide_devices = unsafe { &IDE_DEVICES };
+    let mut passed = 0;
+    if index.index < ide_devices.len() {
+        for ide_device in ide_devices.iter().filter_map(Option::as_ref) {
+            if ide_device.device_type == index.ty {
+                if passed == index.index {
+                    return Some(ide_device.clone());
+                }
+                passed += 1;
+            }
+        }
+    }
+    None
 }
 
 #[allow(dead_code)]
@@ -230,12 +264,6 @@ impl IdeIo {
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IdeDeviceType {
-    Ata,
-    Atapi,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -581,23 +609,13 @@ impl CommandIdentifyDataRaw {
             ata::DEFAULT_SECTOR_SIZE
         }
     }
-
-    fn size_of_device(&self) -> MemSize {
-        MemSize((self.user_addressable_sectors() * self.sector_size() as u64) as usize)
-    }
 }
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct IdeDevice {
-    // if this is None, then DMA is not supported
-    master_io: Option<u16>,
-    io: IdeIo,
-    pci_device: PciDeviceConfig,
-
-    identify_data: CommandIdentifyDataRaw,
+    device_impl: Mutex<IdeDeviceImpl>,
     device_type: IdeDeviceType,
-
     number_of_sectors: u64,
     sector_size: u32,
 
@@ -605,12 +623,45 @@ pub struct IdeDevice {
 }
 
 impl IdeDevice {
+    fn init_new(
+        master_io: Option<u16>,
+        io: IdeIo,
+        pci_device: &PciDeviceConfig,
+        second_device_select: bool,
+    ) -> Option<Self> {
+        IdeDeviceImpl::init_new(master_io, io, pci_device, second_device_select)
+    }
+
+    pub fn interrupt(&self) {
+        self.device_impl.lock().interrupt();
+    }
+
+    pub fn is_primary(&self) -> bool {
+        !self.second_device_select
+    }
+
+    pub fn is_secondary(&self) -> bool {
+        self.second_device_select
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+struct IdeDeviceImpl {
+    // if this is None, then DMA is not supported
+    master_io: Option<u16>,
+    io: IdeIo,
+    pci_device: PciDeviceConfig,
+    identify_data: CommandIdentifyDataRaw,
+}
+
+impl IdeDeviceImpl {
     pub fn init_new(
         mut master_io: Option<u16>,
         io: IdeIo,
         pci_device: &PciDeviceConfig,
         second_device_select: bool,
-    ) -> Option<Self> {
+    ) -> Option<IdeDevice> {
         // identify device
         let mut identify_data = [0u8; 512];
         let command =
@@ -711,25 +762,18 @@ impl IdeDevice {
             MemSize((number_of_sectors * sector_size as u64) as usize),
         );
 
-        Some(Self {
-            master_io,
-            io,
-            pci_device: pci_device.clone(),
-            identify_data,
+        Some(IdeDevice {
+            device_impl: Mutex::new(Self {
+                master_io,
+                io,
+                pci_device: pci_device.clone(),
+                identify_data,
+            }),
             device_type,
             number_of_sectors,
             sector_size,
             second_device_select,
         })
-    }
-
-    #[allow(dead_code)]
-    pub fn size(&self) -> MemSize {
-        self.identify_data.size_of_device()
-    }
-
-    pub fn is_secondary(&self) -> bool {
-        self.second_device_select
     }
 
     pub fn interrupt(&mut self) {}
@@ -851,12 +895,8 @@ impl PciDevice for IdeDevice {
 extern "x86-interrupt" fn ide_interrupt_primary(_stack_frame: InterruptStackFrame64) {
     let ide_devices = unsafe { &IDE_DEVICES };
     for ide_device in ide_devices.iter().filter_map(Option::as_ref) {
-        let mut device = ide_device.lock();
-        // only primary
-        // TODO: fix this and below, we don't want to lock just to ignore later if this is
-        // not the correct device
-        if !device.is_secondary() {
-            device.interrupt()
+        if ide_device.is_primary() {
+            ide_device.interrupt()
         }
     }
     apic::return_from_interrupt();
@@ -865,10 +905,8 @@ extern "x86-interrupt" fn ide_interrupt_primary(_stack_frame: InterruptStackFram
 extern "x86-interrupt" fn ide_interrupt_secondary(_stack_frame: InterruptStackFrame64) {
     let ide_devices = unsafe { &IDE_DEVICES };
     for ide_device in ide_devices.iter().filter_map(Option::as_ref) {
-        let mut device = ide_device.lock();
-        // only secondary
-        if device.is_secondary() {
-            device.interrupt()
+        if ide_device.is_secondary() {
+            ide_device.interrupt()
         }
     }
     apic::return_from_interrupt();
