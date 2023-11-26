@@ -1,4 +1,4 @@
-use core::{cell::UnsafeCell, sync::atomic::AtomicI64};
+use core::{cell::UnsafeCell, fmt, sync::atomic::AtomicI64};
 
 use crate::cpu;
 
@@ -12,6 +12,18 @@ pub struct Mutex<T> {
 
 unsafe impl<T: Send> Send for Mutex<T> {}
 unsafe impl<T: Send> Sync for Mutex<T> {}
+
+impl<T> fmt::Debug for Mutex<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Mutex")
+            .field("owner_cpu", &self.owner_cpu)
+            .field("data", unsafe { &self.data.get().as_ref().unwrap() })
+            .finish()
+    }
+}
 
 #[must_use]
 pub struct MutexGuard<'a, T: 'a> {

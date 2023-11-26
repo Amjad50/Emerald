@@ -1,4 +1,4 @@
-use core::{cell::Cell, sync::atomic::AtomicI64};
+use core::{cell::Cell, fmt, sync::atomic::AtomicI64};
 
 use crate::cpu;
 
@@ -18,6 +18,18 @@ pub struct ReMutex<T> {
 
 unsafe impl<T: Send> Send for ReMutex<T> {}
 unsafe impl<T: Send> Sync for ReMutex<T> {}
+
+impl<T> fmt::Debug for ReMutex<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Mutex")
+            .field("owner_cpu", &self.owner_cpu)
+            .field("data", &self.data)
+            .finish()
+    }
+}
 
 #[must_use]
 pub struct ReMutexGuard<'a, T: 'a> {
