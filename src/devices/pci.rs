@@ -459,8 +459,16 @@ impl PciDeviceConfig {
     }
 }
 
+// Some extra args for probing
+// this is used since some PCI devices might produce multiple devices
+// so we use this to select which one to probe and store them individually
+// so that its easier to interact with them
+pub struct PropeExtra {
+    pub args: [u64; 4],
+}
+
 pub trait PciDevice {
-    fn probe_init(config: &PciDeviceConfig) -> Option<Self>
+    fn probe_init(config: &PciDeviceConfig, extra: PropeExtra) -> Option<Self>
     where
         Self: Sized;
     fn device_name(&self) -> &'static str;
