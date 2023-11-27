@@ -72,16 +72,16 @@ pub fn kernel_elf_rodata_end() -> usize {
     (unsafe { &rodata_end } as *const usize as usize)
 }
 
-pub fn align_up(addr: *mut u8, alignment: usize) -> *mut u8 {
-    ((addr as usize + alignment - 1) & !(alignment - 1)) as *mut u8
+pub fn align_up(addr: usize, alignment: usize) -> usize {
+    (addr + alignment - 1) & !(alignment - 1)
 }
 
-pub fn align_down(addr: *mut u8, alignment: usize) -> *mut u8 {
-    (addr as usize & !(alignment - 1)) as *mut u8
+pub fn align_down(addr: usize, alignment: usize) -> usize {
+    addr & !(alignment - 1)
 }
 
-pub fn is_aligned(addr: *mut u8, alignment: usize) -> bool {
-    (addr as usize & (alignment - 1)) == 0
+pub fn is_aligned(addr: usize, alignment: usize) -> bool {
+    (addr & (alignment - 1)) == 0
 }
 
 #[inline(always)]

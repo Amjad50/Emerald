@@ -67,8 +67,8 @@ impl PhysicalPageAllocator {
     }
 
     fn init(&mut self, start: *mut u8, end: *mut u8) {
-        let start = align_up(start, PAGE_4K);
-        let end = align_down(end, PAGE_4K);
+        let start = align_up(start as usize, PAGE_4K) as _;
+        let end = align_down(end as usize, PAGE_4K) as _;
         assert!(start < end);
 
         self.start = start;

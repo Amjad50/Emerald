@@ -114,7 +114,7 @@ impl VirtualMemoryManager {
     // This replicate what is done in the assembly code
     // but it will be stored
     fn init_kernel_vm(&mut self) {
-        let data_start = align_up(kernel_elf_rodata_end() as *mut u8, PAGE_4K) as usize;
+        let data_start = align_up(kernel_elf_rodata_end(), PAGE_4K);
         let kernel_vm = [
             // Low memory (has some BIOS stuff): mapped to kernel space
             VirtualMemoryMapEntry {

@@ -143,7 +143,7 @@ impl KernelHeapAllocator {
 
     fn get_free_block(&mut self, size: usize) -> *mut HeapFreeBlock {
         if self.mapped_pages == 0 {
-            let size = align_up(size as _, PAGE_4K) as usize;
+            let size = align_up(size, PAGE_4K);
             self.allocate_more_pages(size / PAGE_4K);
             // call recursively
             return self.get_free_block(size);
@@ -160,7 +160,7 @@ impl KernelHeapAllocator {
 
         if best_block.is_null() {
             // no block found, allocate more pages
-            let size = align_up(size as _, PAGE_4K) as usize;
+            let size = align_up(size, PAGE_4K);
             self.allocate_more_pages(size / PAGE_4K);
             // call recursively
             return self.get_free_block(size);
