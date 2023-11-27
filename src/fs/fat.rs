@@ -21,6 +21,7 @@ const DIRECTORY_ENTRY_SIZE: u32 = 32;
 #[derive(Debug)]
 pub enum FatError {
     InvalidBootSector,
+    UnexpectedFatEntry,
 }
 
 impl From<FatError> for FileSystemError {
@@ -255,6 +256,10 @@ impl FatBootSector {
 
     pub fn sectors_per_cluster(&self) -> u8 {
         self.boot_sector.sectors_per_cluster
+    }
+
+    pub fn bytes_per_cluster(&self) -> u32 {
+        self.boot_sector.sectors_per_cluster as u32 * self.boot_sector.bytes_per_sector as u32
     }
 
     pub fn reserved_sectors_count(&self) -> u16 {
@@ -749,7 +754,10 @@ impl FatFilesystem {
         }
 
         let mut dir = root;
-        'component_loop: for component in path.split('/') {
+        'component_loop: for component in path[1..].split('/') {
+            if component.is_empty() {
+                continue;
+            }
             for entry in dir.iter(self)? {
                 if entry.name() == component {
                     dir = Directory::Normal {
@@ -762,5 +770,65 @@ impl FatFilesystem {
             return Err(FileSystemError::FileNotFound);
         }
         DirectoryIterator::new(self, dir)
+    }
+
+    pub fn read_file(
+        &self,
+        inode: &INode,
+        position: u32,
+        buf: &mut [u8],
+    ) -> Result<u64, FileSystemError> {
+        if inode.is_dir {
+            return Err(FileSystemError::IsDirectory);
+        }
+        if position >= inode.size {
+            return Ok(0);
+        }
+        let remaining_file = inode.size - position;
+        let max_to_read = (buf.len() as u32).min(remaining_file);
+
+        let mut cluster = inode.start_cluster;
+        let cluster_index = position / self.boot_sector.bytes_per_cluster();
+        for _ in 0..cluster_index {
+            cluster = match self.read_fat_entry(cluster) {
+                FatEntry::Next(next_cluster) => next_cluster,
+                FatEntry::EndOfChain => return Err(FatError::UnexpectedFatEntry.into()),
+                FatEntry::Bad => return Err(FatError::UnexpectedFatEntry.into()),
+                FatEntry::Reserved => return Err(FatError::UnexpectedFatEntry.into()),
+                FatEntry::Free => return Err(FatError::UnexpectedFatEntry.into()),
+            };
+        }
+
+        let mut read = 0;
+        let mut position_in_cluster = position % self.boot_sector.bytes_per_cluster();
+        while read < max_to_read as usize {
+            let cluster_start_sector = self.first_sector_of_cluster(cluster);
+            let cluster_offset = position_in_cluster / self.boot_sector.bytes_per_sector() as u32;
+
+            let sector_number = cluster_start_sector + cluster_offset;
+            let sector_offset = position_in_cluster % self.boot_sector.bytes_per_sector() as u32;
+            let sector_offset = sector_offset as usize;
+
+            let sector = self.read_sectors(sector_number, 1)?;
+            let sector = &sector[sector_offset..];
+
+            let to_read = core::cmp::min(sector.len() as u32, max_to_read - read as u32) as usize;
+            buf[read..read + to_read].copy_from_slice(&sector[..to_read]);
+
+            read += to_read;
+            position_in_cluster += to_read as u32;
+            if position_in_cluster >= self.boot_sector.bytes_per_cluster() {
+                position_in_cluster = 0;
+                cluster = match self.read_fat_entry(cluster) {
+                    FatEntry::Next(next_cluster) => next_cluster,
+                    FatEntry::EndOfChain => break,
+                    FatEntry::Bad => return Err(FatError::UnexpectedFatEntry.into()),
+                    FatEntry::Reserved => return Err(FatError::UnexpectedFatEntry.into()),
+                    FatEntry::Free => return Err(FatError::UnexpectedFatEntry.into()),
+                };
+            }
+        }
+
+        Ok(read as u64)
     }
 }

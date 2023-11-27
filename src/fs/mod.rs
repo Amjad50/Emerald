@@ -1,6 +1,6 @@
 use core::mem;
 
-use alloc::{borrow::Cow, string::String, vec, vec::Vec};
+use alloc::{borrow::Cow, string::String, sync::Arc, vec, vec::Vec};
 
 use crate::{
     devices::ide::{self, IdeDeviceIndex, IdeDeviceType},
@@ -17,8 +17,32 @@ static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMappi
     mappings: Vec::new(),
 });
 
+type Filesystem = Arc<Mutex<fat::FatFilesystem>>;
+
 struct FileSystemMapping {
-    mappings: Vec<(String, fat::FatFilesystem)>,
+    mappings: Vec<(String, Filesystem)>,
+}
+
+impl FileSystemMapping {
+    fn get_mapping<'p>(&mut self, path: &'p str) -> Result<(&'p str, Filesystem), FileSystemError> {
+        let (prefix, filesystem) = self
+            .mappings
+            .iter()
+            // look from the back for best match
+            .rev()
+            .find(|(fs_path, _)| path.starts_with(fs_path))
+            .ok_or(FileSystemError::FileNotFound)?;
+
+        let prefix_len = if prefix.ends_with('/') {
+            // keep the last /, so we can open the directory
+            prefix.len() - 1
+        } else {
+            prefix.len()
+        };
+        let path = &path[prefix_len..];
+
+        Ok((path, filesystem.clone()))
+    }
 }
 
 #[derive(Debug)]
@@ -29,6 +53,9 @@ pub enum FileSystemError {
     FatError(fat::FatError),
     FileNotFound,
     InvalidPath,
+    IsNotDirectory,
+    IsDirectory,
+    InvalidOffset,
 }
 
 /// Loads the hard disk specified in the argument
@@ -73,7 +100,7 @@ pub fn init_filesystem(hard_disk_index: usize) -> Result<(), FileSystemError> {
         FILESYSTEM_MAPPING
             .lock()
             .mappings
-            .push((String::from("/"), filesystem));
+            .push((String::from("/"), Arc::new(Mutex::new(filesystem))));
 
         Ok(())
     } else {
@@ -89,24 +116,66 @@ pub fn ls_dir(path: &str) -> Result<Vec<DirectoryEntry>, FileSystemError> {
         path += "/";
     }
 
-    let mappings = FILESYSTEM_MAPPING.lock();
+    let (new_path, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(&path)?;
+    let filesystem = filesystem.lock();
+    Ok(filesystem.open_dir(new_path)?.collect())
+}
 
-    let (prefix, filesystem) = mappings
-        .mappings
-        .iter()
-        // look from the back for best match
-        .rev()
-        .find(|(fs_path, _)| path.starts_with(fs_path))
-        .ok_or(FileSystemError::FileNotFound)?;
+pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
+    let last_slash = path.rfind('/');
 
-    let prefix_len = if prefix.ends_with('/') {
-        // keep the last /, so we can open the directory
-        prefix.len() - 1
-    } else {
-        prefix.len()
+    let (parent_dir, basename) = match last_slash {
+        Some(index) => path.split_at(index + 1),
+        None => return Err(FileSystemError::InvalidPath),
     };
-    let path = &path[prefix_len..];
-    println!("Found filesystem {:?} for path {:?}", filesystem, path);
 
-    Ok(filesystem.open_dir(path)?.collect())
+    let (parent_dir, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(parent_dir)?;
+    let filesystem_guard = filesystem.lock();
+
+    for entry in filesystem_guard.open_dir(parent_dir)? {
+        if entry.name() == basename {
+            drop(filesystem_guard);
+            return Ok(File {
+                filesystem,
+                path: String::from(path),
+                inode: entry.inode().clone(),
+                position: 0,
+            });
+        }
+    }
+
+    Err(FileSystemError::FileNotFound)
+}
+
+pub struct File {
+    filesystem: Filesystem,
+    path: String,
+    inode: fat::INode,
+    position: u64,
+}
+
+impl File {
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+        let filesystem_guard = self.filesystem.lock();
+        let read = filesystem_guard.read_file(&self.inode, self.position as u32, buf)?;
+        self.position += read;
+        Ok(read)
+    }
+
+    #[allow(dead_code)]
+    pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {
+        if position > self.inode.size() as u64 {
+            return Err(FileSystemError::InvalidOffset);
+        }
+        self.position = position;
+        Ok(())
+    }
+
+    pub fn filesize(&self) -> u64 {
+        self.inode.size() as u64
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
 }
