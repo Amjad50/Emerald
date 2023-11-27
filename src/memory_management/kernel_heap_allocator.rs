@@ -53,12 +53,66 @@ impl KernelHeapAllocator {
         }
     }
 
-    /// Prints all free blocks in forward and backward order
-    ///
-    /// This doesn't provide any `checking` functionality, it just prints the free blocks
-    ///
-    /// The purpose is to make it easy to spot missing blocks due to bugs.
+    fn is_free_blocks_in_cycle(&self) -> bool {
+        // use floyd algorithm to detect if we are in cycle
+        let mut slow = self.free_list_addr;
+        let mut fast = self.free_list_addr;
+
+        // advance fast first
+        if fast.is_null() {
+            return false;
+        } else {
+            fast = unsafe { (*fast).next };
+        }
+
+        while fast != slow {
+            if fast.is_null() {
+                return false;
+            } else {
+                fast = unsafe { (*fast).next };
+            }
+            if fast.is_null() {
+                return false;
+            } else {
+                fast = unsafe { (*fast).next };
+            }
+
+            if slow.is_null() {
+                return false;
+            } else {
+                slow = unsafe { (*slow).next };
+            }
+        }
+
+        true
+    }
+
+    fn check_free_blocks(&self) -> bool {
+        let mut forward_count = 0;
+        let mut last: *mut HeapFreeBlock = core::ptr::null_mut();
+        for block in self.iter_free_blocks() {
+            forward_count += 1;
+            last = block as _;
+        }
+
+        let mut backward_count = 0;
+        if !last.is_null() {
+            // go back to the first block
+            while !last.is_null() {
+                backward_count += 1;
+                last = unsafe { (*last).prev };
+            }
+        }
+
+        forward_count != backward_count
+    }
+
+    fn check_issues(&self) -> bool {
+        self.is_free_blocks_in_cycle() || self.check_free_blocks()
+    }
+
     fn debug_free_blocks(&self) {
+        println!();
         let mut last: *mut HeapFreeBlock = core::ptr::null_mut();
         for block in self.iter_free_blocks() {
             let block_start = block as *mut _ as usize;
@@ -187,6 +241,7 @@ impl KernelHeapAllocator {
         // find blocks that are either before or after this block
         let mut prev_block: *mut HeapFreeBlock = core::ptr::null_mut();
         let mut next_block: *mut HeapFreeBlock = core::ptr::null_mut();
+        let mut closest_prev_block: *mut HeapFreeBlock = core::ptr::null_mut();
         for block in self.iter_free_blocks() {
             let block_addr = block as *mut _ as usize;
             let block_end = block_addr + block.size;
@@ -212,6 +267,13 @@ impl KernelHeapAllocator {
             } else if freeing_block_end == block_addr {
                 // this block is after the freeing block
                 next_block = block as _;
+            }
+
+            if block_addr < freeing_block_start {
+                // this block is before the freeing block
+                if closest_prev_block.is_null() || block_addr > (closest_prev_block as usize) {
+                    closest_prev_block = block as _;
+                }
             }
         }
 
@@ -287,17 +349,31 @@ impl KernelHeapAllocator {
             });
         } else {
             // no blocks around this
-            // add this to the free list
-            (*freeing_block).prev = core::ptr::null_mut();
-            (*freeing_block).next = self.free_list_addr;
-            (*freeing_block).size = size;
+            // add this to the free list in the correct order
+            if closest_prev_block.is_null() {
+                // this is the first block
+                (*freeing_block).prev = core::ptr::null_mut();
+                (*freeing_block).next = self.free_list_addr;
+                (*freeing_block).size = size;
 
-            // update the next block to point to this new subblock instead
-            if !(*freeing_block).next.is_null() {
-                (*(*freeing_block).next).prev = freeing_block;
+                // update the next block to point to this new subblock instead
+                if !(*freeing_block).next.is_null() {
+                    (*(*freeing_block).next).prev = freeing_block;
+                }
+
+                self.free_list_addr = freeing_block;
+            } else {
+                // put this after the closest previous block
+                let closest_next_block = (*closest_prev_block).next;
+                (*freeing_block).prev = closest_prev_block;
+                (*freeing_block).next = closest_next_block;
+                (*freeing_block).size = size;
+
+                (*closest_prev_block).next = freeing_block;
+                if !closest_next_block.is_null() {
+                    (*closest_next_block).prev = freeing_block;
+                }
             }
-
-            self.free_list_addr = freeing_block;
         }
     }
 }
@@ -405,6 +481,14 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         inner.free_size -= this_allocation_size;
         inner.used_size += this_allocation_size;
 
+        // TODO: add flag to control when to enable this runtime checking
+        if inner.check_issues() {
+            println!("alloc: {:x}..{:x}", free_block as usize, free_block_end);
+            println!("alloc: Issue detected");
+            inner.debug_free_blocks();
+            panic!(); // mostly won't reach here since debug_free_blocks will not finish
+        }
+
         drop(inner);
 
         unsafe { (allocated_block_info as *mut u8).add(allocated_block_offset) }
@@ -439,5 +523,17 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         inner.free_block(freeing_block as _, this_allocation_size);
         inner.used_size -= this_allocation_size;
         inner.free_size += this_allocation_size;
+
+        // TODO: add flag to control when to enable this runtime checking
+        if inner.check_issues() {
+            println!(
+                "dealloc: {:x}..{:x}",
+                freeing_block as usize,
+                freeing_block as usize + this_allocation_size
+            );
+            println!("dealloc: Issue detected");
+            inner.debug_free_blocks();
+            panic!(); // mostly won't reach here since debug_free_blocks will not finish
+        }
     }
 }
