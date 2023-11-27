@@ -1,4 +1,4 @@
-use core::{hint, mem, sync::atomic::AtomicBool};
+use core::{fmt, hint, mem, sync::atomic::AtomicBool};
 
 use alloc::sync::Arc;
 
@@ -611,6 +611,23 @@ impl CommandIdentifyDataRaw {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum IdeError {
+    DeviceError(u8),
+    UnalignedSize,
+    BoundsExceeded,
+}
+
+impl fmt::Display for IdeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            IdeError::DeviceError(err) => write!(f, "IDE device error: {}", err),
+            IdeError::UnalignedSize => write!(f, "unaligned size"),
+            IdeError::BoundsExceeded => write!(f, "bounds exceeded"),
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct IdeDevice {
@@ -643,6 +660,43 @@ impl IdeDevice {
     pub fn is_secondary(&self) -> bool {
         self.second_device_select
     }
+
+    #[allow(dead_code)]
+    pub fn number_of_sectors(&self) -> u64 {
+        self.number_of_sectors
+    }
+
+    #[allow(dead_code)]
+    pub fn sector_size(&self) -> u32 {
+        self.sector_size
+    }
+
+    #[allow(dead_code)]
+    pub fn read_sync(&self, start_sector: u64, data: &mut [u8]) -> Result<(), IdeError> {
+        let sector_size = self.sector_size as u64;
+        let buffer_len = data.len() as u64;
+
+        if buffer_len % sector_size != 0 {
+            return Err(IdeError::UnalignedSize);
+        }
+        if start_sector >= self.number_of_sectors {
+            return Err(IdeError::BoundsExceeded);
+        }
+
+        let number_of_sectors = buffer_len / sector_size;
+
+        if self.device_type == IdeDeviceType::Ata {
+            self.device_impl
+                .lock()
+                .read_sync_ata(start_sector, number_of_sectors, data)
+                .map_err(IdeError::DeviceError)
+        } else {
+            self.device_impl
+                .lock()
+                .read_sync_atapi(start_sector, number_of_sectors, data)
+                .map_err(IdeError::DeviceError)
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -653,10 +707,11 @@ struct IdeDeviceImpl {
     io: IdeIo,
     pci_device: PciDeviceConfig,
     identify_data: CommandIdentifyDataRaw,
+    second_device_select: bool,
 }
 
 impl IdeDeviceImpl {
-    pub fn init_new(
+    fn init_new(
         mut master_io: Option<u16>,
         io: IdeIo,
         pci_device: &PciDeviceConfig,
@@ -768,6 +823,7 @@ impl IdeDeviceImpl {
                 io,
                 pci_device: pci_device.clone(),
                 identify_data,
+                second_device_select,
             }),
             device_type,
             number_of_sectors,
@@ -776,7 +832,43 @@ impl IdeDeviceImpl {
         })
     }
 
-    pub fn interrupt(&mut self) {}
+    fn read_sync_ata(
+        &mut self,
+        start_sector: u64,
+        len_sectors: u64,
+        data: &mut [u8],
+    ) -> Result<(), u8> {
+        assert!(len_sectors <= u16::MAX as u64);
+        // the buffer is enough to hold the data (see read_sync)
+        let command = AtaCommand::new(ata::COMMAND_READ_SECTORS)
+            .with_lba(start_sector)
+            .with_sector_count(len_sectors as u16)
+            .with_second_drive(self.second_device_select);
+
+        command.execute(&self.io, data)
+    }
+
+    fn read_sync_atapi(
+        &mut self,
+        start_sector: u64,
+        len_sectors: u64,
+        data: &mut [u8],
+    ) -> Result<(), u8> {
+        assert!(len_sectors <= u16::MAX as u64);
+        assert!(start_sector <= u32::MAX as u64);
+        // the buffer is enough to hold the data (see read_sync)
+        let command = AtapiPacketCommand::new(ata::PACKET_CMD_READ_10)
+            .with_second_drive(self.second_device_select)
+            .push_param(0) // flags
+            .push_param_u32(start_sector as u32) // lba
+            .push_param(0) // group number
+            .push_param_u16(len_sectors as u16) // transfer length
+            .push_param(0); // control
+
+        command.execute(&self.io, data)
+    }
+
+    fn interrupt(&mut self) {}
 }
 
 impl PciDevice for IdeDevice {
