@@ -1,21 +1,34 @@
 use core::mem;
 
-use alloc::vec;
+use alloc::{borrow::Cow, string::String, vec, vec::Vec};
 
 use crate::{
     devices::ide::{self, IdeDeviceIndex, IdeDeviceType},
     memory_management::memory_layout::align_up,
+    sync::spin::mutex::Mutex,
 };
 
-use self::mbr::MbrRaw;
+use self::{fat::DirectoryEntry, mbr::MbrRaw};
 
+mod fat;
 mod mbr;
+
+static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
+    mappings: Vec::new(),
+});
+
+struct FileSystemMapping {
+    mappings: Vec<(String, fat::FatFilesystem)>,
+}
 
 #[derive(Debug)]
 pub enum FileSystemError {
     PartitionTableNotFound,
     DeviceNotFound,
     DiskReadError { sector: u64, error: ide::IdeError },
+    FatError(fat::FatError),
+    FileNotFound,
+    InvalidPath,
 }
 
 /// Loads the hard disk specified in the argument
@@ -41,16 +54,59 @@ pub fn init_filesystem(hard_disk_index: usize) -> Result<(), FileSystemError> {
             error: e,
         })?;
 
-    // SAFETY: This is a valid allocated memory and the size is at least the size of MbrRaw
+    // SAFETY: This is a valid allocated memory
     let mbr = unsafe { &*(sectors.as_ptr() as *const MbrRaw) };
 
     if mbr.is_valid() {
         // found MBR
 
         let first_partition = &mbr.partition_table[0];
-        println!("Found MBR, first partition: {:?}", first_partition);
+        let filesystem = fat::load_fat_filesystem(
+            ide_index,
+            first_partition.start_lba,
+            first_partition.size_in_sectors,
+        )?;
+        println!(
+            "Mapping / to FAT filesystem {:?}",
+            filesystem.volume_label()
+        );
+        FILESYSTEM_MAPPING
+            .lock()
+            .mappings
+            .push((String::from("/"), filesystem));
+
         Ok(())
     } else {
         Err(FileSystemError::PartitionTableNotFound)
     }
+}
+
+#[allow(dead_code)]
+pub fn ls_dir(path: &str) -> Result<Vec<DirectoryEntry>, FileSystemError> {
+    let mut path = Cow::from(path);
+
+    if !path.ends_with('/') {
+        path += "/";
+    }
+
+    let mappings = FILESYSTEM_MAPPING.lock();
+
+    let (prefix, filesystem) = mappings
+        .mappings
+        .iter()
+        // look from the back for best match
+        .rev()
+        .find(|(fs_path, _)| path.starts_with(fs_path))
+        .ok_or(FileSystemError::FileNotFound)?;
+
+    let prefix_len = if prefix.ends_with('/') {
+        // keep the last /, so we can open the directory
+        prefix.len() - 1
+    } else {
+        prefix.len()
+    };
+    let path = &path[prefix_len..];
+    println!("Found filesystem {:?} for path {:?}", filesystem, path);
+
+    Ok(filesystem.open_dir(path)?.collect())
 }
