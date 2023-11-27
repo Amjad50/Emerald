@@ -17,6 +17,7 @@ mod bios;
 mod collections;
 mod cpu;
 mod devices;
+mod fs;
 mod io;
 mod memory_management;
 mod multiboot;
@@ -120,6 +121,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     console::setup_interrupts();
     unsafe { cpu::set_interrupts() };
     devices::register_devices();
+    fs::init_filesystem(0).unwrap();
 
     finish_boot();
     // -- BOOT FINISHED --
