@@ -3,10 +3,9 @@ use core::mem::{self, size_of};
 use crate::{
     memory_management::{
         memory_layout::{
-            is_aligned, virtual2physical, INTR_STACK_BASE, INTR_STACK_EMPTY_SIZE,
-            INTR_STACK_ENTRY_SIZE, INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, PAGE_4K,
+            is_aligned, INTR_STACK_BASE, INTR_STACK_EMPTY_SIZE, INTR_STACK_ENTRY_SIZE,
+            INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, PAGE_4K,
         },
-        physical_page_allocator,
         virtual_memory::{self, VirtualMemoryMapEntry},
     },
     sync::spin::mutex::Mutex,
@@ -54,7 +53,7 @@ pub fn init_kernel_gdt() {
     for i in 0..7 {
         unsafe {
             // allocate after an empty offset, so that we can detect stack overflows
-            let mut stack_start_virtual =
+            let stack_start_virtual =
                 INTR_STACK_BASE + (i * INTR_STACK_ENTRY_SIZE) + INTR_STACK_EMPTY_SIZE;
             let stack_end_virtual = stack_start_virtual + INTR_STACK_SIZE;
             assert!(stack_end_virtual <= INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
@@ -68,19 +67,14 @@ pub fn init_kernel_gdt() {
                     && is_aligned(stack_start_virtual as _, PAGE_4K)
             );
 
-            // allocate pages and map them
-            // TODO: add a new dynamic virtual allocator and replace this
-            while stack_start_virtual < stack_end_virtual {
-                let stack_start_phy =
-                    virtual2physical(physical_page_allocator::alloc_zeroed() as _);
-                virtual_memory::map(&VirtualMemoryMapEntry {
-                    virtual_address: stack_start_virtual as u64,
-                    start_physical_address: stack_start_phy as u64,
-                    end_physical_address: (stack_start_phy + PAGE_4K) as u64,
-                    flags: virtual_memory::flags::PTE_WRITABLE,
-                });
-                stack_start_virtual += PAGE_4K;
-            }
+            // map the stack
+            virtual_memory::map_kernel(&VirtualMemoryMapEntry {
+                virtual_address: stack_start_virtual as u64,
+                physical_address: None,
+                size: INTR_STACK_SIZE as u64,
+                flags: virtual_memory::flags::PTE_WRITABLE,
+            });
+
             // set the stack pointer
             // subtract 8, since the boundary is not mapped
             TSS.ist[i] = stack_end_virtual as u64 - 8;

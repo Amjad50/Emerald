@@ -2,16 +2,13 @@ use core::{alloc::GlobalAlloc, mem};
 
 use crate::{
     memory_management::{
-        memory_layout::{virtual2physical, KERNEL_HEAP_SIZE},
+        memory_layout::KERNEL_HEAP_SIZE,
         virtual_memory::{self, flags, VirtualMemoryMapEntry},
     },
     sync::spin::mutex::Mutex,
 };
 
-use super::{
-    memory_layout::{align_up, KERNEL_HEAP_BASE, PAGE_4K},
-    physical_page_allocator,
-};
+use super::memory_layout::{align_up, KERNEL_HEAP_BASE, PAGE_4K};
 
 const KERNEL_HEAP_MAGIC: u32 = 0xF0B0CAFE;
 
@@ -188,25 +185,17 @@ impl KernelHeapAllocator {
         assert!(pages > 0);
 
         let last_heap_base = self.heap_start + self.mapped_pages * PAGE_4K;
-        let mut current_heap_base = last_heap_base;
+        let current_heap_base = last_heap_base;
 
         // do not exceed the heap size
         assert!((self.mapped_pages + pages) * PAGE_4K <= KERNEL_HEAP_SIZE);
 
-        for _ in 0..pages {
-            let page = unsafe { physical_page_allocator::alloc_zeroed() };
-
-            let page_phy = virtual2physical(page as _);
-
-            let mapping = VirtualMemoryMapEntry {
-                virtual_address: current_heap_base as u64,
-                start_physical_address: page_phy as u64,
-                end_physical_address: page_phy as u64 + PAGE_4K as u64,
-                flags: flags::PTE_WRITABLE,
-            };
-            virtual_memory::map(&mapping);
-            current_heap_base += PAGE_4K;
-        }
+        virtual_memory::map_kernel(&VirtualMemoryMapEntry {
+            virtual_address: current_heap_base as u64,
+            physical_address: None,
+            size: (PAGE_4K * pages) as u64,
+            flags: flags::PTE_WRITABLE,
+        });
 
         self.mapped_pages += pages;
 
