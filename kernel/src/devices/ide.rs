@@ -814,7 +814,7 @@ impl IdeDeviceImpl {
 
         println!(
             "Initialized IDE device({device_type:?}): size={} ({number_of_sectors} x {sector_size})",
-            MemSize((number_of_sectors * sector_size as u64) as usize),
+            MemSize(number_of_sectors * sector_size as u64),
         );
 
         Some(IdeDevice {

@@ -196,17 +196,17 @@ impl MultiBootInfoRaw {
         core::ptr::read(multiboot_info_ptr as *const MultiBootInfoRaw)
     }
 
-    pub fn lower_memory_size(&self) -> Option<usize> {
+    pub fn lower_memory_size(&self) -> Option<u64> {
         if self.flags & 0b1 != 0 {
-            Some(self.mem_lower as usize * 1024)
+            Some(self.mem_lower as u64 * 1024)
         } else {
             None
         }
     }
 
-    pub fn upper_memory_size(&self) -> Option<usize> {
+    pub fn upper_memory_size(&self) -> Option<u64> {
         if self.flags & 0b1 != 0 {
-            Some(self.mem_upper as usize * 1024)
+            Some(self.mem_upper as u64 * 1024)
         } else {
             None
         }
@@ -380,7 +380,7 @@ impl fmt::Display for MultiBootInfoRaw {
                     f,
                     "base={:010X}, len={:10}, ty={:?}",
                     map.base_addr,
-                    MemSize(map.length as usize),
+                    MemSize(map.length),
                     map.mem_type
                 )?;
             }

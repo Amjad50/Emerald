@@ -50,14 +50,14 @@ use crate::memory_management::{
 /// so that we can make later on
 fn check_and_setup_memory(multiboot_info: &MultiBootInfoRaw) {
     // Upper memory + 1MB since it starts from 1MB offset
-    let mem_size = multiboot_info.upper_memory_size().unwrap() + ONE_MB;
+    let mem_size = multiboot_info.upper_memory_size().unwrap() + ONE_MB as u64;
     // check that we have enough space to map all the data we want in the kernel
-    if mem_size < KERNEL_MAPPED_SIZE {
+    if mem_size < KERNEL_MAPPED_SIZE as u64 {
         // If you specify `-m 128` in qemu, this will crash, since qemu doesn't exactly give 128MB, I think some
         // of this memory is reserved and used by the BIOS, so you will get `127` or `126` MB instead.
         panic!(
             "Not enough memory, need at least {}, got {}",
-            MemSize(KERNEL_MAPPED_SIZE),
+            MemSize(KERNEL_MAPPED_SIZE as u64),
             MemSize(mem_size)
         );
     }
@@ -84,8 +84,8 @@ fn check_and_setup_memory(multiboot_info: &MultiBootInfoRaw) {
 
 fn finish_boot() {
     let physical_pages_stats = physical_page_allocator::stats();
-    let free_mem = MemSize(physical_pages_stats.0 * PAGE_4K);
-    let used_mem = MemSize(physical_pages_stats.1 * PAGE_4K);
+    let free_mem = MemSize((physical_pages_stats.0 * PAGE_4K) as u64);
+    let used_mem = MemSize((physical_pages_stats.1 * PAGE_4K) as u64);
     // this stats is recorded at this point, meaning that we could have allocated a lot,
     //  but then it got freed we don't record that
     let (free_heap, used_heap) = ALLOCATOR.stats();
@@ -96,10 +96,10 @@ fn finish_boot() {
         used_mem,
         used_mem.0 as f64 / (used_mem.0 + free_mem.0) as f64 * 100.
     );
-    println!("Free heap: {}", MemSize(free_heap));
+    println!("Free heap: {}", MemSize(free_heap as u64));
     println!(
         "Used heap: {} ({:0.3}%)",
-        MemSize(used_heap),
+        MemSize(used_heap as u64),
         used_heap as f64 / (used_heap + free_heap) as f64 * 100.
     );
 }

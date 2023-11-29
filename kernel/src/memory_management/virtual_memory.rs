@@ -177,7 +177,7 @@ impl VirtualMemoryManager {
 
         // keep track of current address and size
         let mut physical_address = start_physical_address;
-        let mut size = (end_physical_address - start_physical_address) as usize;
+        let mut size = end_physical_address - start_physical_address;
 
         assert!(size > 0);
 
@@ -257,7 +257,7 @@ impl VirtualMemoryManager {
             // here we have an intersection, if we can map a 2MB page, we will, otherwise we will map a 4K page
             let can_map_2mb_page = is_aligned(physical_address as _, PAGE_2M)
                 && is_aligned(virtual_address as _, PAGE_2M)
-                && size >= PAGE_2M;
+                && size >= PAGE_2M as u64;
 
             if can_map_2mb_page {
                 // we already have an entry here
@@ -283,7 +283,7 @@ impl VirtualMemoryManager {
                     page_directory_index, page_directory_entry, *page_directory_entry
                 );
 
-                size -= PAGE_2M;
+                size -= PAGE_2M as u64;
                 // do not overflow the address
                 if size == 0 {
                     break;
@@ -318,7 +318,7 @@ impl VirtualMemoryManager {
                     page_table_index, page_table_entry, *page_table_entry
                 );
 
-                size -= PAGE_4K;
+                size -= PAGE_4K as u64;
                 // do not overflow the address
                 if size == 0 {
                     break;

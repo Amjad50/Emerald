@@ -110,31 +110,47 @@ pub fn physical2virtual_bios(addr: usize) -> usize {
     }
 }
 
-pub struct MemSize(pub usize);
+#[repr(transparent)]
+pub struct MemSize(pub u64);
 
 impl fmt::Display for MemSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // find the best unit
         let mut size = self.0;
+        let mut remaining = 0;
         let mut unit = "B";
         if size >= 1024 {
+            remaining = size % 1024;
             size /= 1024;
             unit = "KB";
         }
         if size >= 1024 {
+            remaining = size % 1024;
             size /= 1024;
             unit = "MB";
         }
         if size >= 1024 {
+            remaining = size % 1024;
             size /= 1024;
             unit = "GB";
         }
         if size >= 1024 {
+            remaining = size % 1024;
             size /= 1024;
             unit = "TB";
         }
-        size.fmt(f).and_then(|_| write!(f, "{unit}"))?;
-        Ok(())
+        if size >= 1024 {
+            remaining = size % 1024;
+            size /= 1024;
+            unit = "PB";
+        }
+        size.fmt(f).and_then(|_| {
+            if remaining > 0 {
+                let remaining = remaining * 100 / 1024;
+                write!(f, ".{remaining}")?;
+            }
+            write!(f, "{unit}")
+        })
     }
 }
 
