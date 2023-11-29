@@ -75,6 +75,9 @@ pub fn hexdump(buf: &[u8]) {
         for c in buf[remaining_start..].iter() {
             print!("{:02X} ", c);
         }
+        for _ in 0..(16 - remaining) {
+            print!("   ");
+        }
         // print ascii
         print!("  ");
         for &c in buf[remaining_start..].iter() {

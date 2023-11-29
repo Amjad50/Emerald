@@ -41,7 +41,7 @@ use multiboot::{MemoryMapType, MultiBootInfoRaw};
 
 use crate::memory_management::{
     kernel_heap_allocator::ALLOCATOR,
-    memory_layout::{MemSize, PAGE_4K},
+    memory_layout::{MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
     physical_page_allocator,
 };
 
@@ -101,6 +101,11 @@ fn finish_boot() {
         "Used heap: {} ({:0.3}%)",
         MemSize(used_heap as u64),
         used_heap as f64 / (used_heap + free_heap) as f64 * 100.
+    );
+    println!(
+        "From possible heap: {} ({:0.3}%)",
+        MemSize(KERNEL_HEAP_SIZE as u64),
+        used_heap as f64 / KERNEL_HEAP_SIZE as f64 * 100.
     );
 }
 
