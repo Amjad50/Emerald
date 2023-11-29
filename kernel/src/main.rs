@@ -17,6 +17,7 @@ mod bios;
 mod collections;
 mod cpu;
 mod devices;
+mod executable;
 mod fs;
 mod io;
 mod memory_management;
@@ -29,6 +30,7 @@ use cpu::{
     gdt,
     interrupts::{self, apic},
 };
+use executable::elf::Elf;
 use io::console;
 use memory_management::{
     memory_layout::{
@@ -109,6 +111,12 @@ fn finish_boot() {
     );
 }
 
+fn load_init() {
+    let mut init_file = fs::open("/init").expect("Could not find `init` file");
+    let elf = Elf::load(&mut init_file).expect("Could not load init file");
+    println!("Init File ELF: {:#X?}", elf);
+}
+
 #[link_section = ".text"]
 #[no_mangle]
 pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
@@ -127,6 +135,8 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     unsafe { cpu::set_interrupts() };
     devices::register_devices();
     fs::init_filesystem(0).expect("Could not load filesystem");
+
+    load_init();
 
     finish_boot();
     // -- BOOT FINISHED --
