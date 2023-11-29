@@ -1,0 +1,26 @@
+[tasks.build]
+command = "cargo"
+args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}"]
+
+[tasks.iso_create_grub]
+private = true
+command = "mkdir"
+args = ["-p", "${GRUB_PATH}/boot/grub"]
+
+[tasks.iso_copy_kernel]
+private = true
+dependencies = ["iso_create_grub", "build"]
+command = "cp"
+args = ["${KERNEL_PATH}", "${GRUB_PATH}/boot/kernel"]
+
+[tasks.iso_copy_grub_cfg]
+private = true
+dependencies = ["iso_create_grub"]
+command = "cp"
+args = ["${GRUB_CFG_PATH}", "${GRUB_PATH}/boot/grub/grub.cfg"]
+
+[tasks.iso]
+dependencies = ["iso_copy_grub_cfg", "iso_copy_kernel"]
+command = "grub-mkrescue"
+args = ["-o", "${ISO_PATH}", "${GRUB_PATH}"]
+

@@ -1,1 +1,3 @@
 /target
+/filesystem
+!/filesystem/message.txt

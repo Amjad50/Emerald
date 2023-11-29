@@ -1,46 +1,48 @@
 [env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 PROFILE = { source = "${CARGO_MAKE_CARGO_PROFILE}", default_value = "dev", mapping = {"dev" = "debug", "release" = "release" } }
 OUT_DIR = "${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}/${PROFILE}"
 KERNEL_PATH = "${OUT_DIR}/kernel"
 ISO_PATH = "${OUT_DIR}/kernel.iso"
+GRUB_CFG_PATH = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/kernel/grub.cfg"
 GRUB_PATH = "${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}/${PROFILE}/grub"
+FILESYSTEM_PATH = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/filesystem"
 QEMU_ARGS = "-serial mon:stdio -m 512 -boot d -drive format=raw,file=fat:rw:filesystem"
 # UEFI_IMAGE = "" # external: change to a path to a UEFI image to enable UEFI booting (like, /usr/share/edk2-ovmf/x64/OVMF_CODE.fd)
 QEMU_UEFI_ARGS = { value = "-bios ${UEFI_IMAGE}", condition = { env_true = ["UEFI_IMAGE"] } }
 
-[tasks.build]
+[tasks.build_member]
+workspace = true
 command = "cargo"
 args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}"]
 
-[tasks.iso_create_grub]
-private = true
-command = "mkdir"
-args = ["-p", "${GRUB_PATH}/boot/grub"]
-
-[tasks.iso_copy_kernel]
-private = true
-dependencies = ["iso_create_grub", "build"]
+[tasks.copy_to_fs]
+workspace = true
+dependencies = ["build_member"]
 command = "cp"
-args = ["${KERNEL_PATH}", "${GRUB_PATH}/boot/kernel"]
+args = ["-r", "${OUT_DIR}/${CARGO_MAKE_PROJECT_NAME}", "${FILESYSTEM_PATH}/${CARGO_MAKE_PROJECT_NAME}"]
 
-[tasks.iso_copy_grub_cfg]
-private = true
-dependencies = ["iso_create_grub"]
-command = "cp"
-args = ["${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/grub.cfg", "${GRUB_PATH}/boot/grub/grub.cfg"]
+[tasks.filesystem]
+workspace = false
+# empty array means all members (not sure why need to be explicit)
+env = { CARGO_MAKE_WORKSPACE_INCLUDE_MEMBERS=[], CARGO_MAKE_WORKSPACE_SKIP_MEMBERS=["kernel"] }
+run_task = { name = "copy_to_fs", fork = true }
 
-[tasks.iso]
-dependencies = ["iso_copy_grub_cfg", "iso_copy_kernel"]
-command = "grub-mkrescue"
-args = ["-o", "${ISO_PATH}", "${GRUB_PATH}"]
+# kernel tasks
+[tasks.kernel_iso]
+workspace = false
+env = { CARGO_MAKE_WORKSPACE_INCLUDE_MEMBERS=["kernel"] }
+run_task = { name="iso", fork=true }
 
 [tasks.run_iso]
-dependencies = ["iso"]
+workspace = false
+dependencies = ["kernel_iso", "filesystem"]
 command = "qemu-system-x86_64"
 args =  ["-cdrom", "${ISO_PATH}", "@@split(QEMU_ARGS, )", "@@split(QEMU_UEFI_ARGS, )", "${@}"]
 
 [tasks.run_iso_gdb]
-dependencies = ["iso"]
+workspace = false
+dependencies = ["kernel_iso", "filesystem"]
 command = "qemu-system-x86_64"
 args = ["-cdrom", "${ISO_PATH}", "-s", "-S", "@@split(QEMU_ARGS, )", "@@split(QEMU_UEFI_ARGS, )", "${@}"]
 
