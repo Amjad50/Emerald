@@ -121,7 +121,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     console::setup_interrupts();
     unsafe { cpu::set_interrupts() };
     devices::register_devices();
-    fs::init_filesystem(0).unwrap();
+    fs::init_filesystem(0).expect("Could not load filesystem");
 
     finish_boot();
     // -- BOOT FINISHED --

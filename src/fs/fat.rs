@@ -159,7 +159,7 @@ impl fmt::Debug for FatBootSectorRaw {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FatType {
+pub enum FatType {
     Fat12,
     Fat16,
     Fat32,
@@ -662,6 +662,10 @@ impl FatFilesystem {
         label
     }
 
+    pub fn fat_type(&self) -> FatType {
+        self.boot_sector.ty
+    }
+
     fn first_sector_of_cluster(&self, cluster: u32) -> u32 {
         self.boot_sector.data_start_sector()
             + (cluster - 2) * self.boot_sector.sectors_per_cluster() as u32
@@ -772,6 +776,18 @@ impl FatFilesystem {
         DirectoryIterator::new(self, dir)
     }
 
+    #[allow(dead_code)]
+    pub fn open_dir_inode(&self, inode: &INode) -> Result<DirectoryIterator, FileSystemError> {
+        if !inode.is_dir {
+            return Err(FileSystemError::IsNotDirectory);
+        }
+        let dir = Directory::Normal {
+            inode: inode.clone(),
+        };
+        DirectoryIterator::new(self, dir)
+    }
+
+    #[allow(dead_code)]
     pub fn read_file(
         &self,
         inode: &INode,

@@ -1,3 +1,5 @@
+use crate::io::NoDebug;
+
 #[repr(C, packed)]
 #[derive(Copy, Clone, Debug)]
 pub struct PartitionEntry {
@@ -16,7 +18,7 @@ pub struct PartitionEntry {
 #[repr(C, packed)]
 #[derive(Debug)]
 pub struct MbrRaw {
-    pub boot_code: [u8; 446],
+    pub boot_code: NoDebug<[u8; 446]>,
     pub partition_table: [PartitionEntry; 4],
     pub signature: u16,
 }

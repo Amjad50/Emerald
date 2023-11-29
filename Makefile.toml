@@ -4,7 +4,7 @@ OUT_DIR = "${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}/${PROFILE}"
 KERNEL_PATH = "${OUT_DIR}/kernel"
 ISO_PATH = "${OUT_DIR}/kernel.iso"
 GRUB_PATH = "${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}/${PROFILE}/grub"
-QEMU_ARGS = "-serial mon:stdio -m 512"
+QEMU_ARGS = "-serial mon:stdio -m 512 -boot d -drive format=raw,file=fat:rw:filesystem"
 # UEFI_IMAGE = "" # external: change to a path to a UEFI image to enable UEFI booting (like, /usr/share/edk2-ovmf/x64/OVMF_CODE.fd)
 QEMU_UEFI_ARGS = { value = "-bios ${UEFI_IMAGE}", condition = { env_true = ["UEFI_IMAGE"] } }
 

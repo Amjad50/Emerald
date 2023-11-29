@@ -86,7 +86,6 @@ pub fn init_filesystem(hard_disk_index: usize) -> Result<(), FileSystemError> {
 
     if mbr.is_valid() {
         // found MBR
-
         let first_partition = &mbr.partition_table[0];
         let filesystem = fat::load_fat_filesystem(
             ide_index,
@@ -94,8 +93,9 @@ pub fn init_filesystem(hard_disk_index: usize) -> Result<(), FileSystemError> {
             first_partition.size_in_sectors,
         )?;
         println!(
-            "Mapping / to FAT filesystem {:?}",
-            filesystem.volume_label()
+            "Mapping / to FAT filesystem {:?} ({:?})",
+            filesystem.volume_label(),
+            filesystem.fat_type()
         );
         FILESYSTEM_MAPPING
             .lock()
@@ -121,6 +121,7 @@ pub fn ls_dir(path: &str) -> Result<Vec<DirectoryEntry>, FileSystemError> {
     Ok(filesystem.open_dir(new_path)?.collect())
 }
 
+#[allow(dead_code)]
 pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
     let last_slash = path.rfind('/');
 
@@ -147,6 +148,7 @@ pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
     Err(FileSystemError::FileNotFound)
 }
 
+#[allow(dead_code)]
 pub struct File {
     filesystem: Filesystem,
     path: String,
@@ -154,6 +156,7 @@ pub struct File {
     position: u64,
 }
 
+#[allow(dead_code)]
 impl File {
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let filesystem_guard = self.filesystem.lock();
