@@ -7,6 +7,8 @@ use super::idt::{InterruptDescriptorTable, InterruptHandler};
 static INTERRUPTS: Mutex<Interrupts> = Mutex::new(Interrupts::empty());
 
 const USER_INTERRUPTS_START: u8 = 0x20;
+const MAX_USER_INTERRUPTS: u8 = 0xe0 - 0x10;
+pub const SPECIAL_SCHEDULER_INTERRUPT: u8 = 0xdf; // last one (0xFF)
 
 struct Interrupts {
     idt: InterruptDescriptorTable,
@@ -30,7 +32,7 @@ impl Interrupts {
     }
 
     fn allocate_user_interrupt(&mut self, handler: InterruptHandler) -> u8 {
-        if self.last_used_user_interrupt + USER_INTERRUPTS_START as u16 == 0x100 {
+        if self.last_used_user_interrupt >= MAX_USER_INTERRUPTS as u16 {
             panic!("No more user interrupts available");
         }
 
@@ -52,4 +54,9 @@ pub fn init_interrupts() {
 /// Puts the handler in the IDT and returns the interrupt/vector number
 pub(super) fn allocate_user_interrupt(handler: InterruptHandler) -> u8 {
     INTERRUPTS.lock().allocate_user_interrupt(handler)
+}
+
+pub fn create_scheduler_interrupt(handler: InterruptHandler) {
+    let mut interrupts = INTERRUPTS.lock();
+    interrupts.idt.user_defined[SPECIAL_SCHEDULER_INTERRUPT as usize].set_handler(handler);
 }

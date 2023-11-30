@@ -41,6 +41,7 @@ use memory_management::{
     virtual_memory,
 };
 use multiboot::{MemoryMapType, MultiBootInfoRaw};
+use process::scheduler;
 
 use crate::{
     memory_management::{
@@ -148,17 +149,9 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     // -- BOOT FINISHED --
 
     load_init_process();
-    let mut chars = [0u8; 16];
-    loop {
-        let len = io::read_chars(&mut chars);
-        if len > 0 {
-            io::write_chars(&chars[..len]);
-        }
-        // we need this, so that the cpu will have some time to get interrupted
-        // otherwise we are moving from one lock to another, and the interrupt will
-        // always be disabled.
-        hint::spin_loop();
-    }
+
+    // this will never return
+    scheduler::schedule()
 }
 
 #[panic_handler]

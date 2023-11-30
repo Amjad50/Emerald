@@ -1,3 +1,5 @@
+pub mod scheduler;
+
 use alloc::vec::Vec;
 
 use crate::{

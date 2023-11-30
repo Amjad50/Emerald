@@ -1,3 +1,5 @@
+use crate::process::ProcessContext;
+
 use self::{
     gdt::{GlobalDescriptorTablePointer, SegmentSelector},
     idt::InterruptDescriptorTablePointer,
@@ -24,6 +26,11 @@ pub struct Cpu {
     old_interrupt_enable: bool,
     // number of times we have called `cli`
     n_cli: usize,
+
+    // saved context, when switching from kernel to user and vice versa
+    pub context: Option<ProcessContext>,
+    // the process id of the current process
+    pub process_id: u64,
 }
 
 impl Cpu {
@@ -33,6 +40,8 @@ impl Cpu {
             apic_id: 0,
             old_interrupt_enable: false,
             n_cli: 0,
+            context: None,
+            process_id: 0,
         }
     }
 

@@ -114,12 +114,14 @@ pub fn _print(args: ::core::fmt::Arguments) {
     drop(con);
 }
 
+#[allow(dead_code)]
 pub fn read_chars(buf: &mut [u8]) -> usize {
     let con = console::CONSOLE.lock();
     let mut con = con.borrow_mut();
     con.read(buf)
 }
 
+#[allow(dead_code)]
 pub fn write_chars(buf: &[u8]) {
     let con = console::CONSOLE.lock();
     let mut con = con.borrow_mut();
