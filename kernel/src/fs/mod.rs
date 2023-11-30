@@ -49,13 +49,22 @@ impl FileSystemMapping {
 pub enum FileSystemError {
     PartitionTableNotFound,
     DeviceNotFound,
-    DiskReadError { sector: u64, error: ide::IdeError },
+    DiskReadError {
+        sector: u64,
+        error: ide::IdeError,
+    },
     FatError(fat::FatError),
     FileNotFound,
     InvalidPath,
     IsNotDirectory,
     IsDirectory,
     InvalidOffset,
+    /// Unlike InvalidInput, this typically means that the operation parameters were valid,
+    ///  however the error was caused by malformed input data.
+    ///
+    /// For example, a function that reads a file into a string will error with InvalidData
+    /// if the file’s contents are not valid `UTF-8`.
+    InvalidData,
 }
 
 /// Loads the hard disk specified in the argument
@@ -180,5 +189,23 @@ impl File {
 
     pub fn path(&self) -> &str {
         &self.path
+    }
+
+    pub fn read_to_end(&mut self) -> Result<Vec<u8>, FileSystemError> {
+        let mut buf = vec![0; self.inode.size() as usize];
+        let mut position = 0;
+        loop {
+            let read = self.read(&mut buf[position..])?;
+            if read == 0 {
+                break;
+            }
+            position += read as usize;
+        }
+        Ok(buf)
+    }
+
+    pub fn read_to_string(&mut self) -> Result<String, FileSystemError> {
+        let buf = self.read_to_end()?;
+        String::from_utf8(buf).map_err(|_| FileSystemError::InvalidData)
     }
 }
