@@ -115,7 +115,7 @@ fn load_init() {
     let mut init_file = fs::open("/init").expect("Could not find `init` file");
     let elf = Elf::load(&mut init_file).expect("Could not load init file");
     println!("Init File ELF: {:#X?}", elf);
-    let vm = executable::load_elf_to_new_vm(&elf, &mut init_file, true)
+    let mut vm = executable::load_elf_to_new_vm(&elf, &mut init_file, true)
         .expect("Could not load init file into new vm");
     vm.switch_to_this();
 
@@ -124,7 +124,6 @@ fn load_init() {
     println!("Jumping to entry in `init`: {:#X}", entry);
     assert!(vm.is_address_mapped(entry as _) && entry < KERNEL_BASE as u64);
     let entry_fn: extern "C" fn() = unsafe { core::mem::transmute(entry) };
-
     entry_fn();
 
     vm.unmap_user_memory();
