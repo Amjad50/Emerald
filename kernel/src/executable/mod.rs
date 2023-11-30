@@ -3,14 +3,12 @@ use crate::{fs, memory_management::virtual_memory};
 pub mod elf;
 
 #[allow(dead_code)]
-pub fn load_elf_to_new_vm(
+pub fn load_elf_to_vm(
     elf: &elf::Elf,
     file: &mut fs::File,
-    user_mode: bool,
-) -> Result<virtual_memory::VirtualMemoryManager, fs::FileSystemError> {
+    vm: &mut virtual_memory::VirtualMemoryManager,
+) -> Result<(), fs::FileSystemError> {
     let old_vm = virtual_memory::get_current_vm();
-
-    let mut vm = virtual_memory::clone_kernel_vm_as_user();
 
     // switch temporaily so we can map the elf
     vm.switch_to_this();
@@ -19,9 +17,7 @@ pub fn load_elf_to_new_vm(
         if let elf::ElfProgramType::Load = segment.ty() {
             assert!(segment.virtual_address() == segment.physical_address());
             let mut flags = elf::to_virtual_memory_flags(segment.flags());
-            if user_mode {
-                flags |= virtual_memory::flags::PTE_USER;
-            }
+            flags |= virtual_memory::flags::PTE_USER;
             let entry = virtual_memory::VirtualMemoryMapEntry {
                 virtual_address: segment.virtual_address(),
                 physical_address: None,
@@ -46,5 +42,5 @@ pub fn load_elf_to_new_vm(
     // switch back to the old vm
     old_vm.switch_to_this();
 
-    Ok(vm)
+    Ok(())
 }

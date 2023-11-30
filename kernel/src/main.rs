@@ -22,6 +22,7 @@ mod fs;
 mod io;
 mod memory_management;
 mod multiboot;
+pub mod process;
 mod sync;
 
 use core::hint;
@@ -41,10 +42,13 @@ use memory_management::{
 };
 use multiboot::{MemoryMapType, MultiBootInfoRaw};
 
-use crate::memory_management::{
-    kernel_heap_allocator::ALLOCATOR,
-    memory_layout::{MemSize, KERNEL_BASE, KERNEL_HEAP_SIZE, PAGE_4K},
-    physical_page_allocator,
+use crate::{
+    memory_management::{
+        kernel_heap_allocator::ALLOCATOR,
+        memory_layout::{MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
+        physical_page_allocator,
+    },
+    process::Process,
 };
 
 /// Checks that we have enough memory, and keep note of where the kernel ends
@@ -111,25 +115,15 @@ fn finish_boot() {
     );
 }
 
-fn load_init() {
+fn load_init_process() {
     let mut init_file = fs::open("/init").expect("Could not find `init` file");
     let elf = Elf::load(&mut init_file).expect("Could not load init file");
     println!("Init File ELF: {:#X?}", elf);
-    let mut vm = executable::load_elf_to_new_vm(&elf, &mut init_file, true)
-        .expect("Could not load init file into new vm");
-    vm.switch_to_this();
+    let process = Process::allocate_process(0, &elf, &mut init_file)
+        .expect("Could not allocate process for `init`");
+    assert!(process.id() == 0, "Must be the first process");
 
-    // jump to entry
-    let entry = elf.entry_point();
-    println!("Jumping to entry in `init`: {:#X}", entry);
-    assert!(vm.is_address_mapped(entry as _) && entry < KERNEL_BASE as u64);
-    let entry_fn: extern "C" fn() = unsafe { core::mem::transmute(entry) };
-    entry_fn();
-
-    vm.unmap_user_memory();
-
-    println!("Returned from init");
-    virtual_memory::switch_to_kernel();
+    process::push_process(process);
 }
 
 #[link_section = ".text"]
@@ -150,12 +144,10 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     unsafe { cpu::set_interrupts() };
     devices::register_devices();
     fs::init_filesystem(0).expect("Could not load filesystem");
-
-    load_init();
-
     finish_boot();
     // -- BOOT FINISHED --
 
+    load_init_process();
     let mut chars = [0u8; 16];
     loop {
         let len = io::read_chars(&mut chars);
