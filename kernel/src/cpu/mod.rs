@@ -1,4 +1,7 @@
-use self::{gdt::GlobalDescriptorTablePointer, idt::InterruptDescriptorTablePointer};
+use self::{
+    gdt::{GlobalDescriptorTablePointer, SegmentSelector},
+    idt::InterruptDescriptorTablePointer,
+};
 
 pub mod gdt;
 pub mod idt;
@@ -175,11 +178,11 @@ unsafe fn lidt(ldtr: &InterruptDescriptorTablePointer) {
     core::arch::asm!("lidt [rax]", in("rax") ldtr, options(readonly, nostack, preserves_flags));
 }
 
-unsafe fn ltr(tr: u16) {
-    core::arch::asm!("ltr ax", in("ax") tr, options(nomem, nostack, preserves_flags));
+unsafe fn ltr(tr: SegmentSelector) {
+    core::arch::asm!("ltr ax", in("ax") tr.0, options(nomem, nostack, preserves_flags));
 }
 
-unsafe fn set_cs(cs: u16) {
+unsafe fn set_cs(cs: SegmentSelector) {
     core::arch::asm!(
         "push {0:r}",
         // this is not 0x1f, it is `1-forward`,
@@ -188,7 +191,17 @@ unsafe fn set_cs(cs: u16) {
         "push {tmp}",
         "retfq",
         "1:",
-        in(reg) cs as u64, tmp=lateout(reg) _, options(preserves_flags));
+        in(reg) cs.0, tmp=lateout(reg) _, options(preserves_flags));
+}
+
+unsafe fn set_data_segments(ds: SegmentSelector) {
+    core::arch::asm!(
+        "mov ds, {0:r}",
+        "mov es, {0:r}",
+        "mov ss, {0:r}",
+        "mov fs, {0:r}",
+        "mov gs, {0:r}",
+        in(reg) ds.0, options(preserves_flags));
 }
 
 fn get_cs() -> u16 {

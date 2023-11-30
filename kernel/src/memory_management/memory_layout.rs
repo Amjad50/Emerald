@@ -8,6 +8,8 @@ extern "C" {
 
 pub const ONE_MB: usize = 1024 * 1024;
 
+// it starts at 0x10000, which is where the kernel is loaded, and grows down
+pub const KERNEL_STACK_END: usize = 0xFFFF_FFFF_8001_0000;
 // The virtual address of the kernel
 // these are information variables, showing the memory mapping of the kernel
 pub const KERNEL_BASE: usize = 0xFFFF_FFFF_8000_0000;
