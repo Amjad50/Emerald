@@ -2,7 +2,7 @@ use core::{alloc::GlobalAlloc, mem};
 
 use crate::{
     memory_management::{
-        memory_layout::KERNEL_HEAP_SIZE,
+        memory_layout::{is_aligned, KERNEL_HEAP_SIZE},
         virtual_memory::{self, flags, VirtualMemoryMapEntry},
     },
     sync::spin::mutex::Mutex,
@@ -480,7 +480,13 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
 
         drop(inner);
 
-        unsafe { (allocated_block_info as *mut u8).add(allocated_block_offset) }
+        // TODO: sometimes, allocation is misalligned, check why and fix
+        let ptr = unsafe { (allocated_block_info as *mut u8).add(allocated_block_offset) };
+        assert!(
+            is_aligned(ptr as _, layout.align(),),
+            "base_block={allocated_block_info:p}, offset={allocated_block_offset}, ptr={ptr:?}, layout={layout:?}",
+        );
+        ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
