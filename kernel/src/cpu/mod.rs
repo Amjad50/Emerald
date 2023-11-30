@@ -158,6 +158,12 @@ pub unsafe fn set_cr3(cr3: u64) {
     core::arch::asm!("mov cr3, rax", in("rax") cr3, options(nomem, nostack, preserves_flags));
 }
 
+pub unsafe fn get_cr3() -> u64 {
+    let cr3: u64;
+    core::arch::asm!("mov {0:r}, cr3", out(reg) cr3, options(readonly, nostack, preserves_flags));
+    cr3
+}
+
 /// SAFETY: the data pointed to by `gdtr` must be static and never change
 unsafe fn lgdt(gdtr: &GlobalDescriptorTablePointer) {
     // println!("lgdt: {:p}", gdtr);

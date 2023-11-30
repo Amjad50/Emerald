@@ -33,6 +33,30 @@ pub mod flags {
 
 const ADDR_MASK: u64 = 0x0000_0000_FFFF_F000;
 
+// only use the last index for the kernel
+// all the other indexes are free to use by the user
+const KERNEL_L4_INDEX: usize = 0x1FF;
+
+#[inline(always)]
+const fn get_l4(addr: u64) -> u64 {
+    (addr >> 39) & 0x1FF
+}
+
+#[inline(always)]
+const fn get_l3(addr: u64) -> u64 {
+    (addr >> 30) & 0x1FF
+}
+
+#[inline(always)]
+const fn get_l2(addr: u64) -> u64 {
+    (addr >> 21) & 0x1FF
+}
+
+#[inline(always)]
+const fn get_l1(addr: u64) -> u64 {
+    (addr >> 12) & 0x1FF
+}
+
 // have a specific alignment so we can fit them in a page
 #[repr(C, align(32))]
 #[derive(Debug, Copy, Clone)]
@@ -50,9 +74,9 @@ struct PageDirectoryTable {
 }
 
 static mut KERNEL_VIRTUAL_MEMORY_MANAGER: Mutex<VirtualMemoryManager> =
-    Mutex::new(VirtualMemoryManager::empty());
+    Mutex::new(VirtualMemoryManager::boot_vm());
 
-pub fn init_vm() {
+pub fn init_kernel_vm() {
     let new_kernel_manager = VirtualMemoryManager::new_kernel_vm();
     let mut manager = unsafe { KERNEL_VIRTUAL_MEMORY_MANAGER.lock() };
     *manager = new_kernel_manager;
@@ -95,36 +119,67 @@ pub fn switch_to_kernel() {
 }
 
 pub fn map_kernel(entry: &VirtualMemoryMapEntry) {
+    // make sure we are only mapping to kernel memory
+    assert!(entry.virtual_address >= KERNEL_BASE as u64);
     unsafe {
         KERNEL_VIRTUAL_MEMORY_MANAGER.lock().map(entry);
     }
 }
 
 #[allow(dead_code)]
-pub fn is_address_mapped_in_kernel(addr: usize) -> bool {
+pub fn is_address_mapped_in_kernel(addr: u64) -> bool {
     unsafe { KERNEL_VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr) }
+}
+
+#[allow(dead_code)]
+pub fn clone_kernel_vm_as_user() -> VirtualMemoryManager {
+    let manager = unsafe { KERNEL_VIRTUAL_MEMORY_MANAGER.lock() };
+    let mut new_vm = manager.clone_kernel_mem();
+    new_vm.is_user = true;
+    new_vm
+}
+
+pub fn get_current_vm() -> VirtualMemoryManager {
+    VirtualMemoryManager::get_current_vm()
 }
 
 pub struct VirtualMemoryManager {
     page_map_l4: *mut PageDirectoryTable,
+    is_user: bool,
 }
 
 impl VirtualMemoryManager {
-    pub const fn empty() -> Self {
+    /// Return the VM for the CPU at boot time (only applied to the first CPU and this is setup in `boot.S`)
+    const fn boot_vm() -> Self {
         Self {
             // use the same address we used in the assembly code
-            // we will change this anyway in `init`, but at least lets have a valid address
+            // we will change this anyway in `new_kernel_vm`, but at least lets have a valid address
             page_map_l4: physical2virtual(0x1000) as *mut _,
+            is_user: false,
         }
     }
 
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             page_map_l4: unsafe { physical_page_allocator::alloc_zeroed() } as *mut _,
+            is_user: false,
         }
     }
 
-    fn switch_vm(base: *const PageDirectoryTable) {
+    // create a new virtual memory that maps the kernel only
+    pub fn clone_kernel_mem(&self) -> Self {
+        let new_vm = Self::new();
+
+        // share the same kernel mapping
+        unsafe {
+            (*new_vm.page_map_l4).entries[KERNEL_L4_INDEX] =
+                (*self.page_map_l4).entries[KERNEL_L4_INDEX];
+        }
+
+        new_vm
+    }
+
+    fn load_vm(base: *const PageDirectoryTable) {
         eprintln!(
             "Switching to new page map: {:p}",
             virtual2physical(base as _) as *const u8
@@ -132,8 +187,18 @@ impl VirtualMemoryManager {
         unsafe { cpu::set_cr3(virtual2physical(base as _) as _) }
     }
 
+    fn get_current_vm() -> Self {
+        let kernel_vm_addr = unsafe { KERNEL_VIRTUAL_MEMORY_MANAGER.lock().page_map_l4 as usize };
+        let cr3 = unsafe { cpu::get_cr3() };
+        let is_user = cr3 != kernel_vm_addr as u64;
+        Self {
+            page_map_l4: physical2virtual(cr3 as _) as _,
+            is_user,
+        }
+    }
+
     pub fn switch_to_this(&self) {
-        Self::switch_vm(self.page_map_l4);
+        Self::load_vm(self.page_map_l4);
     }
 
     // This replicate what is done in the assembly code
@@ -186,6 +251,10 @@ impl VirtualMemoryManager {
 
         assert!(!self.page_map_l4.is_null());
         assert!(is_aligned(self.page_map_l4 as _, PAGE_4K));
+        if self.is_user {
+            assert!(*flags & flags::PTE_USER != 0);
+            assert!(virtual_address < KERNEL_BASE as u64);
+        }
 
         virtual_address = align_down(virtual_address as _, PAGE_4K) as _;
         start_physical_address =
@@ -216,10 +285,10 @@ impl VirtualMemoryManager {
                 "[!] Mapping {:p} to {:p}",
                 virtual_address as *const u8, current_physical_address as *const u8
             );
-            let page_map_l4_index = ((virtual_address >> 39) & 0x1FF) as usize;
-            let page_directory_pointer_index = ((virtual_address >> 30) & 0x1FF) as usize;
-            let page_directory_index = ((virtual_address >> 21) & 0x1FF) as usize;
-            let page_table_index = ((virtual_address >> 12) & 0x1FF) as usize;
+            let page_map_l4_index = get_l4(virtual_address) as usize;
+            let page_directory_pointer_index = get_l3(virtual_address) as usize;
+            let page_directory_index = get_l2(virtual_address) as usize;
+            let page_table_index = get_l1(virtual_address) as usize;
 
             // Level 4
             let page_map_l4 = unsafe { &mut *self.page_map_l4 };
@@ -360,14 +429,11 @@ impl VirtualMemoryManager {
         }
     }
 
-    pub fn is_address_mapped(&self, addr: usize) -> bool {
-        // TODO: fix this assumption
-        // assume we are using `self.page_map_l4` as the page map
-
-        let page_map_l4_index = (addr >> 39) & 0x1FF;
-        let page_directory_pointer_index = (addr >> 30) & 0x1FF;
-        let page_directory_index = (addr >> 21) & 0x1FF;
-        let page_table_index = (addr >> 12) & 0x1FF;
+    pub fn is_address_mapped(&self, addr: u64) -> bool {
+        let page_map_l4_index = get_l4(addr) as usize;
+        let page_directory_pointer_index = get_l3(addr) as usize;
+        let page_directory_index = get_l2(addr) as usize;
+        let page_table_index = get_l1(addr) as usize;
 
         // Level 4
         let page_map_l4 = unsafe { &mut *self.page_map_l4 };
@@ -430,5 +496,57 @@ impl VirtualMemoryManager {
         );
 
         true
+    }
+
+    // the handler function definition is `fn(page_entry: &mut u64)`
+    fn do_for_every_user_entry(&self, mut f: impl FnMut(&mut u64)) {
+        let page_map_l4 = unsafe { &mut *self.page_map_l4 };
+
+        let present = |entry: &&mut u64| **entry & flags::PTE_PRESENT != 0;
+
+        let as_page_directory_table_flat = |entry: &mut u64| {
+            let page_directory_table = unsafe {
+                &mut *((physical2virtual((*entry & ADDR_MASK) as usize)) as *mut PageDirectoryTable)
+            };
+            page_directory_table.entries.iter_mut()
+        };
+
+        // handle 2MB pages and below
+        let handle_2mb_pages = |page_directory_entry: &mut u64| {
+            // handle 2MB pages
+            if *page_directory_entry & flags::PTE_HUGE_PAGE != 0 {
+                f(page_directory_entry);
+            } else {
+                as_page_directory_table_flat(page_directory_entry)
+                    .filter(present)
+                    .for_each(&mut f);
+            }
+        };
+
+        page_map_l4
+            .entries
+            .iter_mut()
+            .take(KERNEL_L4_INDEX) // skip the kernel (the last one)
+            .filter(present)
+            .flat_map(as_page_directory_table_flat)
+            .filter(present)
+            .flat_map(as_page_directory_table_flat)
+            .filter(present)
+            .for_each(handle_2mb_pages);
+    }
+
+    // search for all the pages that are mapped to the user ranges and unmap them and free their memory
+    pub fn unmap_user_memory(&self) {
+        let free_page = |entry: &mut u64| {
+            assert!(
+                *entry & flags::PTE_HUGE_PAGE == 0,
+                "We haven't implemented 2MB physical pages for user allocation"
+            );
+            let page_table_ptr = physical2virtual((*entry & ADDR_MASK) as usize);
+            *entry = 0;
+            unsafe { physical_page_allocator::free(page_table_ptr as _) };
+        };
+
+        self.do_for_every_user_entry(free_page);
     }
 }
