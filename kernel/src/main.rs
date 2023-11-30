@@ -43,7 +43,7 @@ use multiboot::{MemoryMapType, MultiBootInfoRaw};
 
 use crate::memory_management::{
     kernel_heap_allocator::ALLOCATOR,
-    memory_layout::{MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
+    memory_layout::{MemSize, KERNEL_BASE, KERNEL_HEAP_SIZE, PAGE_4K},
     physical_page_allocator,
 };
 
@@ -115,6 +115,22 @@ fn load_init() {
     let mut init_file = fs::open("/init").expect("Could not find `init` file");
     let elf = Elf::load(&mut init_file).expect("Could not load init file");
     println!("Init File ELF: {:#X?}", elf);
+    let vm = executable::load_elf_to_new_vm(&elf, &mut init_file, true)
+        .expect("Could not load init file into new vm");
+    vm.switch_to_this();
+
+    // jump to entry
+    let entry = elf.entry_point();
+    println!("Jumping to entry in `init`: {:#X}", entry);
+    assert!(vm.is_address_mapped(entry as _) && entry < KERNEL_BASE as u64);
+    let entry_fn: extern "C" fn() = unsafe { core::mem::transmute(entry) };
+
+    entry_fn();
+
+    vm.unmap_user_memory();
+
+    println!("Returned from init");
+    virtual_memory::switch_to_kernel();
 }
 
 #[link_section = ".text"]

@@ -426,6 +426,10 @@ impl Elf {
         })
     }
 
+    pub fn entry_point(&self) -> u64 {
+        self.header.entry()
+    }
+
     #[allow(dead_code)]
     pub fn program_headers(&self) -> &[ElfProgram] {
         &self.prg_headers
