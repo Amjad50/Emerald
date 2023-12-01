@@ -237,6 +237,10 @@ pub unsafe fn wrmsr(inp: u32, val: u64) {
     core::arch::asm!("wrmsr", in("ecx") inp, in("eax") eax, in("edx") edx, options(readonly, nostack, preserves_flags));
 }
 
+pub unsafe fn halt() {
+    core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+}
+
 #[macro_export]
 macro_rules! cpuid {
     ($rax:expr) => {

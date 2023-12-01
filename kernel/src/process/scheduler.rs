@@ -2,6 +2,7 @@ use core::{hint, mem};
 
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
+    memory_management::virtual_memory,
     process::FxSave,
     sync::spin::mutex::Mutex,
 };
@@ -62,8 +63,36 @@ pub fn schedule() -> ! {
             // we are using interrupts to switch context since it allows us to save the registers of exit, which is
             // very convenient
             unsafe { core::arch::asm!("int 0xff") }
+        } else {
+            // no process to run, just wait for interrupts
+            unsafe { cpu::halt() };
         }
     }
+}
+
+pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
+    let current_cpu = cpu::cpu();
+    if current_cpu.context.is_none() {
+        return;
+    }
+
+    // save context of this process and mark is as scheduled
+    {
+        let mut processes = PROCESSES.lock();
+        // TODO: find a better way to store processes or store process index/id.
+        let process = processes
+            .iter_mut()
+            .find(|p| p.id == current_cpu.process_id)
+            .expect("current process not found");
+        assert!(process.state == ProcessState::Running);
+        current_cpu.push_cli();
+        swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+        // clear context from the CPU
+        process.context = current_cpu.context.take().unwrap();
+        process.state = ProcessState::Scheduled;
+    }
+    virtual_memory::switch_to_kernel();
+    current_cpu.pop_cli();
 }
 
 pub fn swap_context(context: &mut ProcessContext, all_state: &mut InterruptAllSavedState) {

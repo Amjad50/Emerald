@@ -16,7 +16,7 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::allocate_user_interrupt;
+use super::{allocate_user_interrupt, allocate_user_interrupt_all_saved};
 
 const CPUID_FEAT_EDX_APIC: u32 = 1 << 9;
 
@@ -476,7 +476,7 @@ impl Apic {
     }
 
     fn initialize_timer(&mut self) {
-        let interrupt_num = allocate_user_interrupt(timer_handler);
+        let interrupt_num = allocate_user_interrupt_all_saved(super::handlers::apic_timer_handler);
 
         unsafe {
             // divide by 1
@@ -553,10 +553,6 @@ impl Apic {
 
 extern "x86-interrupt" fn spurious_handler(_frame: InterruptStackFrame64) {
     println!("Spurious interrupt");
-    return_from_interrupt();
-}
-
-extern "x86-interrupt" fn timer_handler(_frame: InterruptStackFrame64) {
     return_from_interrupt();
 }
 

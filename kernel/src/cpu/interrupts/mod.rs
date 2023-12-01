@@ -1,4 +1,5 @@
 pub mod apic;
+mod handlers;
 
 use crate::sync::spin::mutex::Mutex;
 
