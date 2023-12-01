@@ -114,16 +114,17 @@ fn finish_boot() {
         MemSize(KERNEL_HEAP_SIZE as u64),
         used_heap as f64 / KERNEL_HEAP_SIZE as f64 * 100.
     );
+    println!();
 }
 
 fn load_init_process() {
     let mut init_file = fs::open("/init").expect("Could not find `init` file");
     let elf = Elf::load(&mut init_file).expect("Could not load init file");
-    println!("Init File ELF: {:#X?}", elf);
     let process = Process::allocate_process(0, &elf, &mut init_file)
         .expect("Could not allocate process for `init`");
     assert!(process.id() == 0, "Must be the first process");
 
+    println!("Added `init` process pid={}", process.id());
     process::push_process(process);
 }
 
