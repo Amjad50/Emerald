@@ -28,6 +28,10 @@ pub struct Cpu {
     n_cli: usize,
 
     // saved context, when switching from kernel to user and vice versa
+    // if there is a value here, it indicates that we are running a processing now
+    // either about to run a process, or in the middle
+    //
+    // i.e., if this is `None`, then we are in the kernel and free to take a process
     pub context: Option<ProcessContext>,
     // the process id of the current process
     pub process_id: u64,

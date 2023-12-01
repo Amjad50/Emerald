@@ -2,7 +2,7 @@ pub mod apic;
 
 use crate::sync::spin::mutex::Mutex;
 
-use super::idt::{InterruptDescriptorTable, InterruptHandler};
+use super::idt::{InterruptDescriptorTable, InterruptHandler, InterruptHandlerWithAllState};
 
 static INTERRUPTS: Mutex<Interrupts> = Mutex::new(Interrupts::empty());
 
@@ -31,7 +31,7 @@ impl Interrupts {
         self.idt.apply_idt();
     }
 
-    fn allocate_user_interrupt(&mut self, handler: InterruptHandler) -> u8 {
+    fn get_next_interrupt(&mut self) -> u8 {
         if self.last_used_user_interrupt >= MAX_USER_INTERRUPTS as u16 {
             panic!("No more user interrupts available");
         }
@@ -39,9 +39,24 @@ impl Interrupts {
         let interrupt = self.last_used_user_interrupt;
         self.last_used_user_interrupt += 1;
 
+        interrupt as u8
+    }
+
+    fn allocate_user_interrupt(&mut self, handler: InterruptHandler) -> u8 {
+        let interrupt = self.get_next_interrupt();
+
         self.idt.user_defined[interrupt as usize].set_handler(handler);
 
-        interrupt as u8 + USER_INTERRUPTS_START
+        interrupt + USER_INTERRUPTS_START
+    }
+
+    fn allocate_user_interrupt_all_saved(&mut self, handler: InterruptHandlerWithAllState) -> u8 {
+        let interrupt = self.get_next_interrupt();
+
+        self.idt.user_defined[interrupt as usize]
+            .set_handler_with_number(handler, interrupt + USER_INTERRUPTS_START);
+
+        interrupt + USER_INTERRUPTS_START
     }
 }
 
@@ -56,7 +71,13 @@ pub(super) fn allocate_user_interrupt(handler: InterruptHandler) -> u8 {
     INTERRUPTS.lock().allocate_user_interrupt(handler)
 }
 
-pub fn create_scheduler_interrupt(handler: InterruptHandler) {
+#[allow(dead_code)]
+pub(super) fn allocate_user_interrupt_all_saved(handler: InterruptHandlerWithAllState) -> u8 {
+    INTERRUPTS.lock().allocate_user_interrupt_all_saved(handler)
+}
+
+pub fn create_scheduler_interrupt(handler: InterruptHandlerWithAllState) {
     let mut interrupts = INTERRUPTS.lock();
-    interrupts.idt.user_defined[SPECIAL_SCHEDULER_INTERRUPT as usize].set_handler(handler);
+    interrupts.idt.user_defined[SPECIAL_SCHEDULER_INTERRUPT as usize]
+        .set_handler_with_number(handler, SPECIAL_SCHEDULER_INTERRUPT + USER_INTERRUPTS_START);
 }
