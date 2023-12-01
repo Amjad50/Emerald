@@ -1,4 +1,10 @@
-use core::{cell::Cell, fmt, sync::atomic::AtomicI64};
+use core::{
+    cell::Cell,
+    fmt,
+    marker::PhantomData,
+    ops::Deref,
+    sync::atomic::{AtomicI64, Ordering},
+};
 
 use crate::cpu;
 
@@ -24,16 +30,31 @@ where
     T: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Mutex")
-            .field("owner_cpu", &self.owner_cpu)
-            .field("data", &self.data)
-            .finish()
+        let mut s = f.debug_struct("ReMutex");
+        s.field("owner_cpu", &self.owner_cpu)
+            .field("lock_count", &self.lock_count);
+        if let Some(data) = self.try_lock() {
+            s.field("data", &data);
+        } else {
+            s.field("data", &"[locked]");
+        }
+        s.finish()
     }
 }
 
 #[must_use]
 pub struct ReMutexGuard<'a, T: 'a> {
     lock: &'a ReMutex<T>,
+    marker: PhantomData<*const ()>, // !Send
+}
+
+impl<T> fmt::Debug for ReMutexGuard<'_, T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.deref().fmt(f)
+    }
 }
 
 impl<T> ReMutex<T> {
@@ -51,21 +72,54 @@ impl<T> ReMutex<T> {
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
 
-        if self.owner_cpu.load(core::sync::atomic::Ordering::Relaxed) == cpu_id {
+        if self.owner_cpu.load(Ordering::Relaxed) == cpu_id {
             self.lock_count.set(
                 self.lock_count
                     .get()
                     .checked_add(1)
                     .expect("ReMutex lock count overflow"),
             );
-            ReMutexGuard { lock: self }
+            ReMutexGuard {
+                lock: self,
+                marker: PhantomData,
+            }
         } else {
             // SAFETY: the mutex is locked, we are the only accessor
-            unsafe { self.lock.lock() };
-            self.owner_cpu
-                .store(cpu_id, core::sync::atomic::Ordering::Relaxed);
+            self.lock.lock();
+            self.owner_cpu.store(cpu_id, Ordering::Relaxed);
             self.lock_count.set(1);
-            ReMutexGuard { lock: self }
+            ReMutexGuard {
+                lock: self,
+                marker: PhantomData,
+            }
+        }
+    }
+
+    pub fn try_lock(&self) -> Option<ReMutexGuard<T>> {
+        let cpu = cpu::cpu();
+        cpu.push_cli(); // disable interrupts to avoid deadlock
+        let cpu_id = cpu.id as i64;
+
+        if self.owner_cpu.load(Ordering::Relaxed) == cpu_id {
+            self.lock_count.set(
+                self.lock_count
+                    .get()
+                    .checked_add(1)
+                    .expect("ReMutex lock count overflow"),
+            );
+            Some(ReMutexGuard {
+                lock: self,
+                marker: PhantomData,
+            })
+        } else if self.lock.try_lock() {
+            // already locked here
+            self.lock_count.set(1);
+            Some(ReMutexGuard {
+                lock: self,
+                marker: PhantomData,
+            })
+        } else {
+            None
         }
     }
 }
@@ -88,9 +142,7 @@ impl<T> Drop for ReMutexGuard<'_, T> {
                 .expect("ReMutex lock count underflow"),
         );
         if self.lock.lock_count.get() == 0 {
-            self.lock
-                .owner_cpu
-                .store(-1, core::sync::atomic::Ordering::Relaxed);
+            self.lock.owner_cpu.store(-1, Ordering::Relaxed);
             // SAFETY: the mutex is locked, we are the only accessor
             unsafe { self.lock.lock.unlock() };
             cpu::cpu().pop_cli();

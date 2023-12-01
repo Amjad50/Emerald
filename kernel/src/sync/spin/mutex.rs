@@ -1,33 +1,55 @@
-use core::{cell::UnsafeCell, fmt, sync::atomic::AtomicI64};
+use core::{
+    cell::UnsafeCell,
+    fmt,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    sync::atomic::{AtomicI64, Ordering},
+};
 
 use crate::cpu;
 
 use super::lock;
 
-pub struct Mutex<T> {
+pub struct Mutex<T: ?Sized> {
     lock: lock::Lock,
     owner_cpu: AtomicI64,
     data: UnsafeCell<T>,
 }
 
-unsafe impl<T: Send> Send for Mutex<T> {}
-unsafe impl<T: Send> Sync for Mutex<T> {}
+unsafe impl<T: ?Sized + Send> Send for Mutex<T> {}
+unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
 
 impl<T> fmt::Debug for Mutex<T>
 where
     T: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Mutex")
-            .field("owner_cpu", &self.owner_cpu)
-            .field("data", unsafe { &self.data.get().as_ref().unwrap() })
-            .finish()
+        let mut s = f.debug_struct("Mutex");
+        s.field("owner_cpu", &self.owner_cpu);
+        if let Some(data) = self.try_lock() {
+            s.field("data", &data);
+        } else {
+            s.field("data", &"[locked]");
+        }
+        s.finish()
     }
 }
 
 #[must_use]
-pub struct MutexGuard<'a, T: 'a> {
+pub struct MutexGuard<'a, T: ?Sized + 'a> {
     lock: &'a Mutex<T>,
+    marker: PhantomData<*const ()>, // !Send
+}
+
+unsafe impl<T: ?Sized + Sync> Sync for MutexGuard<'_, T> {}
+
+impl<T> fmt::Debug for MutexGuard<'_, T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.deref().fmt(f)
+    }
 }
 
 impl<T> Mutex<T> {
@@ -44,14 +66,37 @@ impl<T> Mutex<T> {
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
 
-        if self.owner_cpu.load(core::sync::atomic::Ordering::Relaxed) == cpu_id {
+        if self.owner_cpu.load(Ordering::Relaxed) == cpu_id {
             panic!("Mutex already locked by this CPU");
         } else {
-            // SAFETY: the mutex is locked, we are the only accessor
-            unsafe { self.lock.lock() };
-            self.owner_cpu
-                .store(cpu_id, core::sync::atomic::Ordering::Relaxed);
-            MutexGuard { lock: self }
+            // SAFETY: we are the only accessor, and we are locking it, its never locked again until unlocked
+            self.lock.lock();
+            self.owner_cpu.store(cpu_id, Ordering::Relaxed);
+            MutexGuard {
+                lock: self,
+                marker: PhantomData,
+            }
+        }
+    }
+
+    pub fn try_lock(&self) -> Option<MutexGuard<T>> {
+        let cpu = cpu::cpu();
+        cpu.push_cli(); // disable interrupts to avoid deadlock
+        let cpu_id = cpu.id as i64;
+
+        if self.owner_cpu.load(Ordering::Relaxed) == cpu_id {
+            // we will not throw here, since the CPU might want to try to lock it again, at least its not a deadlock
+            cpu.pop_cli();
+            None
+        } else if self.lock.try_lock() {
+            self.owner_cpu.store(cpu_id, Ordering::Relaxed);
+            Some(MutexGuard {
+                lock: self,
+                marker: PhantomData,
+            })
+        } else {
+            cpu.pop_cli();
+            None
         }
     }
 
@@ -78,9 +123,16 @@ impl<T> Mutex<T> {
         let d = unsafe { guard.lock.data.get().as_mut().unwrap() };
         f(d)
     }
+
+    /// We know statically that no one else is accessing the lock, so we can
+    /// just return a reference to the data without acquiring the lock.
+    #[allow(dead_code)]
+    pub fn get_mut(&mut self) -> &mut T {
+        self.data.get_mut()
+    }
 }
 
-impl<T> core::ops::Deref for MutexGuard<'_, T> {
+impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -90,7 +142,7 @@ impl<T> core::ops::Deref for MutexGuard<'_, T> {
     }
 }
 
-impl<T> core::ops::DerefMut for MutexGuard<'_, T> {
+impl<T> DerefMut for MutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: the mutex is locked, we are the only accessors,
         //         and the pointer is valid, since it was generated for a valid T
@@ -98,11 +150,9 @@ impl<T> core::ops::DerefMut for MutexGuard<'_, T> {
     }
 }
 
-impl<T> Drop for MutexGuard<'_, T> {
+impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.lock
-            .owner_cpu
-            .store(-1, core::sync::atomic::Ordering::Relaxed);
+        self.lock.owner_cpu.store(-1, Ordering::Relaxed);
         // SAFETY: the mutex is locked, we are the only accessor
         unsafe { self.lock.lock.unlock() };
         cpu::cpu().pop_cli(); // re-enable interrupts
