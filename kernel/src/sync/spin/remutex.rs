@@ -73,6 +73,8 @@ impl<T> ReMutex<T> {
         let cpu_id = cpu.id as i64;
 
         if self.owner_cpu.load(Ordering::Relaxed) == cpu_id {
+            assert!(self.lock_count.get() > 0);
+            assert!(cpu.n_cli() > 0 && cpu.interrupts_disabled());
             self.lock_count.set(
                 self.lock_count
                     .get()
@@ -84,7 +86,6 @@ impl<T> ReMutex<T> {
                 marker: PhantomData,
             }
         } else {
-            // SAFETY: the mutex is locked, we are the only accessor
             self.lock.lock();
             self.owner_cpu.store(cpu_id, Ordering::Relaxed);
             self.lock_count.set(1);
@@ -101,6 +102,7 @@ impl<T> ReMutex<T> {
         let cpu_id = cpu.id as i64;
 
         if self.owner_cpu.load(Ordering::Relaxed) == cpu_id {
+            assert!(self.lock_count.get() > 0);
             self.lock_count.set(
                 self.lock_count
                     .get()
@@ -113,6 +115,7 @@ impl<T> ReMutex<T> {
             })
         } else if self.lock.try_lock() {
             // already locked here
+            self.owner_cpu.store(cpu_id, Ordering::Relaxed);
             self.lock_count.set(1);
             Some(ReMutexGuard {
                 lock: self,
@@ -145,7 +148,9 @@ impl<T> Drop for ReMutexGuard<'_, T> {
             self.lock.owner_cpu.store(-1, Ordering::Relaxed);
             // SAFETY: the mutex is locked, we are the only accessor
             unsafe { self.lock.lock.unlock() };
-            cpu::cpu().pop_cli();
         }
+        // re-enable interrupts
+        // (we have to do this for every drop, even if we are the same owner, as we are pushing cli in each lock())
+        cpu::cpu().pop_cli();
     }
 }

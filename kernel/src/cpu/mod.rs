@@ -61,22 +61,30 @@ impl Cpu {
             unsafe { clear_interrupts() };
             self.old_interrupt_enable = old_interrupt_flag;
         }
+        // re-read the flags
+        let rflags = unsafe { rflags() };
+        assert!(self.n_cli < usize::MAX);
+        assert!(rflags & flags::IF == 0);
         self.n_cli += 1;
     }
 
     pub fn pop_cli(&mut self) {
         let rflags = unsafe { rflags() };
-        if rflags & flags::IF != 0 {
-            panic!("interrupt shouldn't be set");
-        }
-        if self.n_cli == 0 {
-            panic!("pop_cli called without push_cli");
-        }
+        assert!(self.n_cli > 0);
+        assert!(rflags & flags::IF == 0);
 
         self.n_cli -= 1;
         if self.n_cli == 0 && self.old_interrupt_enable {
             unsafe { set_interrupts() };
         }
+    }
+
+    pub fn interrupts_disabled(&self) -> bool {
+        unsafe { rflags() & flags::IF == 0 }
+    }
+
+    pub fn n_cli(&self) -> usize {
+        self.n_cli
     }
 }
 
