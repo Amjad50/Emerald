@@ -1,6 +1,9 @@
 use core::{ffi, fmt, mem};
 
-use crate::memory_management::memory_layout::{physical2virtual, MemSize};
+use crate::{
+    io::NoDebug,
+    memory_management::memory_layout::{physical2virtual, MemSize},
+};
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq)]
@@ -93,10 +96,63 @@ impl Iterator for ModsIter {
     }
 }
 
+#[repr(C, packed)]
+#[derive(Debug, Clone)]
+pub struct VbeControlInfo {
+    pub signature: [u8; 4],
+    pub version: u16,
+    pub oem_str_ptr: u32,
+    pub capabilities: u32,
+    pub video_modes_ptr: u32,
+    pub video_memory_size_blocks: u16,
+    pub software_rev: u16,
+    pub vendor: u32,
+    pub product_name: u32,
+    pub product_rev: u32,
+    pub reserved: NoDebug<[u8; 222]>,
+    pub oem_data: [u8; 256],
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone)]
+pub struct VbeModeInfo {
+    pub attributes: u16,
+    pub window_a_attributes: u8,
+    pub window_b_attributes: u8,
+    pub window_granularity: u16,
+    pub window_size: u16,
+    pub window_a_segment: u16,
+    pub window_b_segment: u16,
+    pub window_func_ptr: u32,
+    pub bytes_per_scanline: u16,
+    pub width: u16,
+    pub height: u16,
+    pub w_char: u8,
+    pub y_char: u8,
+    pub planes: u8,
+    pub bpp: u8,
+    pub banks: u8,
+    pub memory_model: u8,
+    pub bank_size: u8,
+    pub image_pages: u8,
+    pub reserved0: u8,
+    pub red_mask_size: u8,
+    pub red_field_position: u8,
+    pub green_mask_size: u8,
+    pub green_field_position: u8,
+    pub blue_mask_size: u8,
+    pub blue_field_position: u8,
+    pub rsvd_mask_size: u8,
+    pub rsvd_field_position: u8,
+    pub direct_color_mode_attributes: u8,
+    pub framebuffer_addr: u32,
+    pub reserved1: NoDebug<[u8; 206]>,
+}
+
 #[derive(Debug, Clone)]
 pub struct VbeInfo {
-    pub control_info: u32,
-    pub mode_info: u32,
+    pub control_info: VbeControlInfo,
+    pub mode_info: VbeModeInfo,
     pub mode: u16,
     pub interface_seg: u16,
     pub interface_off: u16,
@@ -313,9 +369,12 @@ impl MultiBootInfoRaw {
     #[allow(dead_code)]
     pub fn vbe(&self) -> Option<VbeInfo> {
         if self.flags & 0b100000000000 != 0 {
+            let contorl_info_ptr =
+                physical2virtual(self.vbe_control_info as _) as *const VbeControlInfo;
+            let mode_info_ptr = physical2virtual(self.vbe_mode_info as _) as *const VbeModeInfo;
             Some(VbeInfo {
-                control_info: self.vbe_control_info,
-                mode_info: self.vbe_mode_info,
+                control_info: unsafe { contorl_info_ptr.read_unaligned() },
+                mode_info: unsafe { mode_info_ptr.read_unaligned() },
                 mode: self.vbe_mode,
                 interface_seg: self.vbe_interface_seg,
                 interface_off: self.vbe_interface_off,
@@ -348,48 +407,50 @@ impl MultiBootInfoRaw {
 
 impl fmt::Display for MultiBootInfoRaw {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Flags: {:012b}", self.flags)?;
+        writeln!(f, "Multiboot:")?;
+        writeln!(f, "    Flags: {:012b}", self.flags)?;
         writeln!(
             f,
-            "Lower memory Size: {:?}",
+            "    Lower memory Size: {:?}",
             self.lower_memory_size().map(MemSize)
         )?;
         writeln!(
             f,
-            "Upper memory Size: {:?}",
+            "    Upper memory Size: {:?}",
             self.upper_memory_size().map(MemSize)
         )?;
-        writeln!(f, "Boot device: {:X?}", self.boot_device())?;
-        writeln!(f, "Cmdline: {:X?}", self.cmdline())?;
+        writeln!(f, "    Boot device: {:X?}", self.boot_device())?;
+        writeln!(f, "    Cmdline: {:X?}", self.cmdline())?;
         if let Some(mods) = self.mods() {
-            writeln!(f, "Mods:")?;
+            writeln!(f, "    Mods:")?;
             for mod_ in mods {
                 writeln!(
                     f,
-                    "start={:010X}, end={:010X}, string={:X?}",
+                    "        start={:010X}, end={:010X}, string={:X?}",
                     mod_.mod_start, mod_.mod_end, mod_.string
                 )?;
             }
         } else {
-            writeln!(f, "Mods: None")?;
+            writeln!(f, "    Mods: None")?;
         }
         if let Some(memory_maps) = self.memory_maps() {
-            writeln!(f, "Memory maps:")?;
+            writeln!(f, "    Memory maps:")?;
             for map in memory_maps {
                 writeln!(
                     f,
-                    "base={:010X}, len={:10}, ty={:?}",
+                    "        range={:016X}..{:016X}, len={:10}, ty={:?}",
                     map.base_addr,
+                    map.base_addr + map.length,
                     MemSize(map.length),
                     map.mem_type
                 )?;
             }
         } else {
-            writeln!(f, "Memory maps: None")?;
+            writeln!(f, "    Memory maps: None")?;
         }
-        writeln!(f, "Bootloader name: {:X?}", self.bootloader_name())?;
-        writeln!(f, "VBE: {:X?}", self.vbe())?;
-        writeln!(f, "Framebuffer: {:X?}", self.framebuffer())?;
+        writeln!(f, "    Bootloader name: {:X?}", self.bootloader_name())?;
+        writeln!(f, "    VBE: {:X?}", self.vbe())?;
+        writeln!(f, "    Framebuffer: {:X?}", self.framebuffer())?;
         Ok(())
     }
 }

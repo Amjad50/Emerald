@@ -133,6 +133,7 @@ fn load_init_process() {
 pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     // init console first, so if we panicked, we can still see the output
     console::init();
+    println!("{}", multiboot_info);
     check_and_setup_memory(multiboot_info);
     // must be called before any pages can be allocated
     physical_page_allocator::init(kernel_elf_end() as _, KERNEL_END as _);

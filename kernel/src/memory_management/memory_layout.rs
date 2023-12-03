@@ -146,11 +146,10 @@ impl fmt::Display for MemSize {
             size /= 1024;
             unit = "PB";
         }
+
         size.fmt(f).and_then(|_| {
-            if remaining > 0 {
-                let remaining = remaining * 100 / 1024;
-                write!(f, ".{remaining}")?;
-            }
+            let remaining = remaining * 100 / 1024;
+            write!(f, ".{remaining:02}")?;
             write!(f, "{unit}")
         })
     }
