@@ -8,7 +8,7 @@ extern "C" {
 
 static mut REDIRECTED_INTERRUPTS: [Option<*const u8>; 256] = [None; 256];
 
-pub type InterruptHandler = extern "x86-interrupt" fn(frame: InterruptStackFrame64);
+pub type BasicInterruptHandler = extern "x86-interrupt" fn(frame: InterruptStackFrame64);
 pub type InterruptHandlerWithError =
     extern "x86-interrupt" fn(frame: InterruptStackFrame64, error_code: u64);
 pub type InterruptHandlerWithAllState = extern "cdecl" fn(state: &mut InterruptAllSavedState);
@@ -142,8 +142,8 @@ impl<T> InterruptDescriptorTableEntry<T> {
 }
 
 #[allow(dead_code)]
-impl InterruptDescriptorTableEntry<InterruptHandler> {
-    pub fn set_handler(&mut self, handler: InterruptHandler) -> &mut Self {
+impl InterruptDescriptorTableEntry<BasicInterruptHandler> {
+    pub fn set_handler(&mut self, handler: BasicInterruptHandler) -> &mut Self {
         self.set_handler_ptr(handler as *const u8 as u64)
     }
 }
@@ -171,14 +171,14 @@ impl<T> InterruptDescriptorTableEntry<T> {
 
 #[repr(C)]
 pub(super) struct InterruptDescriptorTable {
-    pub divide_by_zero: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub debug: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub non_maskable_interrupt: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub breakpoint: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub overflow: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub bound_range_exceeded: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub invalid_opcode: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub device_not_available: InterruptDescriptorTableEntry<InterruptHandler>,
+    pub divide_by_zero: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub debug: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub non_maskable_interrupt: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub breakpoint: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub overflow: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub bound_range_exceeded: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub invalid_opcode: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub device_not_available: InterruptDescriptorTableEntry<BasicInterruptHandler>,
     pub double_fault: InterruptDescriptorTableEntry<InterruptHandlerWithError>,
     pub coprocessor_segment_overrun: InterruptDescriptorTableEntry<()>,
     pub invalid_tss: InterruptDescriptorTableEntry<InterruptHandlerWithError>,
@@ -187,18 +187,18 @@ pub(super) struct InterruptDescriptorTable {
     pub general_protection_fault: InterruptDescriptorTableEntry<InterruptHandlerWithError>,
     pub page_fault: InterruptDescriptorTableEntry<InterruptHandlerWithError>,
     pub reserved_1: InterruptDescriptorTableEntry<()>,
-    pub x87_floating_point: InterruptDescriptorTableEntry<InterruptHandler>,
+    pub x87_floating_point: InterruptDescriptorTableEntry<BasicInterruptHandler>,
     pub alignment_check: InterruptDescriptorTableEntry<InterruptHandlerWithError>,
-    pub machine_check: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub simd_floating_point: InterruptDescriptorTableEntry<InterruptHandler>,
+    pub machine_check: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub simd_floating_point: InterruptDescriptorTableEntry<BasicInterruptHandler>,
     pub reserved_2: InterruptDescriptorTableEntry<()>,
-    pub control_protection: InterruptDescriptorTableEntry<InterruptHandler>,
+    pub control_protection: InterruptDescriptorTableEntry<BasicInterruptHandler>,
     pub reserved_3: [InterruptDescriptorTableEntry<()>; 6],
-    pub hypervisor_injection: InterruptDescriptorTableEntry<InterruptHandler>,
-    pub vmm_communication: InterruptDescriptorTableEntry<InterruptHandler>,
+    pub hypervisor_injection: InterruptDescriptorTableEntry<BasicInterruptHandler>,
+    pub vmm_communication: InterruptDescriptorTableEntry<BasicInterruptHandler>,
     pub security_exception: InterruptDescriptorTableEntry<InterruptHandlerWithError>,
     pub reserved_4: InterruptDescriptorTableEntry<()>,
-    pub user_defined: [InterruptDescriptorTableEntry<InterruptHandler>; 256 - 32],
+    pub user_defined: [InterruptDescriptorTableEntry<BasicInterruptHandler>; 256 - 32],
 }
 
 impl InterruptDescriptorTable {

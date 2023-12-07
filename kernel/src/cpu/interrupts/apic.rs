@@ -7,16 +7,15 @@ use crate::{
         self,
         tables::{self, DescriptorTableBody, InterruptControllerStruct, InterruptSourceOverride},
     },
-    cpu::{
-        self,
-        idt::{InterruptHandler, InterruptStackFrame64},
-        Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS,
-    },
+    cpu::{self, idt::InterruptStackFrame64, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS},
     memory_management::memory_layout::physical2virtual_io,
     sync::spin::mutex::Mutex,
 };
 
-use super::{allocate_user_interrupt, allocate_user_interrupt_all_saved};
+use super::{
+    allocate_basic_user_interrupt, allocate_user_interrupt, allocate_user_interrupt_all_saved,
+    InterruptHandler,
+};
 
 const CPUID_FEAT_EDX_APIC: u32 = 1 << 9;
 
@@ -47,8 +46,22 @@ pub fn return_from_interrupt() {
     }
 }
 
-pub fn assign_io_irq(handler: InterruptHandler, interrupt_num: u8, cpu: &Cpu) {
+pub fn assign_io_irq<H: InterruptHandler>(handler: H, interrupt_num: u8, cpu: &Cpu) {
     unsafe { APIC.lock().assign_io_irq(handler, interrupt_num, cpu) }
+}
+
+pub fn assign_io_irq_custom<H: InterruptHandler, F>(
+    handler: H,
+    interrupt_num: u8,
+    cpu: &Cpu,
+    modify_entry: F,
+) where
+    F: FnOnce(IoApicRedirectionBuilder) -> IoApicRedirectionBuilder,
+{
+    unsafe {
+        APIC.lock()
+            .assign_io_irq_custom(handler, interrupt_num, cpu, modify_entry)
+    }
 }
 
 #[repr(C, align(4))]
@@ -192,7 +205,7 @@ enum DestinationType {
 }
 
 #[derive(Default, Clone, Copy)]
-struct IoApicRedirectionBuilder {
+pub struct IoApicRedirectionBuilder {
     reg: u64,
 }
 
@@ -209,17 +222,17 @@ impl IoApicRedirectionBuilder {
         self
     }
 
-    fn with_interrupt_polartiy_low(mut self, polarity: bool) -> Self {
+    pub fn with_interrupt_polartiy_low(mut self, polarity: bool) -> Self {
         self.reg = (self.reg & !io_apic::RDR_PIN_POLARITY_MASK) | (polarity as u64) << 13;
         self
     }
 
-    fn with_trigger_mode_level(mut self, trigger_mode: bool) -> Self {
+    pub fn with_trigger_mode_level(mut self, trigger_mode: bool) -> Self {
         self.reg = (self.reg & !io_apic::RDR_TRIGGER_MODE_MASK) | (trigger_mode as u64) << 15;
         self
     }
 
-    fn with_mask(mut self, mask: bool) -> Self {
+    pub fn with_mask(mut self, mask: bool) -> Self {
         self.reg = (self.reg & !io_apic::RDR_MASK_MASK) | (mask as u64) << 16;
         self
     }
@@ -457,7 +470,7 @@ impl Apic {
     }
 
     fn initialize_spurious_interrupt(&mut self) {
-        let interrupt_num = allocate_user_interrupt(spurious_handler);
+        let interrupt_num = allocate_basic_user_interrupt(spurious_handler);
         unsafe {
             // 1 << 8, to enable spurious interrupts
             (*self.mmio)
@@ -502,7 +515,7 @@ impl Apic {
             (*self.mmio).error_status.write(0);
         }
 
-        let interrupt_num = allocate_user_interrupt(error_interrupt_handler);
+        let interrupt_num = allocate_basic_user_interrupt(error_interrupt_handler);
         unsafe {
             // not masked, and with the allocated vector number
             let vector_table = LocalVectorRegisterBuilder::default()
@@ -512,7 +525,19 @@ impl Apic {
         }
     }
 
-    fn assign_io_irq(&mut self, handler: InterruptHandler, irq_num: u8, cpu: &Cpu) {
+    fn assign_io_irq<H: InterruptHandler>(&mut self, handler: H, irq_num: u8, cpu: &Cpu) {
+        self.assign_io_irq_custom(handler, irq_num, cpu, |b| b)
+    }
+
+    fn assign_io_irq_custom<H: InterruptHandler, F>(
+        &mut self,
+        handler: H,
+        irq_num: u8,
+        cpu: &Cpu,
+        modify_entry: F,
+    ) where
+        F: FnOnce(IoApicRedirectionBuilder) -> IoApicRedirectionBuilder,
+    {
         assert!(cpu.id < self.n_cpus, "CPU ID is out of range");
         assert!(irq_num < 24, "interrupt number is out of range");
 
@@ -546,6 +571,8 @@ impl Apic {
             .with_trigger_mode_level(false) // edge
             .with_mask(false) // not masked
             .with_destination(DestinationType::Physical(cpu.apic_id));
+
+        let b = modify_entry(b);
 
         io_apic.write_redirect_entry(entry_in_ioapic as u8, b);
     }

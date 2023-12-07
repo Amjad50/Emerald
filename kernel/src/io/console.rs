@@ -2,7 +2,11 @@ use core::{cell::RefCell, fmt::Write};
 
 use crate::{
     collections::ring::RingBuffer,
-    cpu::{self, idt::InterruptStackFrame64, interrupts::apic},
+    cpu::{
+        self,
+        idt::{BasicInterruptHandler, InterruptStackFrame64},
+        interrupts::apic,
+    },
     sync::spin::remutex::ReMutex,
 };
 
@@ -50,11 +54,15 @@ impl Console {
     pub fn setup_interrupts(&mut self) {
         // assign keyboard interrupt to this CPU
         apic::assign_io_irq(
-            keyboard_interrupt,
+            keyboard_interrupt as BasicInterruptHandler,
             self.keyboard.interrupt_num(),
             cpu::cpu(),
         );
-        apic::assign_io_irq(uart_interrupt, self.uart.interrupt_num(), cpu::cpu());
+        apic::assign_io_irq(
+            uart_interrupt as BasicInterruptHandler,
+            self.uart.interrupt_num(),
+            cpu::cpu(),
+        );
     }
 
     fn keyboard_interrupt(&mut self) {

@@ -3,7 +3,7 @@ mod handlers;
 
 use crate::sync::spin::mutex::Mutex;
 
-use super::idt::{InterruptDescriptorTable, InterruptHandler, InterruptHandlerWithAllState};
+use super::idt::{BasicInterruptHandler, InterruptDescriptorTable, InterruptHandlerWithAllState};
 
 static INTERRUPTS: Mutex<Interrupts> = Mutex::new(Interrupts::empty());
 
@@ -43,7 +43,7 @@ impl Interrupts {
         interrupt as u8
     }
 
-    fn allocate_user_interrupt(&mut self, handler: InterruptHandler) -> u8 {
+    fn allocate_basic_user_interrupt(&mut self, handler: BasicInterruptHandler) -> u8 {
         let interrupt = self.get_next_interrupt();
 
         self.idt.user_defined[interrupt as usize].set_handler(handler);
@@ -67,14 +67,37 @@ pub fn init_interrupts() {
     });
 }
 
+// All Types of interrupt handlers
+pub trait InterruptHandler {
+    fn set_handler(val: Self) -> u8;
+}
+
+impl InterruptHandler for BasicInterruptHandler {
+    fn set_handler(handler: Self) -> u8 {
+        INTERRUPTS.lock().allocate_basic_user_interrupt(handler)
+    }
+}
+
+impl InterruptHandler for InterruptHandlerWithAllState {
+    fn set_handler(handler: Self) -> u8 {
+        INTERRUPTS.lock().allocate_user_interrupt_all_saved(handler)
+    }
+}
+
 /// Puts the handler in the IDT and returns the interrupt/vector number
-pub(super) fn allocate_user_interrupt(handler: InterruptHandler) -> u8 {
-    INTERRUPTS.lock().allocate_user_interrupt(handler)
+pub(super) fn allocate_user_interrupt<F: InterruptHandler>(handler: F) -> u8 {
+    F::set_handler(handler)
+}
+
+/// Puts the handler in the IDT and returns the interrupt/vector number
+pub(super) fn allocate_basic_user_interrupt(handler: BasicInterruptHandler) -> u8 {
+    BasicInterruptHandler::set_handler(handler)
 }
 
 #[allow(dead_code)]
+/// Puts the handler in the IDT and returns the interrupt/vector number
 pub(super) fn allocate_user_interrupt_all_saved(handler: InterruptHandlerWithAllState) -> u8 {
-    INTERRUPTS.lock().allocate_user_interrupt_all_saved(handler)
+    InterruptHandlerWithAllState::set_handler(handler)
 }
 
 pub fn create_scheduler_interrupt(handler: InterruptHandlerWithAllState) {

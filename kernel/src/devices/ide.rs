@@ -3,7 +3,11 @@ use core::{fmt, hint, mem, sync::atomic::AtomicBool};
 use alloc::sync::Arc;
 
 use crate::{
-    cpu::{self, idt::InterruptStackFrame64, interrupts::apic},
+    cpu::{
+        self,
+        idt::{BasicInterruptHandler, InterruptStackFrame64},
+        interrupts::apic,
+    },
     memory_management::memory_layout::MemSize,
     sync::spin::mutex::Mutex,
 };
@@ -956,12 +960,12 @@ impl PciDevice for IdeDevice {
                 //       at least, can't find a specific place on all specs for to know for sure if its using
                 //       legacy interrupts or something else
                 apic::assign_io_irq(
-                    ide_interrupt_primary,
+                    ide_interrupt_primary as BasicInterruptHandler,
                     pci_cfg::DEFAULT_PRIMARY_INTERRUPT,
                     cpu::cpu(),
                 );
                 apic::assign_io_irq(
-                    ide_interrupt_secondary,
+                    ide_interrupt_secondary as BasicInterruptHandler,
                     pci_cfg::DEFAULT_SECONDARY_INTERRUPT,
                     cpu::cpu(),
                 );
