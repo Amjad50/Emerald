@@ -110,7 +110,7 @@ pub struct VbeControlInfo {
     pub product_name: u32,
     pub product_rev: u32,
     pub reserved: NoDebug<[u8; 222]>,
-    pub oem_data: [u8; 256],
+    pub oem_data: NoDebug<[u8; 256]>,
 }
 
 #[repr(C, packed)]
