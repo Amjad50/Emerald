@@ -1,25 +1,30 @@
 [tasks.build]
 command = "cargo"
+condition= {files_modified = {input=["${CARGO_MAKE_WORKING_DIRECTORY}/src/**/*", "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml"], output=["${OUT_DIR}/${CARGO_MAKE_PROJECT_NAME}"]}}
 args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}"]
 
 [tasks.iso_create_grub]
 private = true
+condition= {files_not_exist = ["${GRUB_PATH}/boot/grub"]}
 command = "mkdir"
 args = ["-p", "${GRUB_PATH}/boot/grub"]
 
 [tasks.iso_copy_kernel]
 private = true
+condition= {files_modified = {input=["${KERNEL_PATH}"], output=["${GRUB_PATH}/boot/kernel"]}}
 dependencies = ["iso_create_grub", "build"]
 command = "cp"
 args = ["${KERNEL_PATH}", "${GRUB_PATH}/boot/kernel"]
 
 [tasks.iso_copy_grub_cfg]
 private = true
+condition= {files_modified = {input=["${GRUB_CFG_PATH}"], output=["${GRUB_PATH}/boot/grub/grub.cfg"]}}
 dependencies = ["iso_create_grub"]
 command = "cp"
 args = ["${GRUB_CFG_PATH}", "${GRUB_PATH}/boot/grub/grub.cfg"]
 
 [tasks.iso]
+condition= {files_modified = {input=["${GRUB_PATH}/**/*"], output=["${ISO_PATH}"]}}
 dependencies = ["iso_copy_grub_cfg", "iso_copy_kernel"]
 command = "grub-mkrescue"
 args = ["-o", "${ISO_PATH}", "${GRUB_PATH}"]
