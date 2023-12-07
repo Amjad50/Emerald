@@ -19,7 +19,10 @@ pub static ALLOCATOR: LockedKernelHeapAllocator = LockedKernelHeapAllocator::emp
 struct AllocatedHeapBlockInfo {
     magic: u32,
     size: usize,
+    pre_padding: usize,
 }
+
+const KERNEL_HEAP_BLOCK_INFO_SIZE: usize = mem::size_of::<AllocatedHeapBlockInfo>();
 
 #[derive(Debug)]
 struct HeapFreeBlock {
@@ -395,10 +398,11 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         let mut inner = self.inner.lock();
 
         // info header
-        let base_layout = core::alloc::Layout::new::<AllocatedHeapBlockInfo>();
+        let block_info_layout = core::alloc::Layout::new::<AllocatedHeapBlockInfo>();
 
-        let (whole_layout, allocated_block_offset) =
-            base_layout.extend(layout.align_to(16).unwrap()).unwrap();
+        let (whole_layout, whole_block_offset) = block_info_layout
+            .extend(layout.align_to(16).unwrap())
+            .unwrap();
         // at least align to 16 bytes
         let size_to_allocate = whole_layout.pad_to_align().size();
 
@@ -461,12 +465,7 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
                 (*(*free_block).next).prev = (*free_block).prev;
             }
         }
-
-        // write the info header
-        let allocated_block_info = free_block as *mut AllocatedHeapBlockInfo;
-        (*allocated_block_info).magic = KERNEL_HEAP_MAGIC;
-        (*allocated_block_info).size = this_allocation_size;
-
+        // drop inner early
         inner.free_size -= this_allocation_size;
         inner.used_size += this_allocation_size;
 
@@ -480,13 +479,33 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
 
         drop(inner);
 
-        // TODO: sometimes, allocation is misalligned, check why and fix
-        let ptr = unsafe { (allocated_block_info as *mut u8).add(allocated_block_offset) };
+        // work on the pointer and add the info of the block before it
+        // so we can use it to deallocate later
+        let base = free_block as usize;
+        let possible_next_offset = align_up(base, layout.align()) - base;
+        let allocated_block_offset = if possible_next_offset < KERNEL_HEAP_BLOCK_INFO_SIZE {
+            possible_next_offset + KERNEL_HEAP_BLOCK_INFO_SIZE
+        } else {
+            possible_next_offset
+        };
+        assert!(allocated_block_offset >= KERNEL_HEAP_BLOCK_INFO_SIZE);
+        assert!(allocated_block_offset <= whole_block_offset);
+        let allocated_ptr = (free_block as *mut u8).add(allocated_block_offset);
+        let allocated_block_info =
+            allocated_ptr.sub(KERNEL_HEAP_BLOCK_INFO_SIZE) as *mut AllocatedHeapBlockInfo;
+        // make sure we are aligned
         assert!(
-            is_aligned(ptr as _, layout.align(),),
-            "base_block={allocated_block_info:p}, offset={allocated_block_offset}, ptr={ptr:?}, layout={layout:?}",
+            is_aligned(allocated_ptr as _, layout.align(),),
+            "base_block={allocated_block_info:p}, offset={allocated_block_offset}, ptr={allocated_ptr:?}, layout={layout:?}, should_be_addr={:x}",
+            align_up(allocated_block_info as usize, layout.align())
         );
-        ptr
+
+        // write the info header
+        (*allocated_block_info).magic = KERNEL_HEAP_MAGIC;
+        (*allocated_block_info).size = this_allocation_size;
+        (*allocated_block_info).pre_padding = allocated_block_offset;
+
+        allocated_ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
@@ -495,11 +514,11 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         // info header
         let base_layout = core::alloc::Layout::new::<AllocatedHeapBlockInfo>();
 
-        let (whole_layout, allocated_block_offset) =
-            base_layout.extend(layout.align_to(16).unwrap()).unwrap();
+        let (whole_layout, _) = base_layout.extend(layout.align_to(16).unwrap()).unwrap();
         let size_to_free_from_layout = whole_layout.pad_to_align().size();
 
-        let allocated_block_info = ptr.sub(allocated_block_offset) as *mut AllocatedHeapBlockInfo;
+        let allocated_block_info =
+            ptr.sub(KERNEL_HEAP_BLOCK_INFO_SIZE) as *mut AllocatedHeapBlockInfo;
 
         eprintln!(
             "deallocating {:p}, size={}",
@@ -510,12 +529,13 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         // we might increase the size of the block a bit to not leave
         // free blocks that are too small (see `alloc``)
         assert!((*allocated_block_info).size >= size_to_free_from_layout);
+        assert!((*allocated_block_info).pre_padding >= KERNEL_HEAP_BLOCK_INFO_SIZE);
         let this_allocation_size = (*allocated_block_info).size;
 
-        let mut inner = self.inner.lock();
+        let freeing_block = ptr.sub((*allocated_block_info).pre_padding) as usize;
 
-        let freeing_block = allocated_block_info as *mut HeapFreeBlock;
-        inner.free_block(freeing_block as _, this_allocation_size);
+        let mut inner = self.inner.lock();
+        inner.free_block(freeing_block, this_allocation_size);
         inner.used_size -= this_allocation_size;
         inner.free_size += this_allocation_size;
 
@@ -523,8 +543,8 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
         if inner.check_issues() {
             println!(
                 "dealloc: {:x}..{:x}",
-                freeing_block as usize,
-                freeing_block as usize + this_allocation_size
+                freeing_block,
+                freeing_block + this_allocation_size
             );
             println!("dealloc: Issue detected");
             inner.debug_free_blocks();
