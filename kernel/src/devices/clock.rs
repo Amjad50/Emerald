@@ -8,11 +8,11 @@ use crate::{
         interrupts::apic,
     },
     memory_management::memory_layout::physical2virtual_io,
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 // replace with late init
-static mut CLOCK: Option<Arc<Mutex<Hpet>>> = None;
+static CLOCK: OnceLock<Option<Arc<Mutex<Hpet>>>> = OnceLock::new();
 
 const LEGACY_PIT_IO_PORT_CONTROL: u16 = 0x43;
 const LEGACY_PIT_IO_PORT_CHANNEL_0: u16 = 0x40;
@@ -21,20 +21,19 @@ const ONE_SECOND_IN_FEMTOSECONDS: u64 = 1_000_000_000_000_000;
 
 pub fn init(bios_tables: &BiosTables) {
     disable_pit();
-    unsafe {
-        CLOCK = bios_tables
-            .rsdt
-            .entries
-            .iter()
-            .find_map(|entry| {
-                if let bios::tables::DescriptorTableBody::Hpet(hpet) = &entry.body {
-                    Hpet::initialize_from_bios_table(hpet.as_ref())
-                } else {
-                    None
-                }
-            })
-            .map(|hpet| Arc::new(Mutex::new(hpet)));
-    }
+    let hpet = bios_tables
+        .rsdt
+        .entries
+        .iter()
+        .find_map(|entry| {
+            if let bios::tables::DescriptorTableBody::Hpet(hpet) = &entry.body {
+                Hpet::initialize_from_bios_table(hpet.as_ref())
+            } else {
+                None
+            }
+        })
+        .map(|hpet| Arc::new(Mutex::new(hpet)));
+    CLOCK.set(hpet).expect("clock already initialized");
 }
 
 fn disable_pit() {
@@ -70,7 +69,7 @@ fn disable_pit() {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C, packed(8))]
 struct HpetInterruptStatus {
     status: u32,
@@ -94,7 +93,7 @@ impl HpetInterruptStatus {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct InterruptRouteCapabilityBitmap {
     bitmap: u32,
 }
@@ -181,6 +180,7 @@ impl HpetTimerConfig {
     }
 }
 
+#[derive(Debug)]
 #[repr(C, align(8))]
 struct HpetTimerMmio {
     config_and_capabilities: u64,
@@ -203,6 +203,7 @@ impl HpetTimerMmio {
     }
 }
 
+#[derive(Debug)]
 #[repr(C, align(8))]
 struct HpetMmio {
     general_capabilities_id: u64,
@@ -216,6 +217,7 @@ struct HpetMmio {
     timers: [HpetTimerMmio; 3],
 }
 
+#[derive(Debug)]
 pub struct Hpet {
     mmio: &'static mut HpetMmio,
 }
@@ -316,7 +318,7 @@ impl Hpet {
 }
 
 extern "cdecl" fn timer0_handler(_all_state: &mut InterruptAllSavedState) {
-    let mut clock = unsafe { CLOCK.as_ref().unwrap().lock() };
+    let mut clock = CLOCK.get().as_ref().unwrap().lock();
 
     let interrupt = clock.status_interrupts_iter().next().unwrap();
 
