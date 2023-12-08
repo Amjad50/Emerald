@@ -44,6 +44,7 @@ use multiboot::{MemoryMapType, MultiBootInfoRaw};
 use process::scheduler;
 
 use crate::{
+    devices::clock,
     memory_management::{
         kernel_heap_allocator::ALLOCATOR,
         memory_layout::{MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
@@ -142,7 +143,10 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();
-    apic::init();
+    // TODO: handle for UEFI
+    let bios_tables = bios::tables::get_bios_tables().expect("BIOS tables not found");
+    apic::init(&bios_tables);
+    clock::init(&bios_tables);
     console::setup_interrupts();
     unsafe { cpu::set_interrupts() };
     devices::register_devices();

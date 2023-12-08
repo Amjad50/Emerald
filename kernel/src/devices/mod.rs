@@ -1,5 +1,6 @@
 use self::pci::{PciDeviceConfig, PciDevicePropeIterator};
 
+pub mod clock;
 pub mod ide;
 pub mod pci;
 

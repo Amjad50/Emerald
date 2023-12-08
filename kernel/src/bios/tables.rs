@@ -185,6 +185,7 @@ impl DescriptorTable {
         let body = match &header.signature {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
             b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
+            b"HPET" => DescriptorTableBody::Hpet(Box::new(Hpet::from_header(header))),
             _ => DescriptorTableBody::Unknown,
         };
         Self {
@@ -198,6 +199,7 @@ impl DescriptorTable {
 pub enum DescriptorTableBody {
     Apic(Box<Apic>),
     Facp(Box<Facp>),
+    Hpet(Box<Hpet>),
     Unknown,
 }
 
@@ -427,6 +429,35 @@ impl Facp {
     fn from_header(header: &'static DescriptionHeader) -> Self {
         let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let facp = unsafe { &*(facp_ptr as *const Facp) };
+        // SAFETY: I'm using this to copy from the same struct
+        unsafe { core::mem::transmute_copy(facp) }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+pub struct ApicGenericAddress {
+    pub address_space_id: u8,
+    pub register_bit_width: u8,
+    pub register_bit_offset: u8,
+    pub reserved: u8,
+    pub address: u64,
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Clone)]
+pub struct Hpet {
+    pub event_timer_block_id: u32,
+    pub base_address: ApicGenericAddress,
+    pub hpet_number: u8,
+    pub main_counter_minimum_clock_tick: u16,
+    pub page_protection: u8,
+}
+
+impl Hpet {
+    fn from_header(header: &'static DescriptionHeader) -> Self {
+        let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
+        let facp = unsafe { &*(facp_ptr as *const Hpet) };
         // SAFETY: I'm using this to copy from the same struct
         unsafe { core::mem::transmute_copy(facp) }
     }

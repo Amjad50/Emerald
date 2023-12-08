@@ -3,9 +3,8 @@ use core::borrow::{Borrow, BorrowMut};
 use alloc::vec::Vec;
 
 use crate::{
-    bios::{
-        self,
-        tables::{self, DescriptorTableBody, InterruptControllerStruct, InterruptSourceOverride},
+    bios::tables::{
+        self, BiosTables, DescriptorTableBody, InterruptControllerStruct, InterruptSourceOverride,
     },
     cpu::{self, idt::InterruptStackFrame64, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS},
     memory_management::memory_layout::physical2virtual_io,
@@ -26,10 +25,10 @@ const DEFAULT_APIC_BASE: usize = 0xFEE0_0000;
 
 static mut APIC: Mutex<Apic> = Mutex::new(Apic::empty());
 
-pub fn init() {
+pub fn init(bios_tables: &BiosTables) {
     disable_pic();
     unsafe {
-        APIC.lock().init();
+        APIC.lock().init(bios_tables);
     }
 }
 
@@ -348,7 +347,7 @@ impl Apic {
         }
     }
 
-    fn init(&mut self) {
+    fn init(&mut self, bios_tables: &BiosTables) {
         // do we have APIC in this cpu?
         let cpuid = unsafe { cpu::cpuid!(CPUID_FN_FEAT) };
         if cpuid.edx & CPUID_FEAT_EDX_APIC == 0 {
@@ -368,15 +367,13 @@ impl Apic {
         }
         let mut apic_address = (apic_bar & APIC_BASE_MASK) as usize;
 
-        let bios_tables = bios::tables::get_bios_tables().unwrap();
-
         // process the MADT table
         let madt_table = bios_tables
             .rsdt
             .entries
-            .into_iter()
+            .iter()
             .find_map(|entry| {
-                if let DescriptorTableBody::Apic(apic) = entry.body {
+                if let DescriptorTableBody::Apic(apic) = &entry.body {
                     Some(apic)
                 } else {
                     None
@@ -392,7 +389,7 @@ impl Apic {
             apic_address = madt_table.local_apic_address as usize;
         }
 
-        for strct in madt_table.interrupt_controller_structs {
+        for strct in &madt_table.interrupt_controller_structs {
             match strct {
                 InterruptControllerStruct::ProcessorLocalApic(s) => {
                     if s.flags & 1 == 0 {
@@ -413,10 +410,10 @@ impl Apic {
                     }
                 }
                 InterruptControllerStruct::IoApic(s) => {
-                    self.io_apics.push(s.into());
+                    self.io_apics.push(s.clone().into());
                 }
                 InterruptControllerStruct::InterruptSourceOverride(s) => {
-                    self.source_overrides.push(s);
+                    self.source_overrides.push(s.clone());
                 }
                 InterruptControllerStruct::NonMaskableInterrupt(_) => todo!(),
                 InterruptControllerStruct::LocalApicNmi(s) => {
