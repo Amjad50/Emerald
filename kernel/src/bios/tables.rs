@@ -402,7 +402,7 @@ pub struct Facp {
     duty_width: u8,
     day_alarm: u8,
     month_alarm: u8,
-    century: u8,
+    pub century: u8,
     iapc_boot_arch: u16,
     reserved2: u8,
     flags: u32,

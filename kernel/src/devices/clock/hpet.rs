@@ -1,40 +1,19 @@
-use alloc::sync::Arc;
-
 use crate::{
-    bios::{self, tables::BiosTables},
+    bios::{self},
     cpu::{
         self,
         idt::{InterruptAllSavedState, InterruptHandlerWithAllState},
         interrupts::apic,
     },
     memory_management::memory_layout::physical2virtual_io,
-    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
-// replace with late init
-static CLOCK: OnceLock<Option<Arc<Mutex<Hpet>>>> = OnceLock::new();
+use super::HPET_CLOCK;
 
 const LEGACY_PIT_IO_PORT_CONTROL: u16 = 0x43;
 const LEGACY_PIT_IO_PORT_CHANNEL_0: u16 = 0x40;
 
 const ONE_SECOND_IN_FEMTOSECONDS: u64 = 1_000_000_000_000_000;
-
-pub fn init(bios_tables: &BiosTables) {
-    disable_pit();
-    let hpet = bios_tables
-        .rsdt
-        .entries
-        .iter()
-        .find_map(|entry| {
-            if let bios::tables::DescriptorTableBody::Hpet(hpet) = &entry.body {
-                Hpet::initialize_from_bios_table(hpet.as_ref())
-            } else {
-                None
-            }
-        })
-        .map(|hpet| Arc::new(Mutex::new(hpet)));
-    CLOCK.set(hpet).expect("clock already initialized");
-}
 
 fn disable_pit() {
     // disable PIT (timer)
@@ -224,6 +203,8 @@ pub struct Hpet {
 
 impl Hpet {
     pub fn initialize_from_bios_table(hpet: &bios::tables::Hpet) -> Option<Self> {
+        disable_pit();
+
         assert!(hpet.base_address.address_space_id == 0); // memory space
         let mmio =
             unsafe { &mut *(physical2virtual_io(hpet.base_address.address as _) as *mut HpetMmio) };
@@ -318,7 +299,7 @@ impl Hpet {
 }
 
 extern "cdecl" fn timer0_handler(_all_state: &mut InterruptAllSavedState) {
-    let mut clock = CLOCK.get().as_ref().unwrap().lock();
+    let mut clock = HPET_CLOCK.get().as_ref().unwrap().lock();
 
     let interrupt = clock.status_interrupts_iter().next().unwrap();
 
