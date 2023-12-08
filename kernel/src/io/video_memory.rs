@@ -35,16 +35,14 @@ impl VgaBuffer {
         }
         if self.pos.1 >= VGA_HEIGHT {
             // scroll up
-            for i in 1..VGA_HEIGHT {
-                for j in 0..VGA_WIDTH {
-                    let pos_from = get_index((j, i));
-                    let pos_to = get_index((j, i - 1));
-                    unsafe {
-                        *VGA_BUFFER_ADDR.offset(pos_to * 2) = *VGA_BUFFER_ADDR.offset(pos_from * 2);
-                        *VGA_BUFFER_ADDR.offset(pos_to * 2 + 1) =
-                            *VGA_BUFFER_ADDR.offset(pos_from * 2 + 1);
-                    }
-                }
+            let start_arr_index = get_index((0, 1)) * 2;
+            let end_arr_end = get_index((VGA_WIDTH, VGA_HEIGHT)) * 2;
+            unsafe {
+                core::ptr::copy(
+                    VGA_BUFFER_ADDR.offset(start_arr_index),
+                    VGA_BUFFER_ADDR,
+                    (end_arr_end - start_arr_index) as usize,
+                );
             }
             self.pos.1 -= 1;
             self.clear_line(self.pos.1);
