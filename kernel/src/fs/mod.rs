@@ -1,9 +1,12 @@
-use core::mem;
+use core::{mem, ops};
 
 use alloc::{borrow::Cow, string::String, sync::Arc, vec, vec::Vec};
 
 use crate::{
-    devices::ide::{self, IdeDeviceIndex, IdeDeviceType},
+    devices::{
+        ide::{self, IdeDeviceIndex, IdeDeviceType},
+        Device,
+    },
     memory_management::memory_layout::align_up,
     sync::spin::mutex::Mutex,
 };
@@ -27,15 +30,122 @@ pub struct FileAttributes {
     pub archive: bool,
 }
 
+#[allow(dead_code)]
+impl FileAttributes {
+    pub const EMPTY: FileAttributes = FileAttributes {
+        read_only: false,
+        hidden: false,
+        system: false,
+        volume_label: false,
+        directory: false,
+        archive: false,
+    };
+    pub const READ_ONLY: FileAttributes = FileAttributes {
+        read_only: true,
+        hidden: false,
+        system: false,
+        volume_label: false,
+        directory: false,
+        archive: false,
+    };
+    pub const HIDDEN: FileAttributes = FileAttributes {
+        read_only: false,
+        hidden: true,
+        system: false,
+        volume_label: false,
+        directory: false,
+        archive: false,
+    };
+    pub const SYSTEM: FileAttributes = FileAttributes {
+        read_only: false,
+        hidden: false,
+        system: true,
+        volume_label: false,
+        directory: false,
+        archive: false,
+    };
+    pub const VOLUME_LABEL: FileAttributes = FileAttributes {
+        read_only: false,
+        hidden: false,
+        system: false,
+        volume_label: true,
+        directory: false,
+        archive: false,
+    };
+    pub const DIRECTORY: FileAttributes = FileAttributes {
+        read_only: false,
+        hidden: false,
+        system: false,
+        volume_label: false,
+        directory: true,
+        archive: false,
+    };
+    pub const ARCHIVE: FileAttributes = FileAttributes {
+        read_only: false,
+        hidden: false,
+        system: false,
+        volume_label: false,
+        directory: false,
+        archive: true,
+    };
+}
+
+impl ops::BitOr for FileAttributes {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self {
+            read_only: self.read_only | rhs.read_only,
+            hidden: self.hidden | rhs.hidden,
+            system: self.system | rhs.system,
+            volume_label: self.volume_label | rhs.volume_label,
+            directory: self.directory | rhs.directory,
+            archive: self.archive | rhs.archive,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct INode {
     name: String,
     attributes: FileAttributes,
     start_cluster: u32,
     size: u32,
+    device: Option<Arc<dyn Device>>,
 }
 
 impl INode {
+    pub fn new_file(
+        name: String,
+        attributes: FileAttributes,
+        start_cluster: u32,
+        size: u32,
+    ) -> Self {
+        Self {
+            name,
+            attributes,
+            start_cluster,
+            size,
+            device: None,
+        }
+    }
+
+    pub fn new_device(
+        name: String,
+        attributes: FileAttributes,
+        start_cluster: u32,
+        size: u32,
+        device: Option<Arc<dyn Device>>,
+    ) -> Self {
+        Self {
+            name,
+            attributes,
+            start_cluster,
+            size,
+            device,
+        }
+    }
+
     pub fn is_dir(&self) -> bool {
         self.attributes.directory
     }
@@ -51,6 +161,14 @@ impl INode {
     #[allow(dead_code)]
     pub fn attributes(&self) -> FileAttributes {
         self.attributes
+    }
+
+    pub fn start_cluster(&self) -> u32 {
+        self.start_cluster
+    }
+
+    pub fn device(&self) -> Option<&Arc<dyn Device>> {
+        self.device.as_ref()
     }
 }
 
@@ -117,12 +235,31 @@ pub enum FileSystemError {
     InvalidData,
 }
 
+pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) {
+    let mut mappings = FILESYSTEM_MAPPING.lock();
+
+    assert!(
+        !mappings.mappings.iter().any(|(fs_path, _)| fs_path == arg),
+        "Mounting {} twice",
+        arg
+    );
+
+    let base = String::from(arg);
+    let mapping = if arg.ends_with('/') { base } else { base + "/" };
+
+    mappings.mappings.push((mapping, filesystem));
+    // must be kept sorted by length, so we can find the best/correct mapping faster
+    mappings
+        .mappings
+        .sort_unstable_by(|(a, _), (b, _)| a.len().cmp(&b.len()));
+}
+
 /// Loads the hard disk specified in the argument
 /// it will load the first partition (MBR) if any, otherwise it will treat the whole disk
 /// as one partition
 ///
 /// Creates a new filesystem mapping for `/` and the filesystem found
-pub fn init_filesystem(hard_disk_index: usize) -> Result<(), FileSystemError> {
+pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError> {
     let ide_index = IdeDeviceIndex {
         ty: IdeDeviceType::Ata,
         index: hard_disk_index,
@@ -156,10 +293,7 @@ pub fn init_filesystem(hard_disk_index: usize) -> Result<(), FileSystemError> {
             filesystem.volume_label(),
             filesystem.fat_type()
         );
-        FILESYSTEM_MAPPING
-            .lock()
-            .mappings
-            .push((String::from("/"), Arc::new(Mutex::new(filesystem))));
+        mount("/", Arc::new(Mutex::new(filesystem)));
 
         Ok(())
     } else {

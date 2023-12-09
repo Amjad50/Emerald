@@ -566,12 +566,12 @@ impl Iterator for DirectoryIterator<'_> {
 
         let start_cluster = (cluster_hi << 16) | cluster_lo;
 
-        let inode = INode {
+        let inode = INode::new_file(
             name,
-            attributes: file_attribute_from_fat(attributes),
+            file_attribute_from_fat(attributes),
             start_cluster,
             size,
-        };
+        );
 
         Some(inode)
     }
@@ -686,12 +686,12 @@ impl FatFilesystem {
             FatType::Fat32 => {
                 let root_cluster =
                     unsafe { self.boot_sector.boot_sector.extended.fat32.root_cluster };
-                let inode = INode {
-                    attributes: file_attribute_from_fat(attrs::DIRECTORY),
-                    name: String::from("/"),
-                    start_cluster: root_cluster,
-                    size: 0,
-                };
+                let inode = INode::new_file(
+                    String::from("/"),
+                    file_attribute_from_fat(attrs::DIRECTORY),
+                    root_cluster,
+                    0,
+                );
                 Ok(Directory::Normal { inode })
             }
         }
@@ -716,6 +716,9 @@ impl FatFilesystem {
             }
             for entry in dir.iter(self)? {
                 if entry.name() == component {
+                    if !entry.is_dir() {
+                        return Err(FileSystemError::IsNotDirectory);
+                    }
                     dir = Directory::Normal { inode: entry };
                     continue 'component_loop;
                 }

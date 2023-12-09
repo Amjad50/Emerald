@@ -143,14 +143,16 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();
+    // mount
+    devices::init_devices_mapping();
     // TODO: handle for UEFI
     let bios_tables = bios::tables::get_bios_tables().expect("BIOS tables not found");
     apic::init(&bios_tables);
     clock::init(&bios_tables);
     console::setup_interrupts();
     unsafe { cpu::set_interrupts() };
-    devices::register_devices();
-    fs::init_filesystem(0).expect("Could not load filesystem");
+    devices::prope_pci_devices();
+    fs::create_disk_mapping(0).expect("Could not load filesystem");
     finish_boot();
     // -- BOOT FINISHED --
 
