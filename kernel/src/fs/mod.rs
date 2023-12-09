@@ -8,7 +8,7 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use self::{fat::DirectoryEntry, mbr::MbrRaw};
+use self::mbr::MbrRaw;
 
 mod fat;
 mod mbr;
@@ -17,14 +17,64 @@ static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMappi
     mappings: Vec::new(),
 });
 
-type Filesystem = Arc<Mutex<fat::FatFilesystem>>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileAttributes {
+    pub read_only: bool,
+    pub hidden: bool,
+    pub system: bool,
+    pub volume_label: bool,
+    pub directory: bool,
+    pub archive: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct INode {
+    name: String,
+    attributes: FileAttributes,
+    start_cluster: u32,
+    size: u32,
+}
+
+impl INode {
+    pub fn is_dir(&self) -> bool {
+        self.attributes.directory
+    }
+
+    pub fn size(&self) -> u32 {
+        self.size
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    #[allow(dead_code)]
+    pub fn attributes(&self) -> FileAttributes {
+        self.attributes
+    }
+}
+
+pub trait FileSystem: Send + Sync {
+    // TODO: don't use Vector please, use an iterator somehow
+    fn open_dir<'a>(&'a self, path: &str) -> Result<Vec<INode>, FileSystemError>;
+    fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
+    fn read_file(
+        &self,
+        inode: &INode,
+        position: u32,
+        buf: &mut [u8],
+    ) -> Result<u64, FileSystemError>;
+}
 
 struct FileSystemMapping {
-    mappings: Vec<(String, Filesystem)>,
+    mappings: Vec<(String, Arc<dyn FileSystem>)>,
 }
 
 impl FileSystemMapping {
-    fn get_mapping<'p>(&mut self, path: &'p str) -> Result<(&'p str, Filesystem), FileSystemError> {
+    fn get_mapping<'p>(
+        &mut self,
+        path: &'p str,
+    ) -> Result<(&'p str, Arc<dyn FileSystem>), FileSystemError> {
         let (prefix, filesystem) = self
             .mappings
             .iter()
@@ -118,7 +168,7 @@ pub fn init_filesystem(hard_disk_index: usize) -> Result<(), FileSystemError> {
 }
 
 #[allow(dead_code)]
-pub fn ls_dir(path: &str) -> Result<Vec<DirectoryEntry>, FileSystemError> {
+pub fn ls_dir(path: &str) -> Result<Vec<INode>, FileSystemError> {
     let mut path = Cow::from(path);
 
     if !path.ends_with('/') {
@@ -126,8 +176,7 @@ pub fn ls_dir(path: &str) -> Result<Vec<DirectoryEntry>, FileSystemError> {
     }
 
     let (new_path, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(&path)?;
-    let filesystem = filesystem.lock();
-    Ok(filesystem.open_dir(new_path)?.collect())
+    filesystem.open_dir(new_path)
 }
 
 #[allow(dead_code)]
@@ -140,15 +189,14 @@ pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
     };
 
     let (parent_dir, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(parent_dir)?;
-    let filesystem_guard = filesystem.lock();
 
-    for entry in filesystem_guard.open_dir(parent_dir)? {
+    let filesystem_clone = filesystem.clone();
+    for entry in filesystem.open_dir(parent_dir)? {
         if entry.name() == basename {
-            drop(filesystem_guard);
             return Ok(File {
-                filesystem,
+                filesystem: filesystem_clone,
                 path: String::from(path),
-                inode: entry.inode().clone(),
+                inode: entry,
                 position: 0,
             });
         }
@@ -159,17 +207,18 @@ pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
 
 #[allow(dead_code)]
 pub struct File {
-    filesystem: Filesystem,
+    filesystem: Arc<dyn FileSystem>,
     path: String,
-    inode: fat::INode,
+    inode: INode,
     position: u64,
 }
 
 #[allow(dead_code)]
 impl File {
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
-        let filesystem_guard = self.filesystem.lock();
-        let read = filesystem_guard.read_file(&self.inode, self.position as u32, buf)?;
+        let read = self
+            .filesystem
+            .read_file(&self.inode, self.position as u32, buf)?;
         self.position += read;
         Ok(read)
     }

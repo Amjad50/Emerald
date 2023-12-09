@@ -12,11 +12,23 @@ use crate::{
     devices::ide::{self, IdeDeviceIndex},
     io::NoDebug,
     memory_management::memory_layout::align_up,
+    sync::spin::mutex::Mutex,
 };
 
-use super::FileSystemError;
+use super::{FileAttributes, FileSystem, FileSystemError, INode};
 
 const DIRECTORY_ENTRY_SIZE: u32 = 32;
+
+fn file_attribute_from_fat(attributes: u8) -> FileAttributes {
+    FileAttributes {
+        read_only: attributes & attrs::READ_ONLY == attrs::READ_ONLY,
+        hidden: attributes & attrs::HIDDEN == attrs::HIDDEN,
+        system: attributes & attrs::SYSTEM == attrs::SYSTEM,
+        volume_label: attributes & attrs::VOLUME_ID == attrs::VOLUME_ID,
+        directory: attributes & attrs::DIRECTORY == attrs::DIRECTORY,
+        archive: attributes & attrs::ARCHIVE == attrs::ARCHIVE,
+    }
+}
 
 #[derive(Debug)]
 pub enum FatError {
@@ -330,34 +342,6 @@ mod attrs {
 }
 
 #[derive(Debug, Clone)]
-pub struct INode {
-    name: String,
-    attributes: u8,
-    start_cluster: u32,
-    is_dir: bool,
-    size: u32,
-}
-
-#[allow(dead_code)]
-impl INode {
-    pub fn is_dir(&self) -> bool {
-        self.is_dir
-    }
-
-    pub fn size(&self) -> u32 {
-        self.size
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn attributes(&self) -> u8 {
-        self.attributes
-    }
-}
-
-#[derive(Debug, Clone)]
 enum Directory {
     RootFat12_16 {
         start_sector: u32,
@@ -374,36 +358,6 @@ impl Directory {
         filesystem: &'a FatFilesystem,
     ) -> Result<DirectoryIterator<'a>, FileSystemError> {
         DirectoryIterator::new(filesystem, self.clone())
-    }
-}
-
-#[derive(Debug)]
-pub struct DirectoryEntry {
-    inode: INode,
-}
-
-#[allow(dead_code)]
-impl DirectoryEntry {
-    pub fn name(&self) -> &str {
-        &self.inode.name
-    }
-
-    pub fn inode(&self) -> &INode {
-        &self.inode
-    }
-
-    pub fn is_dir(&self) -> bool {
-        self.inode.is_dir
-    }
-
-    fn as_dir(&self) -> Option<Directory> {
-        if self.inode.is_dir {
-            Some(Directory::Normal {
-                inode: self.inode.clone(),
-            })
-        } else {
-            None
-        }
     }
 }
 
@@ -514,7 +468,7 @@ impl DirectoryIterator<'_> {
 }
 
 impl Iterator for DirectoryIterator<'_> {
-    type Item = DirectoryEntry;
+    type Item = INode;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut entry = self.get_next_entry().ok()?;
@@ -614,13 +568,12 @@ impl Iterator for DirectoryIterator<'_> {
 
         let inode = INode {
             name,
-            attributes,
+            attributes: file_attribute_from_fat(attributes),
             start_cluster,
-            is_dir: attributes & 0x10 == 0x10,
             size,
         };
 
-        Some(DirectoryEntry { inode })
+        Some(inode)
     }
 }
 
@@ -734,10 +687,9 @@ impl FatFilesystem {
                 let root_cluster =
                     unsafe { self.boot_sector.boot_sector.extended.fat32.root_cluster };
                 let inode = INode {
-                    attributes: 0,
+                    attributes: file_attribute_from_fat(attrs::DIRECTORY),
                     name: String::from("/"),
                     start_cluster: root_cluster,
-                    is_dir: true,
                     size: 0,
                 };
                 Ok(Directory::Normal { inode })
@@ -764,9 +716,7 @@ impl FatFilesystem {
             }
             for entry in dir.iter(self)? {
                 if entry.name() == component {
-                    dir = Directory::Normal {
-                        inode: entry.inode().clone(),
-                    };
+                    dir = Directory::Normal { inode: entry };
                     continue 'component_loop;
                 }
             }
@@ -778,7 +728,7 @@ impl FatFilesystem {
 
     #[allow(dead_code)]
     pub fn open_dir_inode(&self, inode: &INode) -> Result<DirectoryIterator, FileSystemError> {
-        if !inode.is_dir {
+        if !inode.is_dir() {
             return Err(FileSystemError::IsNotDirectory);
         }
         let dir = Directory::Normal {
@@ -794,7 +744,7 @@ impl FatFilesystem {
         position: u32,
         buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
-        if inode.is_dir {
+        if inode.is_dir() {
             return Err(FileSystemError::IsDirectory);
         }
         if position >= inode.size {
@@ -846,5 +796,24 @@ impl FatFilesystem {
         }
 
         Ok(read as u64)
+    }
+}
+
+impl FileSystem for Mutex<FatFilesystem> {
+    fn read_file(
+        &self,
+        inode: &INode,
+        position: u32,
+        buf: &mut [u8],
+    ) -> Result<u64, FileSystemError> {
+        self.lock().read_file(inode, position, buf)
+    }
+
+    fn open_dir<'a>(&'a self, path: &str) -> Result<Vec<INode>, FileSystemError> {
+        Ok(self.lock().open_dir(path)?.collect())
+    }
+
+    fn read_dir<'a>(&'a self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+        Ok(self.lock().open_dir_inode(inode)?.collect())
     }
 }
