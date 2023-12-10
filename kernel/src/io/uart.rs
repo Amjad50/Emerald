@@ -101,6 +101,7 @@ fn init_port(port_addr: UartPort) {
     );
 }
 
+#[derive(Clone)]
 pub struct Uart {
     port_addr: UartPort,
 }

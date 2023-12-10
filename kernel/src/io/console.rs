@@ -1,100 +1,162 @@
-use core::{cell::RefCell, fmt::Write};
+use core::{
+    cell::RefCell,
+    fmt::{self, Write},
+};
+
+use alloc::sync::Arc;
 
 use crate::{
-    collections::ring::RingBuffer,
-    cpu::{
-        self,
-        idt::{BasicInterruptHandler, InterruptStackFrame64},
-        interrupts::apic,
-    },
+    devices::{self, Device},
+    fs::FileSystemError,
     sync::spin::remutex::ReMutex,
 };
 
 use super::{
-    keyboard::Keyboard,
     uart::{Uart, UartPort},
     video_memory::{VgaBuffer, DEFAULT_ATTRIB},
 };
 
 // SAFETY: the console is only used inside a lock or mutex
-pub(super) static CONSOLE: ReMutex<RefCell<Console>> =
-    ReMutex::new(RefCell::new(unsafe { Console::empty() }));
+static mut CONSOLE: Console = Console::empty_early();
 
-pub fn init() {
-    CONSOLE.lock().borrow_mut().init();
+/// # SAFETY
+/// the caller must assure that this is not called while not being initialized
+/// at the same time
+pub(super) fn run_with_console<F, U>(f: F) -> U
+where
+    F: FnMut(&mut dyn core::fmt::Write) -> U,
+{
+    // SAFETY: printing is done after initialization steps and not at the same time
+    //  look at `io::_print`
+    unsafe { CONSOLE.run_with(f) }
 }
 
-pub fn setup_interrupts() {
-    CONSOLE.lock().borrow_mut().setup_interrupts();
+/// Create an early console, this is used before the kernel heap is initialized
+pub fn early_init() {
+    // SAFETY: we are running this initialization at the very startup,
+    // without printing anything at the same time since we are only
+    // running 1 CPU at the  time
+    unsafe { CONSOLE.init_early() };
 }
 
-pub(super) struct Console {
-    uart: Uart,
-    keyboard: Keyboard,
-    video_buffer: VgaBuffer,
-    write_ring: RingBuffer<u8>,
+/// Create a late console, this is used after the kernel heap is initialized
+/// And also assign a console device
+pub fn init_late_device() {
+    // SAFETY: we are running this initialization at `kernel_main` and its done alone
+    //  without printing anything at the same time since we are only
+    //  running 1 CPU at the  time
+    //  We are also sure that no one is printing at this time
+    let device = unsafe {
+        CONSOLE.init_late();
+        // Must have a device
+        CONSOLE.late_device().unwrap()
+    };
+
+    devices::register_device(device);
+}
+
+pub(super) enum Console {
+    Early(ReMutex<RefCell<EarlyConsole>>),
+    Late(Arc<ReMutex<RefCell<LateConsole>>>),
 }
 
 impl Console {
+    const fn empty_early() -> Self {
+        // SAFETY: this is only called once on static context so nothing is running
+        Self::Early(ReMutex::new(RefCell::new(unsafe { EarlyConsole::empty() })))
+    }
+
+    fn init_early(&self) {
+        match self {
+            Self::Early(console) => {
+                let console = console.lock();
+                console.borrow_mut().init();
+            }
+            Self::Late(_) => {
+                panic!("Unexpected late console");
+            }
+        }
+    }
+
+    /// # SAFETY
+    /// Must ensure that there is no console is being printed to/running at the same time
+    unsafe fn init_late(&mut self) {
+        match self {
+            Self::Early(console) => {
+                // SAFETY: we are relying on the caller calling this function alone
+                //  since we are taking ownership of the early console, and we are sure that
+                //  its not being used anywhere, this is fine
+                let late_console = LateConsole::migrate_from_early(&*console.lock().borrow());
+                *self = Self::Late(Arc::new(ReMutex::new(RefCell::new(late_console))));
+            }
+            Self::Late(_) => {
+                panic!("Unexpected late console");
+            }
+        }
+    }
+
+    fn late_device(&self) -> Option<Arc<ReMutex<RefCell<LateConsole>>>> {
+        match self {
+            Self::Early(_) => None,
+            Self::Late(console) => Some(console.clone()),
+        }
+    }
+
+    pub fn run_with<F, U>(&self, mut f: F) -> U
+    where
+        F: FnMut(&mut dyn core::fmt::Write) -> U,
+    {
+        match self {
+            Console::Early(console) => {
+                let console = console.lock();
+                let x = if let Ok(mut c) = console.try_borrow_mut() {
+                    f(&mut *c)
+                } else {
+                    // if we can't get the lock, we are inside `panic`
+                    //  create a new early console and print to it
+                    let mut console = unsafe { EarlyConsole::empty() };
+                    console.init();
+                    f(&mut console)
+                };
+                x
+            }
+            // we have to use another branch because the types are different
+            // even though we use same function calls
+            Console::Late(console) => {
+                let console = console.lock();
+                let x = if let Ok(mut c) = console.try_borrow_mut() {
+                    f(&mut *c)
+                } else {
+                    // if we can't get the lock, we are inside `panic`
+                    //  create a new early console and print to it
+                    let mut console = unsafe { EarlyConsole::empty() };
+                    console.init();
+                    f(&mut console)
+                };
+                x
+            }
+        }
+    }
+}
+
+pub(super) struct EarlyConsole {
+    uart: Uart,
+    video_buffer: VgaBuffer,
+}
+
+impl EarlyConsole {
     /// SAFETY: the console must be used inside a lock or mutex
+    ///  as the Video buffer position is global
     pub const unsafe fn empty() -> Self {
         Self {
             uart: Uart::new(UartPort::COM1),
             video_buffer: VgaBuffer::new(),
-            keyboard: Keyboard::empty(),
-            write_ring: RingBuffer::empty(),
         }
     }
 
     pub fn init(&mut self) {
         self.uart.init();
         self.video_buffer.init();
-    }
-
-    pub fn setup_interrupts(&mut self) {
-        // assign keyboard interrupt to this CPU
-        apic::assign_io_irq(
-            keyboard_interrupt as BasicInterruptHandler,
-            self.keyboard.interrupt_num(),
-            cpu::cpu(),
-        );
-        apic::assign_io_irq(
-            uart_interrupt as BasicInterruptHandler,
-            self.uart.interrupt_num(),
-            cpu::cpu(),
-        );
-    }
-
-    fn keyboard_interrupt(&mut self) {
-        if let Some(k) = self.keyboard.try_read_char() {
-            if let Some(c) = k.virtual_char {
-                self.feed_char_from_interrupt(c);
-            }
-        }
-    }
-
-    fn uart_interrupt(&mut self) {
-        if let Some(c) = unsafe { self.uart.try_read_byte() } {
-            self.feed_char_from_interrupt(c);
-        }
-    }
-
-    fn feed_char_from_interrupt(&mut self, c: u8) {
-        // convert carriage return to newline (from uart)
-        let c = if c == b'\r' { b'\n' } else { c };
-        // don't force pushing for now
-        // TODO: implement a place where console buffer can be filled
-        let _ = self.write_ring.try_push(c);
-    }
-
-    #[allow(dead_code)]
-    pub fn read(&mut self, dst: &mut [u8]) -> usize {
-        let mut i = 0;
-        while let Some(c) = self.write_ring.pop() {
-            dst[i] = c;
-            i += 1;
-        }
-        i
     }
 
     /// SAFETY: the caller must assure that this is called from once place at a time
@@ -104,32 +166,77 @@ impl Console {
         self.uart.write_byte(byte);
     }
 
-    pub fn write(&mut self, src: &[u8]) -> usize {
+    /// SAFETY: the caller must assure that this is called from once place at a time
+    ///        and should handle synchronization
+    pub unsafe fn write(&mut self, src: &[u8]) -> usize {
         for &c in src {
-            unsafe {
-                self.write_byte(c);
-            }
+            self.write_byte(c);
         }
         src.len()
     }
 }
 
-impl Write for Console {
+impl Write for EarlyConsole {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        self.write(s.as_bytes());
+        unsafe { self.write(s.as_bytes()) };
         Ok(())
     }
 }
 
-extern "x86-interrupt" fn keyboard_interrupt(_frame: InterruptStackFrame64) {
-    let console = CONSOLE.lock();
-    console.borrow_mut().keyboard_interrupt();
-
-    apic::return_from_interrupt();
+pub(super) struct LateConsole {
+    uart: Uart,
+    video_buffer: VgaBuffer,
 }
 
-extern "x86-interrupt" fn uart_interrupt(_frame: InterruptStackFrame64) {
-    let console = CONSOLE.lock();
-    console.borrow_mut().uart_interrupt();
-    apic::return_from_interrupt();
+impl LateConsole {
+    /// SAFETY: must ensure that there is no console running at the same time
+    unsafe fn migrate_from_early(early: &EarlyConsole) -> Self {
+        let mut s = Self {
+            uart: early.uart.clone(),
+            video_buffer: early.video_buffer.clone(),
+        };
+
+        // split inputs
+        s.write_byte(b'\n');
+        s
+    }
+
+    /// SAFETY: the caller must assure that this is called from once place at a time
+    ///         and should handle synchronization
+    unsafe fn write_byte(&mut self, byte: u8) {
+        self.video_buffer.write_byte(byte, DEFAULT_ATTRIB);
+        self.uart.write_byte(byte);
+    }
+
+    /// SAFETY: the caller must assure that this is called from once place at a time
+    ///        and should handle synchronization
+    pub unsafe fn write(&mut self, src: &[u8]) -> usize {
+        for &c in src {
+            self.write_byte(c);
+        }
+        src.len()
+    }
+}
+
+impl Write for LateConsole {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        unsafe { self.write(s.as_bytes()) };
+        Ok(())
+    }
+}
+
+impl fmt::Debug for LateConsole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LateConsole").finish()
+    }
+}
+
+impl Device for ReMutex<RefCell<LateConsole>> {
+    fn name(&self) -> &str {
+        "console"
+    }
+
+    fn read(&self, _offset: u32, _buf: &mut [u8]) -> Result<u64, FileSystemError> {
+        Err(FileSystemError::ReadNotSupported)
+    }
 }

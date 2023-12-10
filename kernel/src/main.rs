@@ -133,7 +133,7 @@ fn load_init_process() {
 #[no_mangle]
 pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     // init console first, so if we panicked, we can still see the output
-    console::init();
+    console::early_init();
     println!("{}", multiboot_info);
     check_and_setup_memory(multiboot_info);
     // must be called before any pages can be allocated
@@ -149,7 +149,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     let bios_tables = bios::tables::get_bios_tables().expect("BIOS tables not found");
     apic::init(&bios_tables);
     clock::init(&bios_tables);
-    console::setup_interrupts();
+    console::init_late_device();
     unsafe { cpu::set_interrupts() };
     devices::prope_pci_devices();
     fs::create_disk_mapping(0).expect("Could not load filesystem");

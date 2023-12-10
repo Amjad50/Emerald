@@ -233,6 +233,7 @@ pub enum FileSystemError {
     /// For example, a function that reads a file into a string will error with InvalidData
     /// if the file’s contents are not valid `UTF-8`.
     InvalidData,
+    ReadNotSupported,
 }
 
 pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) {

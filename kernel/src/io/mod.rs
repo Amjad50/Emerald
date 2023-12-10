@@ -1,6 +1,7 @@
 use core::{fmt, ops, sync::atomic::AtomicBool};
 
 pub mod console;
+#[allow(dead_code)]
 mod keyboard;
 mod uart;
 mod video_memory;
@@ -46,86 +47,55 @@ impl<T> ops::DerefMut for NoDebug<T> {
 pub fn hexdump(buf: &[u8]) {
     // lock first so that none else can access the console
     // its ReMutex so we can aquire the lock
-    let _con = console::CONSOLE.lock();
-
-    // print hex dump
-    for i in 0..buf.len() / 16 {
-        print!("{:08X}:  ", i * 16);
-        for j in 0..16 {
-            print!("{:02X} ", buf[i * 16 + j]);
-        }
-        // print ascii
-        print!("  ");
-        for j in 0..16 {
-            let c = buf[i * 16 + j];
-            if (32..127).contains(&c) {
-                print!("{}", c as char);
-            } else {
-                print!(".");
+    console::run_with_console(|inner| {
+        // print hex dump
+        for i in 0..buf.len() / 16 {
+            write!(inner, "{:08X}:  ", i * 16)?;
+            for j in 0..16 {
+                write!(inner, "{:02X} ", buf[i * 16 + j])?;
             }
-        }
-        println!();
-    }
-    // print remaining if any
-    let remaining = buf.len() % 16;
-    if remaining != 0 {
-        let remaining_start = (buf.len() / 16) * 16;
-
-        print!("{:08X}:  ", remaining_start);
-        for c in buf[remaining_start..].iter() {
-            print!("{:02X} ", c);
-        }
-        for _ in 0..(16 - remaining) {
-            print!("   ");
-        }
-        // print ascii
-        print!("  ");
-        for &c in buf[remaining_start..].iter() {
-            if (32..127).contains(&c) {
-                print!("{}", c as char);
-            } else {
-                print!(".");
+            // print ascii
+            write!(inner, "  ")?;
+            for j in 0..16 {
+                let c = buf[i * 16 + j];
+                if (32..127).contains(&c) {
+                    write!(inner, "{}", c as char)?;
+                } else {
+                    write!(inner, ".")?;
+                }
             }
+            writeln!(inner)?;
         }
-        println!();
-    }
+        // print remaining if any
+        let remaining = buf.len() % 16;
+        if remaining != 0 {
+            let remaining_start = (buf.len() / 16) * 16;
+
+            write!(inner, "{:08X}:  ", remaining_start)?;
+            for c in buf[remaining_start..].iter() {
+                write!(inner, "{:02X} ", c)?;
+            }
+            for _ in 0..(16 - remaining) {
+                write!(inner, "   ")?;
+            }
+            // print ascii
+            write!(inner, "  ")?;
+            for &c in buf[remaining_start..].iter() {
+                if (32..127).contains(&c) {
+                    write!(inner, "{}", c as char)?;
+                } else {
+                    write!(inner, ".")?;
+                }
+            }
+            writeln!(inner)?;
+        }
+        Ok::<(), fmt::Error>(())
+    })
+    .unwrap();
 }
 
 pub fn _print(args: ::core::fmt::Arguments) {
-    use core::fmt::Write;
-
-    let con = console::CONSOLE.lock();
-
-    // if we failed to borrow, it means we are inside panic, and we have paniced inside the lock/console
-    // create a new raw console and print to it
-    // no one else should be able to access the console, since we are holding the lock
-    match con.try_borrow_mut() {
-        Ok(mut con) => {
-            con.write_fmt(args).unwrap();
-        }
-        Err(_) => {
-            // SAFETY: we are creating a new console, and we are holding the lock
-            //         so this acts as a form of locking
-            let mut console = unsafe { console::Console::empty() };
-            console.init();
-            console.write_fmt(args).unwrap();
-        }
-    }
-    drop(con);
-}
-
-#[allow(dead_code)]
-pub fn read_chars(buf: &mut [u8]) -> usize {
-    let con = console::CONSOLE.lock();
-    let mut con = con.borrow_mut();
-    con.read(buf)
-}
-
-#[allow(dead_code)]
-pub fn write_chars(buf: &[u8]) {
-    let con = console::CONSOLE.lock();
-    let mut con = con.borrow_mut();
-    con.write(buf);
+    console::run_with_console(|inner| inner.write_fmt(args)).unwrap();
 }
 
 // Enable `eprint!` and `eprintln!` macros

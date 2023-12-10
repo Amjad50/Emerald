@@ -1,5 +1,6 @@
 use core::mem::MaybeUninit;
 
+#[allow(dead_code)]
 pub struct RingBuffer<T> {
     buffer: [MaybeUninit<T>; 1024],
     read_index: usize,
@@ -42,6 +43,7 @@ impl<T> RingBuffer<T> {
     }
 }
 
+#[allow(dead_code)]
 impl<T: Copy> RingBuffer<T> {
     pub const fn empty() -> Self {
         Self {

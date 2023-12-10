@@ -15,6 +15,7 @@ fn get_index(pos: (usize, usize)) -> isize {
     (pos.0 + pos.1 * VGA_WIDTH) as isize
 }
 
+#[derive(Clone)]
 pub(super) struct VgaBuffer {
     pos: (usize, usize),
 }
