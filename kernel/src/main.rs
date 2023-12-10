@@ -126,7 +126,7 @@ fn load_init_process() {
     assert!(process.id() == 0, "Must be the first process");
 
     println!("Added `init` process pid={}", process.id());
-    process::push_process(process);
+    scheduler::push_process(process);
 }
 
 #[link_section = ".text"]

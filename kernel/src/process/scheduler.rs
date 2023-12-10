@@ -1,5 +1,7 @@
 use core::{hint, mem};
 
+use alloc::vec::Vec;
+
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
     memory_management::virtual_memory,
@@ -7,19 +9,25 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::{ProcessContext, ProcessState, PROCESSES};
+use super::{Process, ProcessContext, ProcessState};
 
 static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
 
 struct Scheduler {
     interrupt_initialized: bool,
+    processes: Vec<Process>,
 }
 
 impl Scheduler {
     const fn new() -> Self {
         Self {
             interrupt_initialized: false,
+            processes: Vec::new(),
         }
+    }
+
+    pub fn push_process(&mut self, process: Process) {
+        self.processes.push(process);
     }
 
     fn init_interrupt(&mut self) {
@@ -30,6 +38,10 @@ impl Scheduler {
 
         interrupts::create_scheduler_interrupt(scheduler_interrupt_handler);
     }
+}
+
+pub fn push_process(process: Process) {
+    SCHEDULER.lock().push_process(process);
 }
 
 pub fn schedule() -> ! {
@@ -43,9 +55,9 @@ pub fn schedule() -> ! {
             }
         }
 
+        let mut scheduler = SCHEDULER.lock();
         // no context holding, i.e. free to take a new process
-        let mut processes = PROCESSES.lock();
-        for process in processes.iter_mut() {
+        for process in scheduler.processes.iter_mut() {
             if process.state == ProcessState::Scheduled {
                 current_cpu.push_cli();
                 process.state = ProcessState::Running;
@@ -56,7 +68,7 @@ pub fn schedule() -> ! {
                 current_cpu.pop_cli();
             }
         }
-        drop(processes);
+        drop(scheduler);
 
         if current_cpu.context.is_some() {
             // call scheduler_interrupt_handler
@@ -78,9 +90,10 @@ pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
 
     // save context of this process and mark is as scheduled
     {
-        let mut processes = PROCESSES.lock();
+        let mut scheduler = SCHEDULER.lock();
         // TODO: find a better way to store processes or store process index/id.
-        let process = processes
+        let process = scheduler
+            .processes
             .iter_mut()
             .find(|p| p.id == current_cpu.process_id)
             .expect("current process not found");

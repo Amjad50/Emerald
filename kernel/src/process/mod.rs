@@ -1,6 +1,6 @@
 pub mod scheduler;
 
-use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{
     cpu::{self, gdt},
@@ -10,16 +10,9 @@ use crate::{
         memory_layout::{KERNEL_BASE, PAGE_4K},
         virtual_memory::{self, VirtualMemoryManager, VirtualMemoryMapEntry},
     },
-    sync::spin::mutex::Mutex,
 };
 
-static PROCESSES: Mutex<Vec<Process>> = Mutex::new(Vec::new());
-static PROCESS_ID_ALLOCATOR: Mutex<ProcessIdAllocator> = Mutex::new(ProcessIdAllocator::new());
-
-pub fn push_process(process: Process) {
-    PROCESSES.lock().push(process);
-}
-
+static PROCESS_ID_ALLOCATOR: ProcessIdAllocator = ProcessIdAllocator::new();
 const INITIAL_STACK_SIZE_PAGES: usize = 4;
 
 #[derive(Debug)]
@@ -34,18 +27,18 @@ impl From<fs::FileSystemError> for ProcessError {
 }
 
 struct ProcessIdAllocator {
-    next_id: u64,
+    next_id: AtomicU64,
 }
 
 impl ProcessIdAllocator {
     const fn new() -> Self {
-        Self { next_id: 0 }
+        Self {
+            next_id: AtomicU64::new(0),
+        }
     }
 
-    fn allocate(&mut self) -> u64 {
-        let id = self.next_id;
-        self.next_id += 1;
-        id
+    fn allocate(&self) -> u64 {
+        self.next_id.fetch_add(1, Ordering::SeqCst)
     }
 }
 
@@ -99,6 +92,7 @@ pub enum ProcessState {
     Stopped,
 }
 
+// TODO: implement threads, for now each process acts as a thread also
 #[allow(dead_code)]
 pub struct Process {
     vm: VirtualMemoryManager,
@@ -118,8 +112,7 @@ impl Process {
         elf: &elf::Elf,
         file: &mut fs::File,
     ) -> Result<Self, ProcessError> {
-        let id = PROCESS_ID_ALLOCATOR.lock().allocate();
-
+        let id = PROCESS_ID_ALLOCATOR.allocate();
         let mut vm = virtual_memory::clone_kernel_vm_as_user();
         let stack_end = KERNEL_BASE - PAGE_4K;
         let stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
