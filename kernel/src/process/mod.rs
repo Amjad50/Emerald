@@ -1,4 +1,5 @@
 pub mod scheduler;
+mod syscalls;
 
 use core::sync::atomic::{AtomicU64, Ordering};
 

@@ -1,5 +1,7 @@
 use core::{marker::PhantomData, mem};
 
+use super::interrupts::stack_index;
+
 core::arch::global_asm!(include_str!("idt_vectors.S"));
 
 extern "C" {
@@ -244,16 +246,16 @@ impl InterruptDescriptorTable {
         self.overflow.set_handler(default_handler::<4>);
         self.bound_range_exceeded
             .set_handler(default_handler::<5>)
-            .set_stack_index(Some(1));
+            .set_stack_index(Some(stack_index::FAULTS_STACK));
         self.invalid_opcode
             .set_handler(default_handler::<6>)
-            .set_stack_index(Some(1));
+            .set_stack_index(Some(stack_index::FAULTS_STACK));
         self.device_not_available
             .set_handler(default_handler::<7>)
-            .set_stack_index(Some(1));
+            .set_stack_index(Some(stack_index::FAULTS_STACK));
         self.double_fault
             .set_handler(default_handler_with_error::<8>)
-            .set_stack_index(Some(2));
+            .set_stack_index(Some(stack_index::DOUBLE_FAULT_STACK));
         self.invalid_tss
             .set_handler(default_handler_with_error::<10>);
         self.segment_not_present
@@ -264,11 +266,11 @@ impl InterruptDescriptorTable {
             .set_handler(default_handler_with_error::<13>);
         self.page_fault
             .set_handler(default_handler_with_error::<14>)
-            .set_stack_index(Some(3));
+            .set_stack_index(Some(stack_index::FAULTS_STACK));
         self.x87_floating_point.set_handler(default_handler::<16>);
         self.alignment_check
             .set_handler(default_handler_with_error::<17>)
-            .set_stack_index(Some(2));
+            .set_stack_index(Some(stack_index::FAULTS_STACK));
         self.machine_check.set_handler(default_handler::<18>);
         self.simd_floating_point.set_handler(default_handler::<19>);
         self.control_protection.set_handler(default_handler::<21>);

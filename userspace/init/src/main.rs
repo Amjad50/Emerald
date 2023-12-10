@@ -8,6 +8,7 @@ pub extern "C" fn _start() -> ! {
     // we are in `init` now
     // create some delay
     loop {
+        unsafe { core::arch::asm!("mov eax, 0; int 0xFE") };
         hint::spin_loop();
     }
 }

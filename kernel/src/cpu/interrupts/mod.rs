@@ -3,13 +3,23 @@ mod handlers;
 
 use crate::sync::spin::mutex::Mutex;
 
-use super::idt::{BasicInterruptHandler, InterruptDescriptorTable, InterruptHandlerWithAllState};
+use super::{
+    gdt::USER_RING,
+    idt::{BasicInterruptHandler, InterruptDescriptorTable, InterruptHandlerWithAllState},
+};
 
 static INTERRUPTS: Mutex<Interrupts> = Mutex::new(Interrupts::empty());
+
+pub(super) mod stack_index {
+    pub const FAULTS_STACK: u8 = 0;
+    pub const DOUBLE_FAULT_STACK: u8 = 1;
+    pub const SYSCALL_STACK: u8 = 2;
+}
 
 const USER_INTERRUPTS_START: u8 = 0x20;
 const MAX_USER_INTERRUPTS: u8 = 0xe0 - 0x10;
 pub const SPECIAL_SCHEDULER_INTERRUPT: u8 = 0xdf; // last one (0xFF)
+pub const SPECIAL_SYSCALL_INTERRUPT: u8 = 0xde; // second last one (0xFE)
 
 struct Interrupts {
     idt: InterruptDescriptorTable,
@@ -104,4 +114,13 @@ pub fn create_scheduler_interrupt(handler: InterruptHandlerWithAllState) {
     let mut interrupts = INTERRUPTS.lock();
     interrupts.idt.user_defined[SPECIAL_SCHEDULER_INTERRUPT as usize]
         .set_handler_with_number(handler, SPECIAL_SCHEDULER_INTERRUPT + USER_INTERRUPTS_START);
+}
+
+pub fn create_syscall_interrupt(handler: InterruptHandlerWithAllState) {
+    let mut interrupts = INTERRUPTS.lock();
+    interrupts.idt.user_defined[SPECIAL_SYSCALL_INTERRUPT as usize]
+        .set_handler_with_number(handler, SPECIAL_SYSCALL_INTERRUPT + USER_INTERRUPTS_START)
+        .set_privilege_level(USER_RING)
+        .set_disable_interrupts(true)
+        .set_stack_index(Some(stack_index::SYSCALL_STACK));
 }

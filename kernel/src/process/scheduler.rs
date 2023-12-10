@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
     memory_management::virtual_memory,
-    process::FxSave,
+    process::{syscalls, FxSave},
     sync::spin::mutex::Mutex,
 };
 
@@ -37,6 +37,7 @@ impl Scheduler {
         self.interrupt_initialized = true;
 
         interrupts::create_scheduler_interrupt(scheduler_interrupt_handler);
+        interrupts::create_syscall_interrupt(syscall_interrupt_handler);
     }
 }
 
@@ -150,12 +151,17 @@ pub fn swap_context(context: &mut ProcessContext, all_state: &mut InterruptAllSa
 }
 
 extern "cdecl" fn scheduler_interrupt_handler(all_state: &mut InterruptAllSavedState) {
-    assert!(all_state.frame.cs & 0x3 == 0, "from user mode");
+    assert!(all_state.frame.cs & 0x3 == 0, "must be from kernel only");
     let current_cpu = cpu::cpu();
-    if current_cpu.context.is_none() {
-        panic!("no context");
-    }
+    assert!(current_cpu.context.is_some());
 
-    // this doesn't return, it does iretq directly
     swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+}
+
+extern "cdecl" fn syscall_interrupt_handler(all_state: &mut InterruptAllSavedState) {
+    assert!(all_state.frame.cs & 0x3 == 3, "must be from user only");
+    let current_cpu = cpu::cpu();
+    assert!(current_cpu.context.is_some());
+
+    syscalls::handle_syscall(all_state);
 }
