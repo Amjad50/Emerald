@@ -6,10 +6,12 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 1;
+pub const NUM_SYSCALLS: usize = 3;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
+    pub const SYS_WRITE: u64 = 1;
+    pub const SYS_READ: u64 = 2;
 }
 pub use numbers::*;
 
@@ -102,6 +104,37 @@ macro_rules! sys_arg {
 }
 
 #[macro_export]
+macro_rules! to_arg_err {
+    ($num:tt, $err:expr) => {
+        to_arg_err!(@impl $num, $err)
+    };
+    (@impl 0, $err:expr) => {
+        $crate::syscalls::SyscallError::InvalidArgument(::core::option::Option::Some($err), None, None, None, None, None, None)
+    };
+    (@impl 1, $err:expr) => {
+        $crate::syscalls::SyscallError::InvalidArgument(None, ::core::option::Option::Some($err), None, None, None, None, None)
+    };
+    (@impl 2, $err:expr) => {
+        $crate::syscalls::SyscallError::InvalidArgument(None, None, ::core::option::Option::Some($err), None, None, None, None)
+    };
+    (@impl 3, $err:expr) => {
+        $crate::syscalls::SyscallError::InvalidArgument(None, None, None, ::core::option::Option::Some($err), None, None, None)
+    };
+    (@impl 4, $err:expr) => {
+        $crate::syscalls::SyscallError::InvalidArgument(None, None, None, None, ::core::option::Option::Some($err), None, None)
+    };
+    (@impl 5, $err:expr) => {
+        $crate::syscalls::SyscallError::InvalidArgument(None, None, None, None, None, ::core::option::Option::Some($err), None)
+    };
+    (@impl 6, $err:expr) => {
+        $crate::syscalls::SyscallError::InvalidArgument(None, None, None, None, None, None, ::core::option::Option::Some($err))
+    };
+    (@impl $rest:tt, $err:expr) => {
+        compile_error!("Not valid argument number")
+    };
+}
+
+#[macro_export]
 macro_rules! verify_args {
     () => {((), (), (), (), (), (), ())};
     ($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr, $arg7:expr) => {
@@ -166,9 +199,14 @@ impl SyscallArgError {
 
 #[repr(align(8))]
 #[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 pub enum SyscallError {
-    SyscallNotFound,
-    InvalidErrorCode(u64),
+    SyscallNotFound = 0,
+    InvalidErrorCode(u64) = 1,
+    CouldNotOpenFile = 2,
+    InvalidFileIndex = 3,
+    CouldNotWriteToFile = 4,
+    CouldNotReadFromFile = 5,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -230,14 +268,28 @@ where
 
 pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
     match result {
-        SyscallResult::Ok(value) => value,
-        SyscallResult::Err(error) => match error {
-            SyscallError::SyscallNotFound => -1i64 as u64,
-            SyscallError::InvalidErrorCode(code) => code,
-            SyscallError::InvalidArgument(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
-                create_syscall_error(arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-            }
-        },
+        SyscallResult::Ok(value) => {
+            assert!(
+                value & (1 << 63) == 0,
+                "syscall result should not have msb set"
+            );
+            value
+        }
+        SyscallResult::Err(error) => {
+            let err_upper = match error {
+                SyscallError::SyscallNotFound => -1i64 as u64,
+                SyscallError::InvalidErrorCode(code) => code,
+                SyscallError::InvalidArgument(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
+                    create_syscall_error(arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+                }
+                SyscallError::CouldNotOpenFile => 2 << 56,
+                SyscallError::InvalidFileIndex => 3 << 56,
+                SyscallError::CouldNotWriteToFile => 4 << 56,
+                SyscallError::CouldNotReadFromFile => 5 << 56,
+            };
+
+            err_upper | (1 << 63)
+        }
     }
 }
 
@@ -245,24 +297,39 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
     if value & (1 << 63) == 0 {
         SyscallResult::Ok(value)
     } else {
+        // remove last bit
+        let value = value & !(1 << 63);
+        // last byte
+        let err_byte = (value >> 56) as u8;
+
         let invalid_error_code = |_| -> SyscallError { SyscallError::InvalidErrorCode(value) };
 
-        let arg1 = SyscallArgError::try_from((value & 0xFF) as u8).map_err(invalid_error_code)?;
-        let arg2 =
-            SyscallArgError::try_from(((value >> 8) & 0xFF) as u8).map_err(invalid_error_code)?;
-        let arg3 =
-            SyscallArgError::try_from(((value >> 16) & 0xFF) as u8).map_err(invalid_error_code)?;
-        let arg4 =
-            SyscallArgError::try_from(((value >> 24) & 0xFF) as u8).map_err(invalid_error_code)?;
-        let arg5 =
-            SyscallArgError::try_from(((value >> 32) & 0xFF) as u8).map_err(invalid_error_code)?;
-        let arg6 =
-            SyscallArgError::try_from(((value >> 40) & 0xFF) as u8).map_err(invalid_error_code)?;
-        let arg7 =
-            SyscallArgError::try_from(((value >> 48) & 0xFF) as u8).map_err(invalid_error_code)?;
+        let err = match err_byte {
+            0 => {
+                let arg1 =
+                    SyscallArgError::try_from((value & 0xFF) as u8).map_err(invalid_error_code)?;
+                let arg2 = SyscallArgError::try_from(((value >> 8) & 0xFF) as u8)
+                    .map_err(invalid_error_code)?;
+                let arg3 = SyscallArgError::try_from(((value >> 16) & 0xFF) as u8)
+                    .map_err(invalid_error_code)?;
+                let arg4 = SyscallArgError::try_from(((value >> 24) & 0xFF) as u8)
+                    .map_err(invalid_error_code)?;
+                let arg5 = SyscallArgError::try_from(((value >> 32) & 0xFF) as u8)
+                    .map_err(invalid_error_code)?;
+                let arg6 = SyscallArgError::try_from(((value >> 40) & 0xFF) as u8)
+                    .map_err(invalid_error_code)?;
+                let arg7 = SyscallArgError::try_from(((value >> 48) & 0xFF) as u8)
+                    .map_err(invalid_error_code)?;
 
-        SyscallResult::Err(SyscallError::InvalidArgument(
-            arg1, arg2, arg3, arg4, arg5, arg6, arg7,
-        ))
+                SyscallError::InvalidArgument(arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+            }
+            1 => SyscallError::InvalidErrorCode(value),
+            2 => SyscallError::CouldNotOpenFile,
+            3 => SyscallError::InvalidFileIndex,
+            4 => SyscallError::CouldNotWriteToFile,
+            5 => SyscallError::CouldNotReadFromFile,
+            _ => invalid_error_code(()),
+        };
+        SyscallResult::Err(err)
     }
 }

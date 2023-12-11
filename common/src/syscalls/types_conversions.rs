@@ -35,3 +35,9 @@ impl FromSyscallArgU64 for *const u8 {
         Ok(value as *const u8)
     }
 }
+
+impl FromSyscallArgU64 for *mut u8 {
+    fn from_syscall_arg_u64(value: u64) -> Result<Self, SyscallArgError> {
+        Ok(value as *mut u8)
+    }
+}
