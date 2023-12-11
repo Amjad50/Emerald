@@ -85,7 +85,8 @@ pub fn schedule() -> ! {
 
 pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
     let current_cpu = cpu::cpu();
-    if current_cpu.context.is_none() {
+    // do not yield if we don't have context or we are in kernel
+    if current_cpu.context.is_none() || all_state.frame.cs & 0x3 == 0 {
         return;
     }
 
