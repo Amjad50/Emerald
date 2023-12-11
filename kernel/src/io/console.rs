@@ -239,4 +239,21 @@ impl Device for ReMutex<RefCell<LateConsole>> {
     fn read(&self, _offset: u32, _buf: &mut [u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::ReadNotSupported)
     }
+
+    fn write(&self, _offset: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+        let console = self.lock();
+        let x = if let Ok(mut c) = console.try_borrow_mut() {
+            unsafe { c.write(buf) }
+        } else {
+            // this should not be reached at all, but just in case
+            //
+            // if we can't get the lock, we are inside `panic`
+            //  create a new early console and print to it
+            let mut console = unsafe { EarlyConsole::empty() };
+            console.init();
+            unsafe { console.write(buf) }
+        };
+
+        Ok(x as u64)
+    }
 }

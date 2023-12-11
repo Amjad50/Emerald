@@ -25,7 +25,12 @@ struct Devices {
 
 pub trait Device: Sync + Send + fmt::Debug {
     fn name(&self) -> &str;
-    fn read(&self, offset: u32, buf: &mut [u8]) -> Result<u64, FileSystemError>;
+    fn read(&self, _offset: u32, _buf: &mut [u8]) -> Result<u64, FileSystemError> {
+        Err(FileSystemError::ReadNotSupported)
+    }
+    fn write(&self, _offset: u32, _buf: &[u8]) -> Result<u64, FileSystemError> {
+        Err(FileSystemError::WriteNotSupported)
+    }
 }
 
 impl FileSystem for Mutex<Devices> {
@@ -66,6 +71,14 @@ impl FileSystem for Mutex<Devices> {
             .device()
             .ok_or(FileSystemError::FileNotFound)?
             .read(position, buf)
+    }
+
+    fn write_file(&self, inode: &INode, position: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+        assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+        inode
+            .device()
+            .ok_or(FileSystemError::FileNotFound)?
+            .write(position, buf)
     }
 }
 

@@ -3,6 +3,8 @@ mod syscalls;
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
+use alloc::collections::BTreeMap;
+
 use crate::{
     cpu::{self, gdt},
     executable::{elf, load_elf_to_vm},
@@ -13,7 +15,7 @@ use crate::{
     },
 };
 
-static PROCESS_ID_ALLOCATOR: ProcessIdAllocator = ProcessIdAllocator::new();
+static PROCESS_ID_ALLOCATOR: GoingUpAllocator = GoingUpAllocator::new();
 const INITIAL_STACK_SIZE_PAGES: usize = 4;
 
 #[derive(Debug)]
@@ -27,11 +29,11 @@ impl From<fs::FileSystemError> for ProcessError {
     }
 }
 
-struct ProcessIdAllocator {
+struct GoingUpAllocator {
     next_id: AtomicU64,
 }
 
-impl ProcessIdAllocator {
+impl GoingUpAllocator {
     const fn new() -> Self {
         Self {
             next_id: AtomicU64::new(0),
@@ -101,6 +103,10 @@ pub struct Process {
     id: u64,
     parent_id: u64,
 
+    // use BTreeMap to keep FDs even after closing some of them
+    open_files: BTreeMap<usize, fs::File>,
+    file_index_allocator: GoingUpAllocator,
+
     stack_ptr_end: usize,
     stack_size: usize,
 
@@ -143,6 +149,8 @@ impl Process {
             context,
             id,
             parent_id,
+            open_files: BTreeMap::new(),
+            file_index_allocator: GoingUpAllocator::new(),
             stack_ptr_end: stack_end - 8, // 8 bytes for padding
             stack_size,
             state: ProcessState::Scheduled,
@@ -163,6 +171,32 @@ impl Process {
 
     pub fn is_user_address_mapped(&self, address: u64) -> bool {
         self.vm.is_address_mapped(address)
+    }
+
+    pub fn push_file(&mut self, file: fs::File) -> usize {
+        let fd = self.file_index_allocator.allocate() as usize;
+        assert!(
+            self.open_files.insert(fd, file).is_none(),
+            "fd already exists"
+        );
+        fd
+    }
+
+    pub fn attach_file_to_fd(&mut self, fd: usize, file: fs::File) -> bool {
+        // fail first
+        if self.open_files.contains_key(&fd) {
+            return false;
+        }
+        // update allocator so that next push_file will not overwrite this fd
+        self.file_index_allocator
+            .next_id
+            .store(fd as u64 + 1, Ordering::SeqCst);
+        // must always return `true`
+        self.open_files.insert(fd, file).is_none()
+    }
+
+    pub fn get_file(&mut self, fd: usize) -> Option<&mut fs::File> {
+        self.open_files.get_mut(&fd)
     }
 }
 

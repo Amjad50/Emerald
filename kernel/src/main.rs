@@ -27,6 +27,7 @@ mod sync;
 
 use core::hint;
 
+use common::{FD_STDERR, FD_STDIN, FD_STDOUT};
 use cpu::{
     gdt,
     interrupts::{self, apic},
@@ -121,9 +122,16 @@ fn finish_boot() {
 fn load_init_process() {
     let mut init_file = fs::open("/init").expect("Could not find `init` file");
     let elf = Elf::load(&mut init_file).expect("Could not load init file");
-    let process = Process::allocate_process(0, &elf, &mut init_file)
+    let mut process = Process::allocate_process(0, &elf, &mut init_file)
         .expect("Could not allocate process for `init`");
     assert!(process.id() == 0, "Must be the first process");
+
+    // add the console to `init` manually, after that processes will either inherit it or open a pipe or something
+    // to act as STDIN/STDOUT/STDERR
+    let console = fs::open("/devices/console").expect("Could not find `/devices/console`");
+    process.attach_file_to_fd(FD_STDIN, console.clone());
+    process.attach_file_to_fd(FD_STDOUT, console.clone());
+    process.attach_file_to_fd(FD_STDERR, console);
 
     println!("Added `init` process pid={}", process.id());
     scheduler::push_process(process);

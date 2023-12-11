@@ -178,10 +178,21 @@ pub trait FileSystem: Send + Sync {
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
     fn read_file(
         &self,
-        inode: &INode,
-        position: u32,
-        buf: &mut [u8],
-    ) -> Result<u64, FileSystemError>;
+        _inode: &INode,
+        _position: u32,
+        _buf: &mut [u8],
+    ) -> Result<u64, FileSystemError> {
+        Err(FileSystemError::ReadNotSupported)
+    }
+
+    fn write_file(
+        &self,
+        _inode: &INode,
+        _position: u32,
+        _buf: &[u8],
+    ) -> Result<u64, FileSystemError> {
+        Err(FileSystemError::WriteNotSupported)
+    }
 }
 
 struct FileSystemMapping {
@@ -234,6 +245,7 @@ pub enum FileSystemError {
     /// if the file’s contents are not valid `UTF-8`.
     InvalidData,
     ReadNotSupported,
+    WriteNotSupported,
 }
 
 pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) {
@@ -340,7 +352,7 @@ pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
     Err(FileSystemError::FileNotFound)
 }
 
-#[allow(dead_code)]
+#[derive(Clone)]
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
     path: String,
@@ -356,6 +368,14 @@ impl File {
             .read_file(&self.inode, self.position as u32, buf)?;
         self.position += read;
         Ok(read)
+    }
+
+    pub fn write(&mut self, _buf: &[u8]) -> Result<u64, FileSystemError> {
+        let written = self
+            .filesystem
+            .write_file(&self.inode, self.position as u32, _buf)?;
+        self.position += written;
+        Ok(written)
     }
 
     #[allow(dead_code)]
