@@ -160,6 +160,10 @@ impl Process {
     pub fn parent_id(&self) -> u64 {
         self.parent_id
     }
+
+    pub fn is_user_address_mapped(&self, address: u64) -> bool {
+        self.vm.is_address_mapped(address)
+    }
 }
 
 impl Drop for Process {

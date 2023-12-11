@@ -58,7 +58,6 @@ macro_rules! call_syscall {
                             $($generated)*
                             options(nomem, nostack, preserves_flags));
             $crate::syscalls::syscall_result_from_u64(result)
-            // result
         }
     };
 }
@@ -129,7 +128,7 @@ macro_rules! verify_args {
         compile_error!("Too many arguments for syscall")
     };
     // general
-    ($($args:expr),*) => {
+    ($($args:expr),* $(,)?) => {
         verify_args!($($args ,)* Ok(()))
     };
 }
@@ -149,7 +148,8 @@ pub fn syscall_arg_to_u64<T: FromSyscallArgU64>(value: u64) -> Result<T, Syscall
 pub enum SyscallArgError {
     // 0 is valid (used by Option::None)
     GeneralInvalid = 1,
-    NotValidUtf8 = 2,
+    InvalidUserPointer = 2,
+    NotValidUtf8 = 3,
 }
 
 impl SyscallArgError {
@@ -157,7 +157,8 @@ impl SyscallArgError {
         match value {
             0 => Ok(None),
             1 => Ok(Some(SyscallArgError::GeneralInvalid)),
-            2 => Ok(Some(SyscallArgError::NotValidUtf8)),
+            2 => Ok(Some(SyscallArgError::InvalidUserPointer)),
+            3 => Ok(Some(SyscallArgError::NotValidUtf8)),
             _ => Err(()),
         }
     }

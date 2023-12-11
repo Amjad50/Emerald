@@ -83,29 +83,36 @@ pub fn schedule() -> ! {
     }
 }
 
+pub fn with_current_process<F, U>(f: F) -> U
+where
+    F: FnOnce(&mut Process) -> U,
+{
+    let current_cpu = cpu::cpu();
+    let mut scheduler = SCHEDULER.lock();
+    // TODO: find a better way to store processes or store process index/id.
+    let process = scheduler
+        .processes
+        .iter_mut()
+        .find(|p| p.id == current_cpu.process_id)
+        .expect("current process not found");
+    f(process)
+}
+
 pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
     let current_cpu = cpu::cpu();
     // do not yield if we don't have context or we are in kernel
     if current_cpu.context.is_none() || all_state.frame.cs & 0x3 == 0 {
         return;
     }
-
     // save context of this process and mark is as scheduled
-    {
-        let mut scheduler = SCHEDULER.lock();
-        // TODO: find a better way to store processes or store process index/id.
-        let process = scheduler
-            .processes
-            .iter_mut()
-            .find(|p| p.id == current_cpu.process_id)
-            .expect("current process not found");
+    with_current_process(|process| {
         assert!(process.state == ProcessState::Running);
         current_cpu.push_cli();
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
         // clear context from the CPU
         process.context = current_cpu.context.take().unwrap();
         process.state = ProcessState::Scheduled;
-    }
+    });
     virtual_memory::switch_to_kernel();
     current_cpu.pop_cli();
 }

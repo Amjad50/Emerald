@@ -1,4 +1,4 @@
-use alloc::ffi;
+use core::ffi::CStr;
 
 use common::{
     sys_arg,
@@ -10,26 +10,38 @@ use common::{
 
 use crate::cpu::idt::InterruptAllSavedState;
 
+use super::scheduler::with_current_process;
+
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
 const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_open, // common::syscalls::SYS_OPEN
 ];
 
-fn convert_sys_arg_to_string(arg: *const u8) -> Result<&'static str, SyscallArgError> {
-    // Err(SyscallArgError::NotValidUtf8)
-    Ok("we are in `init` now {arg:p}")
+fn convert_sys_arg_to_string<'a>(arg: *const u8) -> Result<&'a str, SyscallArgError> {
+    if arg.is_null() {
+        println!("arg is null");
+        return Err(SyscallArgError::InvalidUserPointer);
+    }
+    if !with_current_process(|process| process.is_user_address_mapped(arg as _)) {
+        println!("arg is not mapped");
+        return Err(SyscallArgError::InvalidUserPointer);
+    }
+
+    let slice = unsafe { CStr::from_ptr(arg as _) };
+    let string = CStr::to_str(slice).map_err(|_| SyscallArgError::NotValidUtf8)?;
+    Ok(string)
 }
 
 fn sys_open(_all_state: &mut InterruptAllSavedState) -> SyscallResult {
-    let (arg1, arg2, ..) = verify_args! {
+    let (path, access_mode, flags, ..) = verify_args! {
         sys_arg!(0, _all_state.rest => convert_sys_arg_to_string(*const u8)),
-        sys_arg!(1, _all_state.rest => u64)
+        sys_arg!(1, _all_state.rest => u64),
+        sys_arg!(2, _all_state.rest => u64),
     };
-    println!("{arg1} {arg2}");
+    println!("sys_open: {path} {access_mode} {flags}");
 
-    // println!("sys_open");
-    SyscallResult::Ok(arg2 + 1)
+    SyscallResult::Ok(0)
 }
 
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {
