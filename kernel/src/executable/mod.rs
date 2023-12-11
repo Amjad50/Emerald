@@ -24,7 +24,7 @@ pub fn load_elf_to_vm(
                 size: segment.mem_size(),
                 flags,
             };
-            eprintln!("Mapping segment: {:?}", entry);
+            eprintln!("Mapping segment: {:x?}", entry);
             vm.map(&entry);
 
             // read the file into the memory

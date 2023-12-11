@@ -9,9 +9,9 @@ use common::{call_syscall, syscalls::SYS_OPEN};
 pub extern "C" fn _start() -> ! {
     // we are in `init` now
     // create some delay
+    let mut r = 1;
+    r = unsafe { call_syscall!(SYS_OPEN, 0, r).unwrap() }; // TODO: properly implement
     loop {
-        unsafe { call_syscall!(SYS_OPEN) }; // TODO: properly implement
-
         hint::spin_loop();
     }
 }

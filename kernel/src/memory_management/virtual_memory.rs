@@ -291,11 +291,12 @@ impl VirtualMemoryManager {
             assert!(*flags & flags::PTE_USER != 0);
             assert!(virtual_address < KERNEL_BASE as u64);
         }
-
+        // get the end before alignment
+        let end_virtual_address = (virtual_address - 1) + size;
         virtual_address = align_down(virtual_address as _, PAGE_4K) as _;
         start_physical_address =
             start_physical_address.map(|addr| align_down(addr as _, PAGE_4K) as _);
-        size = align_up(size as _, PAGE_4K) as _;
+        size = align_up((end_virtual_address - virtual_address) as _, PAGE_4K) as _;
 
         // keep track of current address and size
         let mut physical_address = start_physical_address;

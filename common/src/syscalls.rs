@@ -1,3 +1,5 @@
+mod types_conversions;
+
 /// must be one of user interrupts, i.e. 0x20+
 ///
 /// This is the number of the interrupts that we are going to use between the
@@ -52,28 +54,110 @@ macro_rules! call_syscall {
         {
             let result: u64;
             ::core::arch::asm!("int 0xFE",
-                            in("rax") $syscall_num,
-                            lateout("rax") result,
+                            inout("rax") $syscall_num => result,
                             $($generated)*
                             options(nomem, nostack, preserves_flags));
-            result
+            $crate::syscalls::syscall_result_from_u64(result)
+            // result
         }
     };
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum SyscallArgError {
-    Valid = 0,
-    Invalid = 1,
+/// Get the syscall arguments from the interrupt state, the arguments come from
+/// the registers RCX, RDX, RSI, RDI, R8, R9, R10
+#[macro_export]
+macro_rules! sys_arg {
+    ($num:tt, $context_struct:expr) => {
+        sys_arg!(@impl $num, $context_struct => u64)
+    };
+    ($num:tt, $context_struct:expr => $func:ident($ty:ty)) => {
+        sys_arg!($num, $context_struct => $ty).and_then($func)
+    };
+    ($num:tt, $context_struct:expr => $ty:ty) => {
+        syscall_arg_to_u64::<$ty>(sys_arg!(@impl $num, $context_struct))
+    };
+    (@impl 0, $context_struct:expr) => {
+        $context_struct.rcx
+    };
+    (@impl 1, $context_struct:expr) => {
+        $context_struct.rdx
+    };
+    (@impl 2, $context_struct:expr) => {
+        $context_struct.rsi
+    };
+    (@impl 3, $context_struct:expr) => {
+        $context_struct.rdi
+    };
+    (@impl 4, $context_struct:expr) => {
+        $context_struct.r8
+    };
+    (@impl 5, $context_struct:expr) => {
+        $context_struct.r9
+    };
+    (@impl 6, $context_struct:expr) => {
+        $context_struct.r10
+    };
+    (@impl $rest:tt, $context_struct:expr) => {
+        compile_error!("Not valid argument number")
+    };
 }
 
-impl TryFrom<u8> for SyscallArgError {
-    type Error = ();
+#[macro_export]
+macro_rules! verify_args {
+    () => {((), (), (), (), (), (), ())};
+    ($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr, $arg7:expr) => {
+        match ($arg1, $arg2, $arg3, $arg4, $arg5, $arg6, $arg7) {
+            (
+                Ok(a),
+                Ok(b),
+                Ok(c),
+                Ok(d),
+                Ok(e),
+                Ok(f),
+                Ok(g),
+            ) => {(a, b, c, d, e, f, g)}
+            err => {
+                return $crate::syscalls::SyscallResult::Err(
+                    $crate::syscalls::SyscallError::InvalidArgument(
+                        err.0.err(), err.1.err(), err.2.err(), err.3.err(), err.4.err(), err.5.err(), err.6.err(),
+                    ),
+                )
+            }
+        }
+    };
+    ($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr, $arg7:expr, $extra:expr) => {
+        compile_error!("Too many arguments for syscall")
+    };
+    // general
+    ($($args:expr),*) => {
+        verify_args!($($args ,)* Ok(()))
+    };
+}
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+pub trait FromSyscallArgU64 {
+    fn from_syscall_arg_u64(value: u64) -> Result<Self, SyscallArgError>
+    where
+        Self: Sized;
+}
+
+pub fn syscall_arg_to_u64<T: FromSyscallArgU64>(value: u64) -> Result<T, SyscallArgError> {
+    T::from_syscall_arg_u64(value)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SyscallArgError {
+    // 0 is valid (used by Option::None)
+    GeneralInvalid = 1,
+    NotValidUtf8 = 2,
+}
+
+impl SyscallArgError {
+    fn try_from(value: u8) -> Result<Option<Self>, ()> {
         match value {
-            0 => Ok(SyscallArgError::Valid),
-            1 => Ok(SyscallArgError::Invalid),
+            0 => Ok(None),
+            1 => Ok(Some(SyscallArgError::GeneralInvalid)),
+            2 => Ok(Some(SyscallArgError::NotValidUtf8)),
             _ => Err(()),
         }
     }
@@ -85,13 +169,13 @@ pub enum SyscallError {
     SyscallNotFound,
     InvalidErrorCode(u64),
     InvalidArgument(
-        SyscallArgError,
-        SyscallArgError,
-        SyscallArgError,
-        SyscallArgError,
-        SyscallArgError,
-        SyscallArgError,
-        SyscallArgError,
+        Option<SyscallArgError>,
+        Option<SyscallArgError>,
+        Option<SyscallArgError>,
+        Option<SyscallArgError>,
+        Option<SyscallArgError>,
+        Option<SyscallArgError>,
+        Option<SyscallArgError>,
     ),
 }
 
@@ -111,22 +195,22 @@ impl From<SyscallError> for SyscallResult {
 ///
 /// This function will always set the msb to 1
 fn create_syscall_error(
-    arg1: SyscallArgError,
-    arg2: SyscallArgError,
-    arg3: SyscallArgError,
-    arg4: SyscallArgError,
-    arg5: SyscallArgError,
-    arg6: SyscallArgError,
-    arg7: SyscallArgError,
+    arg1: Option<SyscallArgError>,
+    arg2: Option<SyscallArgError>,
+    arg3: Option<SyscallArgError>,
+    arg4: Option<SyscallArgError>,
+    arg5: Option<SyscallArgError>,
+    arg6: Option<SyscallArgError>,
+    arg7: Option<SyscallArgError>,
 ) -> u64 {
     let mut error = 0u64;
-    error |= arg1 as u64;
-    error |= (arg2 as u64) << 8;
-    error |= (arg3 as u64) << 16;
-    error |= (arg4 as u64) << 24;
-    error |= (arg5 as u64) << 32;
-    error |= (arg6 as u64) << 40;
-    error |= (arg7 as u64) << 48;
+    error |= arg1.map(|e| e as u64).unwrap_or(0);
+    error |= arg2.map(|e| e as u64).unwrap_or(0) << 8;
+    error |= arg3.map(|e| e as u64).unwrap_or(0) << 16;
+    error |= arg4.map(|e| e as u64).unwrap_or(0) << 24;
+    error |= arg5.map(|e| e as u64).unwrap_or(0) << 32;
+    error |= arg6.map(|e| e as u64).unwrap_or(0) << 40;
+    error |= arg7.map(|e| e as u64).unwrap_or(0) << 48;
     error |= 1 << 63;
     error
 }
