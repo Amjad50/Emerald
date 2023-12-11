@@ -174,7 +174,7 @@ impl INode {
 
 pub trait FileSystem: Send + Sync {
     // TODO: don't use Vector please, use an iterator somehow
-    fn open_dir<'a>(&'a self, path: &str) -> Result<Vec<INode>, FileSystemError>;
+    fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError>;
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
     fn read_file(
         &self,

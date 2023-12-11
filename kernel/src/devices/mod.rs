@@ -29,7 +29,7 @@ pub trait Device: Sync + Send + fmt::Debug {
 }
 
 impl FileSystem for Mutex<Devices> {
-    fn open_dir<'a>(&'a self, path: &str) -> Result<Vec<INode>, FileSystemError> {
+    fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError> {
         if path == "/" {
             Ok(self
                 .lock()

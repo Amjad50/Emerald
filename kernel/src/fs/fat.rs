@@ -812,11 +812,11 @@ impl FileSystem for Mutex<FatFilesystem> {
         self.lock().read_file(inode, position, buf)
     }
 
-    fn open_dir<'a>(&'a self, path: &str) -> Result<Vec<INode>, FileSystemError> {
+    fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError> {
         Ok(self.lock().open_dir(path)?.collect())
     }
 
-    fn read_dir<'a>(&'a self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+    fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
         Ok(self.lock().open_dir_inode(inode)?.collect())
     }
 }

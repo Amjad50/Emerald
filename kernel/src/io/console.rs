@@ -86,7 +86,7 @@ impl Console {
                 // SAFETY: we are relying on the caller calling this function alone
                 //  since we are taking ownership of the early console, and we are sure that
                 //  its not being used anywhere, this is fine
-                let late_console = LateConsole::migrate_from_early(&*console.lock().borrow());
+                let late_console = LateConsole::migrate_from_early(&console.lock().borrow());
                 *self = Self::Late(Arc::new(ReMutex::new(RefCell::new(late_console))));
             }
             Self::Late(_) => {

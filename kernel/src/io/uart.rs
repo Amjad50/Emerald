@@ -136,6 +136,7 @@ impl Uart {
         Some(read_reg(self.port_addr, UartReg::Data))
     }
 
+    #[allow(dead_code)]
     pub fn interrupt_num(&self) -> u8 {
         match self.port_addr {
             UartPort::COM1 => 4,
