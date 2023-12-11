@@ -1,0 +1,183 @@
+/// must be one of user interrupts, i.e. 0x20+
+///
+/// This is the number of the interrupts that we are going to use between the
+/// user-kernel
+pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
+
+pub const NUM_SYSCALLS: usize = 1;
+
+mod numbers {
+    pub const SYS_OPEN: u64 = 0;
+}
+pub use numbers::*;
+
+/// Creates a syscall, the first argument is the syscall number (in RAX), then the arguments are as follows
+/// RCX, RDX, RSI, RDI, R8, R9, R10 (7 arguments max)
+#[macro_export]
+macro_rules! call_syscall {
+    ($syscall_num:expr) => {
+        call_syscall!(@step $syscall_num; { }; { })
+    };
+    ($syscall_num:expr, $($args:expr),*) => {
+        call_syscall!(@step $syscall_num; { }; {$($args),*})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {}) => {
+        call_syscall!(@final $syscall_num, {$($generated)*})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {$one:expr}) => {
+        call_syscall!(@step $syscall_num; {in("rcx") $one, $($generated)*}; {})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {$one:expr, $two:expr}) => {
+        call_syscall!(@step $syscall_num; {in("rdx") $two, $($generated)*}; {$one})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {$one:expr, $two:expr, $three:expr}) => {
+        call_syscall!(@step $syscall_num; {in("rsi") $three, $($generated)*}; {$one, $two})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {$one:expr, $two:expr, $three:expr, $four:expr}) => {
+        call_syscall!(@step $syscall_num; {in("rdi") $four, $($generated)*}; {$one, $two, $three})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {$one:expr, $two:expr, $three:expr, $four:expr, $five:expr}) => {
+        call_syscall!(@step $syscall_num; {in("r8") $five, $($generated)*}; {$one, $two, $three, $four})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {$one:expr, $two:expr, $three:expr, $four:expr, $five:expr, $six:expr}) => {
+        call_syscall!(@step $syscall_num; {in("r9") $six, $($generated)*}; {$one, $two, $three, $four, $five})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {$one:expr, $two:expr, $three:expr, $four:expr, $five:expr, $six:expr, $seven:expr}) => {
+        call_syscall!(@step $syscall_num; {in("r10") $seven, $($generated)*}; {$one, $two, $three, $four, $five, $six})
+    };
+    (@step $syscall_num: expr; {$($generated:tt)*}; {$($args:expr),*}) => {
+        compile_error!("Too many arguments for syscall")
+    };
+    (@final $syscall_num: expr, {$($generated:tt)*}) => {
+        {
+            let result: u64;
+            ::core::arch::asm!("int 0xFE",
+                            in("rax") $syscall_num,
+                            lateout("rax") result,
+                            $($generated)*
+                            options(nomem, nostack, preserves_flags));
+            result
+        }
+    };
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SyscallArgError {
+    Valid = 0,
+    Invalid = 1,
+}
+
+impl TryFrom<u8> for SyscallArgError {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(SyscallArgError::Valid),
+            1 => Ok(SyscallArgError::Invalid),
+            _ => Err(()),
+        }
+    }
+}
+
+#[repr(align(8))]
+#[derive(Debug, Clone, Copy)]
+pub enum SyscallError {
+    SyscallNotFound,
+    InvalidErrorCode(u64),
+    InvalidArgument(
+        SyscallArgError,
+        SyscallArgError,
+        SyscallArgError,
+        SyscallArgError,
+        SyscallArgError,
+        SyscallArgError,
+        SyscallArgError,
+    ),
+}
+
+pub type SyscallResult = Result<u64, SyscallError>;
+
+impl From<SyscallError> for SyscallResult {
+    fn from(error: SyscallError) -> Self {
+        SyscallResult::Err(error)
+    }
+}
+
+/// Creates an error u64 value for syscall, each byte controls the error for that
+/// argument, if the byte is 0, then the argument is valid, otherwise it is
+/// invalid. and it represent the error code
+/// the error value contains up to 7 arguments errors, the most significant bit
+/// indicate a negative number.
+///
+/// This function will always set the msb to 1
+fn create_syscall_error(
+    arg1: SyscallArgError,
+    arg2: SyscallArgError,
+    arg3: SyscallArgError,
+    arg4: SyscallArgError,
+    arg5: SyscallArgError,
+    arg6: SyscallArgError,
+    arg7: SyscallArgError,
+) -> u64 {
+    let mut error = 0u64;
+    error |= arg1 as u64;
+    error |= (arg2 as u64) << 8;
+    error |= (arg3 as u64) << 16;
+    error |= (arg4 as u64) << 24;
+    error |= (arg5 as u64) << 32;
+    error |= (arg6 as u64) << 40;
+    error |= (arg7 as u64) << 48;
+    error |= 1 << 63;
+    error
+}
+
+#[inline(always)]
+pub fn syscall_handler_wrapper<F>(syscall_number: u64, f: F) -> u64
+where
+    F: FnOnce() -> SyscallResult,
+{
+    if syscall_number >= NUM_SYSCALLS as u64 {
+        return syscall_result_to_u64(SyscallResult::Err(SyscallError::SyscallNotFound));
+    }
+    let result = f();
+    syscall_result_to_u64(result)
+}
+
+pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
+    match result {
+        SyscallResult::Ok(value) => value,
+        SyscallResult::Err(error) => match error {
+            SyscallError::SyscallNotFound => -1i64 as u64,
+            SyscallError::InvalidErrorCode(code) => code,
+            SyscallError::InvalidArgument(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
+                create_syscall_error(arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+            }
+        },
+    }
+}
+
+pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
+    if value & (1 << 63) == 0 {
+        SyscallResult::Ok(value)
+    } else {
+        let invalid_error_code = |_| -> SyscallError { SyscallError::InvalidErrorCode(value) };
+
+        let arg1 = SyscallArgError::try_from((value & 0xFF) as u8).map_err(invalid_error_code)?;
+        let arg2 =
+            SyscallArgError::try_from(((value >> 8) & 0xFF) as u8).map_err(invalid_error_code)?;
+        let arg3 =
+            SyscallArgError::try_from(((value >> 16) & 0xFF) as u8).map_err(invalid_error_code)?;
+        let arg4 =
+            SyscallArgError::try_from(((value >> 24) & 0xFF) as u8).map_err(invalid_error_code)?;
+        let arg5 =
+            SyscallArgError::try_from(((value >> 32) & 0xFF) as u8).map_err(invalid_error_code)?;
+        let arg6 =
+            SyscallArgError::try_from(((value >> 40) & 0xFF) as u8).map_err(invalid_error_code)?;
+        let arg7 =
+            SyscallArgError::try_from(((value >> 48) & 0xFF) as u8).map_err(invalid_error_code)?;
+
+        SyscallResult::Err(SyscallError::InvalidArgument(
+            arg1, arg2, arg3, arg4, arg5, arg6, arg7,
+        ))
+    }
+}

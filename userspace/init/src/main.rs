@@ -3,12 +3,15 @@
 
 use core::hint;
 
+use common::{call_syscall, syscalls::SYS_OPEN};
+
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     // we are in `init` now
     // create some delay
     loop {
-        unsafe { core::arch::asm!("mov eax, 0; int 0xFE") };
+        unsafe { call_syscall!(SYS_OPEN) }; // TODO: properly implement
+
         hint::spin_loop();
     }
 }

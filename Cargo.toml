@@ -2,6 +2,7 @@
 resolver = "2"
 default-members = ["kernel"]
 members = [
-    "userspace/init",
+    "common",
     "kernel",
+    "userspace/init",
 ]

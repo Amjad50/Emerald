@@ -3,9 +3,19 @@
 version = 3
 
 [[package]]
+name = "common"
+version = "0.1.0"
+
+[[package]]
 name = "init"
 version = "0.1.0"
+dependencies = [
+ "common",
+]
 
 [[package]]
 name = "kernel"
 version = "0.1.0"
+dependencies = [
+ "common",
+]
