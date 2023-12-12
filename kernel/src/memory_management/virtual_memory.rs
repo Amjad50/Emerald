@@ -9,8 +9,7 @@ use crate::{
         memory_layout::{
             align_down, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
             virtual2physical, MemSize, DEVICE_BASE_PHYSICAL, DEVICE_BASE_VIRTUAL,
-            DEVICE_PHYSICAL_END, EXTENDED_BIOS_BASE_PHYSICAL, EXTENDED_BIOS_BASE_VIRTUAL,
-            EXTENDED_BIOS_SIZE, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, KERNEL_MAPPED_SIZE,
+            DEVICE_PHYSICAL_END, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, KERNEL_MAPPED_SIZE,
             PAGE_2M, PAGE_4K,
         },
         physical_page_allocator,
@@ -125,21 +124,7 @@ pub fn init_kernel_vm() {
     manager.switch_to_this();
 
     // map the BIOS memory
-    map_bios_memory(&mut manager);
     map_device_memory(&mut manager);
-}
-
-fn map_bios_memory(manager: &mut VirtualMemoryManager) {
-    assert!(unsafe { EXTENDED_BIOS_BASE_PHYSICAL } > 0 && unsafe { EXTENDED_BIOS_SIZE } > 0);
-    // the space immediately after the ram is reserved for the BIOS
-    let map_entry = VirtualMemoryMapEntry {
-        virtual_address: EXTENDED_BIOS_BASE_VIRTUAL as u64,
-        physical_address: Some(unsafe { EXTENDED_BIOS_BASE_PHYSICAL } as u64),
-        size: unsafe { EXTENDED_BIOS_SIZE } as u64,
-        flags: 0,
-    };
-
-    manager.map(&map_entry);
 }
 
 fn map_device_memory(manager: &mut VirtualMemoryManager) {

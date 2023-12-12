@@ -1,12 +1,13 @@
-use core::fmt;
+use core::{
+    fmt,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 extern "C" {
     static begin: usize;
     static end: usize;
     static rodata_end: usize;
 }
-
-pub const ONE_MB: usize = 1024 * 1024;
 
 // it starts at 0x10000, which is where the kernel is loaded, and grows down
 pub const KERNEL_STACK_END: usize = 0xFFFF_FFFF_8001_0000;
@@ -36,6 +37,13 @@ pub const INTR_STACK_COUNT: usize = 7;
 // we are going to setup a spacing at the end of the stack, so that we can detect stack overflows
 pub const INTR_STACK_TOTAL_SIZE: usize = INTR_STACK_ENTRY_SIZE * INTR_STACK_COUNT;
 
+// extra space that we can make virtual memory to when we don't care where we want to map it
+// this is only in kernel space, as userspace programs should be mapped into the rest of the memory range
+// that is below `KERNEL_BASE`
+pub const KERNEL_EXTRA_MEMORY_BASE: usize = INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE;
+pub const KERNEL_EXTRA_MEMORY_SIZE: usize = DEVICE_BASE_VIRTUAL - KERNEL_EXTRA_MEMORY_BASE;
+static KERNEL_EXTRA_MEMORY_USED_PAGES: AtomicUsize = AtomicUsize::new(0);
+
 // Where to map IO memory, and memory mapped devices in virtual space
 // the reason this is hear, is that these registers are at the bottom of the physica memory
 // and converting those addresses to `virtual(kernel)` addresses, will result in an overflow
@@ -48,15 +56,6 @@ pub const DEVICE_BASE_VIRTUAL: usize = 0xFFFF_FFFF_D000_0000;
 pub const DEVICE_BASE_PHYSICAL: usize = 0x0000_0000_D000_0000;
 // not inclusive, we want to map until 0xFFFF_FFFF
 pub const DEVICE_PHYSICAL_END: usize = 0x0000_0001_0000_0000;
-
-// The BIOS has some information that is located after the end of the middle chunk of the ram (~3GB)
-// the issue is that its not at the same place and depend on the ram
-// so we will map it to the same virtual space
-//
-// The bios already has some data before `EXTENDED_OFFSET`, but that is fine, since we can map it to kernel space easily.
-pub const EXTENDED_BIOS_BASE_VIRTUAL: usize = 0xFFFF_FFFF_C000_0000;
-pub static mut EXTENDED_BIOS_BASE_PHYSICAL: usize = 0;
-pub static mut EXTENDED_BIOS_SIZE: usize = 0;
 
 pub const PAGE_4K: usize = 0x1000;
 pub const PAGE_2M: usize = 0x20_0000;
@@ -74,7 +73,7 @@ pub fn kernel_elf_rodata_end() -> usize {
     (unsafe { &rodata_end } as *const usize as usize)
 }
 
-pub fn align_up(addr: usize, alignment: usize) -> usize {
+pub const fn align_up(addr: usize, alignment: usize) -> usize {
     (addr + alignment - 1) & !(alignment - 1)
 }
 
@@ -102,13 +101,29 @@ pub const fn physical2virtual_io(addr: usize) -> usize {
     addr - DEVICE_BASE_PHYSICAL + DEVICE_BASE_VIRTUAL
 }
 
-#[allow(dead_code)]
-pub fn physical2virtual_bios(addr: usize) -> usize {
-    let base_physical = unsafe { EXTENDED_BIOS_BASE_PHYSICAL };
-    if addr > base_physical {
-        addr - base_physical + EXTENDED_BIOS_BASE_VIRTUAL
-    } else {
-        addr + KERNEL_BASE
+// Gets the virtual address of free virtual memory that anyone can use
+// These pages are not returned at all
+// this just provide, a kind of dynamic nature in mapping physical
+// memory that we don't really care where they are mapped virtually
+pub unsafe fn allocate_from_extra_kernel_pages(pages: usize) -> *mut u8 {
+    let mut used_pages = KERNEL_EXTRA_MEMORY_USED_PAGES.load(Ordering::Relaxed);
+    loop {
+        let new_used_pages = used_pages + pages;
+        assert!(
+            new_used_pages <= KERNEL_EXTRA_MEMORY_SIZE / PAGE_4K,
+            "out of extra kernel virtual memory"
+        );
+        match KERNEL_EXTRA_MEMORY_USED_PAGES.compare_exchange_weak(
+            used_pages,
+            new_used_pages,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => {
+                return (KERNEL_EXTRA_MEMORY_BASE + used_pages * PAGE_4K) as _;
+            }
+            Err(x) => used_pages = x,
+        }
     }
 }
 
