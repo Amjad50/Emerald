@@ -34,7 +34,8 @@ fn physical_to_bios_memory(addr: usize) -> usize {
 }
 
 // number of pages to map around the `prope/start` address
-const BIOS_MEMORY_MAPPED_PAGES_AROUND: usize = 4;
+// TODO: replace by mapping whole memory segments (normally are not large)
+const BIOS_MEMORY_MAPPED_PAGES_AROUND: usize = 10;
 
 #[derive(Debug)]
 struct BiosMemoryMapper {
@@ -90,12 +91,11 @@ impl BiosMemoryMapper {
 
 // Note: this requires allocation, so it should be called after the heap is initialized
 pub fn get_bios_tables() -> Result<BiosTables, ()> {
-    let mut tables = BiosTables::empty();
-
     // look for RSDP PTR
     let mut rsdp_ptr = physical_to_bios_memory(BIOS_RO_MEM_START) as *const u8;
     let end = physical_to_bios_memory(BIOS_RO_MEM_END) as *const u8;
 
+    let mut rsdp = None;
     while rsdp_ptr < end {
         let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
         if str == b"RSD PTR " {
@@ -106,35 +106,38 @@ pub fn get_bios_tables() -> Result<BiosTables, ()> {
                     .fold(0u8, |acc, &x| acc.wrapping_add(x))
             };
             if sum == 0 {
-                let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV0) };
-                if rsdp_ref.revision >= 2 {
-                    tables.rsdp.fill_from_v2(rsdp_ref);
+                let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
+                if rsdp_ref.rsdp_v1.revision >= 2 {
+                    rsdp = Some(Rsdp::from_v2(rsdp_ref));
                 } else {
-                    tables.rsdp.fill_from_v0(rsdp_ref);
+                    rsdp = Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1));
                 }
                 break;
             }
         }
         rsdp_ptr = unsafe { rsdp_ptr.add(1) };
     }
-    if rsdp_ptr == end {
+    if let Some(rsdp) = rsdp {
+        Ok(BiosTables::new(rsdp))
+    } else {
         // TODO: report error, no RSDP found
-        return Err(());
+        Err(())
     }
-
-    tables.rsdt = tables.rsdp.rdst();
-
-    Ok(tables)
 }
 
-// used to copy
 #[repr(C, packed)]
-struct RsdpV0 {
+pub struct RsdpV1 {
     signature: [u8; 8],
     checksum: u8,
     oem_id: [u8; 6],
     revision: u8,
     rsdt_address: u32,
+}
+
+// used to copy
+#[repr(C, packed)]
+pub struct RsdpV2 {
+    rsdp_v1: RsdpV1,
     // these are only v2, but its here to make copying easier
     length: u32,
     xsdt_address: u64,
@@ -158,13 +161,13 @@ pub struct Rsdp {
 }
 
 impl Rsdp {
-    pub const fn empty() -> Self {
+    pub fn from_v1(v0: &RsdpV1) -> Self {
         Self {
-            signature: [0; 8],
-            checksum: 0,
-            oem_id: [0; 6],
-            revision: 0,
-            rsdt_address: 0,
+            signature: v0.signature,
+            checksum: v0.checksum,
+            oem_id: v0.oem_id,
+            revision: v0.revision,
+            rsdt_address: v0.rsdt_address,
             length: 0,
             xsdt_address: 0,
             extended_checksum: 0,
@@ -172,17 +175,18 @@ impl Rsdp {
         }
     }
 
-    fn fill_from_v0(&mut self, v0: &RsdpV0) {
-        self.signature = v0.signature;
-        self.checksum = v0.checksum;
-        self.oem_id = v0.oem_id;
-        self.revision = v0.revision;
-        self.rsdt_address = v0.rsdt_address;
-    }
-
-    fn fill_from_v2(&mut self, v2: &RsdpV0) {
-        assert!(size_of::<Rsdp>() == size_of::<RsdpV0>());
-        *self = unsafe { core::mem::transmute_copy(v2) }
+    pub fn from_v2(v2: &RsdpV2) -> Self {
+        Self {
+            signature: v2.rsdp_v1.signature,
+            checksum: v2.rsdp_v1.checksum,
+            oem_id: v2.rsdp_v1.oem_id,
+            revision: v2.rsdp_v1.revision,
+            rsdt_address: v2.rsdp_v1.rsdt_address,
+            length: v2.length,
+            xsdt_address: v2.xsdt_address,
+            extended_checksum: v2.extended_checksum,
+            reserved: v2.reserved,
+        }
     }
 
     // allocates a new RDST
@@ -214,15 +218,6 @@ pub struct Rsdt {
     pub entries: Vec<DescriptorTable>,
 }
 
-impl Rsdt {
-    pub const fn empty() -> Self {
-        Self {
-            header: DescriptionHeader::empty(),
-            entries: Vec::new(),
-        }
-    }
-}
-
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct DescriptionHeader {
@@ -235,22 +230,6 @@ pub struct DescriptionHeader {
     pub oem_revision: u32,
     pub creator_id: u32,
     pub creator_revision: u32,
-}
-
-impl DescriptionHeader {
-    const fn empty() -> Self {
-        Self {
-            signature: [0; 4],
-            length: 0,
-            revision: 0,
-            checksum: 0,
-            oem_id: [0; 6],
-            oem_table_id: [0; 8],
-            oem_revision: 0,
-            creator_id: 0,
-            creator_revision: 0,
-        }
-    }
 }
 
 #[allow(dead_code)]
@@ -267,7 +246,15 @@ impl DescriptorTable {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
             b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
             b"HPET" => DescriptorTableBody::Hpet(Box::new(Hpet::from_header(header))),
-            _ => DescriptorTableBody::Unknown,
+            _ => DescriptorTableBody::Unknown(
+                unsafe {
+                    slice::from_raw_parts(
+                        header as *const DescriptionHeader as *const u8,
+                        header.length as usize,
+                    )
+                }
+                .to_vec(),
+            ),
         };
         Self {
             header: *header,
@@ -281,7 +268,7 @@ pub enum DescriptorTableBody {
     Apic(Box<Apic>),
     Facp(Box<Facp>),
     Hpet(Box<Hpet>),
-    Unknown,
+    Unknown(Vec<u8>),
 }
 
 #[derive(Debug, Clone)]
@@ -551,10 +538,10 @@ pub struct BiosTables {
 }
 
 impl BiosTables {
-    pub const fn empty() -> Self {
+    pub fn new(rsdp: Rsdp) -> Self {
         Self {
-            rsdp: Rsdp::empty(),
-            rsdt: Rsdt::empty(),
+            rsdt: rsdp.rdst(),
+            rsdp,
         }
     }
 }
