@@ -137,8 +137,6 @@ pub fn swap_context(context: &mut ProcessContext, all_state: &mut InterruptAllSa
     mem::swap(&mut all_state.rest.dr1, &mut context.dr1);
     mem::swap(&mut all_state.rest.dr2, &mut context.dr2);
     mem::swap(&mut all_state.rest.dr3, &mut context.dr3);
-    mem::swap(&mut all_state.rest.dr4, &mut context.dr4);
-    mem::swap(&mut all_state.rest.dr5, &mut context.dr5);
     mem::swap(&mut all_state.rest.dr6, &mut context.dr6);
     mem::swap(&mut all_state.rest.dr7, &mut context.dr7);
     mem::swap(&mut all_state.rest.rax, &mut context.rax);
