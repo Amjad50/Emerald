@@ -21,7 +21,7 @@ mod executable;
 mod fs;
 mod io;
 mod memory_management;
-mod multiboot;
+mod multiboot2;
 pub mod process;
 mod sync;
 
@@ -35,7 +35,7 @@ use cpu::{
 use executable::elf::Elf;
 use io::console;
 use memory_management::virtual_memory;
-use multiboot::MultiBootInfoRaw;
+use multiboot2::MultiBoot2Info;
 use process::scheduler;
 
 use crate::{
@@ -96,7 +96,7 @@ fn load_init_process() {
 
 #[link_section = ".text"]
 #[no_mangle]
-pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
+pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // init console first, so if we panicked, we can still see the output
     console::early_init();
     println!("{}", multiboot_info);
@@ -109,8 +109,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBootInfoRaw) -> ! {
     interrupts::init_interrupts();
     // mount
     devices::init_devices_mapping();
-    // TODO: handle for UEFI
-    let bios_tables = bios::tables::get_bios_tables().expect("BIOS tables not found");
+    let bios_tables = bios::tables::get_bios_tables(multiboot_info).expect("BIOS tables not found");
     apic::init(&bios_tables);
     clock::init(&bios_tables);
     console::init_late_device();

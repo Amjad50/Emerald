@@ -10,6 +10,7 @@ use crate::{
         },
         virtual_memory::{self, VirtualMemoryMapEntry},
     },
+    multiboot2::MultiBoot2Info,
     sync::once::OnceLock,
 };
 
@@ -90,39 +91,40 @@ impl BiosMemoryMapper {
 }
 
 // Note: this requires allocation, so it should be called after the heap is initialized
-pub fn get_bios_tables() -> Result<BiosTables, ()> {
-    // look for RSDP PTR
-    let mut rsdp_ptr = physical_to_bios_memory(BIOS_RO_MEM_START) as *const u8;
-    let end = physical_to_bios_memory(BIOS_RO_MEM_END) as *const u8;
+pub fn get_bios_tables(multiboot_info: &MultiBoot2Info) -> Result<BiosTables, ()> {
+    let rdsp = multiboot_info
+        .get_most_recent_rsdp()
+        .or_else(|| {
+            // look for RSDP PTR
+            let mut rsdp_ptr = physical_to_bios_memory(BIOS_RO_MEM_START) as *const u8;
+            let end = physical_to_bios_memory(BIOS_RO_MEM_END) as *const u8;
 
-    let mut rsdp = None;
-    while rsdp_ptr < end {
-        let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
-        if str == b"RSD PTR " {
-            // calculate checksum
-            let sum = unsafe {
-                slice::from_raw_parts(rsdp_ptr, 20)
-                    .iter()
-                    .fold(0u8, |acc, &x| acc.wrapping_add(x))
-            };
-            if sum == 0 {
-                let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
-                if rsdp_ref.rsdp_v1.revision >= 2 {
-                    rsdp = Some(Rsdp::from_v2(rsdp_ref));
-                } else {
-                    rsdp = Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1));
+            while rsdp_ptr < end {
+                let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
+                if str == b"RSD PTR " {
+                    // calculate checksum
+                    let sum = unsafe {
+                        slice::from_raw_parts(rsdp_ptr, 20)
+                            .iter()
+                            .fold(0u8, |acc, &x| acc.wrapping_add(x))
+                    };
+                    if sum == 0 {
+                        let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
+                        if rsdp_ref.rsdp_v1.revision >= 2 {
+                            return Some(Rsdp::from_v2(rsdp_ref));
+                        } else {
+                            return Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1));
+                        }
+                    }
                 }
-                break;
+                rsdp_ptr = unsafe { rsdp_ptr.add(1) };
             }
-        }
-        rsdp_ptr = unsafe { rsdp_ptr.add(1) };
-    }
-    if let Some(rsdp) = rsdp {
-        Ok(BiosTables::new(rsdp))
-    } else {
-        // TODO: report error, no RSDP found
-        Err(())
-    }
+
+            None
+        })
+        .ok_or(())?;
+
+    Ok(BiosTables::new(rdsp))
 }
 
 #[repr(C, packed)]

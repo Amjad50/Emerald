@@ -57,31 +57,57 @@ EFER_LME = 1 << 8
 
 # Start here
 .code32
-.section .multiboot_header
-mb_magic = 0x1BADB002
-mb_flags = MULTIBOOT_FLAG_VIDEO_INFO | MULTIBOOT_FLAG_CUSTOM_LOAD_INFO | MULTIBOOT_FLAG_MEM_INFO | MULTIBOOT_FLAG_ALIGN_4K
-mb_checksum = -mb_magic-mb_flags
-
+.section .multiboot2_header
+mb_magic = 0xE85250D6   # multiboot2 magic number
+mb_arch = 0x00000000    # x86
 # header
-.long mb_magic
-.long mb_flags
-.long mb_checksum
-# load address
-.long multiboot_load_addr
-.long multiboot_load_addr
-.long multiboot_load_end
-.long multiboot_bss_end
-.long multiboot_entry_addr
-# video info
-.long MULTIBOOT_VIDEO_MODE_TEXT # mode type
-.long 1024                      # width
-.long 768                       # height
-.long 32                        # depth
+mb2_header_start:
+    .long mb_magic
+    .long mb_arch
+    .long mb2_header_end - mb2_header_start # header length
+    .long -mb_magic-mb_arch-(mb2_header_end-mb2_header_start) # checksum
+    # tags
+    .align 8
+    mb2_information_request_start:
+        .short 1 # type (information request)
+        .short 0 # flags
+        .long mb2_information_request_end - mb2_information_request_start # size
+    mb2_information_request_end:
+    .align 8
+    mb2_address_tag_start:
+        .short 2 # type (address)
+        .short 0 # flags
+        .long mb2_address_tag_end - mb2_address_tag_start # size
+        .long multiboot_load_addr
+        .long multiboot_load_addr
+        .long multiboot_load_end
+        .long multiboot_bss_end
+    mb2_address_tag_end:
+    .align 8
+    mb2_entry_address_tag_start:
+        .short 3 # type (entry address)
+        .short 0 # flags
+        .long mb2_entry_address_tag_end - mb2_entry_address_tag_start # size
+        .long multiboot_entry_addr
+    mb2_entry_address_tag_end:
+    .align 8
+    mb2_module_align_tag_start:
+        .short 6 # type (module align)
+        .short 0 # flags
+        .long mb2_module_align_tag_end - mb2_module_align_tag_start # size
+    mb2_module_align_tag_end:
+    .align 8
+    mb2_end_tag_start:
+        .short 0 # type (end)
+        .short 0 # flags
+        .long mb2_end_tag_end - mb2_end_tag_start # size
+    mb2_end_tag_end:
+mb2_header_end:
 
 .section .text
 .global entry
 entry:
-    cmp eax, 0x2BADB002
+    cmp eax, 0x36d76289
     jne error_halt
 
 # load the kernel

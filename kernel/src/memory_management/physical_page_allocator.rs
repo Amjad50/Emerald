@@ -4,7 +4,7 @@ use crate::{
         kernel_elf_end, physical2virtual, virtual2physical, EXTENDED_OFFSET, KERNEL_END,
         KERNEL_LINK,
     },
-    multiboot::{MemoryMapType, MultiBootInfoRaw},
+    multiboot2::{MemoryMapType, MultiBoot2Info},
     sync::spin::mutex::Mutex,
 };
 
@@ -14,7 +14,7 @@ struct FreePage {
 
 static mut ALLOCATOR: Mutex<PhysicalPageAllocator> = Mutex::new(PhysicalPageAllocator::empty());
 
-pub fn init(multiboot_info: &MultiBootInfoRaw) {
+pub fn init(multiboot_info: &MultiBoot2Info) {
     unsafe {
         ALLOCATOR.lock().init(multiboot_info);
     }
@@ -77,7 +77,7 @@ impl PhysicalPageAllocator {
         }
     }
 
-    fn init(&mut self, multiboot_info: &MultiBootInfoRaw) {
+    fn init(&mut self, multiboot_info: &MultiBoot2Info) {
         const PHYSICAL_KERNEL_START: usize = virtual2physical(KERNEL_LINK);
         let physical_kernel_end: usize = virtual2physical(align_up(kernel_elf_end(), PAGE_4K));
 

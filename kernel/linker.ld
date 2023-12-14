@@ -11,7 +11,7 @@ SECTIONS {
 
     .text : AT(load_addr) ALIGN(4K)
     {
-        KEEP(*(.multiboot_header))
+        KEEP(*(.multiboot2_header))
         *(.text .text.*)
     } : kernel_rx
 
