@@ -18,7 +18,6 @@ use super::{
 
 const CPUID_FEAT_EDX_APIC: u32 = 1 << 9;
 
-const APIC_BAR_MSR: u32 = 0x1B;
 const APIC_BAR_ENABLED: u64 = 1 << 11;
 const APIC_BASE_MASK: u64 = 0xFFFF_FFFF_FFFF_F000;
 const DEFAULT_APIC_BASE: usize = 0xFEE0_0000;
@@ -353,14 +352,14 @@ impl Apic {
         if cpuid.edx & CPUID_FEAT_EDX_APIC == 0 {
             panic!("APIC is not supported");
         }
-        let apic_bar = unsafe { cpu::rdmsr(APIC_BAR_MSR) };
+        let apic_bar = unsafe { cpu::msr::read(cpu::msr::APIC_BASE) };
         if apic_bar & APIC_BAR_ENABLED == 0 {
             // enable APIC
             unsafe {
-                cpu::wrmsr(APIC_BAR_MSR, apic_bar | APIC_BAR_ENABLED);
+                cpu::msr::write(cpu::msr::APIC_BASE, apic_bar | APIC_BAR_ENABLED);
             }
             // recheck
-            let apic_bar = unsafe { cpu::rdmsr(APIC_BAR_MSR) };
+            let apic_bar = unsafe { cpu::msr::read(cpu::msr::APIC_BASE) };
             if apic_bar & APIC_BAR_ENABLED == 0 {
                 panic!("APIC is not enabled");
             }

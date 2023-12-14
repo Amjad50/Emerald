@@ -16,6 +16,24 @@ pub mod flags {
     pub const IF: u64 = 1 << 9;
 }
 
+#[allow(dead_code)]
+pub mod msr {
+    pub const APIC_BASE: u32 = 0x1b;
+    pub const EFER: u32 = 0xc0000080;
+
+    pub unsafe fn read(reg: u32) -> u64 {
+        let (eax, edx): (u32, u32);
+        core::arch::asm!("rdmsr", in("ecx") reg, out("eax") eax, out("edx") edx, options(readonly, nostack, preserves_flags));
+        ((edx as u64) << 32) | (eax as u64)
+    }
+
+    pub unsafe fn write(reg: u32, val: u64) {
+        let eax = val as u32;
+        let edx = (val >> 32) as u32;
+        core::arch::asm!("wrmsr", in("ecx") reg, in("eax") eax, in("edx") edx, options(readonly, nostack, preserves_flags));
+    }
+}
+
 static mut CPUS: [Cpu; MAX_CPUS] = [Cpu::empty(); MAX_CPUS];
 
 #[derive(Debug, Clone, Copy)]
@@ -178,6 +196,18 @@ pub unsafe fn set_interrupts() {
     core::arch::asm!("sti", options(nomem, nostack, preserves_flags));
 }
 
+#[allow(dead_code)]
+pub unsafe fn get_cr0() -> u64 {
+    let cr0: u64;
+    core::arch::asm!("mov {0:r}, cr0", out(reg) cr0, options(readonly, nostack, preserves_flags));
+    cr0
+}
+
+#[allow(dead_code)]
+pub unsafe fn set_cr0(cr0: u64) {
+    core::arch::asm!("mov cr0, rax", in("rax") cr0, options(nomem, nostack, preserves_flags));
+}
+
 pub unsafe fn set_cr3(cr3: u64) {
     core::arch::asm!("mov cr3, rax", in("rax") cr3, options(nomem, nostack, preserves_flags));
 }
@@ -186,6 +216,18 @@ pub unsafe fn get_cr3() -> u64 {
     let cr3: u64;
     core::arch::asm!("mov {0:r}, cr3", out(reg) cr3, options(readonly, nostack, preserves_flags));
     cr3
+}
+
+#[allow(dead_code)]
+pub unsafe fn get_cr4() -> u64 {
+    let cr4: u64;
+    core::arch::asm!("mov {0:r}, cr4", out(reg) cr4, options(readonly, nostack, preserves_flags));
+    cr4
+}
+
+#[allow(dead_code)]
+pub unsafe fn set_cr4(cr4: u64) {
+    core::arch::asm!("mov cr4, rax", in("rax") cr4, options(nomem, nostack, preserves_flags));
 }
 
 /// SAFETY: the data pointed to by `gdtr` must be static and never change
@@ -231,18 +273,6 @@ fn get_cs() -> u16 {
         core::arch::asm!("mov {0:r}, cs", out(reg) cs, options(readonly, nostack, preserves_flags));
     }
     cs
-}
-
-pub unsafe fn rdmsr(inp: u32) -> u64 {
-    let (eax, edx): (u32, u32);
-    core::arch::asm!("rdmsr", in("ecx") inp, out("eax") eax, out("edx") edx, options(readonly, nostack, preserves_flags));
-    ((edx as u64) << 32) | (eax as u64)
-}
-
-pub unsafe fn wrmsr(inp: u32, val: u64) {
-    let eax = val as u32;
-    let edx = (val >> 32) as u32;
-    core::arch::asm!("wrmsr", in("ecx") inp, in("eax") eax, in("edx") edx, options(readonly, nostack, preserves_flags));
 }
 
 pub unsafe fn halt() {
