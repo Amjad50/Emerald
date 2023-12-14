@@ -25,6 +25,7 @@ MULTIBOOT_VIDEO_MODE_TEXT = 1
 
 PHY_PAGE_SIZE_4K = 0x1000
 PHY_PAGE_SIZE_2M = 0x200000
+PAGE_TABLE_ALLOC_PAGES = 4  # only need 4
 
 # Page tables flags
 PGE_PRESENT   = 1 << 0
@@ -101,33 +102,40 @@ entry:
 #
 # IMPORTANT: This is only for setup, we will change the page tables in the kernel
 
-# zero out 8 pages of memory
-    xor eax, eax
-    mov edi, 0x1000
-    mov ecx, 8 * PHY_PAGE_SIZE_4K / 4  # 4 bytes per dword
-    rep stosd
+# PML4 (edi=boot_page_tables[0])
+# PML4[0] ->   PDPT-A (esi=boot_page_tables[1])
+    virtual_to_physical_mov edi, boot_page_tables
+    lea esi, [edi + PHY_PAGE_SIZE_4K]
+    or esi, PGE_PRESENT | PGE_WRITE
+    mov eax, esi
+    mov [edi], eax
+# PML4[511] -> PDPT-B (esi=boot_page_tables[2])
+    lea esi, [edi + PHY_PAGE_SIZE_4K * 2]
+    or esi, PGE_PRESENT | PGE_WRITE
+    mov eax, esi
+    mov [edi + 8 * 511], eax
 
-# PML4 (0x1000)
-# PML4[0] ->   PDPT-A (0x2000)
-    mov eax, 0x2000 | PGE_PRESENT | PGE_WRITE
-    mov [0x1000], eax
-# PML4[511] -> PDPT-B (0x3000)
-    mov eax, 0x3000 | PGE_PRESENT | PGE_WRITE
-    mov [0x1000 + 8 * 511], eax
-
-# PDPT-A (0x2000)
-# PDPT-A[0] -> PDT (0x4000)
-    mov eax, 0x4000 | PGE_PRESENT | PGE_WRITE
-    mov [0x2000], eax
-# PDPT-B (0x3000)
-# PDPT-B[510] -> PDT (0x4000)
-    mov eax, 0x4000 | PGE_PRESENT | PGE_WRITE
-    mov [0x3000 + 8 * 510], eax
-# PDT (0x4000)
+# PDPT-A (edi=boot_page_tables[1])
+# PDPT-A[0] -> PDT (esi=boot_page_tables[3])
+    virtual_to_physical_mov eax, boot_page_tables
+    lea edi, [eax + PHY_PAGE_SIZE_4K]
+    lea esi, [eax + PHY_PAGE_SIZE_4K * 3]
+    or esi, PGE_PRESENT | PGE_WRITE
+    mov eax, esi
+    mov [edi], eax
+# PDPT-B (edi=boot_page_tables[2])
+# PDPT-B[510] -> PDT (esi=boot_page_tables[3])
+    virtual_to_physical_mov eax, boot_page_tables
+    lea edi, [eax + PHY_PAGE_SIZE_4K * 2]
+    or esi, PGE_PRESENT | PGE_WRITE
+    mov eax, esi
+    mov [edi + 8 * 510], eax
+# PDT (edi=boot_page_tables[3])
 # PDT[0..63] -> 2MB pages (0x0000000..0x7FFFFFF)
+    virtual_to_physical_mov eax, boot_page_tables
+    lea edi, [eax + PHY_PAGE_SIZE_4K * 3]
     mov eax, 0x0000000 | PGE_PRESENT | PGE_WRITE | PGE_PAGE_SIZE
     mov ecx, 64
-    mov edi, 0x4000
 fill_pdt_loop:
     mov [edi], eax
     add eax, PHY_PAGE_SIZE_2M
@@ -135,7 +143,7 @@ fill_pdt_loop:
     loop fill_pdt_loop
 
 # Complete setting up the page tables
-    mov eax, 0x1000
+    virtual_to_physical_mov eax, boot_page_tables
     mov cr3, eax
 
 # enable PAE
@@ -229,3 +237,9 @@ kernel_main_low:
 
     mov rax, offset kernel_main
     jmp rax
+
+# place where we have a temporary page tables
+.section .boot_page_tables
+.align PHY_PAGE_SIZE_4K
+boot_page_tables:
+    .space PHY_PAGE_SIZE_4K * PAGE_TABLE_ALLOC_PAGES, 0

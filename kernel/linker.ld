@@ -29,6 +29,7 @@ SECTIONS {
 
     .data :
     {
+        KEEP(*(.boot_page_tables .boot_page_tables.*))
         *(.data .data.*)
     } : kernel_rw
 
