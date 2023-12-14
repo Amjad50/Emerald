@@ -25,6 +25,7 @@ MULTIBOOT_VIDEO_MODE_TEXT = 1
 
 PHY_PAGE_SIZE_4K = 0x1000
 PHY_PAGE_SIZE_2M = 0x200000
+PAGE_TABLE_ALLOC_PAGES = 4  # only need 4
 
 # Page tables flags
 PGE_PRESENT   = 1 << 0
@@ -56,31 +57,57 @@ EFER_LME = 1 << 8
 
 # Start here
 .code32
-.section .multiboot_header
-mb_magic = 0x1BADB002
-mb_flags = MULTIBOOT_FLAG_VIDEO_INFO | MULTIBOOT_FLAG_CUSTOM_LOAD_INFO | MULTIBOOT_FLAG_MEM_INFO | MULTIBOOT_FLAG_ALIGN_4K
-mb_checksum = -mb_magic-mb_flags
-
+.section .multiboot2_header
+mb_magic = 0xE85250D6   # multiboot2 magic number
+mb_arch = 0x00000000    # x86
 # header
-.long mb_magic
-.long mb_flags
-.long mb_checksum
-# load address
-.long multiboot_load_addr
-.long multiboot_load_addr
-.long multiboot_load_end
-.long multiboot_bss_end
-.long multiboot_entry_addr
-# video info
-.long MULTIBOOT_VIDEO_MODE_TEXT # mode type
-.long 1024                      # width
-.long 768                       # height
-.long 32                        # depth
+mb2_header_start:
+    .long mb_magic
+    .long mb_arch
+    .long mb2_header_end - mb2_header_start # header length
+    .long -mb_magic-mb_arch-(mb2_header_end-mb2_header_start) # checksum
+    # tags
+    .align 8
+    mb2_information_request_start:
+        .short 1 # type (information request)
+        .short 0 # flags
+        .long mb2_information_request_end - mb2_information_request_start # size
+    mb2_information_request_end:
+    .align 8
+    mb2_address_tag_start:
+        .short 2 # type (address)
+        .short 0 # flags
+        .long mb2_address_tag_end - mb2_address_tag_start # size
+        .long multiboot_load_addr
+        .long multiboot_load_addr
+        .long multiboot_load_end
+        .long multiboot_bss_end
+    mb2_address_tag_end:
+    .align 8
+    mb2_entry_address_tag_start:
+        .short 3 # type (entry address)
+        .short 0 # flags
+        .long mb2_entry_address_tag_end - mb2_entry_address_tag_start # size
+        .long multiboot_entry_addr
+    mb2_entry_address_tag_end:
+    .align 8
+    mb2_module_align_tag_start:
+        .short 6 # type (module align)
+        .short 0 # flags
+        .long mb2_module_align_tag_end - mb2_module_align_tag_start # size
+    mb2_module_align_tag_end:
+    .align 8
+    mb2_end_tag_start:
+        .short 0 # type (end)
+        .short 0 # flags
+        .long mb2_end_tag_end - mb2_end_tag_start # size
+    mb2_end_tag_end:
+mb2_header_end:
 
 .section .text
 .global entry
 entry:
-    cmp eax, 0x2BADB002
+    cmp eax, 0x36d76289
     jne error_halt
 
 # load the kernel
@@ -101,33 +128,40 @@ entry:
 #
 # IMPORTANT: This is only for setup, we will change the page tables in the kernel
 
-# zero out 8 pages of memory
-    xor eax, eax
-    mov edi, 0x1000
-    mov ecx, 8 * PHY_PAGE_SIZE_4K / 4  # 4 bytes per dword
-    rep stosd
+# PML4 (edi=boot_page_tables[0])
+# PML4[0] ->   PDPT-A (esi=boot_page_tables[1])
+    virtual_to_physical_mov edi, boot_page_tables
+    lea esi, [edi + PHY_PAGE_SIZE_4K]
+    or esi, PGE_PRESENT | PGE_WRITE
+    mov eax, esi
+    mov [edi], eax
+# PML4[511] -> PDPT-B (esi=boot_page_tables[2])
+    lea esi, [edi + PHY_PAGE_SIZE_4K * 2]
+    or esi, PGE_PRESENT | PGE_WRITE
+    mov eax, esi
+    mov [edi + 8 * 511], eax
 
-# PML4 (0x1000)
-# PML4[0] ->   PDPT-A (0x2000)
-    mov eax, 0x2000 | PGE_PRESENT | PGE_WRITE
-    mov [0x1000], eax
-# PML4[511] -> PDPT-B (0x3000)
-    mov eax, 0x3000 | PGE_PRESENT | PGE_WRITE
-    mov [0x1000 + 8 * 511], eax
-
-# PDPT-A (0x2000)
-# PDPT-A[0] -> PDT (0x4000)
-    mov eax, 0x4000 | PGE_PRESENT | PGE_WRITE
-    mov [0x2000], eax
-# PDPT-B (0x3000)
-# PDPT-B[510] -> PDT (0x4000)
-    mov eax, 0x4000 | PGE_PRESENT | PGE_WRITE
-    mov [0x3000 + 8 * 510], eax
-# PDT (0x4000)
+# PDPT-A (edi=boot_page_tables[1])
+# PDPT-A[0] -> PDT (esi=boot_page_tables[3])
+    virtual_to_physical_mov eax, boot_page_tables
+    lea edi, [eax + PHY_PAGE_SIZE_4K]
+    lea esi, [eax + PHY_PAGE_SIZE_4K * 3]
+    or esi, PGE_PRESENT | PGE_WRITE
+    mov eax, esi
+    mov [edi], eax
+# PDPT-B (edi=boot_page_tables[2])
+# PDPT-B[510] -> PDT (esi=boot_page_tables[3])
+    virtual_to_physical_mov eax, boot_page_tables
+    lea edi, [eax + PHY_PAGE_SIZE_4K * 2]
+    or esi, PGE_PRESENT | PGE_WRITE
+    mov eax, esi
+    mov [edi + 8 * 510], eax
+# PDT (edi=boot_page_tables[3])
 # PDT[0..63] -> 2MB pages (0x0000000..0x7FFFFFF)
+    virtual_to_physical_mov eax, boot_page_tables
+    lea edi, [eax + PHY_PAGE_SIZE_4K * 3]
     mov eax, 0x0000000 | PGE_PRESENT | PGE_WRITE | PGE_PAGE_SIZE
     mov ecx, 64
-    mov edi, 0x4000
 fill_pdt_loop:
     mov [edi], eax
     add eax, PHY_PAGE_SIZE_2M
@@ -135,7 +169,7 @@ fill_pdt_loop:
     loop fill_pdt_loop
 
 # Complete setting up the page tables
-    mov eax, 0x1000
+    virtual_to_physical_mov eax, boot_page_tables
     mov cr3, eax
 
 # enable PAE
@@ -229,3 +263,9 @@ kernel_main_low:
 
     mov rax, offset kernel_main
     jmp rax
+
+# place where we have a temporary page tables
+.section .boot_page_tables
+.align PHY_PAGE_SIZE_4K
+boot_page_tables:
+    .space PHY_PAGE_SIZE_4K * PAGE_TABLE_ALLOC_PAGES, 0

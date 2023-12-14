@@ -2,58 +2,144 @@ use core::{mem::size_of, slice};
 
 use alloc::{boxed::Box, vec::Vec};
 
-use crate::memory_management::memory_layout::physical2virtual_bios;
+use crate::{
+    memory_management::{
+        memory_layout::{
+            align_down, allocate_from_extra_kernel_pages, virtual2physical, KERNEL_BASE,
+            KERNEL_END, PAGE_4K,
+        },
+        virtual_memory::{self, VirtualMemoryMapEntry},
+    },
+    multiboot2::MultiBoot2Info,
+    sync::once::OnceLock,
+};
 
 const BIOS_RO_MEM_START: usize = 0x000E0000;
 const BIOS_RO_MEM_END: usize = 0x000FFFFF;
 
-// Note: this requires allocation, so it should be called after the heap is initialized
-pub fn get_bios_tables() -> Result<BiosTables, ()> {
-    let mut tables = BiosTables::empty();
+static BIOS_MEMORY_MAPPER: OnceLock<BiosMemoryMapper> = OnceLock::new();
 
-    // look for RSDP PTR
-    let mut rsdp_ptr = physical2virtual_bios(BIOS_RO_MEM_START) as *const u8;
-    let end = physical2virtual_bios(BIOS_RO_MEM_END) as *const u8;
-
-    while rsdp_ptr < end {
-        let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
-        if str == b"RSD PTR " {
-            // calculate checksum
-            let sum = unsafe {
-                slice::from_raw_parts(rsdp_ptr, 20)
-                    .iter()
-                    .fold(0u8, |acc, &x| acc.wrapping_add(x))
-            };
-            if sum == 0 {
-                let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV0) };
-                if rsdp_ref.revision >= 2 {
-                    tables.rsdp.fill_from_v2(rsdp_ref);
-                } else {
-                    tables.rsdp.fill_from_v0(rsdp_ref);
-                }
-                break;
-            }
-        }
-        rsdp_ptr = unsafe { rsdp_ptr.add(1) };
+fn physical_to_bios_memory(addr: usize) -> usize {
+    if addr < virtual2physical(KERNEL_END) {
+        addr + KERNEL_BASE
+    } else if let Some(mapper) = BIOS_MEMORY_MAPPER.try_get() {
+        mapper.get_virtual(addr as _) as _
+    } else {
+        let mapper = BiosMemoryMapper::new(addr as _);
+        let virtual_addr = mapper.get_virtual(addr as _) as _;
+        BIOS_MEMORY_MAPPER
+            .set(mapper)
+            .expect("BIOS_MEMORY_MAPPER already set");
+        virtual_addr
     }
-    if rsdp_ptr == end {
-        // TODO: report error, no RSDP found
-        return Err(());
-    }
-
-    tables.rsdt = tables.rsdp.rdst();
-
-    Ok(tables)
 }
 
-// used to copy
+// number of pages to map around the `prope/start` address
+// TODO: replace by mapping whole memory segments (normally are not large)
+const BIOS_MEMORY_MAPPED_PAGES_AROUND: usize = 10;
+
+#[derive(Debug)]
+struct BiosMemoryMapper {
+    start_physical: u64,
+    start_virtual: u64,
+    num_pages: usize,
+}
+
+impl BiosMemoryMapper {
+    // we use `prope_addr` to know where to start from, generally this memory isn't very large
+    // so we can just start pages around `prope` address and map from there
+    pub fn new(prope_addr: u64) -> Self {
+        let prope_page = align_down(prope_addr as _, PAGE_4K) as u64;
+        const MEMORY_AROUND: u64 = BIOS_MEMORY_MAPPED_PAGES_AROUND as u64 * PAGE_4K as u64;
+        assert!(prope_page > MEMORY_AROUND);
+        assert!(prope_page < (usize::MAX as u64 - MEMORY_AROUND));
+        let physical_start = prope_page - MEMORY_AROUND;
+        let num_pages = BIOS_MEMORY_MAPPED_PAGES_AROUND * 2 + 1;
+
+        let start_virtual = unsafe { allocate_from_extra_kernel_pages(num_pages) };
+
+        virtual_memory::map_kernel(&VirtualMemoryMapEntry {
+            virtual_address: start_virtual as u64,
+            physical_address: Some(physical_start),
+            size: num_pages as u64 * PAGE_4K as u64,
+            flags: 0,
+        });
+
+        Self {
+            start_physical: physical_start,
+            start_virtual: start_virtual as u64,
+            num_pages,
+        }
+    }
+
+    pub fn get_virtual(&self, addr: u64) -> u64 {
+        if addr >= self.start_physical
+            && addr < self.start_physical + self.num_pages as u64 * PAGE_4K as u64
+        {
+            addr - self.start_physical + self.start_virtual
+        } else {
+            // for now I'm assuming we can start from the first address we try to map
+            // and just map `BIOS_MEMORY_MAPPED_PAGES_AROUND` pages around it
+            panic!(
+                "bios address {:#X} not mapped, range: {:#X}-{:#X}",
+                addr,
+                self.start_physical,
+                self.start_physical + self.num_pages as u64 * PAGE_4K as u64
+            );
+        }
+    }
+}
+
+// Note: this requires allocation, so it should be called after the heap is initialized
+pub fn get_bios_tables(multiboot_info: &MultiBoot2Info) -> Result<BiosTables, ()> {
+    let rdsp = multiboot_info
+        .get_most_recent_rsdp()
+        .or_else(|| {
+            // look for RSDP PTR
+            let mut rsdp_ptr = physical_to_bios_memory(BIOS_RO_MEM_START) as *const u8;
+            let end = physical_to_bios_memory(BIOS_RO_MEM_END) as *const u8;
+
+            while rsdp_ptr < end {
+                let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
+                if str == b"RSD PTR " {
+                    // calculate checksum
+                    let sum = unsafe {
+                        slice::from_raw_parts(rsdp_ptr, 20)
+                            .iter()
+                            .fold(0u8, |acc, &x| acc.wrapping_add(x))
+                    };
+                    if sum == 0 {
+                        let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
+                        if rsdp_ref.rsdp_v1.revision >= 2 {
+                            return Some(Rsdp::from_v2(rsdp_ref));
+                        } else {
+                            return Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1));
+                        }
+                    }
+                }
+                rsdp_ptr = unsafe { rsdp_ptr.add(1) };
+            }
+
+            None
+        })
+        .ok_or(())?;
+
+    Ok(BiosTables::new(rdsp))
+}
+
 #[repr(C, packed)]
-struct RsdpV0 {
+pub struct RsdpV1 {
     signature: [u8; 8],
     checksum: u8,
     oem_id: [u8; 6],
     revision: u8,
     rsdt_address: u32,
+}
+
+// used to copy
+#[repr(C, packed)]
+pub struct RsdpV2 {
+    rsdp_v1: RsdpV1,
     // these are only v2, but its here to make copying easier
     length: u32,
     xsdt_address: u64,
@@ -77,13 +163,13 @@ pub struct Rsdp {
 }
 
 impl Rsdp {
-    pub const fn empty() -> Self {
+    pub fn from_v1(v0: &RsdpV1) -> Self {
         Self {
-            signature: [0; 8],
-            checksum: 0,
-            oem_id: [0; 6],
-            revision: 0,
-            rsdt_address: 0,
+            signature: v0.signature,
+            checksum: v0.checksum,
+            oem_id: v0.oem_id,
+            revision: v0.revision,
+            rsdt_address: v0.rsdt_address,
             length: 0,
             xsdt_address: 0,
             extended_checksum: 0,
@@ -91,22 +177,23 @@ impl Rsdp {
         }
     }
 
-    fn fill_from_v0(&mut self, v0: &RsdpV0) {
-        self.signature = v0.signature;
-        self.checksum = v0.checksum;
-        self.oem_id = v0.oem_id;
-        self.revision = v0.revision;
-        self.rsdt_address = v0.rsdt_address;
-    }
-
-    fn fill_from_v2(&mut self, v2: &RsdpV0) {
-        assert!(size_of::<Rsdp>() == size_of::<RsdpV0>());
-        *self = unsafe { core::mem::transmute_copy(v2) }
+    pub fn from_v2(v2: &RsdpV2) -> Self {
+        Self {
+            signature: v2.rsdp_v1.signature,
+            checksum: v2.rsdp_v1.checksum,
+            oem_id: v2.rsdp_v1.oem_id,
+            revision: v2.rsdp_v1.revision,
+            rsdt_address: v2.rsdp_v1.rsdt_address,
+            length: v2.length,
+            xsdt_address: v2.xsdt_address,
+            extended_checksum: v2.extended_checksum,
+            reserved: v2.reserved,
+        }
     }
 
     // allocates a new RDST
     fn rdst(&self) -> Rsdt {
-        let header = physical2virtual_bios(self.rsdt_address as _) as *const DescriptionHeader;
+        let header = physical_to_bios_memory(self.rsdt_address as _) as *const DescriptionHeader;
         let len = unsafe { (*header).length } as usize;
         let entries_len = (len - size_of::<DescriptionHeader>()) / size_of::<u32>();
         let entries_ptr = unsafe { header.add(1) as *const u32 };
@@ -133,15 +220,6 @@ pub struct Rsdt {
     pub entries: Vec<DescriptorTable>,
 }
 
-impl Rsdt {
-    pub const fn empty() -> Self {
-        Self {
-            header: DescriptionHeader::empty(),
-            entries: Vec::new(),
-        }
-    }
-}
-
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct DescriptionHeader {
@@ -156,22 +234,6 @@ pub struct DescriptionHeader {
     pub creator_revision: u32,
 }
 
-impl DescriptionHeader {
-    const fn empty() -> Self {
-        Self {
-            signature: [0; 4],
-            length: 0,
-            revision: 0,
-            checksum: 0,
-            oem_id: [0; 6],
-            oem_table_id: [0; 8],
-            oem_revision: 0,
-            creator_id: 0,
-            creator_revision: 0,
-        }
-    }
-}
-
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DescriptorTable {
@@ -181,12 +243,20 @@ pub struct DescriptorTable {
 
 impl DescriptorTable {
     pub fn from_physical_ptr(ptr: u32) -> Self {
-        let header = unsafe { &*(physical2virtual_bios(ptr as _) as *const DescriptionHeader) };
+        let header = unsafe { &*(physical_to_bios_memory(ptr as _) as *const DescriptionHeader) };
         let body = match &header.signature {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
             b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
             b"HPET" => DescriptorTableBody::Hpet(Box::new(Hpet::from_header(header))),
-            _ => DescriptorTableBody::Unknown,
+            _ => DescriptorTableBody::Unknown(
+                unsafe {
+                    slice::from_raw_parts(
+                        header as *const DescriptionHeader as *const u8,
+                        header.length as usize,
+                    )
+                }
+                .to_vec(),
+            ),
         };
         Self {
             header: *header,
@@ -200,7 +270,7 @@ pub enum DescriptorTableBody {
     Apic(Box<Apic>),
     Facp(Box<Facp>),
     Hpet(Box<Hpet>),
-    Unknown,
+    Unknown(Vec<u8>),
 }
 
 #[derive(Debug, Clone)]
@@ -470,10 +540,10 @@ pub struct BiosTables {
 }
 
 impl BiosTables {
-    pub const fn empty() -> Self {
+    pub fn new(rsdp: Rsdp) -> Self {
         Self {
-            rsdp: Rsdp::empty(),
-            rsdt: Rsdt::empty(),
+            rsdt: rsdp.rdst(),
+            rsdp,
         }
     }
 }

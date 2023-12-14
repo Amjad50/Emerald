@@ -101,10 +101,6 @@ interrupt_vector_global:
     push rax
     mov rax, dr6
     push rax
-    mov rax, dr5
-    push rax
-    mov rax, dr4
-    push rax
     mov rax, dr3
     push rax
     mov rax, dr2
@@ -142,10 +138,6 @@ interrupt_vector_global:
     mov dr2, rax
     pop rax
     mov dr3, rax
-    pop rax
-    mov dr4, rax
-    pop rax
-    mov dr5, rax
     pop rax
     mov dr6, rax
     pop rax
