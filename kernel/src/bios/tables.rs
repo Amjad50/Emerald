@@ -1,4 +1,4 @@
-use core::{fmt, mem::size_of, slice};
+use core::{any::Any, fmt, mem::size_of, slice};
 
 use alloc::{boxed::Box, vec::Vec};
 
@@ -217,7 +217,21 @@ impl Rsdp {
 #[derive(Debug, Clone)]
 pub struct Rsdt {
     pub header: DescriptionHeader,
-    pub entries: Vec<DescriptorTable>,
+    entries: Vec<DescriptorTable>,
+}
+
+impl Rsdt {
+    pub fn get_table<T: Any>(&self) -> Option<&T> {
+        self.entries
+            .iter()
+            .filter_map(|entry| match &entry.body {
+                DescriptorTableBody::Unknown(_) => None,
+                DescriptorTableBody::Apic(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Facp(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Hpet(a) => Some(a.as_ref() as &dyn Any),
+            })
+            .find_map(|obj| obj.downcast_ref::<T>())
+    }
 }
 
 #[repr(C, packed)]

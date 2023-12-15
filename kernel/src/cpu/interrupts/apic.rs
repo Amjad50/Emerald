@@ -3,9 +3,7 @@ use core::borrow::{Borrow, BorrowMut};
 use alloc::vec::Vec;
 
 use crate::{
-    bios::tables::{
-        self, BiosTables, DescriptorTableBody, InterruptControllerStruct, InterruptSourceOverride,
-    },
+    bios::tables::{self, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
     cpu::{self, idt::InterruptStackFrame64, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS},
     memory_management::memory_layout::physical2virtual_io,
     sync::spin::mutex::Mutex,
@@ -369,15 +367,7 @@ impl Apic {
         // process the MADT table
         let madt_table = bios_tables
             .rsdt
-            .entries
-            .iter()
-            .find_map(|entry| {
-                if let DescriptorTableBody::Apic(apic) = &entry.body {
-                    Some(apic)
-                } else {
-                    None
-                }
-            })
+            .get_table::<tables::Apic>()
             .expect("MADT table not found");
 
         if madt_table.local_apic_address as usize != apic_address {
