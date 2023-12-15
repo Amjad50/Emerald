@@ -130,6 +130,9 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     unsafe { cpu::clear_interrupts() };
     println!("{info}");
     loop {
+        unsafe {
+            cpu::halt();
+        }
         hint::spin_loop();
     }
 }
