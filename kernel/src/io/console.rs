@@ -155,8 +155,8 @@ impl EarlyConsole {
     }
 
     pub fn init(&mut self) {
-        self.uart.init();
         self.video_buffer.init();
+        self.uart.init();
     }
 
     /// SAFETY: the caller must assure that this is called from once place at a time

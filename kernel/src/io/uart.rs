@@ -87,10 +87,15 @@ fn init_port(port_addr: UartPort) {
     // set loopback mode
     write_reg(port_addr, UartReg::ModemControl, MODEM_CTL_LOOPBACK);
     write_reg(port_addr, UartReg::Data, 0xAA);
+    // wait until we can read
+    while read_reg(port_addr, UartReg::LineStatus) & LINE_RX_READY == 0 {
+        hint::spin_loop();
+    }
     // check if we got the same value
     let val = read_reg(port_addr, UartReg::Data);
     if val != 0xAA {
-        panic!("UART init test failed");
+        // we haven't intialized here, but we can get the message in VGA at least
+        panic!("UART init test failed (got 0x{:02X}, expected 0xAA)", val);
     }
 
     // disable loopback mode go back to normal
