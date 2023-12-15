@@ -109,6 +109,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // mount
     devices::init_devices_mapping();
     let bios_tables = bios::tables::get_bios_tables(multiboot_info).expect("BIOS tables not found");
+    println!("BIOS tables: {}", bios_tables);
     apic::init(&bios_tables);
     clock::init(&bios_tables);
     console::init_late_device();
@@ -129,6 +130,9 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     unsafe { cpu::clear_interrupts() };
     println!("{info}");
     loop {
+        unsafe {
+            cpu::halt();
+        }
         hint::spin_loop();
     }
 }

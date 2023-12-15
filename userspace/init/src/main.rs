@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(c_str_literals)]
 
 use core::{ffi::CStr, hint};
 
@@ -67,6 +66,7 @@ pub extern "C" fn _start() -> ! {
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
+    write_to_stdout(c"init panicked!\n");
     loop {
         hint::spin_loop();
     }

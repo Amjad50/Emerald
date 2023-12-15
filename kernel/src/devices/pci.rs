@@ -374,7 +374,7 @@ impl PciDeviceConfig {
                 let size = (!(bar & 0xFFFF_FFF0) + 1) as u64;
 
                 let prefetchable = (bar_v & 0x8) == 0x8;
-                let ty = bar_v & 0x6;
+                let ty = (bar_v & 0x6) >> 1;
                 match ty {
                     0x0 => {
                         // 32-bit
@@ -399,7 +399,7 @@ impl PciDeviceConfig {
                         // store it in the two bars
                         base_address[(i - 1) as usize] = base_address[i as usize];
                     }
-                    _ => panic!("Reserved bar memory type 1, BAR{i}=0x{bar_v:08X}"),
+                    _ => panic!("Reserved bar memory type {ty}, BAR{i}=0x{bar_v:08X}"),
                 };
             }
             i += 1;

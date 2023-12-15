@@ -103,13 +103,23 @@ pub fn prope_pci_devices() {
     for device in pci_device_iter {
         if probe_driver(&device) {
             println!(
-                "Driver found for device: {:04X}:{:04X} - {}",
-                device.vendor_id, device.device_id, device.device_type
+                "[{:02X}.{:02X}.{:02X}] Driver found for device: {:04X}:{:04X} - {}",
+                device.bus,
+                device.dev,
+                device.func,
+                device.vendor_id,
+                device.device_id,
+                device.device_type
             );
         } else {
             println!(
-                "No driver found for device: {:04X}:{:04X} - {}",
-                device.vendor_id, device.device_id, device.device_type
+                "[{:02X}.{:02X}.{:02X}] No driver found for device: {:04X}:{:04X} - {}",
+                device.bus,
+                device.dev,
+                device.func,
+                device.vendor_id,
+                device.device_id,
+                device.device_type
             );
         }
     }

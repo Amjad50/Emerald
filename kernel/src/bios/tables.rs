@@ -1,4 +1,4 @@
-use core::{mem::size_of, slice};
+use core::{fmt, mem::size_of, slice};
 
 use alloc::{boxed::Box, vec::Vec};
 
@@ -545,5 +545,16 @@ impl BiosTables {
             rsdt: rsdp.rdst(),
             rsdp,
         }
+    }
+}
+
+impl fmt::Display for BiosTables {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "RSDP: {:#X?}", self.rsdp)?;
+        writeln!(f, "RSDT: {:#X?}", self.rsdt.header)?;
+        for entry in &self.rsdt.entries {
+            writeln!(f, "{:#X?}", entry.body)?;
+        }
+        Ok(())
     }
 }

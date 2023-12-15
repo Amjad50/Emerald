@@ -79,17 +79,34 @@ impl PhysicalPageAllocator {
 
     fn init(&mut self, multiboot_info: &MultiBoot2Info) {
         const PHYSICAL_KERNEL_START: usize = virtual2physical(KERNEL_LINK);
-        let physical_kernel_end: usize = virtual2physical(align_up(kernel_elf_end(), PAGE_4K));
-
+        // get the end of the kernel, align, and add 5 PAGES of alignment as well
+        // because the multiboot info might be stored there by grub
+        let mut physical_kernel_end: usize = virtual2physical(align_up(kernel_elf_end(), PAGE_4K));
+        let multiboot_end = align_up(
+            virtual2physical(multiboot_info.end_address() as usize),
+            PAGE_4K,
+        );
+        println!("multiboot end: {multiboot_end:x}",);
         println!(
             "physical_kernel_start: {:p}",
             PHYSICAL_KERNEL_START as *mut u8
         );
         println!("physical_kernel_end: {:p}", physical_kernel_end as *mut u8);
 
+        // if the multiboot info is after the kernel, make sure we are not allocating it
+        if multiboot_end > physical_kernel_end {
+            // if its after the kernel by a lot, then panic, so we can handle it, we don't want
+            // to make this more complex if we don't need to
+            assert!(
+                multiboot_end - physical_kernel_end < PAGE_4K * 5,
+                "Multiboot is after the kernel by a lot",
+            );
+            physical_kernel_end = multiboot_end;
+        }
+
         for memory in multiboot_info.memory_maps().unwrap() {
-            // skip all the memory before the kernel for now
-            // TODO: we are skipping this for now since some are used by `boot.S`
+            // skip all the memory before the kernel, it could be used by the bootloader
+            // its generally not a lot, just 1 MB, so its fine to skip it
             if (memory.base_addr + memory.length) < EXTENDED_OFFSET as u64 {
                 continue;
             }
@@ -186,7 +203,7 @@ impl PhysicalPageAllocator {
         {
             panic!("freeing invalid page: {:p}", page);
         }
-        // TODO: for now make sure we are not freeing the high memory
+        // TODO: for now make sure we are not freeing the high memory for now
         assert!(self.high_mem_start.is_null() || page < self.high_mem_start as _);
 
         (*page).next = self.low_mem_free_list_head;

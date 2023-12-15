@@ -575,7 +575,8 @@ struct CommandIdentifyDataRaw {
 impl CommandIdentifyDataRaw {
     fn is_valid(&self) -> bool {
         // check that the serial number is not empty
-        self.serial_number.iter().any(|x| *x != 0)
+        // and not all is 0xFF
+        self.serial_number.iter().any(|x| *x != 0) && self.serial_number.iter().any(|x| *x != 0xFF)
     }
 
     fn is_dma_supported(&self) -> bool {
@@ -592,12 +593,16 @@ impl CommandIdentifyDataRaw {
     }
 
     fn user_addressable_sectors(&self) -> u64 {
-        let extended_number_of_sectors_supported = self.addional_supported & (1 << 3) != 0;
+        if self.is_lba48_supported() {
+            let extended_number_of_sectors_supported = self.addional_supported & (1 << 3) != 0;
 
-        if extended_number_of_sectors_supported {
-            self.extended_user_addressable_sectors
+            if extended_number_of_sectors_supported {
+                self.extended_user_addressable_sectors
+            } else {
+                self.user_addressable_sectors
+            }
         } else {
-            self.user_addressable_sectors
+            self.user_addressable_sectors_28_mode as u64
         }
     }
 
