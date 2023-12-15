@@ -44,6 +44,10 @@ CR0_PG   = 1 << 31
 CR4_PAE  = 1 << 5
 EFER_LME = 1 << 8
 
+CPUID_FEAT_ID_CMD  = 0x80000001
+CPUID_FEAT_EDX_PAE = 1 << 6
+CPUID_FEAT_EDX_LM  = 1 << 29
+
 # some helper macros that converts a virtual address to a physical address
 # this should be used when loading any address while paging is disabled
 .macro virtual_to_physical_mov reg:req,  addr:req
@@ -108,7 +112,20 @@ mb2_header_end:
 .global entry
 entry:
     cmp eax, 0x36d76289
-    jne error_halt
+    jne not_multiboot2
+    # check if we are running on a 64-bit CPU
+    # save ebx, since its important containing the multiboot info
+    # no stack yet, so lets use registers
+    mov edi, ebx
+    mov eax, CPUID_FEAT_ID_CMD
+    cpuid
+    test edx, CPUID_FEAT_EDX_PAE
+    jz not_64bit
+    test edx, CPUID_FEAT_EDX_LM
+    jz not_64bit
+
+    # restore ebx
+    mov ebx, edi
 
 # load the kernel
 # -- Setup paging --
@@ -213,10 +230,15 @@ gdt64:
 gdtr64_end:
 
 
+not_multiboot2:
+    virtual_to_physical_mov esi, message_not_valid_multiboot
+    jmp error_halt
+not_64bit:
+    virtual_to_physical_mov esi, message_not_64bit
+    jmp error_halt
 # Errors (still in 32bit)
 error_halt:
     mov edi, 0xb8000
-    virtual_to_physical_mov esi, message
 print:
     mov al, [esi]
     cmp al, 0
@@ -232,9 +254,10 @@ halt_loop:
     jmp halt_loop
 
 .section .rodata
-message:
+message_not_valid_multiboot:
     .ascii  "[ERROR] Not a valid multiboot result!!!\0"
-
+message_not_64bit:
+    .ascii  "[ERROR] Not a 64-bit CPU!!!\0"
 
 # From here, its 64-bit code
 # kernel_main_low (This is a trunk for kernel_main that is close to the `entry` so we can use a relative jump)
