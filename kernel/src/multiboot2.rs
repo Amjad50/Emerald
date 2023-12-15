@@ -469,6 +469,10 @@ impl MultiBoot2Info {
         }
     }
 
+    pub fn end_address(&self) -> u64 {
+        unsafe { (self as *const Self as *const u8).add(self.total_size as _) as _ }
+    }
+
     pub fn tags(&self) -> MultiBootTagIter<'_> {
         MultiBootTagIter {
             current: unsafe { (self as *const Self as *const u8).add(8) as _ },
