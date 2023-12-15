@@ -50,6 +50,15 @@ impl fmt::Display for RtcTime {
 
 impl Rtc {
     pub const fn new(century_reg: Option<u8>) -> Self {
+        let century_reg = if let Some(century_reg) = century_reg {
+            if century_reg == 0 {
+                None
+            } else {
+                Some(century_reg)
+            }
+        } else {
+            None
+        };
         Self { century_reg }
     }
 
