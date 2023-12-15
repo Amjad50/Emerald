@@ -206,10 +206,19 @@ impl Rsdp {
             // SAEFTY: these entries are static and never change, and not null
             .map(DescriptorTable::from_physical_ptr)
             .collect();
-        Rsdt {
+        let mut s = Rsdt {
             header: unsafe { *header },
             entries,
+        };
+        // add extra entries
+        if let Some(facp) = s.get_table::<Facp>() {
+            if facp.dsdt != 0 {
+                s.entries
+                    .push(DescriptorTable::from_physical_ptr(facp.dsdt));
+            }
         }
+
+        s
     }
 }
 
@@ -229,6 +238,7 @@ impl Rsdt {
                 DescriptorTableBody::Apic(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Facp(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Hpet(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Dsdt(a) => Some(a.as_ref() as &dyn Any),
             })
             .find_map(|obj| obj.downcast_ref::<T>())
     }
@@ -262,6 +272,7 @@ impl DescriptorTable {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
             b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
             b"HPET" => DescriptorTableBody::Hpet(Box::new(Hpet::from_header(header))),
+            b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Dsdt::from_header(header))),
             _ => DescriptorTableBody::Unknown(
                 unsafe {
                     slice::from_raw_parts(
@@ -284,6 +295,7 @@ pub enum DescriptorTableBody {
     Apic(Box<Apic>),
     Facp(Box<Facp>),
     Hpet(Box<Hpet>),
+    Dsdt(Box<Dsdt>),
     Unknown(Vec<u8>),
 }
 
@@ -544,6 +556,27 @@ impl Hpet {
         let facp = unsafe { &*(facp_ptr as *const Hpet) };
         // SAFETY: I'm using this to copy from the same struct
         unsafe { core::mem::transmute_copy(facp) }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Dsdt {
+    definition_block: Box<[u8]>,
+}
+
+impl Dsdt {
+    fn from_header(header: &'static DescriptionHeader) -> Self {
+        let dsdt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
+        let data_len = header.length as usize - size_of::<DescriptionHeader>();
+        let data = unsafe { slice::from_raw_parts(dsdt_ptr, data_len) };
+        Self {
+            definition_block: data.into(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn data(&self) -> &[u8] {
+        self.definition_block.as_ref()
     }
 }
 
