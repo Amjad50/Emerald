@@ -91,7 +91,7 @@ impl BiosMemoryMapper {
 }
 
 // Note: this requires allocation, so it should be called after the heap is initialized
-pub fn get_bios_tables(multiboot_info: &MultiBoot2Info) -> Result<BiosTables, ()> {
+pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<BiosTables, ()> {
     let rdsp = multiboot_info
         .get_most_recent_rsdp()
         .or_else(|| {

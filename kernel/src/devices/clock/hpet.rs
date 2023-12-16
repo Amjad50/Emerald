@@ -1,5 +1,5 @@
 use crate::{
-    bios::{self},
+    acpi::{self},
     cpu::{
         self,
         idt::{InterruptAllSavedState, InterruptHandlerWithAllState},
@@ -202,7 +202,7 @@ pub struct Hpet {
 }
 
 impl Hpet {
-    pub fn initialize_from_bios_table(hpet: &bios::tables::Hpet) -> Option<Self> {
+    pub fn initialize_from_bios_table(hpet: &acpi::tables::Hpet) -> Option<Self> {
         disable_pit();
 
         assert!(hpet.base_address.address_space_id == 0); // memory space

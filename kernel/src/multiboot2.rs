@@ -1,7 +1,7 @@
 use core::{ffi, fmt, mem};
 
 use crate::{
-    bios::tables::{Rsdp, RsdpV1, RsdpV2},
+    acpi::tables::{Rsdp, RsdpV1, RsdpV2},
     memory_management::memory_layout::{align_up, MemSize, PAGE_4K},
 };
 

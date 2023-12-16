@@ -3,7 +3,7 @@ use core::borrow::{Borrow, BorrowMut};
 use alloc::vec::Vec;
 
 use crate::{
-    bios::tables::{self, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
+    acpi::tables::{self, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
     cpu::{self, idt::InterruptStackFrame64, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS},
     memory_management::memory_layout::physical2virtual_io,
     sync::spin::mutex::Mutex,

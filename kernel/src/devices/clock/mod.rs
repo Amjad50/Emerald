@@ -4,7 +4,7 @@ mod rtc;
 use alloc::sync::Arc;
 
 use crate::{
-    bios::tables::{self, BiosTables, Facp},
+    acpi::tables::{self, BiosTables, Facp},
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 

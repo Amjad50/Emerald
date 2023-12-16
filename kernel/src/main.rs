@@ -12,7 +12,7 @@ core::arch::global_asm!(include_str!("boot.S"));
 // import first so that macros are available in other modules
 mod macros;
 
-mod bios;
+mod acpi;
 mod collections;
 mod cpu;
 mod devices;
@@ -108,7 +108,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     interrupts::init_interrupts();
     // mount
     devices::init_devices_mapping();
-    let bios_tables = bios::tables::get_bios_tables(multiboot_info).expect("BIOS tables not found");
+    let bios_tables = acpi::get_acpi_tables(multiboot_info).expect("BIOS tables not found");
     println!("BIOS tables: {}", bios_tables);
     apic::init(&bios_tables);
     clock::init(&bios_tables);
