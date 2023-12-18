@@ -7,6 +7,7 @@ extern "C" {
     static begin: usize;
     static end: usize;
     static rodata_end: usize;
+    static stack_guard_page: usize;
 }
 
 // it starts at 0x10000, which is where the kernel is loaded, and grows down
@@ -71,6 +72,10 @@ pub fn kernel_elf_size() -> usize {
 
 pub fn kernel_elf_rodata_end() -> usize {
     (unsafe { &rodata_end } as *const usize as usize)
+}
+
+pub fn stack_guard_page_ptr() -> usize {
+    (unsafe { &stack_guard_page } as *const usize as usize)
 }
 
 pub const fn align_up(addr: usize, alignment: usize) -> usize {

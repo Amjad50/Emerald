@@ -17,6 +17,8 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
+use super::memory_layout::stack_guard_page_ptr;
+
 // TODO: replace by some sort of bitfield
 #[allow(dead_code)]
 pub mod flags {
@@ -259,6 +261,17 @@ impl VirtualMemoryManager {
             s.map(entry);
         }
 
+        // unmap stack guard
+        s.unmap_impl(
+            &VirtualMemoryMapEntry {
+                virtual_address: stack_guard_page_ptr() as u64,
+                physical_address: None,
+                size: PAGE_4K as u64,
+                flags: 0,
+            },
+            false,
+        );
+
         s
     }
 
@@ -357,14 +370,16 @@ impl VirtualMemoryManager {
 
             // here we have an intersection, if we can map a 2MB page, we will, otherwise we will map a 4K page
             // if we are providing the pages (the user didn't provide), then we can't use 2MB pages
-            let can_map_2mb_page = physical_address
-                .map(|phy_addr| {
-                    is_aligned(phy_addr as _, PAGE_2M)
-                        && is_aligned(virtual_address as _, PAGE_2M)
-                        && size >= PAGE_2M as u64
-                })
-                .unwrap_or(false);
+            // let can_map_2mb_page = physical_address
+            //     .map(|phy_addr| {
+            //         is_aligned(phy_addr as _, PAGE_2M)
+            //             && is_aligned(virtual_address as _, PAGE_2M)
+            //             && size >= PAGE_2M as u64
+            //     })
+            //     .unwrap_or(false);
+            // TODO: we have disabled 2MB as its not easy to unmap in the middle, all pages must be the sames
 
+            let can_map_2mb_page = false;
             if can_map_2mb_page {
                 // we already have an entry here
                 if *page_directory_entry & flags::PTE_PRESENT != 0 {
@@ -434,6 +449,111 @@ impl VirtualMemoryManager {
             }
 
             eprintln!();
+        }
+    }
+
+    /// Removes mapping of a virtual entry, it will free it from physical memory if it was allocated
+    fn unmap_impl(&mut self, entry: &VirtualMemoryMapEntry, is_allocated: bool) {
+        let VirtualMemoryMapEntry {
+            mut virtual_address,
+            physical_address,
+            mut size,
+            flags,
+        } = entry;
+
+        assert!(physical_address.is_none());
+
+        // get the end before alignment
+        let end_virtual_address = (virtual_address - 1) + size;
+        virtual_address = align_down(virtual_address as _, PAGE_4K) as _;
+        size = align_up((end_virtual_address - virtual_address) as _, PAGE_4K) as _;
+
+        assert!(size > 0);
+
+        eprintln!(
+            "{} {:08X?}",
+            MemSize(size),
+            VirtualMemoryMapEntry {
+                virtual_address: virtual_address as _,
+                physical_address: *physical_address,
+                size,
+                flags: *flags,
+            }
+        );
+
+        while size > 0 {
+            let page_map_l4_index = get_l4(virtual_address) as usize;
+            let page_directory_pointer_index = get_l3(virtual_address) as usize;
+            let page_directory_index = get_l2(virtual_address) as usize;
+            let page_table_index = get_l1(virtual_address) as usize;
+
+            // Level 4
+            let page_map_l4_entry = &mut self.page_map_l4.as_mut().entries[page_map_l4_index];
+
+            if *page_map_l4_entry & flags::PTE_PRESENT == 0 {
+                panic!("Trying to unmap a non-mapped address");
+            }
+            // remove flags
+            *page_map_l4_entry &= !flags;
+            eprintln!(
+                "L4[{}]: {:p} = {:x}",
+                page_map_l4_index, page_map_l4_entry, *page_map_l4_entry
+            );
+
+            // Level 3
+            let mut page_directory_pointer_table =
+                PageDirectoryTablePtr::from_entry(*page_map_l4_entry);
+
+            let page_directory_pointer_entry =
+                &mut page_directory_pointer_table.as_mut().entries[page_directory_pointer_index];
+
+            if *page_directory_pointer_entry & flags::PTE_PRESENT == 0 {
+                panic!("Trying to unmap a non-mapped address");
+            }
+            // remove flags
+            *page_directory_pointer_entry &= !flags;
+            eprintln!(
+                "L3[{}]: {:p} = {:x}",
+                page_directory_pointer_index,
+                page_directory_pointer_entry,
+                *page_directory_pointer_entry
+            );
+
+            // Level 2
+            let mut page_directory_table =
+                PageDirectoryTablePtr::from_entry(*page_directory_pointer_entry);
+            let page_directory_entry =
+                &mut page_directory_table.as_mut().entries[page_directory_index];
+
+            if *page_directory_entry & flags::PTE_PRESENT == 0 {
+                panic!("Trying to unmap a non-mapped address");
+            }
+            // remove flags
+            *page_directory_entry &= !flags;
+
+            // Level 1
+            let mut page_table = PageDirectoryTablePtr::from_entry(*page_directory_entry);
+            let page_table_entry = &mut page_table.as_mut().entries[page_table_index];
+            if *page_table_entry & flags::PTE_PRESENT == 0 {
+                panic!("Trying to unmap a non-mapped address");
+            }
+            let physical_entry = PageDirectoryTablePtr::from_entry(*page_table_entry);
+            if is_allocated {
+                unsafe { physical_entry.free() };
+            }
+            // remove whole entry
+            *page_table_entry = 0;
+            eprintln!(
+                "L1[{}]: {:p} = {:x}",
+                page_table_index, page_table_entry, *page_table_entry
+            );
+
+            size -= PAGE_4K as u64;
+            // do not overflow the address
+            if size == 0 {
+                break;
+            }
+            virtual_address += PAGE_4K as u64;
         }
     }
 

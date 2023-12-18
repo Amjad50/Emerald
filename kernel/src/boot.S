@@ -27,6 +27,8 @@ PHY_PAGE_SIZE_4K = 0x1000
 PHY_PAGE_SIZE_2M = 0x200000
 PAGE_TABLE_ALLOC_PAGES = 4  # only need 4
 
+STACK_SIZE_PAGES = 128
+
 # Page tables flags
 PGE_PRESENT   = 1 << 0
 PGE_WRITE     = 1 << 1
@@ -275,8 +277,8 @@ kernel_main_low:
     mov gs, ax
     mov ss, ax
 
-    # setup the stack (grows downwards to 0x00000000, which gets us 64KB of stack)
-    mov rax, 0xFFFFFFFF80010000
+    # setup the stack (grows downwards to stack_guard_page)
+    mov rax, offset stack_end - 8
     mov rsp, rax
 
     # (first argument) rdi = multiboot info (we haven't toched ebx, so it should have the same value since `entry`)
@@ -292,3 +294,13 @@ kernel_main_low:
 .align PHY_PAGE_SIZE_4K
 boot_page_tables:
     .space PHY_PAGE_SIZE_4K * PAGE_TABLE_ALLOC_PAGES, 0
+
+.section .stack
+.align PHY_PAGE_SIZE_4K
+.global stack_guard_page
+stack_guard_page:
+    .space PHY_PAGE_SIZE_4K, 0
+.align PHY_PAGE_SIZE_4K
+stack:
+    .space PHY_PAGE_SIZE_4K * STACK_SIZE_PAGES, 0
+stack_end:
