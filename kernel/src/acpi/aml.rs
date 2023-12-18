@@ -1,0 +1,1006 @@
+use core::cell::RefCell;
+
+use alloc::{boxed::Box, collections::BTreeMap, format, rc::Rc, string::String, vec::Vec};
+
+#[derive(Debug, Clone)]
+pub enum AmlParseError {
+    UnexpectedEndOfCode,
+    InvalidPkgLengthLead,
+    RemainingBytes(usize),
+    CannotMoveBackward,
+}
+
+pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
+    let mut parser = Parser {
+        code,
+        pos: 0,
+        state: State::default(),
+    };
+    parser.parse_root()
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct AmlCode {
+    term_list: Vec<AmlTerm>,
+}
+
+#[derive(Debug, Clone)]
+pub enum DataObject {
+    ConstZero,
+    ConstOne,
+    ConstOnes,
+    ByteConst(u8),
+    WordConst(u16),
+    DWordConst(u32),
+    QWordConst(u64),
+}
+
+#[derive(Debug, Clone)]
+pub enum AmlTerm {
+    Scope(ScopeObj),
+    Region(RegionObj),
+    Field(FieldDef),
+    Device(ScopeObj),
+    Processor(ProcessorDeprecated),
+    Method(MethodObj),
+    NameObj(String, TermArg),
+    Package(u8, Vec<TermArg>),
+    String(String),
+    Buffer(TermArg, Vec<u8>),
+    ToHexString(TermArg, Target),
+    ToBuffer(TermArg, Target),
+    ToDecimalString(TermArg, Target),
+    ToInteger(TermArg, Target),
+    Add(TermArg, TermArg, Target),
+    Concat(TermArg, TermArg, Target),
+    Subtract(TermArg, TermArg, Target),
+    Multiply(TermArg, TermArg, Target),
+    Divide(TermArg, TermArg, Target, Target),
+    ShiftLeft(TermArg, TermArg, Target),
+    ShiftRight(TermArg, TermArg, Target),
+    And(TermArg, TermArg, Target),
+    Nand(TermArg, TermArg, Target),
+    Or(TermArg, TermArg, Target),
+    Nor(TermArg, TermArg, Target),
+    Xor(TermArg, TermArg, Target),
+    Not(TermArg, Target),
+    SizeOf(Target),
+    Store(TermArg, Target),
+    RefOf(Target),
+    Increment(Target),
+    Decrement(Target),
+    While(PredicateBlock),
+    If(PredicateBlock),
+    Else(Vec<AmlTerm>),
+    Noop,
+    Return(TermArg),
+    Break,
+    LAnd(TermArg, TermArg),
+    LOr(TermArg, TermArg),
+    LNot(TermArg),
+    LNotEqual(TermArg, TermArg),
+    LLessEqual(TermArg, TermArg),
+    LGreaterEqual(TermArg, TermArg),
+    LEqual(TermArg, TermArg),
+    LGreater(TermArg, TermArg),
+    LLess(TermArg, TermArg),
+    FindSetLeftBit(TermArg, Target),
+    FindSetRightBit(TermArg, Target),
+    DerefOf(TermArg),
+    ConcatRes(TermArg, TermArg, Target),
+    Mod(TermArg, TermArg, Target),
+    Notify(Target, TermArg),
+    Index(TermArg, TermArg, Target),
+    Mutex(String, u8),
+    Event(String),
+    Aquire(Target, u16),
+    Signal(Target),
+    Wait(Target, TermArg),
+    Reset(Target),
+    Release(Target),
+    CreateDWordField(TermArg, TermArg, String),
+    CreateWordField(TermArg, TermArg, String),
+    CreateByteField(TermArg, TermArg, String),
+    CreateBitField(TermArg, TermArg, String),
+    CreateQWordField(TermArg, TermArg, String),
+    MethodCall(String, Vec<TermArg>),
+}
+
+#[derive(Debug, Clone)]
+pub enum TermArg {
+    Expression(Box<AmlTerm>),
+    DataObject(DataObject),
+    Arg(u8),
+    Local(u8),
+    MethodCall(String, Vec<TermArg>),
+    Name(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum Target {
+    None,
+    Arg(u8),
+    Local(u8),
+    Name(String),
+    Debug,
+    DerefOf(TermArg),
+    RefOf(Box<Target>),
+    Index(TermArg, TermArg, Box<Target>),
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ScopeObj {
+    name: String,
+    term_list: Vec<AmlTerm>,
+}
+
+impl ScopeObj {
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let mut inner = parser.get_inner_parser()?;
+        let name = inner.parse_name()?;
+
+        inner.state.scope = name.clone();
+        eprintln!("scope name: {}, now: {}", name, inner.state.scope);
+        let term_list = inner.parse_term_list()?;
+        inner.check_empty()?;
+        inner.state.move_to_parent(parser);
+
+        Ok(Self { name, term_list })
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct RegionObj {
+    name: String,
+    region_space: u8,
+    region_offset: TermArg,
+    region_length: TermArg,
+}
+
+impl RegionObj {
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let name = parser.parse_name()?;
+        eprintln!("region name: {}", name);
+        let region_space = parser.get_next_byte()?;
+        let region_offset = parser.parse_term_arg()?;
+        eprintln!("region offset: {:?}", region_offset);
+        let region_length = parser.parse_term_arg()?;
+        eprintln!("region length: {:?}", region_length);
+        Ok(Self {
+            name,
+            region_space,
+            region_offset,
+            region_length,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct FieldDef {
+    name: String,
+    flags: u8,
+    fields: Vec<FieldElement>,
+}
+
+impl FieldDef {
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let mut inner = parser.get_inner_parser()?;
+        let name = inner.parse_name()?;
+        eprintln!("field name: {}", name);
+        let flags = inner.get_next_byte()?;
+        eprintln!("field flags: {:x}", flags);
+        let mut field_list = Vec::new();
+
+        while inner.pos < inner.code.len() {
+            let lead = inner.peek_next_byte()?;
+
+            let field = match lead {
+                0 => {
+                    inner.forward(1)?;
+                    let pkg_length = inner.get_pkg_length()?;
+                    eprintln!("reserved field element pkg length: {:x}", pkg_length);
+                    // add 1 since we are not using it as normal pkg length
+                    FieldElement::ReservedField(pkg_length + 1)
+                }
+                1 => todo!("access field"),
+                2 => todo!("connection field"),
+                3 => todo!("extended access field"),
+                _ => {
+                    let len_now = inner.pos;
+                    let name = inner.parse_name()?;
+                    assert!(inner.pos - len_now == 4); // must be a name segment
+                    eprintln!("field element name: {}", name);
+                    let pkg_length = inner.get_pkg_length()?;
+                    eprintln!("field element pkg length: {:x}", pkg_length);
+                    // add 1 since we are not using it as normal pkg length
+                    FieldElement::NamedField(name, pkg_length + 1)
+                }
+            };
+            field_list.push(field);
+        }
+        inner.check_empty()?;
+        Ok(Self {
+            name,
+            flags,
+            fields: field_list,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum FieldElement {
+    ReservedField(usize),
+    NamedField(String, usize),
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct MethodObj {
+    name: String,
+    flags: u8,
+    term_list: Vec<AmlTerm>,
+}
+
+impl MethodObj {
+    fn arg_count(&self) -> usize {
+        (self.flags & 0b111) as usize
+    }
+
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let mut inner = parser.get_inner_parser()?;
+        let name = inner.parse_name()?;
+        eprintln!("method name: {}", name);
+        let flags = inner.get_next_byte()?;
+        eprintln!("method flags: {:x}", flags);
+        let term_list = inner.parse_term_list()?;
+        inner.check_empty()?;
+
+        Ok(Self {
+            name,
+            flags,
+            term_list,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct PredicateBlock {
+    predicate: TermArg,
+    term_list: Vec<AmlTerm>,
+}
+
+impl PredicateBlock {
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let mut inner = parser.get_inner_parser()?;
+
+        let predicate = inner.parse_term_arg()?;
+        eprintln!("pred predicate: {:?}", predicate);
+        let term_list = inner.parse_term_list()?;
+        inner.check_empty()?;
+
+        Ok(Self {
+            predicate,
+            term_list,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ProcessorDeprecated {
+    name: String,
+    unk1: u8,
+    unk2: u32,
+    unk3: u8,
+    term_list: Vec<AmlTerm>,
+}
+
+impl ProcessorDeprecated {
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let mut inner = parser.get_inner_parser()?;
+        let name = inner.parse_name()?;
+        eprintln!("processor name: {}", name);
+        let unk1 = inner.get_next_byte()?;
+        eprintln!("processor unk1: {:x}", unk1);
+        let unk2 = u32::from_le_bytes([
+            inner.get_next_byte()?,
+            inner.get_next_byte()?,
+            inner.get_next_byte()?,
+            inner.get_next_byte()?,
+        ]);
+        eprintln!("processor unk2: {:x}", unk2);
+        let unk3 = inner.get_next_byte()?;
+        eprintln!("processor unk3: {:x}", unk3);
+        let term_list = inner.parse_term_list()?;
+        inner.check_empty()?;
+        Ok(Self {
+            name,
+            unk1,
+            unk2,
+            unk3,
+            term_list,
+        })
+    }
+}
+
+type StateMethodsList = Rc<RefCell<BTreeMap<String, usize>>>;
+
+/// inner state of the parser to store information about the current scope/position
+#[derive(Debug, Clone, Default)]
+struct State {
+    /// the current scope
+    scope: String,
+    /// the current method
+    scopes: Vec<(String, StateMethodsList)>,
+    /// the current methods
+    methods: StateMethodsList,
+}
+
+impl State {
+    fn move_to_parent(self, parser: &mut Parser) {
+        let s = self.methods.borrow().clone();
+        parser.state.methods.borrow_mut().extend(s);
+        for (scope_name, scope) in &self.scopes {
+            let mut found = false;
+            for (scope_name_mine, scope_mine) in &parser.state.scopes {
+                if scope_name == scope_name_mine {
+                    let s = scope.clone().borrow().clone().into_iter();
+                    scope_mine.borrow_mut().extend(s);
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                parser
+                    .state
+                    .scopes
+                    .push((scope_name.clone(), Rc::clone(scope)));
+            }
+        }
+        parser.state.scopes.push((self.scope, self.methods));
+    }
+
+    fn find_method(&self, name: &str) -> Option<usize> {
+        eprintln!("finding method {name:?} in {:?}", self.scopes);
+
+        let (methods, method_name) = if name.len() > 4 {
+            let scope_name = &name[..name.len() - 5];
+            let method_name = &name[name.len() - 4..];
+
+            eprintln!("scope name: {scope_name:?}, method name: {method_name:?}");
+
+            let methods = self
+                .scopes
+                .iter()
+                .find_map(|(search_scope_name, scope_vars)| {
+                    eprintln!("{search_scope_name:?} == {scope_name:?}");
+                    if search_scope_name == scope_name {
+                        Some(scope_vars.clone())
+                    } else {
+                        None
+                    }
+                })
+                .expect("scope not found");
+            (methods, method_name)
+        } else {
+            (self.methods.clone(), name)
+        };
+
+        eprintln!("methods: {methods:?}");
+
+        let methods = methods.borrow();
+        methods
+            .iter()
+            .find(|(scope_method_name, _)| method_name == *scope_method_name)
+            .map(|(_, n_args)| *n_args)
+    }
+}
+
+pub struct Parser<'a> {
+    code: &'a [u8],
+    pos: usize,
+    state: State,
+}
+
+impl Parser<'_> {
+    fn remaining_bytes(&self) -> usize {
+        self.code.len() - self.pos
+    }
+
+    fn get_next_byte(&mut self) -> Result<u8, AmlParseError> {
+        if self.pos >= self.code.len() {
+            return Err(AmlParseError::UnexpectedEndOfCode);
+        }
+        let byte = self.code[self.pos];
+        self.pos += 1;
+        Ok(byte)
+    }
+
+    fn peek_next_byte(&self) -> Result<u8, AmlParseError> {
+        if self.pos >= self.code.len() {
+            return Err(AmlParseError::UnexpectedEndOfCode);
+        }
+        Ok(self.code[self.pos])
+    }
+
+    fn forward(&mut self, n: usize) -> Result<(), AmlParseError> {
+        if self.pos + n > self.code.len() {
+            return Err(AmlParseError::UnexpectedEndOfCode);
+        }
+        self.pos += n;
+        Ok(())
+    }
+
+    fn backward(&mut self, n: usize) -> Result<(), AmlParseError> {
+        if self.pos == 0 {
+            return Err(AmlParseError::CannotMoveBackward);
+        }
+        self.pos -= n;
+        Ok(())
+    }
+
+    fn get_pkg_length(&mut self) -> Result<usize, AmlParseError> {
+        let lead_byte = self.get_next_byte()?;
+        let following_bytes = lead_byte >> 6;
+
+        eprintln!("pkglen: lead byte: {:x}", lead_byte);
+
+        let mut length: usize;
+        if following_bytes == 0 {
+            // subtract the bytes used for the length
+            return Ok((lead_byte & 0b0011_1111) as usize - 1);
+        } else {
+            // bits 4-5 must be zero
+            if (lead_byte >> 4) & 0b11 != 0 {
+                return Err(AmlParseError::InvalidPkgLengthLead);
+            }
+            length = lead_byte as usize & 0b0000_1111;
+        }
+        eprintln!("len now start: {:x}", length);
+
+        for i in 0..following_bytes {
+            let byte = self.get_next_byte()?;
+            length |= (byte as usize) << (8 * i + 4);
+            eprintln!("len now: {:x}", length);
+        }
+        // subtract the bytes used for the length
+        Ok(length - following_bytes as usize - 1)
+    }
+
+    fn get_inner_parser(&mut self) -> Result<Parser, AmlParseError> {
+        let pkg_length = self.get_pkg_length()?;
+        eprintln!("inner pkg length: {:x}", pkg_length);
+
+        let inner_parser = Parser {
+            code: &self.code[self.pos..self.pos + pkg_length],
+            pos: 0,
+            state: State {
+                scope: String::new(),
+                scopes: self.state.scopes.clone(),
+                methods: self.state.methods.clone(),
+            },
+        };
+        self.pos += pkg_length;
+        Ok(inner_parser)
+    }
+
+    fn check_empty(&self) -> Result<(), AmlParseError> {
+        if self.pos != self.code.len() {
+            return Err(AmlParseError::RemainingBytes(self.code.len() - self.pos));
+        }
+        Ok(())
+    }
+
+    fn parse_term(&mut self) -> Result<AmlTerm, AmlParseError> {
+        let byte = self.get_next_byte()?;
+        let term = self.try_parse_term(byte)?;
+
+        if let Some(term) = term {
+            Ok(term)
+        } else {
+            todo!("opcode: {:x}", byte)
+        }
+    }
+
+    fn try_parse_term(&mut self, opcode: u8) -> Result<Option<AmlTerm>, AmlParseError> {
+        eprintln!("opcode: {:x}", opcode);
+
+        let term = match opcode {
+            0x08 => AmlTerm::NameObj(self.parse_name()?, self.parse_term_arg()?),
+            0x0d => {
+                let mut str = String::new();
+                loop {
+                    let byte = self.get_next_byte()?;
+                    eprintln!("byte: {:x}", byte);
+                    if byte == 0 {
+                        break;
+                    }
+                    str.push(byte as char);
+                }
+                AmlTerm::String(str)
+            }
+            0x10 => AmlTerm::Scope(ScopeObj::parse(self)?),
+            0x11 => {
+                let mut inner = self.get_inner_parser()?;
+                let buf_size = inner.parse_term_arg()?;
+                // no need for `check_empty`, just take all remaining
+                AmlTerm::Buffer(buf_size, inner.code[inner.pos..].to_vec())
+            }
+            0x12 => {
+                let mut inner = self.get_inner_parser()?;
+                let package_size = inner.get_next_byte()?;
+                eprintln!("package size: {:x}", package_size);
+                let mut package_elements = Vec::new();
+                while inner.pos < inner.code.len() {
+                    package_elements.push(inner.parse_term_arg()?);
+                    eprintln!("package element: {:?}", package_elements.last());
+                }
+                inner.check_empty()?;
+                AmlTerm::Package(package_size, package_elements)
+            }
+            0x14 => {
+                let method = MethodObj::parse(self)?;
+                self.state
+                    .methods
+                    .borrow_mut()
+                    .insert(method.name.clone(), method.arg_count());
+                AmlTerm::Method(method)
+            }
+            0x5b => {
+                // extra ops
+                let inner_opcode = self.get_next_byte()?;
+
+                match inner_opcode {
+                    0x01 => AmlTerm::Mutex(self.parse_name()?, self.get_next_byte()?),
+                    0x02 => AmlTerm::Event(self.parse_name()?),
+                    0x23 => AmlTerm::Aquire(
+                        self.parse_target()?,
+                        u16::from_le_bytes([self.get_next_byte()?, self.get_next_byte()?]),
+                    ),
+                    0x24 => AmlTerm::Signal(self.parse_target()?),
+                    0x25 => AmlTerm::Wait(self.parse_target()?, self.parse_term_arg()?),
+                    0x26 => AmlTerm::Reset(self.parse_target()?),
+                    0x27 => AmlTerm::Release(self.parse_target()?),
+                    0x80 => AmlTerm::Region(RegionObj::parse(self)?),
+                    0x81 => AmlTerm::Field(FieldDef::parse(self)?),
+                    0x82 => AmlTerm::Device(ScopeObj::parse(self)?),
+                    0x83 => AmlTerm::Processor(ProcessorDeprecated::parse(self)?),
+                    _ => todo!("extra opcode: {:x}", inner_opcode),
+                }
+            }
+            0x70 => AmlTerm::Store(self.parse_term_arg()?, self.parse_target()?),
+            0x71 => AmlTerm::RefOf(self.parse_target()?),
+            0x72 => AmlTerm::Add(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x73 => AmlTerm::Concat(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x74 => AmlTerm::Subtract(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x75 => AmlTerm::Increment(self.parse_target()?),
+            0x76 => AmlTerm::Decrement(self.parse_target()?),
+            0x77 => AmlTerm::Multiply(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x78 => AmlTerm::Divide(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+                self.parse_target()?,
+            ),
+            0x79 => AmlTerm::ShiftLeft(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x7A => AmlTerm::ShiftRight(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x7B => AmlTerm::And(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x7C => AmlTerm::Nand(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x7D => AmlTerm::Or(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x7E => AmlTerm::Nor(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x7F => AmlTerm::Xor(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x80 => AmlTerm::Not(self.parse_term_arg()?, self.parse_target()?),
+            0x81 => AmlTerm::FindSetLeftBit(self.parse_term_arg()?, self.parse_target()?),
+            0x82 => AmlTerm::FindSetRightBit(self.parse_term_arg()?, self.parse_target()?),
+            0x83 => AmlTerm::DerefOf(self.parse_term_arg()?),
+            0x84 => AmlTerm::ConcatRes(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x85 => AmlTerm::Mod(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x86 => AmlTerm::Notify(self.parse_target()?, self.parse_term_arg()?),
+            0x87 => AmlTerm::SizeOf(self.parse_target()?),
+            0x88 => AmlTerm::Index(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
+            0x8A => AmlTerm::CreateDWordField(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_name()?,
+            ),
+            0x8B => AmlTerm::CreateWordField(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_name()?,
+            ),
+            0x8C => AmlTerm::CreateByteField(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_name()?,
+            ),
+            0x8D => AmlTerm::CreateBitField(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_name()?,
+            ),
+            0x8F => AmlTerm::CreateQWordField(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_name()?,
+            ),
+            0x90 => AmlTerm::LAnd(self.parse_term_arg()?, self.parse_term_arg()?),
+            0x91 => AmlTerm::LOr(self.parse_term_arg()?, self.parse_term_arg()?),
+            0x92 => {
+                let next_byte = self.peek_next_byte()?;
+                match next_byte {
+                    0x93 => {
+                        self.forward(1)?;
+                        AmlTerm::LNotEqual(self.parse_term_arg()?, self.parse_term_arg()?)
+                    }
+                    0x94 => {
+                        self.forward(1)?;
+                        AmlTerm::LLessEqual(self.parse_term_arg()?, self.parse_term_arg()?)
+                    }
+                    0x95 => {
+                        self.forward(1)?;
+                        AmlTerm::LGreaterEqual(self.parse_term_arg()?, self.parse_term_arg()?)
+                    }
+                    _ => AmlTerm::LNot(self.parse_term_arg()?),
+                }
+            }
+            0x93 => AmlTerm::LEqual(self.parse_term_arg()?, self.parse_term_arg()?),
+            0x94 => AmlTerm::LGreater(self.parse_term_arg()?, self.parse_term_arg()?),
+            0x95 => AmlTerm::LLess(self.parse_term_arg()?, self.parse_term_arg()?),
+            0x96 => AmlTerm::ToBuffer(self.parse_term_arg()?, self.parse_target()?),
+            0x97 => AmlTerm::ToDecimalString(self.parse_term_arg()?, self.parse_target()?),
+            0x98 => AmlTerm::ToHexString(self.parse_term_arg()?, self.parse_target()?),
+            0x99 => AmlTerm::ToInteger(self.parse_term_arg()?, self.parse_target()?),
+            0xA0 => AmlTerm::If(PredicateBlock::parse(self)?),
+            0xA1 => {
+                let mut inner = self.get_inner_parser()?;
+                let else_list = inner.parse_term_list()?;
+                inner.check_empty()?;
+
+                AmlTerm::Else(else_list)
+            }
+            0xA2 => AmlTerm::While(PredicateBlock::parse(self)?),
+            0xA3 => AmlTerm::Noop,
+            0xA4 => AmlTerm::Return(self.parse_term_arg()?),
+            0xA5 => AmlTerm::Break,
+            _ => {
+                eprintln!("try parse name");
+                // move back once, since we have consumed this byte
+                self.backward(1)?;
+                let Some(name) = self.try_parse_name()? else {
+                    return Ok(None);
+                };
+                let n_args = self.state.find_method(&name).ok_or_else(|| {
+                    todo!(
+                        "method not found: {}\nstate: {:#X?}",
+                        name,
+                        self.state.methods
+                    );
+                })?;
+
+                let mut args = Vec::new();
+                for _ in 0..n_args {
+                    args.push(self.parse_term_arg()?);
+                }
+
+                AmlTerm::MethodCall(name, args)
+            }
+        };
+        eprintln!("{:x?}", term);
+
+        Ok(Some(term))
+    }
+
+    fn parse_term_arg(&mut self) -> Result<TermArg, AmlParseError> {
+        let lead_byte = self.get_next_byte()?;
+
+        let x = match lead_byte {
+            0x0 => Ok(TermArg::DataObject(DataObject::ConstZero)),
+            0x1 => Ok(TermArg::DataObject(DataObject::ConstOne)),
+            0xA => {
+                let data = self.get_next_byte()?;
+                Ok(TermArg::DataObject(DataObject::ByteConst(data)))
+            }
+            0xB => {
+                let data = u16::from_le_bytes([self.get_next_byte()?, self.get_next_byte()?]);
+                Ok(TermArg::DataObject(DataObject::WordConst(data)))
+            }
+            0xC => {
+                let data = u32::from_le_bytes([
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                ]);
+                Ok(TermArg::DataObject(DataObject::DWordConst(data)))
+            }
+            0xE => {
+                let data = u64::from_le_bytes([
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                    self.get_next_byte()?,
+                ]);
+                Ok(TermArg::DataObject(DataObject::QWordConst(data)))
+            }
+            0xFF => Ok(TermArg::DataObject(DataObject::ConstOnes)),
+            _ => {
+                if let Some(local) = self.try_parse_local(lead_byte)? {
+                    Ok(TermArg::Local(local))
+                } else if let Some(arg) = self.try_parse_arg(lead_byte)? {
+                    Ok(TermArg::Arg(arg))
+                } else {
+                    self.backward(1)?;
+                    if let Some(name) = self.try_parse_name()? {
+                        if let Some(n_args) = self.state.find_method(&name) {
+                            let mut args = Vec::new();
+                            for _ in 0..n_args {
+                                args.push(self.parse_term_arg()?);
+                            }
+
+                            Ok(TermArg::MethodCall(name, args))
+                        } else {
+                            Ok(TermArg::Name(name))
+                        }
+                    } else {
+                        // didn't work for `name`, we need to go forward to be back to where we were before
+                        self.forward(1)?;
+
+                        if let Some(term) = self
+                            .try_parse_term(lead_byte)?
+                            .map(|term| TermArg::Expression(Box::new(term)))
+                        {
+                            Ok(term)
+                        } else {
+                            todo!("term arg lead byte: {:x}", lead_byte)
+                        }
+                    }
+                }
+            }
+        };
+        eprintln!("term arg: {:x?}", x);
+        x
+    }
+
+    fn try_parse_name(&mut self) -> Result<Option<String>, AmlParseError> {
+        let name_char_byte = self.peek_next_byte()?;
+
+        fn parse_name_path(parser: &mut Parser) -> Result<String, AmlParseError> {
+            let byte = parser.get_next_byte()?;
+            let mut str = String::new();
+
+            if byte == 0 {
+                return Ok(str);
+            }
+
+            str.push(byte as char);
+
+            // add 3 more
+            for _ in 0..3 {
+                let byte = parser.get_next_byte()?;
+                match byte {
+                    b'A'..=b'Z' | b'_' | b'0'..=b'9' => {
+                        str.push(byte as char);
+                    }
+                    _ => panic!("invalid name path char: {:x} so far {str:?}", byte),
+                }
+            }
+
+            Ok(str)
+        }
+
+        eprintln!("name char byte: {:x}", name_char_byte);
+
+        match name_char_byte {
+            0 => {
+                self.forward(1)?;
+                Ok(Some(String::new()))
+            }
+            // lead name char
+            b'A'..=b'Z' | b'_' => Ok(Some(parse_name_path(self)?)),
+            // // digit char
+            // b'0'..=b'9' => {}
+            // root char
+            b'\\' => {
+                self.forward(1)?;
+                let name = self.parse_name()?;
+                Ok(Some(format!("\\{}", name)))
+            }
+            // parent prefix
+            b'^' => {
+                let mut str = String::new();
+                while self.peek_next_byte()? == b'^' {
+                    self.forward(1)?;
+                    str.push('^');
+                }
+                str += &self.parse_name()?;
+
+                Ok(Some(str))
+            }
+            b'.' => {
+                self.forward(1)?;
+                let seg1 = parse_name_path(self)?;
+                let seg2 = parse_name_path(self)?;
+                Ok(Some(format!("{seg1}.{seg2}")))
+            }
+            b'/' => {
+                self.forward(1)?;
+                let count = self.get_next_byte()?;
+                let mut str = String::new();
+                for i in 0..count {
+                    str += &parse_name_path(self)?;
+                    if i != count - 1 {
+                        str += ".";
+                    }
+                }
+                Ok(Some(str))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn parse_name(&mut self) -> Result<String, AmlParseError> {
+        let peek = self.peek_next_byte()?;
+        let name = self.try_parse_name()?;
+
+        if let Some(name) = name {
+            Ok(name)
+        } else {
+            todo!("char not valid {:X}", peek)
+        }
+    }
+
+    fn try_parse_local(&mut self, lead: u8) -> Result<Option<u8>, AmlParseError> {
+        match lead {
+            0x60..=0x67 => {
+                // local0-local7
+                Ok(Some(lead - 0x60))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn try_parse_arg(&mut self, lead: u8) -> Result<Option<u8>, AmlParseError> {
+        match lead {
+            0x68..=0x6E => {
+                // arg0-arg6
+                Ok(Some(lead - 0x68))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn parse_target(&mut self) -> Result<Target, AmlParseError> {
+        let lead_byte = self.peek_next_byte()?;
+
+        let x = match lead_byte {
+            0x0 => {
+                self.forward(1)?;
+                Ok(Target::None)
+            }
+            0x5b => {
+                self.forward(1)?;
+                let next_byte = self.get_next_byte()?;
+                assert!(next_byte == 0x31);
+                Ok(Target::Debug)
+            }
+            0x71 => {
+                // typeref opcode
+                panic!("typeref opcode")
+            }
+            _ => {
+                if let Some(local) = self.try_parse_local(lead_byte)? {
+                    self.forward(1)?;
+                    Ok(Target::Local(local))
+                } else if let Some(arg) = self.try_parse_arg(lead_byte)? {
+                    self.forward(1)?;
+                    Ok(Target::Arg(arg))
+                } else if let Some(name) = self.try_parse_name()? {
+                    Ok(Target::Name(name))
+                } else {
+                    self.forward(1)?;
+                    if let Some(term) =
+                        self.try_parse_term(lead_byte)?.and_then(|term| match term {
+                            AmlTerm::Index(term_arg1, term_arg2, target) => {
+                                Some(Target::Index(term_arg1, term_arg2, Box::new(target)))
+                            }
+                            AmlTerm::RefOf(target) => Some(Target::RefOf(Box::new(target))),
+                            AmlTerm::DerefOf(term_arg) => Some(Target::DerefOf(term_arg)),
+                            _ => None,
+                        })
+                    {
+                        eprintln!("mmmm: {:x?}", term);
+                        Ok(term)
+                    } else {
+                        todo!("target lead byte: {:x}", lead_byte)
+                    }
+                }
+            }
+        };
+        eprintln!("target: {:x?}", x);
+        x
+    }
+
+    fn parse_term_list(&mut self) -> Result<Vec<AmlTerm>, AmlParseError> {
+        let mut term_list = Vec::new();
+        while self.pos < self.code.len() {
+            let term = self.parse_term()?;
+            term_list.push(term);
+        }
+        if self.remaining_bytes() != 0 {
+            return Err(AmlParseError::RemainingBytes(self.remaining_bytes()));
+        }
+        Ok(term_list)
+    }
+
+    fn parse_root(&mut self) -> Result<AmlCode, AmlParseError> {
+        let term_list = self.parse_term_list()?;
+        eprintln!("{:?}", term_list);
+
+        Ok(AmlCode { term_list })
+    }
+}

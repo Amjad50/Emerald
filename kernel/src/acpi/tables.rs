@@ -14,6 +14,8 @@ use crate::{
     sync::once::OnceLock,
 };
 
+use super::aml::{parse_aml, AmlCode};
+
 const BIOS_RO_MEM_START: usize = 0x000E0000;
 const BIOS_RO_MEM_END: usize = 0x000FFFFF;
 
@@ -560,8 +562,9 @@ impl Hpet {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Dsdt {
-    definition_block: Box<[u8]>,
+    aml_code: AmlCode,
 }
 
 impl Dsdt {
@@ -569,14 +572,8 @@ impl Dsdt {
         let dsdt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let data_len = header.length as usize - size_of::<DescriptionHeader>();
         let data = unsafe { slice::from_raw_parts(dsdt_ptr, data_len) };
-        Self {
-            definition_block: data.into(),
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn data(&self) -> &[u8] {
-        self.definition_block.as_ref()
+        let aml_code = parse_aml(data).unwrap();
+        Self { aml_code }
     }
 }
 
@@ -600,7 +597,7 @@ impl fmt::Display for BiosTables {
         writeln!(f, "RSDP: {:#X?}", self.rsdp)?;
         writeln!(f, "RSDT: {:#X?}", self.rsdt.header)?;
         for entry in &self.rsdt.entries {
-            writeln!(f, "{:#X?}", entry.body)?;
+            writeln!(f, "{:X?}", entry.body)?;
         }
         Ok(())
     }
