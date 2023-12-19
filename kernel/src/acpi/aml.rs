@@ -1354,7 +1354,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
                     writeln!(f)?;
                     display_depth(f, depth + 1)?;
                 }
-                display_term_arg(element, f, depth)?;
+                display_term_arg(element, f, depth + 1)?;
                 if i != elements.len() - 1 {
                     write!(f, ", ")?;
                 }
@@ -1372,7 +1372,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
                     writeln!(f)?;
                     display_depth(f, depth + 1)?;
                 }
-                display_term_arg(element, f, depth)?;
+                display_term_arg(element, f, depth + 1)?;
                 if i != elements.len() - 1 {
                     write!(f, ", ")?;
                 }
@@ -1649,6 +1649,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
                     write!(f, ", ")?;
                 }
             }
+            write!(f, ")")?;
         }
         AmlTerm::Concat(term1, term2, target) => {
             display_call_term_target("Concat", &[term1, term2], &[target], f, depth)?;
