@@ -1,6 +1,13 @@
 use core::{cell::RefCell, fmt};
 
-use alloc::{boxed::Box, collections::BTreeMap, format, rc::Rc, string::String, vec::Vec};
+use alloc::{
+    boxed::Box,
+    collections::{BTreeMap, BTreeSet},
+    format,
+    rc::Rc,
+    string::String,
+    vec::Vec,
+};
 
 #[derive(Debug, Clone)]
 pub enum AmlParseError {
@@ -360,6 +367,7 @@ impl PowerResource {
 }
 
 type StateMethodsList = Rc<RefCell<BTreeMap<String, usize>>>;
+type StateNamesList = Rc<RefCell<BTreeSet<String>>>;
 
 /// inner state of the parser to store information about the current scope/position
 #[derive(Debug, Clone, Default)]
@@ -370,12 +378,16 @@ struct State {
     scopes: Vec<(String, StateMethodsList)>,
     /// the current methods
     methods: StateMethodsList,
+    /// the current names (aliases, fields, etc.)
+    names: StateNamesList,
 }
 
 impl State {
     fn move_to_parent(self, parser: &mut Parser) {
         let s = self.methods.borrow().clone();
         parser.state.methods.borrow_mut().extend(s);
+        let s = self.names.borrow().clone();
+        parser.state.names.borrow_mut().extend(s);
         for (scope_name, scope) in &self.scopes {
             let mut found = false;
             for (scope_name_mine, scope_mine) in &parser.state.scopes {
@@ -394,6 +406,11 @@ impl State {
             }
         }
         parser.state.scopes.push((self.scope, self.methods));
+    }
+
+    fn find_name(&self, name: &str) -> bool {
+        eprintln!("finding name {name:?}, {:?}", self.names.borrow());
+        self.names.borrow().contains(name)
     }
 
     fn find_method(&self, name: &str) -> Option<usize> {
@@ -514,6 +531,7 @@ impl Parser<'_> {
                 scope: String::new(),
                 scopes: self.state.scopes.clone(),
                 methods: self.state.methods.clone(),
+                names: self.state.names.clone(),
             },
         };
         self.pos += pkg_length;
@@ -566,8 +584,18 @@ impl Parser<'_> {
         eprintln!("opcode: {:x}", opcode);
 
         let term = match opcode {
-            0x06 => AmlTerm::Alias(self.parse_name()?, self.parse_name()?),
-            0x08 => AmlTerm::NameObj(self.parse_name()?, self.parse_term_arg()?),
+            0x06 => {
+                let original_name = self.parse_name()?;
+                let aliased_name = self.parse_name()?;
+                self.state.names.borrow_mut().insert(aliased_name.clone());
+
+                AmlTerm::Alias(original_name, aliased_name)
+            }
+            0x08 => {
+                let name = self.parse_name()?;
+                self.state.names.borrow_mut().insert(name.clone());
+                AmlTerm::NameObj(name, self.parse_term_arg()?)
+            }
             0x0d => {
                 let mut str = String::new();
                 loop {
@@ -875,9 +903,16 @@ impl Parser<'_> {
                     self.backward(1)?;
                     if let Some(name) = self.try_parse_name()? {
                         let option_nargs = self.state.find_method(&name).or_else(|| {
-                            if for_method_call {
-                                // method calls cannot have names, it must be another method call inside
-                                Some(self.predict_possible_args())
+                            if self.state.find_name(&name) {
+                                None
+                            } else if for_method_call {
+                                let possible_args = self.predict_possible_args();
+                                // if its 0 and we are inside a method call, probably this is just a named variable
+                                if possible_args == 0 {
+                                    None
+                                } else {
+                                    Some(possible_args)
+                                }
                             } else {
                                 None
                             }
@@ -1046,6 +1081,7 @@ impl Parser<'_> {
                     self.forward(1)?;
                     Ok(Target::Arg(arg))
                 } else if let Some(name) = self.try_parse_name()? {
+                    self.state.names.borrow_mut().insert(name.clone());
                     Ok(Target::Name(name))
                 } else {
                     self.forward(1)?;
@@ -1105,6 +1141,7 @@ impl Parser<'_> {
                 _ => {
                     let len_now = self.pos;
                     let name = self.parse_name()?;
+                    self.state.names.borrow_mut().insert(name.clone());
                     assert!(self.pos - len_now == 4); // must be a name segment
                     eprintln!("field element name: {}", name);
                     let pkg_length = self.get_pkg_length()?;
