@@ -41,11 +41,15 @@ pub enum AmlTerm {
     Scope(ScopeObj),
     Region(RegionObj),
     Field(FieldDef),
+    IndexField(IndexFieldDef),
     Device(ScopeObj),
     Processor(ProcessorDeprecated),
+    PowerResource(PowerResource),
     Method(MethodObj),
     NameObj(String, TermArg),
     Package(u8, Vec<TermArg>),
+    VarPackage(TermArg, Vec<TermArg>),
+    Alias(String, String),
     String(String),
     Buffer(TermArg, Vec<u8>),
     ToHexString(TermArg, Target),
@@ -94,11 +98,14 @@ pub enum AmlTerm {
     Index(TermArg, TermArg, Target),
     Mutex(String, u8),
     Event(String),
+    CondRefOf(Target, Target),
     Aquire(Target, u16),
     Signal(Target),
     Wait(Target, TermArg),
     Reset(Target),
     Release(Target),
+    Stall(TermArg),
+    Sleep(TermArg),
     CreateDWordField(TermArg, TermArg, String),
     CreateWordField(TermArg, TermArg, String),
     CreateByteField(TermArg, TermArg, String),
@@ -191,40 +198,35 @@ impl FieldDef {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
         eprintln!("field name: {}", name);
-        let flags = inner.get_next_byte()?;
-        eprintln!("field flags: {:x}", flags);
-        let mut field_list = Vec::new();
-
-        while inner.pos < inner.code.len() {
-            let lead = inner.peek_next_byte()?;
-
-            let field = match lead {
-                0 => {
-                    inner.forward(1)?;
-                    let pkg_length = inner.get_pkg_length()?;
-                    eprintln!("reserved field element pkg length: {:x}", pkg_length);
-                    // add 1 since we are not using it as normal pkg length
-                    FieldElement::ReservedField(pkg_length + 1)
-                }
-                1 => todo!("access field"),
-                2 => todo!("connection field"),
-                3 => todo!("extended access field"),
-                _ => {
-                    let len_now = inner.pos;
-                    let name = inner.parse_name()?;
-                    assert!(inner.pos - len_now == 4); // must be a name segment
-                    eprintln!("field element name: {}", name);
-                    let pkg_length = inner.get_pkg_length()?;
-                    eprintln!("field element pkg length: {:x}", pkg_length);
-                    // add 1 since we are not using it as normal pkg length
-                    FieldElement::NamedField(name, pkg_length + 1)
-                }
-            };
-            field_list.push(field);
-        }
-        inner.check_empty()?;
+        let (flags, field_list) = inner.parse_fields_list_and_flags()?;
         Ok(Self {
             name,
+            flags,
+            fields: field_list,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct IndexFieldDef {
+    name: String,
+    index_name: String,
+    flags: u8,
+    fields: Vec<FieldElement>,
+}
+
+impl IndexFieldDef {
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let mut inner = parser.get_inner_parser()?;
+        let name = inner.parse_name()?;
+        eprintln!("indexfield name: {}", name);
+        let index_name = inner.parse_name()?;
+        eprintln!("indexfield index_name: {}", index_name);
+        let (flags, field_list) = inner.parse_fields_list_and_flags()?;
+        Ok(Self {
+            name,
+            index_name,
             flags,
             fields: field_list,
         })
@@ -323,6 +325,35 @@ impl ProcessorDeprecated {
             unk1,
             unk2,
             unk3,
+            term_list,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct PowerResource {
+    name: String,
+    system_level: u8,
+    resource_order: u16,
+    term_list: Vec<AmlTerm>,
+}
+
+impl PowerResource {
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let mut inner = parser.get_inner_parser()?;
+        let name = inner.parse_name()?;
+        eprintln!("powerresource name: {}", name);
+        let system_level = inner.get_next_byte()?;
+        eprintln!("powerresource system_level: {:x}", system_level);
+        let resource_order = u16::from_le_bytes([inner.get_next_byte()?, inner.get_next_byte()?]);
+        eprintln!("powerresource resource_order: {:x}", resource_order);
+        let term_list = inner.parse_term_list()?;
+        inner.check_empty()?;
+        Ok(Self {
+            name,
+            system_level,
+            resource_order,
             term_list,
         })
     }
@@ -511,6 +542,7 @@ impl Parser<'_> {
         eprintln!("opcode: {:x}", opcode);
 
         let term = match opcode {
+            0x06 => AmlTerm::Alias(self.parse_name()?, self.parse_name()?),
             0x08 => AmlTerm::NameObj(self.parse_name()?, self.parse_term_arg()?),
             0x0d => {
                 let mut str = String::new();
@@ -543,6 +575,18 @@ impl Parser<'_> {
                 inner.check_empty()?;
                 AmlTerm::Package(package_size, package_elements)
             }
+            0x13 => {
+                let mut inner = self.get_inner_parser()?;
+                let package_size = inner.parse_term_arg()?;
+                let mut package_elements = Vec::new();
+                eprintln!("varpackage size: {:x?}", package_size);
+                while inner.pos < inner.code.len() {
+                    package_elements.push(inner.parse_term_arg()?);
+                    eprintln!("varpackage element: {:?}", package_elements.last());
+                }
+                inner.check_empty()?;
+                AmlTerm::VarPackage(package_size, package_elements)
+            }
             0x14 => {
                 let method = MethodObj::parse(self)?;
                 self.state
@@ -558,6 +602,9 @@ impl Parser<'_> {
                 match inner_opcode {
                     0x01 => AmlTerm::Mutex(self.parse_name()?, self.get_next_byte()?),
                     0x02 => AmlTerm::Event(self.parse_name()?),
+                    0x12 => AmlTerm::CondRefOf(self.parse_target()?, self.parse_target()?),
+                    0x21 => AmlTerm::Stall(self.parse_term_arg()?),
+                    0x22 => AmlTerm::Sleep(self.parse_term_arg()?),
                     0x23 => AmlTerm::Aquire(
                         self.parse_target()?,
                         u16::from_le_bytes([self.get_next_byte()?, self.get_next_byte()?]),
@@ -570,6 +617,8 @@ impl Parser<'_> {
                     0x81 => AmlTerm::Field(FieldDef::parse(self)?),
                     0x82 => AmlTerm::Device(ScopeObj::parse(self)?),
                     0x83 => AmlTerm::Processor(ProcessorDeprecated::parse(self)?),
+                    0x84 => AmlTerm::PowerResource(PowerResource::parse(self)?),
+                    0x86 => AmlTerm::IndexField(IndexFieldDef::parse(self)?),
                     _ => todo!("extra opcode: {:x}", inner_opcode),
                 }
             }
@@ -997,6 +1046,44 @@ impl Parser<'_> {
         Ok(term_list)
     }
 
+    fn parse_fields_list_and_flags(mut self) -> Result<(u8, Vec<FieldElement>), AmlParseError> {
+        let flags = self.get_next_byte()?;
+        eprintln!("field flags: {:x}", flags);
+        let mut field_list = Vec::new();
+
+        while self.pos < self.code.len() {
+            let lead = self.peek_next_byte()?;
+
+            let field = match lead {
+                0 => {
+                    self.forward(1)?;
+                    let pkg_length = self.get_pkg_length()?;
+                    eprintln!("reserved field element pkg length: {:x}", pkg_length);
+                    // add 1 since we are not using it as normal pkg length
+                    FieldElement::ReservedField(pkg_length + 1)
+                }
+                1 => todo!("access field"),
+                2 => todo!("connection field"),
+                3 => todo!("extended access field"),
+                _ => {
+                    let len_now = self.pos;
+                    let name = self.parse_name()?;
+                    assert!(self.pos - len_now == 4); // must be a name segment
+                    eprintln!("field element name: {}", name);
+                    let pkg_length = self.get_pkg_length()?;
+                    eprintln!("field element pkg length: {:x}", pkg_length);
+                    // add 1 since we are not using it as normal pkg length
+                    FieldElement::NamedField(name, pkg_length + 1)
+                }
+            };
+            field_list.push(field);
+        }
+
+        self.check_empty()?;
+
+        Ok((flags, field_list))
+    }
+
     fn parse_root(&mut self) -> Result<AmlCode, AmlParseError> {
         let term_list = self.parse_term_list()?;
         eprintln!("{:?}", term_list);
@@ -1167,8 +1254,31 @@ fn display_predicate_block(
     write!(f, "}}")
 }
 
+fn display_fields(
+    fields: &[FieldElement],
+    f: &mut fmt::Formatter<'_>,
+    depth: usize,
+) -> fmt::Result {
+    let len = fields.len();
+    for (i, field) in fields.iter().enumerate() {
+        display_depth(f, depth)?;
+        match field {
+            FieldElement::ReservedField(len) => write!(f, "_Reserved (0x{:02X})", len)?,
+            FieldElement::NamedField(name, len) => write!(f, "{},     (0x{:02X})", name, len)?,
+        }
+        if i != len - 1 {
+            write!(f, ", ")?;
+        }
+        writeln!(f)?;
+    }
+    Ok(())
+}
+
 fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
     match term {
+        AmlTerm::Alias(name1, name2) => {
+            write!(f, "Alias({}, {})", name1, name2)?;
+        }
         AmlTerm::Scope(scope) => {
             write!(f, "Scope ")?;
             display_scope(scope, f, depth)?;
@@ -1186,25 +1296,40 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::Field(field) => {
             writeln!(f, "Field ({}, {}) {{", field.name, field.flags)?;
-            let len = field.fields.len();
-            for (i, field) in field.fields.iter().enumerate() {
-                display_depth(f, depth + 1)?;
-                match field {
-                    FieldElement::ReservedField(len) => write!(f, "_Reserved (0x{:02X})", len)?,
-                    FieldElement::NamedField(name, len) => {
-                        write!(f, "{},     (0x{:02X})", name, len)?
-                    }
-                }
-                if i != len - 1 {
-                    write!(f, ", ")?;
-                }
-                writeln!(f)?;
-            }
+            display_fields(&field.fields, f, depth + 1)?;
+            display_depth(f, depth)?;
+            writeln!(f, "}}")?;
+        }
+        AmlTerm::IndexField(index_field) => {
+            writeln!(
+                f,
+                "IndexField ({}, {}, {}) {{",
+                index_field.name, index_field.index_name, index_field.flags
+            )?;
+            display_fields(&index_field.fields, f, depth + 1)?;
             display_depth(f, depth)?;
             writeln!(f, "}}")?;
         }
         AmlTerm::Package(size, elements) => {
             write!(f, "Package (0x{:02X}) {{", size)?;
+            for (i, element) in elements.iter().enumerate() {
+                if i % 4 == 0 {
+                    writeln!(f)?;
+                    display_depth(f, depth + 1)?;
+                }
+                display_term_arg(element, f, depth)?;
+                if i != elements.len() - 1 {
+                    write!(f, ", ")?;
+                }
+            }
+            writeln!(f)?;
+            display_depth(f, depth)?;
+            write!(f, "}}")?;
+        }
+        AmlTerm::VarPackage(size, elements) => {
+            write!(f, "VarPackage (")?;
+            display_term_arg(size, f, depth)?;
+            write!(f, ") {{")?;
             for (i, element) in elements.iter().enumerate() {
                 if i % 4 == 0 {
                     writeln!(f)?;
@@ -1226,6 +1351,16 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
                 processor.name, processor.unk1, processor.unk2, processor.unk3
             )?;
             display_terms(&processor.term_list, f, depth + 1)?;
+            display_depth(f, depth)?;
+            writeln!(f, "}}")?;
+        }
+        AmlTerm::PowerResource(power_resource) => {
+            writeln!(
+                f,
+                "PowerResource ({}, 0x{:02X}, 0x{:04X}) {{",
+                power_resource.name, power_resource.system_level, power_resource.resource_order,
+            )?;
+            display_terms(&power_resource.term_list, f, depth + 1)?;
             display_depth(f, depth)?;
             writeln!(f, "}}")?;
         }
@@ -1366,7 +1501,6 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         AmlTerm::Index(term1, term2, target) => {
             display_index(term1, term2, target, f, depth)?;
         }
-
         AmlTerm::Buffer(size, data) => {
             write!(f, "Buffer (")?;
             display_term_arg(size, f, depth)?;
@@ -1387,6 +1521,15 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::Event(name) => {
             write!(f, "Event ({})", name)?;
+        }
+        AmlTerm::CondRefOf(target1, target2) => {
+            display_call_term_target("CondRefOf", &[], &[target1, target2], f, depth)?;
+        }
+        AmlTerm::Stall(term) => {
+            display_call_term_target("Stall", &[term], &[], f, depth)?;
+        }
+        AmlTerm::Sleep(term) => {
+            display_call_term_target("Sleep", &[term], &[], f, depth)?;
         }
         AmlTerm::Aquire(target, timeout) => {
             write!(f, "Aquire (")?;
