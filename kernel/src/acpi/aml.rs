@@ -417,7 +417,7 @@ impl State {
         eprintln!("finding method {name:?}");
 
         let (methods, method_name) = if name.len() > 4 {
-            let scope_name = &name[..name.len() - 5];
+            let scope_name = name[..name.len() - 5].trim_start_matches(['\\', '^']);
             let method_name = &name[name.len() - 4..];
 
             eprintln!("scope name: {scope_name:?}, method name: {method_name:?}");
@@ -427,7 +427,7 @@ impl State {
                 .iter()
                 .find_map(|(search_scope_name, scope_vars)| {
                     eprintln!("{search_scope_name:?} == {scope_name:?}");
-                    if search_scope_name == scope_name {
+                    if search_scope_name.trim_start_matches(['\\', '^']) == scope_name {
                         Some(scope_vars.clone())
                     } else {
                         None
