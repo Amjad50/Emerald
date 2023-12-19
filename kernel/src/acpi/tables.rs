@@ -597,7 +597,12 @@ impl fmt::Display for BiosTables {
         writeln!(f, "RSDP: {:#X?}", self.rsdp)?;
         writeln!(f, "RSDT: {:#X?}", self.rsdt.header)?;
         for entry in &self.rsdt.entries {
-            writeln!(f, "{:X?}", entry.body)?;
+            if let DescriptorTableBody::Dsdt(entry) = &entry.body {
+                writeln!(f, "DSDT: ")?;
+                entry.aml_code.display_with_depth(f, 1)?;
+            } else {
+                writeln!(f, "{:X?}", entry.body)?;
+            }
         }
         Ok(())
     }
