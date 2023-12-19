@@ -397,7 +397,7 @@ impl State {
     }
 
     fn find_method(&self, name: &str) -> Option<usize> {
-        eprintln!("finding method {name:?} in {:?}", self.scopes);
+        eprintln!("finding method {name:?}");
 
         let (methods, method_name) = if name.len() > 4 {
             let scope_name = &name[..name.len() - 5];
@@ -415,8 +415,7 @@ impl State {
                     } else {
                         None
                     }
-                })
-                .expect("scope not found");
+                })?;
             (methods, method_name)
         } else {
             (self.methods.clone(), name)
@@ -432,6 +431,7 @@ impl State {
     }
 }
 
+#[derive(Clone)]
 pub struct Parser<'a> {
     code: &'a [u8],
     pos: usize,
@@ -536,6 +536,30 @@ impl Parser<'_> {
         } else {
             todo!("opcode: {:x}", byte)
         }
+    }
+
+    fn predict_possible_args(&mut self) -> usize {
+        // clone ourselves to search futrue nodes
+        // TODO: reduce allocations
+        let mut inner = self.clone();
+
+        let mut n_args = 0;
+        // max 7 args
+        for _ in 0..7 {
+            // filter out impossible cases to be a method argument (taken from ACPICA code),
+            // but not exactly the same for simplicity, maybe will need to modify later.
+            match inner.parse_term_arg_for_method_call() {
+                Ok(TermArg::Name(_)) => break,
+                Ok(TermArg::Expression(amlterm)) => match amlterm.as_ref() {
+                    AmlTerm::Store(_, _) | AmlTerm::Notify(_, _) => break,
+                    _ => {}
+                },
+                Err(_) => break,
+                _ => {}
+            }
+            n_args += 1;
+        }
+        n_args
     }
 
     fn try_parse_term(&mut self, opcode: u8) -> Result<Option<AmlTerm>, AmlParseError> {
@@ -779,17 +803,14 @@ impl Parser<'_> {
                 let Some(name) = self.try_parse_name()? else {
                     return Ok(None);
                 };
-                let n_args = self.state.find_method(&name).ok_or_else(|| {
-                    todo!(
-                        "method not found: {}\nstate: {:#X?}",
-                        name,
-                        self.state.methods
-                    );
-                })?;
+                let n_args = self
+                    .state
+                    .find_method(&name)
+                    .unwrap_or_else(|| self.predict_possible_args());
 
                 let mut args = Vec::new();
                 for _ in 0..n_args {
-                    args.push(self.parse_term_arg()?);
+                    args.push(self.parse_term_arg_for_method_call()?);
                 }
 
                 AmlTerm::MethodCall(name, args)
@@ -801,6 +822,14 @@ impl Parser<'_> {
     }
 
     fn parse_term_arg(&mut self) -> Result<TermArg, AmlParseError> {
+        self.parse_term_arg_general(false)
+    }
+
+    fn parse_term_arg_for_method_call(&mut self) -> Result<TermArg, AmlParseError> {
+        self.parse_term_arg_general(true)
+    }
+
+    fn parse_term_arg_general(&mut self, for_method_call: bool) -> Result<TermArg, AmlParseError> {
         let lead_byte = self.get_next_byte()?;
 
         let x = match lead_byte {
@@ -845,10 +874,18 @@ impl Parser<'_> {
                 } else {
                     self.backward(1)?;
                     if let Some(name) = self.try_parse_name()? {
-                        if let Some(n_args) = self.state.find_method(&name) {
+                        let option_nargs = self.state.find_method(&name).or_else(|| {
+                            if for_method_call {
+                                // method calls cannot have names, it must be another method call inside
+                                Some(self.predict_possible_args())
+                            } else {
+                                None
+                            }
+                        });
+                        if let Some(n_args) = option_nargs {
                             let mut args = Vec::new();
                             for _ in 0..n_args {
-                                args.push(self.parse_term_arg()?);
+                                args.push(self.parse_term_arg_for_method_call()?);
                             }
 
                             Ok(TermArg::MethodCall(name, args))
