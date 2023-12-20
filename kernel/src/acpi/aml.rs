@@ -1,10 +1,9 @@
-use core::{cell::RefCell, fmt};
+use core::fmt;
 
 use alloc::{
     boxed::Box,
     collections::{BTreeMap, BTreeSet},
     format,
-    rc::Rc,
     string::String,
     vec::Vec,
 };
@@ -18,10 +17,12 @@ pub enum AmlParseError {
 }
 
 pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
+    let mut methods = BTreeMap::new();
+    let mut names = BTreeSet::new();
     let mut parser = Parser {
         code,
         pos: 0,
-        state: State::default(),
+        state: State::new(&mut methods, &mut names),
     };
     parser.parse_root()
 }
@@ -155,12 +156,9 @@ impl ScopeObj {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
 
-        inner.state.scope = name.clone();
-        eprintln!("scope name: {}, now: {}", name, inner.state.scope);
+        eprintln!("scope name: {}", name);
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
-        inner.state.move_to_parent(parser);
-
         Ok(Self { name, term_list })
     }
 }
@@ -366,93 +364,50 @@ impl PowerResource {
     }
 }
 
-type StateMethodsList = Rc<RefCell<BTreeMap<String, usize>>>;
-type StateNamesList = Rc<RefCell<BTreeSet<String>>>;
+type StateMethodsList<'a> = &'a mut BTreeMap<String, usize>;
+type StateNamesList<'a> = &'a mut BTreeSet<String>;
 
 /// inner state of the parser to store information about the current scope/position
-#[derive(Debug, Clone, Default)]
-struct State {
-    /// the current scope
-    scope: String,
-    /// the current method
-    scopes: Vec<(String, StateMethodsList)>,
-    /// the current methods
-    methods: StateMethodsList,
-    /// the current names (aliases, fields, etc.)
-    names: StateNamesList,
+#[derive(Debug)]
+struct State<'a> {
+    /// Shared state all method names
+    methods: StateMethodsList<'a>,
+    /// all found names (aliases, fields, etc.)
+    names: StateNamesList<'a>,
 }
 
-impl State {
-    fn move_to_parent(self, parser: &mut Parser) {
-        let s = self.methods.borrow().clone();
-        parser.state.methods.borrow_mut().extend(s);
-        let s = self.names.borrow().clone();
-        parser.state.names.borrow_mut().extend(s);
-        for (scope_name, scope) in &self.scopes {
-            let mut found = false;
-            for (scope_name_mine, scope_mine) in &parser.state.scopes {
-                if scope_name == scope_name_mine {
-                    let s = scope.clone().borrow().clone().into_iter();
-                    scope_mine.borrow_mut().extend(s);
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                parser
-                    .state
-                    .scopes
-                    .push((scope_name.clone(), Rc::clone(scope)));
-            }
+impl<'a> State<'a> {
+    fn new(methods: StateMethodsList<'a>, names: StateNamesList<'a>) -> State<'a> {
+        State { methods, names }
+    }
+
+    /// Renamed to not be confused with `Clone::clone`
+    fn clone_state(&mut self) -> State {
+        State {
+            methods: self.methods,
+            names: self.names,
         }
-        parser.state.scopes.push((self.scope, self.methods));
     }
 
     fn find_name(&self, name: &str) -> bool {
-        eprintln!("finding name {name:?}, {:?}", self.names.borrow());
-        self.names.borrow().contains(name)
+        eprintln!("finding name {name:?}, {:?}", self.names);
+        self.names.contains(name)
     }
 
     fn find_method(&self, name: &str) -> Option<usize> {
         eprintln!("finding method {name:?}");
-
-        let (methods, method_name) = if name.len() > 4 {
-            let scope_name = name[..name.len() - 5].trim_start_matches(['\\', '^']);
-            let method_name = &name[name.len() - 4..];
-
-            eprintln!("scope name: {scope_name:?}, method name: {method_name:?}");
-
-            let methods = self
-                .scopes
-                .iter()
-                .find_map(|(search_scope_name, scope_vars)| {
-                    eprintln!("{search_scope_name:?} == {scope_name:?}");
-                    if search_scope_name.trim_start_matches(['\\', '^']) == scope_name {
-                        Some(scope_vars.clone())
-                    } else {
-                        None
-                    }
-                })?;
-            (methods, method_name)
-        } else {
-            (self.methods.clone(), name)
-        };
-
-        eprintln!("methods: {methods:?}");
-
-        let methods = methods.borrow();
-        methods
-            .iter()
-            .find(|(scope_method_name, _)| method_name == *scope_method_name)
-            .map(|(_, n_args)| *n_args)
+        // all methods are shared here, from all scopes
+        // we are assuming that methods with similar names have the same number of arguments
+        let method_name = &name[name.len() - 4..];
+        eprintln!("methods: {:?}", self.methods);
+        self.methods.get(method_name).copied()
     }
 }
 
-#[derive(Clone)]
 pub struct Parser<'a> {
     code: &'a [u8],
     pos: usize,
-    state: State,
+    state: State<'a>,
 }
 
 impl Parser<'_> {
@@ -527,15 +482,19 @@ impl Parser<'_> {
         let inner_parser = Parser {
             code: &self.code[self.pos..self.pos + pkg_length],
             pos: 0,
-            state: State {
-                scope: String::new(),
-                scopes: self.state.scopes.clone(),
-                methods: self.state.methods.clone(),
-                names: self.state.names.clone(),
-            },
+            state: self.state.clone_state(),
         };
         self.pos += pkg_length;
         Ok(inner_parser)
+    }
+
+    /// Renamed to not be confused with `Clone::clone`
+    fn clone_parser(&mut self) -> Parser {
+        Parser {
+            code: self.code,
+            pos: self.pos,
+            state: self.state.clone_state(),
+        }
     }
 
     fn check_empty(&self) -> Result<(), AmlParseError> {
@@ -559,17 +518,84 @@ impl Parser<'_> {
     fn predict_possible_args(&mut self) -> usize {
         // clone ourselves to search futrue nodes
         // TODO: reduce allocations
-        let mut inner = self.clone();
+        let mut inner = self.clone_parser();
 
         let mut n_args = 0;
         // max 7 args
         for _ in 0..7 {
             // filter out impossible cases to be a method argument (taken from ACPICA code),
             // but not exactly the same for simplicity, maybe will need to modify later.
-            match inner.parse_term_arg_for_method_call() {
+            match inner.parse_term_arg_for_method_arg() {
                 Ok(TermArg::Name(_)) => break,
                 Ok(TermArg::Expression(amlterm)) => match amlterm.as_ref() {
-                    AmlTerm::Store(_, _) | AmlTerm::Notify(_, _) => break,
+                    AmlTerm::Store(_, _)
+                    | AmlTerm::Notify(_, _)
+                    | AmlTerm::Release(_)
+                    | AmlTerm::Reset(_)
+                    | AmlTerm::Signal(_)
+                    | AmlTerm::Wait(_, _)
+                    | AmlTerm::Sleep(_)
+                    | AmlTerm::Stall(_)
+                    | AmlTerm::Aquire(_, _)
+                    | AmlTerm::CondRefOf(_, _)
+                    | AmlTerm::Break
+                    | AmlTerm::Return(_)
+                    | AmlTerm::Noop
+                    | AmlTerm::Else(_)
+                    | AmlTerm::If(_)
+                    | AmlTerm::While(_)
+                    | AmlTerm::Scope(_)
+                    | AmlTerm::Region(_)
+                    | AmlTerm::Field(_)
+                    | AmlTerm::IndexField(_)
+                    | AmlTerm::Device(_)
+                    | AmlTerm::Processor(_)
+                    | AmlTerm::PowerResource(_)
+                    | AmlTerm::Method(_)
+                    | AmlTerm::NameObj(_, _)
+                    | AmlTerm::Alias(_, _)
+                    | AmlTerm::Buffer(_, _)
+                    | AmlTerm::ToHexString(_, _)
+                    | AmlTerm::ToBuffer(_, _)
+                    | AmlTerm::ToDecimalString(_, _)
+                    | AmlTerm::ToInteger(_, _)
+                    | AmlTerm::LAnd(_, _)
+                    | AmlTerm::LOr(_, _)
+                    | AmlTerm::LNot(_)
+                    | AmlTerm::LNotEqual(_, _)
+                    | AmlTerm::LLessEqual(_, _)
+                    | AmlTerm::LGreaterEqual(_, _)
+                    | AmlTerm::LEqual(_, _)
+                    | AmlTerm::LGreater(_, _)
+                    | AmlTerm::LLess(_, _)
+                    | AmlTerm::Mutex(_, _)
+                    | AmlTerm::Event(_)
+                    | AmlTerm::CreateDWordField(_, _, _)
+                    | AmlTerm::CreateWordField(_, _, _)
+                    | AmlTerm::CreateByteField(_, _, _)
+                    | AmlTerm::CreateBitField(_, _, _)
+                    | AmlTerm::CreateQWordField(_, _, _) => break,
+                    AmlTerm::Add(_, _, t)
+                    | AmlTerm::Concat(_, _, t)
+                    | AmlTerm::Subtract(_, _, t)
+                    | AmlTerm::Multiply(_, _, t)
+                    | AmlTerm::Divide(_, _, _, t)
+                    | AmlTerm::ShiftLeft(_, _, t)
+                    | AmlTerm::ShiftRight(_, _, t)
+                    | AmlTerm::And(_, _, t)
+                    | AmlTerm::Nand(_, _, t)
+                    | AmlTerm::Or(_, _, t)
+                    | AmlTerm::Nor(_, _, t)
+                    | AmlTerm::Xor(_, _, t)
+                    | AmlTerm::Not(_, t)
+                    | AmlTerm::ConcatRes(_, _, t)
+                    | AmlTerm::Mod(_, _, t)
+                    | AmlTerm::Index(_, _, t)
+                        if !matches!(t, Target::None) =>
+                    {
+                        // only allow if target is None
+                        break;
+                    }
                     _ => {}
                 },
                 Err(_) => break,
@@ -587,13 +613,13 @@ impl Parser<'_> {
             0x06 => {
                 let original_name = self.parse_name()?;
                 let aliased_name = self.parse_name()?;
-                self.state.names.borrow_mut().insert(aliased_name.clone());
+                self.state.names.insert(aliased_name.clone());
 
                 AmlTerm::Alias(original_name, aliased_name)
             }
             0x08 => {
                 let name = self.parse_name()?;
-                self.state.names.borrow_mut().insert(name.clone());
+                self.state.names.insert(name.clone());
                 AmlTerm::NameObj(name, self.parse_term_arg()?)
             }
             0x0d => {
@@ -643,7 +669,6 @@ impl Parser<'_> {
                 let method = MethodObj::parse(self)?;
                 self.state
                     .methods
-                    .borrow_mut()
                     .insert(method.name.clone(), method.arg_count());
                 AmlTerm::Method(method)
             }
@@ -822,7 +847,8 @@ impl Parser<'_> {
             }
             0xA2 => AmlTerm::While(PredicateBlock::parse(self)?),
             0xA3 => AmlTerm::Noop,
-            0xA4 => AmlTerm::Return(self.parse_term_arg()?),
+            // parse it as if its a method arg, this fixes issues of us mis-representing the term as a name
+            0xA4 => AmlTerm::Return(self.parse_term_arg_for_method_arg()?),
             0xA5 => AmlTerm::Break,
             _ => {
                 eprintln!("try parse name");
@@ -831,6 +857,7 @@ impl Parser<'_> {
                 let Some(name) = self.try_parse_name()? else {
                     return Ok(None);
                 };
+                assert!(!name.is_empty());
                 let n_args = self
                     .state
                     .find_method(&name)
@@ -838,7 +865,7 @@ impl Parser<'_> {
 
                 let mut args = Vec::new();
                 for _ in 0..n_args {
-                    args.push(self.parse_term_arg_for_method_call()?);
+                    args.push(self.parse_term_arg_for_method_arg()?);
                 }
 
                 AmlTerm::MethodCall(name, args)
@@ -853,7 +880,7 @@ impl Parser<'_> {
         self.parse_term_arg_general(false)
     }
 
-    fn parse_term_arg_for_method_call(&mut self) -> Result<TermArg, AmlParseError> {
+    fn parse_term_arg_for_method_arg(&mut self) -> Result<TermArg, AmlParseError> {
         self.parse_term_arg_general(true)
     }
 
@@ -902,6 +929,7 @@ impl Parser<'_> {
                 } else {
                     self.backward(1)?;
                     if let Some(name) = self.try_parse_name()? {
+                        assert!(!name.is_empty());
                         let option_nargs = self.state.find_method(&name).or_else(|| {
                             if self.state.find_name(&name) {
                                 None
@@ -920,7 +948,7 @@ impl Parser<'_> {
                         if let Some(n_args) = option_nargs {
                             let mut args = Vec::new();
                             for _ in 0..n_args {
-                                args.push(self.parse_term_arg_for_method_call()?);
+                                args.push(self.parse_term_arg_for_method_arg()?);
                             }
 
                             Ok(TermArg::MethodCall(name, args))
@@ -1081,7 +1109,7 @@ impl Parser<'_> {
                     self.forward(1)?;
                     Ok(Target::Arg(arg))
                 } else if let Some(name) = self.try_parse_name()? {
-                    self.state.names.borrow_mut().insert(name.clone());
+                    self.state.names.insert(name.clone());
                     Ok(Target::Name(name))
                 } else {
                     self.forward(1)?;
@@ -1141,7 +1169,7 @@ impl Parser<'_> {
                 _ => {
                     let len_now = self.pos;
                     let name = self.parse_name()?;
-                    self.state.names.borrow_mut().insert(name.clone());
+                    self.state.names.insert(name.clone());
                     assert!(self.pos - len_now == 4); // must be a name segment
                     eprintln!("field element name: {}", name);
                     let pkg_length = self.get_pkg_length()?;
