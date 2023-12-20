@@ -241,6 +241,8 @@ impl Rsdt {
                 DescriptorTableBody::Facp(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Hpet(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Dsdt(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Bgrt(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Waet(a) => Some(a.as_ref() as &dyn Any),
             })
             .find_map(|obj| obj.downcast_ref::<T>())
     }
@@ -275,6 +277,8 @@ impl DescriptorTable {
             b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
             b"HPET" => DescriptorTableBody::Hpet(Box::new(Hpet::from_header(header))),
             b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Dsdt::from_header(header))),
+            b"BGRT" => DescriptorTableBody::Bgrt(Box::new(Bgrt::from_header(header))),
+            b"WAET" => DescriptorTableBody::Waet(Box::new(Waet::from_header(header))),
             _ => DescriptorTableBody::Unknown(
                 unsafe {
                     slice::from_raw_parts(
@@ -298,6 +302,8 @@ pub enum DescriptorTableBody {
     Facp(Box<Facp>),
     Hpet(Box<Hpet>),
     Dsdt(Box<Dsdt>),
+    Bgrt(Box<Bgrt>),
+    Waet(Box<Waet>),
     Unknown(Vec<u8>),
 }
 
@@ -574,6 +580,42 @@ impl Dsdt {
         let data = unsafe { slice::from_raw_parts(dsdt_ptr, data_len) };
         let aml_code = parse_aml(data).unwrap();
         Self { aml_code }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct Bgrt {
+    version: u16,
+    status: u8,
+    image_type: u8,
+    pub image_address: u64,
+    pub image_offset_x: u32,
+    pub image_offset_y: u32,
+}
+
+impl Bgrt {
+    fn from_header(header: &'static DescriptionHeader) -> Self {
+        let bgrt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
+        let bgrt = unsafe { &*(bgrt_ptr as *const Bgrt) };
+        // SAFETY: I'm using this to copy from the same struct
+        unsafe { core::mem::transmute_copy(bgrt) }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct Waet {
+    emulated_device_flags: u32,
+}
+
+impl Waet {
+    fn from_header(header: &'static DescriptionHeader) -> Self {
+        let waet_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u32 };
+        let flags = unsafe { *waet_ptr };
+        Self {
+            emulated_device_flags: flags,
+        }
     }
 }
 
