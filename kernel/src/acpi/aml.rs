@@ -60,28 +60,28 @@ pub enum AmlTerm {
     Alias(String, String),
     String(String),
     Buffer(TermArg, Vec<u8>),
-    ToHexString(TermArg, Target),
-    ToBuffer(TermArg, Target),
-    ToDecimalString(TermArg, Target),
-    ToInteger(TermArg, Target),
-    Add(TermArg, TermArg, Target),
-    Concat(TermArg, TermArg, Target),
-    Subtract(TermArg, TermArg, Target),
-    Multiply(TermArg, TermArg, Target),
-    Divide(TermArg, TermArg, Target, Target),
-    ShiftLeft(TermArg, TermArg, Target),
-    ShiftRight(TermArg, TermArg, Target),
-    And(TermArg, TermArg, Target),
-    Nand(TermArg, TermArg, Target),
-    Or(TermArg, TermArg, Target),
-    Nor(TermArg, TermArg, Target),
-    Xor(TermArg, TermArg, Target),
-    Not(TermArg, Target),
-    SizeOf(Target),
-    Store(TermArg, Target),
-    RefOf(Target),
-    Increment(Target),
-    Decrement(Target),
+    ToHexString(TermArg, Box<Target>),
+    ToBuffer(TermArg, Box<Target>),
+    ToDecimalString(TermArg, Box<Target>),
+    ToInteger(TermArg, Box<Target>),
+    Add(TermArg, TermArg, Box<Target>),
+    Concat(TermArg, TermArg, Box<Target>),
+    Subtract(TermArg, TermArg, Box<Target>),
+    Multiply(TermArg, TermArg, Box<Target>),
+    Divide(TermArg, TermArg, Box<Target>, Box<Target>),
+    ShiftLeft(TermArg, TermArg, Box<Target>),
+    ShiftRight(TermArg, TermArg, Box<Target>),
+    And(TermArg, TermArg, Box<Target>),
+    Nand(TermArg, TermArg, Box<Target>),
+    Or(TermArg, TermArg, Box<Target>),
+    Nor(TermArg, TermArg, Box<Target>),
+    Xor(TermArg, TermArg, Box<Target>),
+    Not(TermArg, Box<Target>),
+    SizeOf(Box<Target>),
+    Store(TermArg, Box<Target>),
+    RefOf(Box<Target>),
+    Increment(Box<Target>),
+    Decrement(Box<Target>),
     While(PredicateBlock),
     If(PredicateBlock),
     Else(Vec<AmlTerm>),
@@ -97,21 +97,21 @@ pub enum AmlTerm {
     LEqual(TermArg, TermArg),
     LGreater(TermArg, TermArg),
     LLess(TermArg, TermArg),
-    FindSetLeftBit(TermArg, Target),
-    FindSetRightBit(TermArg, Target),
+    FindSetLeftBit(TermArg, Box<Target>),
+    FindSetRightBit(TermArg, Box<Target>),
     DerefOf(TermArg),
-    ConcatRes(TermArg, TermArg, Target),
-    Mod(TermArg, TermArg, Target),
-    Notify(Target, TermArg),
-    Index(TermArg, TermArg, Target),
+    ConcatRes(TermArg, TermArg, Box<Target>),
+    Mod(TermArg, TermArg, Box<Target>),
+    Notify(Box<Target>, TermArg),
+    Index(TermArg, TermArg, Box<Target>),
     Mutex(String, u8),
     Event(String),
-    CondRefOf(Target, Target),
-    Aquire(Target, u16),
-    Signal(Target),
-    Wait(Target, TermArg),
-    Reset(Target),
-    Release(Target),
+    CondRefOf(Box<Target>, Box<Target>),
+    Aquire(Box<Target>, u16),
+    Signal(Box<Target>),
+    Wait(Box<Target>, TermArg),
+    Reset(Box<Target>),
+    Release(Box<Target>),
     Stall(TermArg),
     Sleep(TermArg),
     CreateDWordField(TermArg, TermArg, String),
@@ -128,7 +128,6 @@ pub enum TermArg {
     DataObject(DataObject),
     Arg(u8),
     Local(u8),
-    MethodCall(String, Vec<TermArg>),
     Name(String),
 }
 
@@ -591,7 +590,7 @@ impl Parser<'_> {
                     | AmlTerm::ConcatRes(_, _, t)
                     | AmlTerm::Mod(_, _, t)
                     | AmlTerm::Index(_, _, t)
-                        if !matches!(t, Target::None) =>
+                        if !matches!(t.as_ref(), Target::None) =>
                     {
                         // only allow if target is None
                         break;
@@ -951,7 +950,9 @@ impl Parser<'_> {
                                 args.push(self.parse_term_arg_for_method_arg()?);
                             }
 
-                            Ok(TermArg::MethodCall(name, args))
+                            Ok(TermArg::Expression(Box::new(AmlTerm::MethodCall(
+                                name, args,
+                            ))))
                         } else {
                             Ok(TermArg::Name(name))
                         }
@@ -1083,7 +1084,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_target(&mut self) -> Result<Target, AmlParseError> {
+    fn parse_target(&mut self) -> Result<Box<Target>, AmlParseError> {
         let lead_byte = self.peek_next_byte()?;
 
         let x = match lead_byte {
@@ -1116,9 +1117,9 @@ impl Parser<'_> {
                     if let Some(term) =
                         self.try_parse_term(lead_byte)?.and_then(|term| match term {
                             AmlTerm::Index(term_arg1, term_arg2, target) => {
-                                Some(Target::Index(term_arg1, term_arg2, Box::new(target)))
+                                Some(Target::Index(term_arg1, term_arg2, target))
                             }
-                            AmlTerm::RefOf(target) => Some(Target::RefOf(Box::new(target))),
+                            AmlTerm::RefOf(target) => Some(Target::RefOf(target)),
                             AmlTerm::DerefOf(term_arg) => Some(Target::DerefOf(term_arg)),
                             _ => None,
                         })
@@ -1132,7 +1133,7 @@ impl Parser<'_> {
             }
         };
         eprintln!("target: {:x?}", x);
-        x
+        x.map(Box::new)
     }
 
     fn parse_term_list(&mut self) -> Result<Vec<AmlTerm>, AmlParseError> {
@@ -1227,16 +1228,6 @@ fn display_term_arg(term_arg: &TermArg, f: &mut fmt::Formatter<'_>, depth: usize
         },
         TermArg::Arg(arg) => write!(f, "Arg{:x}", arg),
         TermArg::Local(local) => write!(f, "Local{:x}", local),
-        TermArg::MethodCall(name, args) => {
-            write!(f, "{} (", name)?;
-            for (i, arg) in args.iter().enumerate() {
-                display_term_arg(arg, f, depth)?;
-                if i != args.len() - 1 {
-                    write!(f, ", ")?;
-                }
-            }
-            write!(f, ")")
-        }
         TermArg::Name(name) => write!(f, "{}", name),
     }
 }
@@ -1514,7 +1505,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::Divide(term1, term2, target1, target2) => {
             display_binary_op("/", term1, term2, target2, f, depth)?;
-            if !matches!(target1, Target::None) {
+            if !matches!(target1.as_ref(), Target::None) {
                 write!(f, ", Reminder=")?;
                 display_target(target1, f, depth)?;
             }
