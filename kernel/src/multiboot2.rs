@@ -2,6 +2,7 @@ use core::{ffi, fmt, mem};
 
 use crate::{
     acpi::tables::{Rsdp, RsdpV1, RsdpV2},
+    io::NoDebug,
     memory_management::memory_layout::{align_up, MemSize, PAGE_4K},
 };
 
@@ -226,6 +227,10 @@ impl FramebufferColorInfo {
             _ => panic!("unknown framebuffer color info type"),
         }
     }
+
+    pub fn is_rgb(&self) -> bool {
+        matches!(self, Self::Rgb { .. })
+    }
 }
 
 #[repr(C)]
@@ -247,6 +252,70 @@ pub struct Framebuffer {
     pub height: u32,
     pub bpp: u8,
     pub color_info: FramebufferColorInfo,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct VbeControlInfo {
+    pub signature: [u8; 4],
+    pub version: u16,
+    pub oem_str_ptr: u32,
+    pub capabilities: u32,
+    pub video_modes_ptr: u32,
+    pub video_memory_size_blocks: u16,
+    pub software_rev: u16,
+    pub vendor: u32,
+    pub product_name: u32,
+    pub product_rev: u32,
+    pub reserved: NoDebug<[u8; 222]>,
+    pub oem_data: NoDebug<[u8; 256]>,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct VbeModeInfo {
+    pub attributes: u16,
+    pub window_a_attributes: u8,
+    pub window_b_attributes: u8,
+    pub window_granularity: u16,
+    pub window_size: u16,
+    pub window_a_segment: u16,
+    pub window_b_segment: u16,
+    pub window_func_ptr: u32,
+    pub bytes_per_scanline: u16,
+    pub width: u16,
+    pub height: u16,
+    pub w_char: u8,
+    pub y_char: u8,
+    pub planes: u8,
+    pub bpp: u8,
+    pub banks: u8,
+    pub memory_model: u8,
+    pub bank_size: u8,
+    pub image_pages: u8,
+    pub reserved0: u8,
+    pub red_mask_size: u8,
+    pub red_field_position: u8,
+    pub green_mask_size: u8,
+    pub green_field_position: u8,
+    pub blue_mask_size: u8,
+    pub blue_field_position: u8,
+    pub rsvd_mask_size: u8,
+    pub rsvd_field_position: u8,
+    pub direct_color_mode_attributes: u8,
+    pub framebuffer_addr: u32,
+    pub reserved1: NoDebug<[u8; 212]>,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C)]
+pub struct VbeInfo {
+    pub mode: u16,
+    pub interface_seg: u16,
+    pub interface_off: u16,
+    pub interface_len: u16,
+    pub control_info: VbeControlInfo,
+    pub mode_info: VbeModeInfo,
 }
 
 struct MultiBootTagRaw {
@@ -283,8 +352,8 @@ pub enum MultiBootTag<'a> {
     BootLoaderName {
         name: &'a str,
     },
-    BasicMemoryInfo(BasicMemoryInfo),
-    AdvancedPowerManagementTable(AdvancedPowerManagementTable),
+    BasicMemoryInfo(&'a BasicMemoryInfo),
+    AdvancedPowerManagementTable(&'a AdvancedPowerManagementTable),
     ImageLoadBasePhysical {
         base_addr: u32,
     },
@@ -306,6 +375,7 @@ pub enum MultiBootTag<'a> {
     Efi64ImageHandle {
         ptr: u64,
     },
+    VbeInfo(&'a VbeInfo),
 }
 
 pub struct MultiBootTagIter<'a> {
@@ -347,7 +417,7 @@ impl<'a> Iterator for MultiBootTagIter<'a> {
             }
             4 => {
                 let tag = unsafe { &*(ptr.add(1) as *const BasicMemoryInfo) };
-                MultiBootTag::BasicMemoryInfo(tag.clone())
+                MultiBootTag::BasicMemoryInfo(tag)
             }
             5 => {
                 let tag = unsafe { ptr.add(1) as *const u32 };
@@ -367,6 +437,10 @@ impl<'a> Iterator for MultiBootTagIter<'a> {
                     entry_size: mmap_tag.entry_size,
                     memory_map_raw: unsafe { (mmap_tag as *const MemoryMapTagRaw).add(1) as _ },
                 })
+            }
+            7 => {
+                let vbe_tag = unsafe { &*(ptr.add(1) as *const VbeInfo) };
+                MultiBootTag::VbeInfo(vbe_tag)
             }
             8 => {
                 let frame_tag = unsafe { &*(ptr.add(1) as *const FramebufferRaw) };
@@ -395,7 +469,7 @@ impl<'a> Iterator for MultiBootTagIter<'a> {
             }
             10 => {
                 let tag = unsafe { &*(ptr.add(1) as *const AdvancedPowerManagementTable) };
-                MultiBootTag::AdvancedPowerManagementTable(tag.clone())
+                MultiBootTag::AdvancedPowerManagementTable(tag)
             }
             12 => {
                 let efi64_ptr = unsafe { &*(ptr.add(1) as *const u64) };
@@ -488,6 +562,20 @@ impl MultiBoot2Info {
         })
     }
 
+    pub fn framebuffer(&self) -> Option<Framebuffer> {
+        self.tags().find_map(|tag| match tag {
+            MultiBootTag::FrameBufferInfo(fb) => Some(fb),
+            _ => None,
+        })
+    }
+
+    pub fn vbe_info(&self) -> Option<&VbeInfo> {
+        self.tags().find_map(|tag| match tag {
+            MultiBootTag::VbeInfo(vbe) => Some(vbe),
+            _ => None,
+        })
+    }
+
     pub fn get_most_recent_rsdp(&self) -> Option<Rsdp> {
         let mut ret_rdsp: Option<Rsdp> = None;
         for tag in self.tags() {
@@ -495,7 +583,7 @@ impl MultiBoot2Info {
                 MultiBootTag::OldRsdp(rsdp) | MultiBootTag::NewRsdp(rsdp) => {
                     // only override if new is higher version
                     if ret_rdsp.is_none() || ret_rdsp.as_ref().unwrap().revision < rsdp.revision {
-                        ret_rdsp = Some(rsdp.clone());
+                        ret_rdsp = Some(rsdp);
                     }
                 }
                 _ => {}
