@@ -2,7 +2,7 @@ use alloc::collections::LinkedList;
 
 use crate::{
     memory_management::memory_layout::{
-        is_aligned, KERNEL_EXTRA_MEMORY_BASE, KERNEL_EXTRA_MEMORY_SIZE, PAGE_4K,
+        is_aligned, MemSize, KERNEL_EXTRA_MEMORY_BASE, KERNEL_EXTRA_MEMORY_SIZE, PAGE_4K,
     },
     sync::spin::mutex::Mutex,
 };
@@ -78,7 +78,13 @@ pub fn deallocate_virtual_space(virtual_start: u64, size: u64) {
         // we did specify our own physical address on allocation, so we must set this to false
         false,
     );
-    allocator.deallocate(virtual_start, size)
+    allocator.deallocate(virtual_start, size);
+}
+
+#[allow(dead_code)]
+pub fn debug_blocks() {
+    let allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
+    allocator.debug_blocks();
 }
 
 struct VirtualSpaceEntry {
@@ -282,15 +288,27 @@ impl VirtualSpaceAllocator {
                         // merge with prev
                         prev_entry.size += current.size;
                         // no need to remove the `current` since its already removed
-                    } else {
-                        // add `current` back
-                        cursor.insert_after(current);
                     }
                 }
+                // add `current` back
+                cursor.insert_after(current);
                 return;
             }
             cursor.move_next();
         }
         panic!("Could not find virtual space to deallocate");
+    }
+
+    fn debug_blocks(&self) {
+        println!("Virtual space blocks:");
+        for entry in self.entries.iter() {
+            println!(
+                "  range={:016x}..{:016x}, len={:4} => {:016X?}",
+                entry.virtual_start,
+                entry.virtual_start + entry.size,
+                MemSize(entry.size),
+                entry.physical_start
+            );
+        }
     }
 }

@@ -43,7 +43,7 @@ use crate::{
     memory_management::{
         kernel_heap_allocator::ALLOCATOR,
         memory_layout::{self, MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
-        physical_page_allocator,
+        physical_page_allocator, virtual_space,
     },
     process::Process,
 };
@@ -74,6 +74,7 @@ fn finish_boot() {
         MemSize(KERNEL_HEAP_SIZE as u64),
         used_heap as f64 / KERNEL_HEAP_SIZE as f64 * 100.
     );
+    virtual_space::debug_blocks();
     println!();
 }
 
