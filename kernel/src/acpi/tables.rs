@@ -636,12 +636,13 @@ impl BiosTables {
 
 impl fmt::Display for BiosTables {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "RSDP: {:#X?}", self.rsdp)?;
-        writeln!(f, "RSDT: {:#X?}", self.rsdt.header)?;
+        writeln!(f, "RSDP: {:X?}", self.rsdp)?;
+        writeln!(f, "RSDT: {:X?}", self.rsdt.header)?;
         for entry in &self.rsdt.entries {
-            if let DescriptorTableBody::Dsdt(entry) = &entry.body {
-                writeln!(f, "DSDT: ")?;
-                entry.aml_code.display_with_depth(f, 1)?;
+            if let DescriptorTableBody::Dsdt(_entry) = &entry.body {
+                // TODO: add cmdline arg to print DSDT (its very large, so don't by default)
+                // writeln!(f, "DSDT: ")?;
+                // entry.aml_code.display_with_depth(f, 1)?;
             } else {
                 writeln!(f, "{:X?}", entry.body)?;
             }
