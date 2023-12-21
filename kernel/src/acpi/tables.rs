@@ -8,7 +8,7 @@ use crate::{
             align_down, allocate_from_extra_kernel_pages, virtual2physical, KERNEL_BASE,
             KERNEL_END, PAGE_4K,
         },
-        virtual_memory::{self, VirtualMemoryMapEntry},
+        virtual_memory_mapper::{self, VirtualMemoryMapEntry},
     },
     multiboot2::MultiBoot2Info,
     sync::once::OnceLock,
@@ -60,7 +60,7 @@ impl BiosMemoryMapper {
 
         let start_virtual = unsafe { allocate_from_extra_kernel_pages(num_pages) };
 
-        virtual_memory::map_kernel(&VirtualMemoryMapEntry {
+        virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
             virtual_address: start_virtual as u64,
             physical_address: Some(physical_start),
             size: num_pages as u64 * PAGE_4K as u64,

@@ -116,11 +116,11 @@ impl PageDirectoryTablePtr {
     }
 }
 
-static KERNEL_VIRTUAL_MEMORY_MANAGER: Mutex<VirtualMemoryManager> =
-    Mutex::new(VirtualMemoryManager::boot_vm());
+static KERNEL_VIRTUAL_MEMORY_MANAGER: Mutex<VirtualMemoryMapper> =
+    Mutex::new(VirtualMemoryMapper::boot_vm());
 
 pub fn init_kernel_vm() {
-    let new_kernel_manager = VirtualMemoryManager::new_kernel_vm();
+    let new_kernel_manager = VirtualMemoryMapper::new_kernel_vm();
     let mut manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
     *manager = new_kernel_manager;
     manager.switch_to_this();
@@ -129,7 +129,7 @@ pub fn init_kernel_vm() {
     map_device_memory(&mut manager);
 }
 
-fn map_device_memory(manager: &mut VirtualMemoryManager) {
+fn map_device_memory(manager: &mut VirtualMemoryMapper) {
     let map_entry = VirtualMemoryMapEntry {
         virtual_address: DEVICE_BASE_VIRTUAL as u64,
         physical_address: Some(DEVICE_BASE_PHYSICAL as u64),
@@ -157,23 +157,23 @@ pub fn is_address_mapped_in_kernel(addr: u64) -> bool {
 }
 
 #[allow(dead_code)]
-pub fn clone_kernel_vm_as_user() -> VirtualMemoryManager {
+pub fn clone_kernel_vm_as_user() -> VirtualMemoryMapper {
     let manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
     let mut new_vm = manager.clone_kernel_mem();
     new_vm.is_user = true;
     new_vm
 }
 
-pub fn get_current_vm() -> VirtualMemoryManager {
-    VirtualMemoryManager::get_current_vm()
+pub fn get_current_vm() -> VirtualMemoryMapper {
+    VirtualMemoryMapper::get_current_vm()
 }
 
-pub struct VirtualMemoryManager {
+pub struct VirtualMemoryMapper {
     page_map_l4: PageDirectoryTablePtr,
     is_user: bool,
 }
 
-impl VirtualMemoryManager {
+impl VirtualMemoryMapper {
     /// Return the VM for the CPU at boot time (only applied to the first CPU and this is setup in `boot.S`)
     const fn boot_vm() -> Self {
         Self {

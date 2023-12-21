@@ -33,7 +33,7 @@ use cpu::{
 };
 use executable::elf::Elf;
 use io::console;
-use memory_management::virtual_memory;
+use memory_management::virtual_memory_mapper;
 use multiboot2::MultiBoot2Info;
 use process::scheduler;
 
@@ -103,7 +103,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // must be called before any pages can be allocated
     physical_page_allocator::init(multiboot_info);
     // must be called next, before GDT, and this must be called before any heap allocations
-    virtual_memory::init_kernel_vm();
+    virtual_memory_mapper::init_kernel_vm();
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();

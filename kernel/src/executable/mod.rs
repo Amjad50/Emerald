@@ -1,4 +1,4 @@
-use crate::{fs, memory_management::virtual_memory};
+use crate::{fs, memory_management::virtual_memory_mapper};
 
 pub mod elf;
 
@@ -6,9 +6,9 @@ pub mod elf;
 pub fn load_elf_to_vm(
     elf: &elf::Elf,
     file: &mut fs::File,
-    vm: &mut virtual_memory::VirtualMemoryManager,
+    vm: &mut virtual_memory_mapper::VirtualMemoryMapper,
 ) -> Result<(), fs::FileSystemError> {
-    let old_vm = virtual_memory::get_current_vm();
+    let old_vm = virtual_memory_mapper::get_current_vm();
 
     // switch temporaily so we can map the elf
     vm.switch_to_this();
@@ -17,8 +17,8 @@ pub fn load_elf_to_vm(
         if let elf::ElfProgramType::Load = segment.ty() {
             assert!(segment.virtual_address() == segment.physical_address());
             let mut flags = elf::to_virtual_memory_flags(segment.flags());
-            flags |= virtual_memory::flags::PTE_USER;
-            let entry = virtual_memory::VirtualMemoryMapEntry {
+            flags |= virtual_memory_mapper::flags::PTE_USER;
+            let entry = virtual_memory_mapper::VirtualMemoryMapEntry {
                 virtual_address: segment.virtual_address(),
                 physical_address: None,
                 size: segment.mem_size(),

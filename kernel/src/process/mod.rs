@@ -11,7 +11,7 @@ use crate::{
     fs,
     memory_management::{
         memory_layout::{KERNEL_BASE, PAGE_4K},
-        virtual_memory::{self, VirtualMemoryManager, VirtualMemoryMapEntry},
+        virtual_memory_mapper::{self, VirtualMemoryMapEntry, VirtualMemoryMapper},
     },
 };
 
@@ -96,7 +96,7 @@ pub enum ProcessState {
 // TODO: implement threads, for now each process acts as a thread also
 #[allow(dead_code)]
 pub struct Process {
-    vm: VirtualMemoryManager,
+    vm: VirtualMemoryMapper,
     context: ProcessContext,
     id: u64,
     parent_id: u64,
@@ -118,7 +118,7 @@ impl Process {
         file: &mut fs::File,
     ) -> Result<Self, ProcessError> {
         let id = PROCESS_ID_ALLOCATOR.allocate();
-        let mut vm = virtual_memory::clone_kernel_vm_as_user();
+        let mut vm = virtual_memory_mapper::clone_kernel_vm_as_user();
         let stack_end = KERNEL_BASE - PAGE_4K;
         let stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
         let stack_start = stack_end - stack_size;
@@ -126,7 +126,8 @@ impl Process {
             virtual_address: stack_start as u64,
             physical_address: None,
             size: stack_size as u64,
-            flags: virtual_memory::flags::PTE_USER | virtual_memory::flags::PTE_WRITABLE,
+            flags: virtual_memory_mapper::flags::PTE_USER
+                | virtual_memory_mapper::flags::PTE_WRITABLE,
         });
 
         load_elf_to_vm(elf, file, &mut vm)?;

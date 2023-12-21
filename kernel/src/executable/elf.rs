@@ -2,7 +2,7 @@ use core::{fmt, mem};
 
 use alloc::vec::Vec;
 
-use crate::{fs, memory_management::virtual_memory};
+use crate::{fs, memory_management::virtual_memory_mapper};
 
 #[derive(Debug)]
 pub enum ElfLoadError {
@@ -45,7 +45,7 @@ pub fn to_virtual_memory_flags(flags: u32) -> u64 {
     let mut vm_flags = 0;
 
     if flags & consts::PROG_FLAG_WRITE != 0 {
-        vm_flags |= virtual_memory::flags::PTE_WRITABLE;
+        vm_flags |= virtual_memory_mapper::flags::PTE_WRITABLE;
     }
     if flags & consts::PROG_FLAG_EXE != 0 {
         // TODO: add support for executable pages
