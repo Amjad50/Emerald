@@ -1736,6 +1736,7 @@ impl fmt::Display for AmlCode {
 }
 
 impl AmlCode {
+    #[allow(dead_code)]
     pub fn display_with_depth(&self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
         display_terms(&self.term_list, f, depth)
     }
