@@ -151,6 +151,18 @@ pub fn map_kernel(entry: &VirtualMemoryMapEntry) {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().map(entry);
 }
 
+/// `is_allocated` is used to indicate if the physical pages were allocated by the caller
+/// i.e. when we called `map_kernel`, the `physical_address` is `None` and we will allocate the pages, and thus
+/// when calling this function, you should pass `is_allocated = true`
+// TODO: maybe its better to keep track of this information somewhere in the mapper here
+pub fn unmap_kernel(entry: &VirtualMemoryMapEntry, is_allocated: bool) {
+    // make sure we are only mapping to kernel memory
+    assert!(entry.virtual_address >= KERNEL_BASE as u64);
+    KERNEL_VIRTUAL_MEMORY_MANAGER
+        .lock()
+        .unmap_impl(entry, is_allocated);
+}
+
 #[allow(dead_code)]
 pub fn is_address_mapped_in_kernel(addr: u64) -> bool {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr)

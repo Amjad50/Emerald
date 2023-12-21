@@ -1,7 +1,4 @@
-use core::{
-    fmt,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::fmt;
 
 extern "C" {
     static begin: usize;
@@ -45,7 +42,6 @@ pub const INTR_STACK_TOTAL_SIZE: usize = INTR_STACK_ENTRY_SIZE * INTR_STACK_COUN
 // that is below `KERNEL_BASE`
 pub const KERNEL_EXTRA_MEMORY_BASE: usize = INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE;
 pub const KERNEL_EXTRA_MEMORY_SIZE: usize = DEVICE_BASE_VIRTUAL - KERNEL_EXTRA_MEMORY_BASE;
-static KERNEL_EXTRA_MEMORY_USED_PAGES: AtomicUsize = AtomicUsize::new(0);
 
 // Where to map IO memory, and memory mapped devices in virtual space
 // the reason this is hear, is that these registers are at the bottom of the physica memory
@@ -114,32 +110,6 @@ pub const fn physical2virtual(addr: usize) -> usize {
 #[allow(dead_code)]
 pub const fn physical2virtual_io(addr: usize) -> usize {
     addr - DEVICE_BASE_PHYSICAL + DEVICE_BASE_VIRTUAL
-}
-
-// Gets the virtual address of free virtual memory that anyone can use
-// These pages are not returned at all
-// this just provide, a kind of dynamic nature in mapping physical
-// memory that we don't really care where they are mapped virtually
-pub unsafe fn allocate_from_extra_kernel_pages(pages: usize) -> *mut u8 {
-    let mut used_pages = KERNEL_EXTRA_MEMORY_USED_PAGES.load(Ordering::Relaxed);
-    loop {
-        let new_used_pages = used_pages + pages;
-        assert!(
-            new_used_pages <= KERNEL_EXTRA_MEMORY_SIZE / PAGE_4K,
-            "out of extra kernel virtual memory"
-        );
-        match KERNEL_EXTRA_MEMORY_USED_PAGES.compare_exchange_weak(
-            used_pages,
-            new_used_pages,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        ) {
-            Ok(_) => {
-                return (KERNEL_EXTRA_MEMORY_BASE + used_pages * PAGE_4K) as _;
-            }
-            Err(x) => used_pages = x,
-        }
-    }
 }
 
 #[allow(dead_code)]
