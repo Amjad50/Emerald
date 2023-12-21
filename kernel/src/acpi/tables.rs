@@ -232,14 +232,12 @@ pub struct DescriptorTable {
 
 impl DescriptorTable {
     pub fn from_physical_ptr(ptr: u32) -> Self {
-        let header = unsafe {
-            &*(physical_to_acpi_memory(ptr as _, mem::size_of::<DescriptionHeader>())
-                as *const DescriptionHeader)
-        };
-        ensure_at_least_size(
-            header as *const DescriptionHeader as _,
-            header.length as usize,
-        );
+        let header_ptr = physical_to_acpi_memory(ptr as _, mem::size_of::<DescriptionHeader>())
+            as *const DescriptionHeader;
+
+        let header = unsafe { &*header_ptr };
+        let len = header.length as usize;
+        ensure_at_least_size(header_ptr as _, len);
 
         let body = match &header.signature {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
@@ -284,7 +282,7 @@ pub struct Apic {
 }
 
 impl Apic {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let mut apic = Self {
             local_apic_address: 0,
             flags: 0,
@@ -499,7 +497,7 @@ pub struct Facp {
 }
 
 impl Facp {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let facp = unsafe { &*(facp_ptr as *const Facp) };
         // SAFETY: I'm using this to copy from the same struct
@@ -528,7 +526,7 @@ pub struct Hpet {
 }
 
 impl Hpet {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let facp = unsafe { &*(facp_ptr as *const Hpet) };
         // SAFETY: I'm using this to copy from the same struct
@@ -543,7 +541,7 @@ pub struct Dsdt {
 }
 
 impl Dsdt {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let dsdt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let data_len = header.length as usize - size_of::<DescriptionHeader>();
         let data = unsafe { slice::from_raw_parts(dsdt_ptr, data_len) };
@@ -564,7 +562,7 @@ pub struct Bgrt {
 }
 
 impl Bgrt {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let bgrt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let bgrt = unsafe { &*(bgrt_ptr as *const Bgrt) };
         // SAFETY: I'm using this to copy from the same struct
@@ -579,7 +577,7 @@ pub struct Waet {
 }
 
 impl Waet {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let waet_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u32 };
         let flags = unsafe { *waet_ptr };
         Self {
