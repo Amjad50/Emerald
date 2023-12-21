@@ -41,20 +41,9 @@ pub const INTR_STACK_TOTAL_SIZE: usize = INTR_STACK_ENTRY_SIZE * INTR_STACK_COUN
 // this is only in kernel space, as userspace programs should be mapped into the rest of the memory range
 // that is below `KERNEL_BASE`
 pub const KERNEL_EXTRA_MEMORY_BASE: usize = INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE;
-pub const KERNEL_EXTRA_MEMORY_SIZE: usize = DEVICE_BASE_VIRTUAL - KERNEL_EXTRA_MEMORY_BASE;
-
-// Where to map IO memory, and memory mapped devices in virtual space
-// the reason this is hear, is that these registers are at the bottom of the physica memory
-// and converting those addresses to `virtual(kernel)` addresses, will result in an overflow
-// so this is a special range for them
-//
-// When looking at the CPU docs, looks like the important addresses such as the APIC, are located
-// at the end, around 0xFxxxxxxx place, but we use `0xDxxxxxxx` to cover more if we need to.
-// Since anyway we are not using this memory
-pub const DEVICE_BASE_VIRTUAL: usize = 0xFFFF_FFFF_D000_0000;
-pub const DEVICE_BASE_PHYSICAL: usize = 0x0000_0000_D000_0000;
-// not inclusive, we want to map until 0xFFFF_FFFF
-pub const DEVICE_PHYSICAL_END: usize = 0x0000_0001_0000_0000;
+// to avoid overflow stuff, we don't use the last page
+pub const KERNEL_LAST_POSSIBLE_ADDR: usize = 0xFFFF_FFFF_FFFF_F000;
+pub const KERNEL_EXTRA_MEMORY_SIZE: usize = KERNEL_LAST_POSSIBLE_ADDR - KERNEL_EXTRA_MEMORY_BASE;
 
 pub const PAGE_4K: usize = 0x1000;
 pub const PAGE_2M: usize = 0x20_0000;
@@ -118,12 +107,6 @@ pub const fn physical2virtual(addr: usize) -> usize {
     addr + KERNEL_BASE
 }
 
-#[inline(always)]
-#[allow(dead_code)]
-pub const fn physical2virtual_io(addr: usize) -> usize {
-    addr - DEVICE_BASE_PHYSICAL + DEVICE_BASE_VIRTUAL
-}
-
 #[allow(dead_code)]
 pub fn display_kernel_map() {
     println!("Kernel map:");
@@ -139,7 +122,6 @@ pub fn display_kernel_map() {
     let interrupt_stack = INTR_STACK_BASE..INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE;
     let kernel_extra_memory =
         KERNEL_EXTRA_MEMORY_BASE..KERNEL_EXTRA_MEMORY_BASE + KERNEL_EXTRA_MEMORY_SIZE;
-    let device_memory = DEVICE_BASE_VIRTUAL..physical2virtual_io(DEVICE_PHYSICAL_END - 1);
 
     println!(
         "  range={:016x}..{:016x}, len={:4}  nothing",
@@ -197,16 +179,10 @@ pub fn display_kernel_map() {
         MemSize(interrupt_stack.len() as u64)
     );
     println!(
-        "  range={:016x}..{:016x}, len={:4}  kernel extra memory",
+        "  range={:016x}..{:016x}, len={:4}  kernel extra (virtual space)",
         kernel_extra_memory.start,
         kernel_extra_memory.end,
         MemSize(kernel_extra_memory.len() as u64)
-    );
-    println!(
-        "  range={:016x}..{:016x}, len={:4}  device memory",
-        device_memory.start,
-        device_memory.end,
-        MemSize(device_memory.len() as u64 + 1)
     );
 
     // number of bytes approx used from physical memory

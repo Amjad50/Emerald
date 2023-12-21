@@ -123,20 +123,6 @@ pub fn init_kernel_vm() {
     let mut manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
     *manager = new_kernel_manager;
     manager.switch_to_this();
-
-    // map the BIOS memory
-    map_device_memory(&mut manager);
-}
-
-fn map_device_memory(manager: &mut VirtualMemoryMapper) {
-    let map_entry = VirtualMemoryMapEntry {
-        virtual_address: DEVICE_BASE_VIRTUAL as u64,
-        physical_address: Some(DEVICE_BASE_PHYSICAL as u64),
-        size: DEVICE_PHYSICAL_END as u64 - DEVICE_BASE_PHYSICAL as u64,
-        flags: flags::PTE_WRITABLE,
-    };
-
-    manager.map(&map_entry);
 }
 
 #[allow(dead_code)]

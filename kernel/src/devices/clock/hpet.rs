@@ -1,3 +1,5 @@
+use core::mem;
+
 use crate::{
     acpi::{self},
     cpu::{
@@ -5,7 +7,7 @@ use crate::{
         idt::{InterruptAllSavedState, InterruptHandlerWithAllState},
         interrupts::apic,
     },
-    memory_management::memory_layout::physical2virtual_io,
+    memory_management::virtual_space,
 };
 
 use super::HPET_CLOCK;
@@ -206,8 +208,11 @@ impl Hpet {
         disable_pit();
 
         assert!(hpet.base_address.address_space_id == 0); // memory space
-        let mmio =
-            unsafe { &mut *(physical2virtual_io(hpet.base_address.address as _) as *mut HpetMmio) };
+        let mmio_virtual_addr = virtual_space::allocate_and_map_virtual_space(
+            hpet.base_address.address as _,
+            mem::size_of::<HpetMmio>() as _,
+        );
+        let mmio = unsafe { &mut *(mmio_virtual_addr as *mut HpetMmio) };
 
         // enable the timer
         let mut s = Self { mmio };
