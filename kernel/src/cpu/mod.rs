@@ -279,6 +279,10 @@ pub unsafe fn halt() {
     core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
 }
 
+pub unsafe fn invalidate_tlp(virtual_address: u64) {
+    core::arch::asm!("invlpg [{0}]", in(reg) virtual_address);
+}
+
 #[macro_export]
 macro_rules! cpuid {
     ($rax:expr) => {

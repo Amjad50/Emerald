@@ -494,6 +494,10 @@ impl VirtualMemoryMapper {
         );
 
         while size > 0 {
+            unsafe {
+                cpu::invalidate_tlp(virtual_address as _);
+            }
+
             let page_map_l4_index = get_l4(virtual_address) as usize;
             let page_directory_pointer_index = get_l3(virtual_address) as usize;
             let page_directory_index = get_l2(virtual_address) as usize;
