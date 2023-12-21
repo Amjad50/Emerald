@@ -1,17 +1,18 @@
-use core::{any::Any, fmt, mem::size_of, slice};
+use core::{
+    any::Any,
+    fmt,
+    mem::{self, size_of},
+    slice,
+};
 
 use alloc::{boxed::Box, vec::Vec};
 
 use crate::{
     memory_management::{
-        memory_layout::{
-            align_down, allocate_from_extra_kernel_pages, virtual2physical, KERNEL_BASE,
-            KERNEL_END, PAGE_4K,
-        },
-        virtual_memory::{self, VirtualMemoryMapEntry},
+        memory_layout::{align_down, align_up, virtual2physical, KERNEL_BASE, KERNEL_END, PAGE_4K},
+        virtual_space,
     },
     multiboot2::MultiBoot2Info,
-    sync::once::OnceLock,
 };
 
 use super::aml::{parse_aml, AmlCode};
@@ -19,76 +20,27 @@ use super::aml::{parse_aml, AmlCode};
 const BIOS_RO_MEM_START: usize = 0x000E0000;
 const BIOS_RO_MEM_END: usize = 0x000FFFFF;
 
-static BIOS_MEMORY_MAPPER: OnceLock<BiosMemoryMapper> = OnceLock::new();
-
-fn physical_to_bios_memory(addr: usize) -> usize {
+fn physical_to_acpi_memory(addr: usize, size: usize) -> usize {
     if addr < virtual2physical(KERNEL_END) {
+        assert!(addr + size <= virtual2physical(KERNEL_END));
         addr + KERNEL_BASE
-    } else if let Some(mapper) = BIOS_MEMORY_MAPPER.try_get() {
-        mapper.get_virtual(addr as _) as _
     } else {
-        let mapper = BiosMemoryMapper::new(addr as _);
-        let virtual_addr = mapper.get_virtual(addr as _) as _;
-        BIOS_MEMORY_MAPPER
-            .set(mapper)
-            .expect("BIOS_MEMORY_MAPPER already set");
-        virtual_addr
+        virtual_space::get_virtual_for_physical(addr as _, size as _) as usize
     }
 }
 
-// number of pages to map around the `prope/start` address
-// TODO: replace by mapping whole memory segments (normally are not large)
-const BIOS_MEMORY_MAPPED_PAGES_AROUND: usize = 10;
-
-#[derive(Debug)]
-struct BiosMemoryMapper {
-    start_physical: u64,
-    start_virtual: u64,
-    num_pages: usize,
-}
-
-impl BiosMemoryMapper {
-    // we use `prope_addr` to know where to start from, generally this memory isn't very large
-    // so we can just start pages around `prope` address and map from there
-    pub fn new(prope_addr: u64) -> Self {
-        let prope_page = align_down(prope_addr as _, PAGE_4K) as u64;
-        const MEMORY_AROUND: u64 = BIOS_MEMORY_MAPPED_PAGES_AROUND as u64 * PAGE_4K as u64;
-        assert!(prope_page > MEMORY_AROUND);
-        assert!(prope_page < (usize::MAX as u64 - MEMORY_AROUND));
-        let physical_start = prope_page - MEMORY_AROUND;
-        let num_pages = BIOS_MEMORY_MAPPED_PAGES_AROUND * 2 + 1;
-
-        let start_virtual = unsafe { allocate_from_extra_kernel_pages(num_pages) };
-
-        virtual_memory::map_kernel(&VirtualMemoryMapEntry {
-            virtual_address: start_virtual as u64,
-            physical_address: Some(physical_start),
-            size: num_pages as u64 * PAGE_4K as u64,
-            flags: 0,
-        });
-
-        Self {
-            start_physical: physical_start,
-            start_virtual: start_virtual as u64,
-            num_pages,
-        }
-    }
-
-    pub fn get_virtual(&self, addr: u64) -> u64 {
-        if addr >= self.start_physical
-            && addr < self.start_physical + self.num_pages as u64 * PAGE_4K as u64
-        {
-            addr - self.start_physical + self.start_virtual
-        } else {
-            // for now I'm assuming we can start from the first address we try to map
-            // and just map `BIOS_MEMORY_MAPPED_PAGES_AROUND` pages around it
-            panic!(
-                "bios address {:#X} not mapped, range: {:#X}-{:#X}",
-                addr,
-                self.start_physical,
-                self.start_physical + self.num_pages as u64 * PAGE_4K as u64
-            );
-        }
+// this is used after parsing headers and determining the size of the table
+// it tells the `virtual_space` module to ensure that the new size is still
+// mapped, otherwise try to allocate next blocks if they are free.
+// in our case since its done immidiately after parsing the headers, we know it
+// should work unless someone else is executing concurrently
+// at the time of writing this comment, this is done in startup so there shouldn't be anyne else.
+fn ensure_at_least_size(addr: usize, size: usize) {
+    if addr < virtual2physical(KERNEL_END) {
+        assert!(addr + size <= virtual2physical(KERNEL_END));
+    } else {
+        let virtual_start = align_down(addr, PAGE_4K);
+        virtual_space::ensure_at_least_size(virtual_start as _, align_up(size, PAGE_4K) as _);
     }
 }
 
@@ -98,8 +50,9 @@ pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<BiosTables, ()
         .get_most_recent_rsdp()
         .or_else(|| {
             // look for RSDP PTR
-            let mut rsdp_ptr = physical_to_bios_memory(BIOS_RO_MEM_START) as *const u8;
-            let end = physical_to_bios_memory(BIOS_RO_MEM_END) as *const u8;
+            let mut rsdp_ptr =
+                physical_to_acpi_memory(BIOS_RO_MEM_START, mem::size_of::<Rsdp>()) as *const u8;
+            let end = physical_to_acpi_memory(BIOS_RO_MEM_END, mem::size_of::<Rsdp>()) as *const u8;
 
             while rsdp_ptr < end {
                 let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
@@ -195,8 +148,12 @@ impl Rsdp {
 
     // allocates a new RDST
     fn rdst(&self) -> Rsdt {
-        let header = physical_to_bios_memory(self.rsdt_address as _) as *const DescriptionHeader;
+        let header =
+            physical_to_acpi_memory(self.rsdt_address as _, mem::size_of::<DescriptionHeader>())
+                as *const DescriptionHeader;
         let len = unsafe { (*header).length } as usize;
+        ensure_at_least_size(header as _, len);
+
         let entries_len = (len - size_of::<DescriptionHeader>()) / size_of::<u32>();
         let entries_ptr = unsafe { header.add(1) as *const u32 };
         // use slice of u8 since we can't use u32 since its not aligned
@@ -271,7 +228,13 @@ pub struct DescriptorTable {
 
 impl DescriptorTable {
     pub fn from_physical_ptr(ptr: u32) -> Self {
-        let header = unsafe { &*(physical_to_bios_memory(ptr as _) as *const DescriptionHeader) };
+        let header_ptr = physical_to_acpi_memory(ptr as _, mem::size_of::<DescriptionHeader>())
+            as *const DescriptionHeader;
+
+        let header = unsafe { &*header_ptr };
+        let len = header.length as usize;
+        ensure_at_least_size(header_ptr as _, len);
+
         let body = match &header.signature {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
             b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
@@ -315,7 +278,7 @@ pub struct Apic {
 }
 
 impl Apic {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let mut apic = Self {
             local_apic_address: 0,
             flags: 0,
@@ -530,7 +493,7 @@ pub struct Facp {
 }
 
 impl Facp {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let facp = unsafe { &*(facp_ptr as *const Facp) };
         // SAFETY: I'm using this to copy from the same struct
@@ -559,7 +522,7 @@ pub struct Hpet {
 }
 
 impl Hpet {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let facp = unsafe { &*(facp_ptr as *const Hpet) };
         // SAFETY: I'm using this to copy from the same struct
@@ -574,7 +537,7 @@ pub struct Dsdt {
 }
 
 impl Dsdt {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let dsdt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let data_len = header.length as usize - size_of::<DescriptionHeader>();
         let data = unsafe { slice::from_raw_parts(dsdt_ptr, data_len) };
@@ -595,7 +558,7 @@ pub struct Bgrt {
 }
 
 impl Bgrt {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let bgrt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
         let bgrt = unsafe { &*(bgrt_ptr as *const Bgrt) };
         // SAFETY: I'm using this to copy from the same struct
@@ -610,7 +573,7 @@ pub struct Waet {
 }
 
 impl Waet {
-    fn from_header(header: &'static DescriptionHeader) -> Self {
+    fn from_header(header: &DescriptionHeader) -> Self {
         let waet_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u32 };
         let flags = unsafe { *waet_ptr };
         Self {

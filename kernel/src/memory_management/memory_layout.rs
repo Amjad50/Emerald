@@ -1,12 +1,11 @@
-use core::{
-    fmt,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::fmt;
 
 extern "C" {
     static begin: usize;
     static end: usize;
+    static text_end: usize;
     static rodata_end: usize;
+    static data_end: usize;
     static stack_guard_page: usize;
 }
 
@@ -42,21 +41,9 @@ pub const INTR_STACK_TOTAL_SIZE: usize = INTR_STACK_ENTRY_SIZE * INTR_STACK_COUN
 // this is only in kernel space, as userspace programs should be mapped into the rest of the memory range
 // that is below `KERNEL_BASE`
 pub const KERNEL_EXTRA_MEMORY_BASE: usize = INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE;
-pub const KERNEL_EXTRA_MEMORY_SIZE: usize = DEVICE_BASE_VIRTUAL - KERNEL_EXTRA_MEMORY_BASE;
-static KERNEL_EXTRA_MEMORY_USED_PAGES: AtomicUsize = AtomicUsize::new(0);
-
-// Where to map IO memory, and memory mapped devices in virtual space
-// the reason this is hear, is that these registers are at the bottom of the physica memory
-// and converting those addresses to `virtual(kernel)` addresses, will result in an overflow
-// so this is a special range for them
-//
-// When looking at the CPU docs, looks like the important addresses such as the APIC, are located
-// at the end, around 0xFxxxxxxx place, but we use `0xDxxxxxxx` to cover more if we need to.
-// Since anyway we are not using this memory
-pub const DEVICE_BASE_VIRTUAL: usize = 0xFFFF_FFFF_D000_0000;
-pub const DEVICE_BASE_PHYSICAL: usize = 0x0000_0000_D000_0000;
-// not inclusive, we want to map until 0xFFFF_FFFF
-pub const DEVICE_PHYSICAL_END: usize = 0x0000_0001_0000_0000;
+// to avoid overflow stuff, we don't use the last page
+pub const KERNEL_LAST_POSSIBLE_ADDR: usize = 0xFFFF_FFFF_FFFF_F000;
+pub const KERNEL_EXTRA_MEMORY_SIZE: usize = KERNEL_LAST_POSSIBLE_ADDR - KERNEL_EXTRA_MEMORY_BASE;
 
 pub const PAGE_4K: usize = 0x1000;
 pub const PAGE_2M: usize = 0x20_0000;
@@ -70,8 +57,16 @@ pub fn kernel_elf_size() -> usize {
     (unsafe { &end } as *const usize as usize) - (unsafe { &begin } as *const usize as usize)
 }
 
+pub fn kernel_text_end() -> usize {
+    (unsafe { &text_end } as *const usize as usize)
+}
+
 pub fn kernel_elf_rodata_end() -> usize {
     (unsafe { &rodata_end } as *const usize as usize)
+}
+
+pub fn kernel_elf_data_end() -> usize {
+    (unsafe { &data_end } as *const usize as usize)
 }
 
 pub fn stack_guard_page_ptr() -> usize {
@@ -90,6 +85,18 @@ pub fn is_aligned(addr: usize, alignment: usize) -> bool {
     (addr & (alignment - 1)) == 0
 }
 
+pub fn align_range(addr: usize, size: usize, alignment: usize) -> (usize, usize, usize) {
+    let addr_end: usize = addr + size;
+    let start_aligned = align_down(addr, alignment);
+    let end_aligned = align_up(addr_end, alignment);
+    let size = end_aligned - start_aligned;
+    assert!(size > 0);
+    assert!(is_aligned(size, alignment));
+    let offset = addr - start_aligned;
+
+    (start_aligned, size, offset)
+}
+
 #[inline(always)]
 pub const fn virtual2physical(addr: usize) -> usize {
     addr - KERNEL_BASE
@@ -100,36 +107,94 @@ pub const fn physical2virtual(addr: usize) -> usize {
     addr + KERNEL_BASE
 }
 
-#[inline(always)]
 #[allow(dead_code)]
-pub const fn physical2virtual_io(addr: usize) -> usize {
-    addr - DEVICE_BASE_PHYSICAL + DEVICE_BASE_VIRTUAL
-}
+pub fn display_kernel_map() {
+    println!("Kernel map:");
+    let nothing = KERNEL_BASE..KERNEL_LINK;
+    let kernel_elf_end = align_up(kernel_elf_end(), PAGE_4K);
+    let kernel_elf = KERNEL_LINK..kernel_elf_end;
+    let kernel_elf_text = KERNEL_LINK..kernel_text_end();
+    let kernel_elf_rodata = kernel_text_end()..kernel_elf_rodata_end();
+    let kernel_elf_data = kernel_elf_rodata_end()..kernel_elf_data_end();
+    let kernel_elf_bss = kernel_elf_data_end()..kernel_elf_end;
+    let kernel_physical_allocator_low = kernel_elf_end..KERNEL_END;
+    let kernel_heap = KERNEL_HEAP_BASE..KERNEL_HEAP_BASE + KERNEL_HEAP_SIZE;
+    let interrupt_stack = INTR_STACK_BASE..INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE;
+    let kernel_extra_memory =
+        KERNEL_EXTRA_MEMORY_BASE..KERNEL_EXTRA_MEMORY_BASE + KERNEL_EXTRA_MEMORY_SIZE;
 
-// Gets the virtual address of free virtual memory that anyone can use
-// These pages are not returned at all
-// this just provide, a kind of dynamic nature in mapping physical
-// memory that we don't really care where they are mapped virtually
-pub unsafe fn allocate_from_extra_kernel_pages(pages: usize) -> *mut u8 {
-    let mut used_pages = KERNEL_EXTRA_MEMORY_USED_PAGES.load(Ordering::Relaxed);
-    loop {
-        let new_used_pages = used_pages + pages;
-        assert!(
-            new_used_pages <= KERNEL_EXTRA_MEMORY_SIZE / PAGE_4K,
-            "out of extra kernel virtual memory"
-        );
-        match KERNEL_EXTRA_MEMORY_USED_PAGES.compare_exchange_weak(
-            used_pages,
-            new_used_pages,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        ) {
-            Ok(_) => {
-                return (KERNEL_EXTRA_MEMORY_BASE + used_pages * PAGE_4K) as _;
-            }
-            Err(x) => used_pages = x,
-        }
-    }
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  nothing",
+        nothing.start,
+        nothing.end,
+        MemSize(nothing.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  kernel elf",
+        kernel_elf.start,
+        kernel_elf.end,
+        MemSize(kernel_elf.len() as u64)
+    );
+    // inner map for the elf
+    println!(
+        "    range={:016x}..{:016x}, len={:4}  kernel elf text",
+        kernel_elf_text.start,
+        kernel_elf_text.end,
+        MemSize(kernel_elf_text.len() as u64)
+    );
+    println!(
+        "    range={:016x}..{:016x}, len={:4}  kernel elf rodata",
+        kernel_elf_rodata.start,
+        kernel_elf_rodata.end,
+        MemSize(kernel_elf_rodata.len() as u64)
+    );
+    println!(
+        "    range={:016x}..{:016x}, len={:4}  kernel elf data",
+        kernel_elf_data.start,
+        kernel_elf_data.end,
+        MemSize(kernel_elf_data.len() as u64)
+    );
+    println!(
+        "    range={:016x}..{:016x}, len={:4}  kernel elf bss",
+        kernel_elf_bss.start,
+        kernel_elf_bss.end,
+        MemSize(kernel_elf_bss.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  kernel physical allocator low",
+        kernel_physical_allocator_low.start,
+        kernel_physical_allocator_low.end,
+        MemSize(kernel_physical_allocator_low.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  kernel heap",
+        kernel_heap.start,
+        kernel_heap.end,
+        MemSize(kernel_heap.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  interrupt stack",
+        interrupt_stack.start,
+        interrupt_stack.end,
+        MemSize(interrupt_stack.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  kernel extra (virtual space)",
+        kernel_extra_memory.start,
+        kernel_extra_memory.end,
+        MemSize(kernel_extra_memory.len() as u64)
+    );
+
+    // number of bytes approx used from physical memory
+    println!(
+        "whole kernel physical size (startup/low): {}",
+        MemSize((KERNEL_END - KERNEL_BASE) as u64)
+    );
+    // total addressable virtual kernel memory
+    println!(
+        "whole kernel size: {}",
+        MemSize(u64::MAX - KERNEL_BASE as u64 + 1)
+    );
 }
 
 #[repr(transparent)]

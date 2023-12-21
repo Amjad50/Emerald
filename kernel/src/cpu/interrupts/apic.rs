@@ -1,11 +1,14 @@
-use core::borrow::{Borrow, BorrowMut};
+use core::{
+    borrow::{Borrow, BorrowMut},
+    mem,
+};
 
 use alloc::vec::Vec;
 
 use crate::{
     acpi::tables::{self, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
     cpu::{self, idt::InterruptStackFrame64, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS},
-    memory_management::memory_layout::physical2virtual_io,
+    memory_management::virtual_space,
     sync::spin::mutex::Mutex,
 };
 
@@ -18,7 +21,6 @@ const CPUID_FEAT_EDX_APIC: u32 = 1 << 9;
 
 const APIC_BAR_ENABLED: u64 = 1 << 11;
 const APIC_BASE_MASK: u64 = 0xFFFF_FFFF_FFFF_F000;
-const DEFAULT_APIC_BASE: usize = 0xFEE0_0000;
 
 static mut APIC: Mutex<Apic> = Mutex::new(Apic::empty());
 
@@ -321,7 +323,10 @@ impl From<tables::IoApic> for IoApic {
         Self {
             id: table.io_apic_id,
             global_irq_base: table.global_system_interrupt_base,
-            mmio: physical2virtual_io(table.io_apic_address as _) as *mut IoApicMmio,
+            mmio: virtual_space::allocate_and_map_virtual_space(
+                table.io_apic_address as _,
+                mem::size_of::<IoApicMmio>() as _,
+            ) as *mut IoApicMmio,
         }
     }
 }
@@ -336,8 +341,9 @@ struct Apic {
 impl Apic {
     const fn empty() -> Self {
         Self {
-            // we should call `init` first, but this is just in case.
-            mmio: physical2virtual_io(DEFAULT_APIC_BASE) as *mut ApicMmio,
+            // we should call `init` first, it will cause an exception
+            // if referenced and we should catch that.
+            mmio: core::ptr::null_mut(),
             n_cpus: 0,
             io_apics: Vec::new(),
             source_overrides: Vec::new(),
@@ -434,7 +440,10 @@ impl Apic {
         );
         assert!(apic_address != 0, "APIC address is 0, cannot continue");
         assert!(apic_address & 0xF == 0, "APIC address is not aligned");
-        self.mmio = physical2virtual_io(apic_address) as *mut ApicMmio;
+        self.mmio = virtual_space::allocate_and_map_virtual_space(
+            apic_address as _,
+            mem::size_of::<ApicMmio>() as _,
+        ) as *mut ApicMmio;
 
         // reset all interrupts
         self.io_apics.iter_mut().for_each(|io_apic| {

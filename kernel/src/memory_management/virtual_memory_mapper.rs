@@ -7,10 +7,9 @@ use crate::{
     cpu,
     memory_management::{
         memory_layout::{
-            align_down, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
-            virtual2physical, MemSize, DEVICE_BASE_PHYSICAL, DEVICE_BASE_VIRTUAL,
-            DEVICE_PHYSICAL_END, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, KERNEL_MAPPED_SIZE,
-            PAGE_2M, PAGE_4K,
+            align_range, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
+            virtual2physical, MemSize, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK,
+            KERNEL_MAPPED_SIZE, PAGE_2M, PAGE_4K,
         },
         physical_page_allocator,
     },
@@ -116,28 +115,14 @@ impl PageDirectoryTablePtr {
     }
 }
 
-static KERNEL_VIRTUAL_MEMORY_MANAGER: Mutex<VirtualMemoryManager> =
-    Mutex::new(VirtualMemoryManager::boot_vm());
+static KERNEL_VIRTUAL_MEMORY_MANAGER: Mutex<VirtualMemoryMapper> =
+    Mutex::new(VirtualMemoryMapper::boot_vm());
 
 pub fn init_kernel_vm() {
-    let new_kernel_manager = VirtualMemoryManager::new_kernel_vm();
+    let new_kernel_manager = VirtualMemoryMapper::new_kernel_vm();
     let mut manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
     *manager = new_kernel_manager;
     manager.switch_to_this();
-
-    // map the BIOS memory
-    map_device_memory(&mut manager);
-}
-
-fn map_device_memory(manager: &mut VirtualMemoryManager) {
-    let map_entry = VirtualMemoryMapEntry {
-        virtual_address: DEVICE_BASE_VIRTUAL as u64,
-        physical_address: Some(DEVICE_BASE_PHYSICAL as u64),
-        size: DEVICE_PHYSICAL_END as u64 - DEVICE_BASE_PHYSICAL as u64,
-        flags: flags::PTE_WRITABLE,
-    };
-
-    manager.map(&map_entry);
 }
 
 #[allow(dead_code)]
@@ -151,29 +136,41 @@ pub fn map_kernel(entry: &VirtualMemoryMapEntry) {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().map(entry);
 }
 
+/// `is_allocated` is used to indicate if the physical pages were allocated by the caller
+/// i.e. when we called `map_kernel`, the `physical_address` is `None` and we will allocate the pages, and thus
+/// when calling this function, you should pass `is_allocated = true`
+// TODO: maybe its better to keep track of this information somewhere in the mapper here
+pub fn unmap_kernel(entry: &VirtualMemoryMapEntry, is_allocated: bool) {
+    // make sure we are only mapping to kernel memory
+    assert!(entry.virtual_address >= KERNEL_BASE as u64);
+    KERNEL_VIRTUAL_MEMORY_MANAGER
+        .lock()
+        .unmap_impl(entry, is_allocated);
+}
+
 #[allow(dead_code)]
 pub fn is_address_mapped_in_kernel(addr: u64) -> bool {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr)
 }
 
 #[allow(dead_code)]
-pub fn clone_kernel_vm_as_user() -> VirtualMemoryManager {
+pub fn clone_kernel_vm_as_user() -> VirtualMemoryMapper {
     let manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
     let mut new_vm = manager.clone_kernel_mem();
     new_vm.is_user = true;
     new_vm
 }
 
-pub fn get_current_vm() -> VirtualMemoryManager {
-    VirtualMemoryManager::get_current_vm()
+pub fn get_current_vm() -> VirtualMemoryMapper {
+    VirtualMemoryMapper::get_current_vm()
 }
 
-pub struct VirtualMemoryManager {
+pub struct VirtualMemoryMapper {
     page_map_l4: PageDirectoryTablePtr,
     is_user: bool,
 }
 
-impl VirtualMemoryManager {
+impl VirtualMemoryMapper {
     /// Return the VM for the CPU at boot time (only applied to the first CPU and this is setup in `boot.S`)
     const fn boot_vm() -> Self {
         Self {
@@ -279,7 +276,7 @@ impl VirtualMemoryManager {
         let VirtualMemoryMapEntry {
             mut virtual_address,
             physical_address: mut start_physical_address,
-            mut size,
+            size: requested_size,
             flags,
         } = entry;
 
@@ -289,12 +286,17 @@ impl VirtualMemoryManager {
             assert!(*flags & flags::PTE_USER != 0);
             assert!(virtual_address < KERNEL_BASE as u64);
         }
-        // get the end before alignment
-        let end_virtual_address = (virtual_address - 1) + size;
-        virtual_address = align_down(virtual_address as _, PAGE_4K) as _;
-        start_physical_address =
-            start_physical_address.map(|addr| align_down(addr as _, PAGE_4K) as _);
-        size = align_up((end_virtual_address - virtual_address) as _, PAGE_4K) as _;
+        let (aligned_start, size, _) =
+            align_range(virtual_address as _, *requested_size as _, PAGE_4K);
+        let mut size = size as u64;
+        virtual_address = aligned_start as _;
+
+        if let Some(start_physical_address) = start_physical_address.as_mut() {
+            let (aligned_start, physical_size, _) =
+                align_range(*start_physical_address as _, *requested_size as _, PAGE_4K);
+            assert!(physical_size as u64 == size);
+            *start_physical_address = aligned_start as _;
+        }
 
         // keep track of current address and size
         let mut physical_address = start_physical_address;
@@ -457,16 +459,16 @@ impl VirtualMemoryManager {
         let VirtualMemoryMapEntry {
             mut virtual_address,
             physical_address,
-            mut size,
+            size,
             flags,
         } = entry;
 
         assert!(physical_address.is_none());
 
         // get the end before alignment
-        let end_virtual_address = (virtual_address - 1) + size;
-        virtual_address = align_down(virtual_address as _, PAGE_4K) as _;
-        size = align_up((end_virtual_address - virtual_address) as _, PAGE_4K) as _;
+        let (aligned_start, size, _) = align_range(virtual_address as _, *size as _, PAGE_4K);
+        let mut size = size as u64;
+        virtual_address = aligned_start as _;
 
         assert!(size > 0);
 
@@ -482,6 +484,10 @@ impl VirtualMemoryManager {
         );
 
         while size > 0 {
+            unsafe {
+                cpu::invalidate_tlp(virtual_address as _);
+            }
+
             let page_map_l4_index = get_l4(virtual_address) as usize;
             let page_directory_pointer_index = get_l3(virtual_address) as usize;
             let page_directory_index = get_l2(virtual_address) as usize;

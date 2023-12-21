@@ -6,7 +6,7 @@ use crate::{
             is_aligned, INTR_STACK_BASE, INTR_STACK_EMPTY_SIZE, INTR_STACK_ENTRY_SIZE,
             INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, KERNEL_STACK_END, PAGE_4K,
         },
-        virtual_memory::{self, VirtualMemoryMapEntry},
+        virtual_memory_mapper::{self, VirtualMemoryMapEntry},
     },
     sync::spin::mutex::Mutex,
 };
@@ -85,11 +85,11 @@ pub fn init_kernel_gdt() {
             );
 
             // map the stack
-            virtual_memory::map_kernel(&VirtualMemoryMapEntry {
+            virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
                 virtual_address: stack_start_virtual as u64,
                 physical_address: None,
                 size: INTR_STACK_SIZE as u64,
-                flags: virtual_memory::flags::PTE_WRITABLE,
+                flags: virtual_memory_mapper::flags::PTE_WRITABLE,
             });
 
             // set the stack pointer

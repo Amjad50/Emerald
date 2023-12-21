@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
+#![feature(linked_list_cursors)]
 
 extern crate alloc;
 
@@ -33,7 +34,7 @@ use cpu::{
 };
 use executable::elf::Elf;
 use io::console;
-use memory_management::virtual_memory;
+use memory_management::virtual_memory_mapper;
 use multiboot2::MultiBoot2Info;
 use process::scheduler;
 
@@ -41,8 +42,8 @@ use crate::{
     devices::clock,
     memory_management::{
         kernel_heap_allocator::ALLOCATOR,
-        memory_layout::{MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
-        physical_page_allocator,
+        memory_layout::{self, MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
+        physical_page_allocator, virtual_space,
     },
     process::Process,
 };
@@ -55,6 +56,7 @@ fn finish_boot() {
     //  but then it got freed we don't record that
     let (free_heap, used_heap) = ALLOCATOR.stats();
     println!("\n\nBoot finished!");
+    memory_layout::display_kernel_map();
     println!("Free memory: {}", free_mem);
     println!(
         "Used memory: {} ({:0.3}%)",
@@ -72,6 +74,7 @@ fn finish_boot() {
         MemSize(KERNEL_HEAP_SIZE as u64),
         used_heap as f64 / KERNEL_HEAP_SIZE as f64 * 100.
     );
+    virtual_space::debug_blocks();
     println!();
 }
 
@@ -102,7 +105,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // must be called before any pages can be allocated
     physical_page_allocator::init(multiboot_info);
     // must be called next, before GDT, and this must be called before any heap allocations
-    virtual_memory::init_kernel_vm();
+    virtual_memory_mapper::init_kernel_vm();
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();

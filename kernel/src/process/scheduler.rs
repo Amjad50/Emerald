@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
-    memory_management::virtual_memory,
+    memory_management::virtual_memory_mapper,
     process::{syscalls, FxSave},
     sync::spin::mutex::Mutex,
 };
@@ -113,7 +113,7 @@ pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
         process.context = current_cpu.context.take().unwrap();
         process.state = ProcessState::Scheduled;
     });
-    virtual_memory::switch_to_kernel();
+    virtual_memory_mapper::switch_to_kernel();
     current_cpu.pop_cli();
 }
 

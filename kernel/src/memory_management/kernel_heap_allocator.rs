@@ -3,7 +3,7 @@ use core::{alloc::GlobalAlloc, mem};
 use crate::{
     memory_management::{
         memory_layout::{is_aligned, KERNEL_HEAP_SIZE},
-        virtual_memory::{self, flags, VirtualMemoryMapEntry},
+        virtual_memory_mapper::{self, flags, VirtualMemoryMapEntry},
     },
     sync::spin::mutex::Mutex,
 };
@@ -193,7 +193,7 @@ impl KernelHeapAllocator {
         // do not exceed the heap size
         assert!((self.mapped_pages + pages) * PAGE_4K <= KERNEL_HEAP_SIZE);
 
-        virtual_memory::map_kernel(&VirtualMemoryMapEntry {
+        virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
             virtual_address: current_heap_base as u64,
             physical_address: None,
             size: (PAGE_4K * pages) as u64,
