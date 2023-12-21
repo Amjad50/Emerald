@@ -6,7 +6,9 @@ use core::{
 extern "C" {
     static begin: usize;
     static end: usize;
+    static text_end: usize;
     static rodata_end: usize;
+    static data_end: usize;
     static stack_guard_page: usize;
 }
 
@@ -70,8 +72,16 @@ pub fn kernel_elf_size() -> usize {
     (unsafe { &end } as *const usize as usize) - (unsafe { &begin } as *const usize as usize)
 }
 
+pub fn kernel_text_end() -> usize {
+    (unsafe { &text_end } as *const usize as usize)
+}
+
 pub fn kernel_elf_rodata_end() -> usize {
     (unsafe { &rodata_end } as *const usize as usize)
+}
+
+pub fn kernel_elf_data_end() -> usize {
+    (unsafe { &data_end } as *const usize as usize)
 }
 
 pub fn stack_guard_page_ptr() -> usize {
@@ -130,6 +140,103 @@ pub unsafe fn allocate_from_extra_kernel_pages(pages: usize) -> *mut u8 {
             Err(x) => used_pages = x,
         }
     }
+}
+
+#[allow(dead_code)]
+pub fn display_kernel_map() {
+    println!("Kernel map:");
+    let nothing = KERNEL_BASE..KERNEL_LINK;
+    let kernel_elf_end = align_up(kernel_elf_end(), PAGE_4K);
+    let kernel_elf = KERNEL_LINK..kernel_elf_end;
+    let kernel_elf_text = KERNEL_LINK..kernel_text_end();
+    let kernel_elf_rodata = kernel_text_end()..kernel_elf_rodata_end();
+    let kernel_elf_data = kernel_elf_rodata_end()..kernel_elf_data_end();
+    let kernel_elf_bss = kernel_elf_data_end()..kernel_elf_end;
+    let kernel_physical_allocator_low = kernel_elf_end..KERNEL_END;
+    let kernel_heap = KERNEL_HEAP_BASE..KERNEL_HEAP_BASE + KERNEL_HEAP_SIZE;
+    let interrupt_stack = INTR_STACK_BASE..INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE;
+    let kernel_extra_memory =
+        KERNEL_EXTRA_MEMORY_BASE..KERNEL_EXTRA_MEMORY_BASE + KERNEL_EXTRA_MEMORY_SIZE;
+    let device_memory = DEVICE_BASE_VIRTUAL..physical2virtual_io(DEVICE_PHYSICAL_END - 1);
+
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  nothing",
+        nothing.start,
+        nothing.end,
+        MemSize(nothing.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  kernel elf",
+        kernel_elf.start,
+        kernel_elf.end,
+        MemSize(kernel_elf.len() as u64)
+    );
+    // inner map for the elf
+    println!(
+        "    range={:016x}..{:016x}, len={:4}  kernel elf text",
+        kernel_elf_text.start,
+        kernel_elf_text.end,
+        MemSize(kernel_elf_text.len() as u64)
+    );
+    println!(
+        "    range={:016x}..{:016x}, len={:4}  kernel elf rodata",
+        kernel_elf_rodata.start,
+        kernel_elf_rodata.end,
+        MemSize(kernel_elf_rodata.len() as u64)
+    );
+    println!(
+        "    range={:016x}..{:016x}, len={:4}  kernel elf data",
+        kernel_elf_data.start,
+        kernel_elf_data.end,
+        MemSize(kernel_elf_data.len() as u64)
+    );
+    println!(
+        "    range={:016x}..{:016x}, len={:4}  kernel elf bss",
+        kernel_elf_bss.start,
+        kernel_elf_bss.end,
+        MemSize(kernel_elf_bss.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  kernel physical allocator low",
+        kernel_physical_allocator_low.start,
+        kernel_physical_allocator_low.end,
+        MemSize(kernel_physical_allocator_low.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  kernel heap",
+        kernel_heap.start,
+        kernel_heap.end,
+        MemSize(kernel_heap.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  interrupt stack",
+        interrupt_stack.start,
+        interrupt_stack.end,
+        MemSize(interrupt_stack.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  kernel extra memory",
+        kernel_extra_memory.start,
+        kernel_extra_memory.end,
+        MemSize(kernel_extra_memory.len() as u64)
+    );
+    println!(
+        "  range={:016x}..{:016x}, len={:4}  device memory",
+        device_memory.start,
+        device_memory.end,
+        MemSize(device_memory.len() as u64 + 1)
+    );
+
+    // number of bytes approx used from physical memory
+    println!(
+        "whole kernel physical size (startup/low): {}",
+        MemSize((KERNEL_END - KERNEL_BASE) as u64)
+    );
+    // total addressable virtual kernel memory
+    println!(
+        "whole kernel size: {}",
+        MemSize(u64::MAX - KERNEL_BASE as u64 + 1)
+    );
 }
 
 #[repr(transparent)]

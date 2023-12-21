@@ -41,7 +41,7 @@ use crate::{
     devices::clock,
     memory_management::{
         kernel_heap_allocator::ALLOCATOR,
-        memory_layout::{MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
+        memory_layout::{self, MemSize, KERNEL_HEAP_SIZE, PAGE_4K},
         physical_page_allocator,
     },
     process::Process,
@@ -55,6 +55,7 @@ fn finish_boot() {
     //  but then it got freed we don't record that
     let (free_heap, used_heap) = ALLOCATOR.stats();
     println!("\n\nBoot finished!");
+    memory_layout::display_kernel_map();
     println!("Free memory: {}", free_mem);
     println!(
         "Used memory: {} ({:0.3}%)",
