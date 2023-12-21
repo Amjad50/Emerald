@@ -2,7 +2,8 @@ use alloc::collections::LinkedList;
 
 use crate::{
     memory_management::memory_layout::{
-        is_aligned, MemSize, KERNEL_EXTRA_MEMORY_BASE, KERNEL_EXTRA_MEMORY_SIZE, PAGE_4K,
+        align_range, is_aligned, MemSize, KERNEL_EXTRA_MEMORY_BASE, KERNEL_EXTRA_MEMORY_SIZE,
+        PAGE_4K,
     },
     sync::spin::mutex::Mutex,
 };
@@ -13,30 +14,36 @@ static VIRTUAL_SPACE_ALLOCATOR: Mutex<VirtualSpaceAllocator> =
     Mutex::new(VirtualSpaceAllocator::empty());
 
 pub fn get_virtual_for_physical(physical_start: u64, size: u64) -> u64 {
+    let (aligned_start, size, offset) = align_range(physical_start as _, size as _, PAGE_4K);
+
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    let virtual_addr = allocator.get_virtual_for_physical(physical_start, size);
+    let virtual_addr = allocator.get_virtual_for_physical(aligned_start as u64, size as u64);
     // ensure its mapped
     virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
-        physical_address: Some(physical_start),
-        size,
+        physical_address: Some(aligned_start as u64),
+        size: size as _,
         flags: virtual_memory_mapper::flags::PTE_WRITABLE,
     });
     // to make sure no one else play around with the space while we are mapping it
     drop(allocator);
 
-    virtual_addr
+    virtual_addr + offset as u64
 }
 
 pub fn ensure_at_least_size(virtual_start: u64, size: u64) {
+    let (aligned_start, size, _) = align_range(virtual_start as _, size as _, PAGE_4K);
+
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    if let Some((allocated, physical_addr)) = allocator.ensure_at_least_size(virtual_start, size) {
+    if let Some((allocated, physical_addr)) =
+        allocator.ensure_at_least_size(aligned_start as u64, size as u64)
+    {
         if allocated {
             // ensure its mapped
             virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
                 virtual_address: virtual_start,
                 physical_address: Some(physical_addr),
-                size,
+                size: size as _,
                 flags: virtual_memory_mapper::flags::PTE_WRITABLE,
             });
         }
@@ -48,37 +55,41 @@ pub fn ensure_at_least_size(virtual_start: u64, size: u64) {
 
 #[allow(dead_code)]
 pub fn allocate_and_map_virtual_space(physical_start: u64, size: u64) -> u64 {
+    let (aligned_start, size, offset) = align_range(physical_start as _, size as _, PAGE_4K);
+
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    let virtual_addr = allocator.allocate(physical_start, size);
+    let virtual_addr = allocator.allocate(aligned_start as u64, size as u64);
 
     virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
-        physical_address: Some(physical_start),
-        size,
+        physical_address: Some(aligned_start as u64),
+        size: size as _,
         flags: virtual_memory_mapper::flags::PTE_WRITABLE,
     });
     // to make sure no one else play around with the space while we are mapping it
     drop(allocator);
 
-    virtual_addr
+    virtual_addr + offset as u64
 }
 
 #[allow(dead_code)]
 pub fn deallocate_virtual_space(virtual_start: u64, size: u64) {
-    let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
+    let (aligned_start, size, _) = align_range(virtual_start as _, size as _, PAGE_4K);
 
-    // unmap it
+    let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
+    allocator.deallocate(aligned_start as u64, size as u64);
+    // unmap it after we deallocate (it will panic if its not valid deallocation)
     virtual_memory_mapper::unmap_kernel(
         &VirtualMemoryMapEntry {
-            virtual_address: virtual_start,
+            virtual_address: aligned_start as u64,
             physical_address: None,
-            size,
+            size: size as _,
             flags: virtual_memory_mapper::flags::PTE_WRITABLE,
         },
         // we did specify our own physical address on allocation, so we must set this to false
         false,
     );
-    allocator.deallocate(virtual_start, size);
+    drop(allocator);
 }
 
 #[allow(dead_code)]

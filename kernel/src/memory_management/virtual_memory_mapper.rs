@@ -7,10 +7,9 @@ use crate::{
     cpu,
     memory_management::{
         memory_layout::{
-            align_down, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
-            virtual2physical, MemSize, DEVICE_BASE_PHYSICAL, DEVICE_BASE_VIRTUAL,
-            DEVICE_PHYSICAL_END, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK, KERNEL_MAPPED_SIZE,
-            PAGE_2M, PAGE_4K,
+            align_range, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
+            virtual2physical, MemSize, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK,
+            KERNEL_MAPPED_SIZE, PAGE_2M, PAGE_4K,
         },
         physical_page_allocator,
     },
@@ -291,7 +290,7 @@ impl VirtualMemoryMapper {
         let VirtualMemoryMapEntry {
             mut virtual_address,
             physical_address: mut start_physical_address,
-            mut size,
+            size: requested_size,
             flags,
         } = entry;
 
@@ -301,12 +300,17 @@ impl VirtualMemoryMapper {
             assert!(*flags & flags::PTE_USER != 0);
             assert!(virtual_address < KERNEL_BASE as u64);
         }
-        // get the end before alignment
-        let end_virtual_address = (virtual_address - 1) + size;
-        virtual_address = align_down(virtual_address as _, PAGE_4K) as _;
-        start_physical_address =
-            start_physical_address.map(|addr| align_down(addr as _, PAGE_4K) as _);
-        size = align_up((end_virtual_address - virtual_address) as _, PAGE_4K) as _;
+        let (aligned_start, size, _) =
+            align_range(virtual_address as _, *requested_size as _, PAGE_4K);
+        let mut size = size as u64;
+        virtual_address = aligned_start as _;
+
+        if let Some(start_physical_address) = start_physical_address.as_mut() {
+            let (aligned_start, physical_size, _) =
+                align_range(*start_physical_address as _, *requested_size as _, PAGE_4K);
+            assert!(physical_size as u64 == size);
+            *start_physical_address = aligned_start as _;
+        }
 
         // keep track of current address and size
         let mut physical_address = start_physical_address;
@@ -469,16 +473,16 @@ impl VirtualMemoryMapper {
         let VirtualMemoryMapEntry {
             mut virtual_address,
             physical_address,
-            mut size,
+            size,
             flags,
         } = entry;
 
         assert!(physical_address.is_none());
 
         // get the end before alignment
-        let end_virtual_address = (virtual_address - 1) + size;
-        virtual_address = align_down(virtual_address as _, PAGE_4K) as _;
-        size = align_up((end_virtual_address - virtual_address) as _, PAGE_4K) as _;
+        let (aligned_start, size, _) = align_range(virtual_address as _, *size as _, PAGE_4K);
+        let mut size = size as u64;
+        virtual_address = aligned_start as _;
 
         assert!(size > 0);
 

@@ -25,11 +25,7 @@ fn physical_to_acpi_memory(addr: usize, size: usize) -> usize {
         assert!(addr + size <= virtual2physical(KERNEL_END));
         addr + KERNEL_BASE
     } else {
-        let phy_start = align_down(addr, PAGE_4K);
-        let offset = addr - phy_start;
-        virtual_space::get_virtual_for_physical(phy_start as _, align_up(size, PAGE_4K) as _)
-            as usize
-            + offset
+        virtual_space::get_virtual_for_physical(addr as _, size as _) as usize
     }
 }
 
