@@ -8,6 +8,7 @@ use core::{
 use alloc::{boxed::Box, vec::Vec};
 
 use crate::{
+    io::{ByteStr, HexArray},
     memory_management::{
         memory_layout::{align_down, align_up, virtual2physical, KERNEL_BASE, KERNEL_END, PAGE_4K},
         virtual_space,
@@ -84,9 +85,9 @@ pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<BiosTables, ()
 
 #[repr(C, packed)]
 pub struct RsdpV1 {
-    signature: [u8; 8],
+    signature: ByteStr<[u8; 8]>,
     checksum: u8,
-    oem_id: [u8; 6],
+    oem_id: ByteStr<[u8; 6]>,
     revision: u8,
     rsdt_address: u32,
 }
@@ -106,9 +107,9 @@ pub struct RsdpV2 {
 #[repr(C, packed)]
 #[derive(Debug, Clone)]
 pub struct Rsdp {
-    pub signature: [u8; 8],
+    pub signature: ByteStr<[u8; 8]>,
     pub checksum: u8,
-    pub oem_id: [u8; 6],
+    pub oem_id: ByteStr<[u8; 6]>,
     pub revision: u8,
     pub rsdt_address: u32,
     pub length: u32,
@@ -208,12 +209,12 @@ impl Rsdt {
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct DescriptionHeader {
-    pub signature: [u8; 4],
+    pub signature: ByteStr<[u8; 4]>,
     pub length: u32,
     pub revision: u8,
     pub checksum: u8,
-    pub oem_id: [u8; 6],
-    pub oem_table_id: [u8; 8],
+    pub oem_id: ByteStr<[u8; 6]>,
+    pub oem_table_id: ByteStr<[u8; 8]>,
     pub oem_revision: u32,
     pub creator_id: u32,
     pub creator_revision: u32,
@@ -235,14 +236,14 @@ impl DescriptorTable {
         let len = header.length as usize;
         ensure_at_least_size(header_ptr as _, len);
 
-        let body = match &header.signature {
+        let body = match &header.signature.0 {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
             b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
             b"HPET" => DescriptorTableBody::Hpet(Box::new(Hpet::from_header(header))),
             b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Dsdt::from_header(header))),
             b"BGRT" => DescriptorTableBody::Bgrt(Box::new(Bgrt::from_header(header))),
             b"WAET" => DescriptorTableBody::Waet(Box::new(Waet::from_header(header))),
-            _ => DescriptorTableBody::Unknown(
+            _ => DescriptorTableBody::Unknown(HexArray(
                 unsafe {
                     slice::from_raw_parts(
                         header as *const DescriptionHeader as *const u8,
@@ -250,7 +251,7 @@ impl DescriptorTable {
                     )
                 }
                 .to_vec(),
-            ),
+            )),
         };
         Self {
             header: *header,
@@ -267,7 +268,7 @@ pub enum DescriptorTableBody {
     Dsdt(Box<Dsdt>),
     Bgrt(Box<Bgrt>),
     Waet(Box<Waet>),
-    Unknown(Vec<u8>),
+    Unknown(HexArray<Vec<u8>>),
 }
 
 #[derive(Debug, Clone)]
@@ -316,7 +317,10 @@ pub enum InterruptControllerStruct {
     NonMaskableInterrupt(NonMaskableInterrupt) = 3,
     LocalApicNmi(LocalApicNmi) = 4,
     LocalApicAddressOverride(LocalApicAddressOverride) = 5,
-    Unknown { struct_type: u8, bytes: Vec<u8> } = 255,
+    Unknown {
+        struct_type: u8,
+        bytes: HexArray<Vec<u8>>,
+    } = 255,
 }
 
 // extract enum into outside structs
@@ -426,7 +430,7 @@ impl InterruptControllerStruct {
             }
             _ => Self::Unknown {
                 struct_type,
-                bytes: bytes.to_vec(),
+                bytes: HexArray(bytes.to_vec()),
             },
         }
     }
@@ -473,22 +477,22 @@ pub struct Facp {
     iapc_boot_arch: u16,
     reserved2: u8,
     flags: u32,
-    reset_reg: [u8; 12],
+    reset_reg: HexArray<[u8; 12]>,
     reset_value: u8,
     arm_boot_arch: u16,
     fadt_minor_version: u8,
     x_firmware_control: u64,
     x_dsdt: u64,
-    x_pm1a_event_block: [u8; 12],
-    x_pm1b_event_block: [u8; 12],
-    x_pm1a_control_block: [u8; 12],
-    x_pm1b_control_block: [u8; 12],
-    x_pm2_control_block: [u8; 12],
-    x_pm_timer_block: [u8; 12],
-    x_gpe0_block: [u8; 12],
-    x_gpe1_block: [u8; 12],
-    sleep_control_reg: [u8; 12],
-    sleep_status_reg: [u8; 12],
+    x_pm1a_event_block: HexArray<[u8; 12]>,
+    x_pm1b_event_block: HexArray<[u8; 12]>,
+    x_pm1a_control_block: HexArray<[u8; 12]>,
+    x_pm1b_control_block: HexArray<[u8; 12]>,
+    x_pm2_control_block: HexArray<[u8; 12]>,
+    x_pm_timer_block: HexArray<[u8; 12]>,
+    x_gpe0_block: HexArray<[u8; 12]>,
+    x_gpe1_block: HexArray<[u8; 12]>,
+    sleep_control_reg: HexArray<[u8; 12]>,
+    sleep_status_reg: HexArray<[u8; 12]>,
     hypervisor_vendor_id: u64,
 }
 
@@ -602,12 +606,19 @@ impl fmt::Display for BiosTables {
         writeln!(f, "RSDP: {:X?}", self.rsdp)?;
         writeln!(f, "RSDT: {:X?}", self.rsdt.header)?;
         for entry in &self.rsdt.entries {
-            if let DescriptorTableBody::Dsdt(_entry) = &entry.body {
-                // TODO: add cmdline arg to print DSDT (its very large, so don't by default)
-                // writeln!(f, "DSDT: ")?;
-                // entry.aml_code.display_with_depth(f, 1)?;
-            } else {
-                writeln!(f, "{:X?}", entry.body)?;
+            match entry.body {
+                DescriptorTableBody::Dsdt(_) => {
+                    // TODO: add cmdline arg to print DSDT (its very large, so don't by default)
+                    // writeln!(f, "DSDT: ")?;
+                    // entry.aml_code.display_with_depth(f, 1)?;
+                }
+                DescriptorTableBody::Unknown(_) => {
+                    writeln!(f, "  {:X?}", entry.header)?;
+                    writeln!(f, "  {:X?}", entry.body)?;
+                }
+                _ => {
+                    writeln!(f, "{:X?}", entry.body)?;
+                }
             }
         }
         Ok(())

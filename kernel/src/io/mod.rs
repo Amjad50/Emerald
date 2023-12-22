@@ -1,4 +1,4 @@
-use core::{fmt, ops, sync::atomic::AtomicBool};
+use core::{fmt, sync::atomic::AtomicBool};
 
 pub mod console;
 #[allow(dead_code)]
@@ -7,6 +7,38 @@ mod uart;
 mod video_memory;
 
 static PRINT_ERR: AtomicBool = AtomicBool::new(false);
+
+macro_rules! impl_copy_clone_deref_wrapper {
+    ($new_type:tt <$generic:tt>) => {
+        impl<$generic> ::core::clone::Clone for $new_type<$generic>
+        where
+            $generic: ::core::clone::Clone,
+        {
+            fn clone(&self) -> Self {
+                $new_type(self.0.clone())
+            }
+        }
+
+        impl<$generic> ::core::marker::Copy for $new_type<$generic> where
+            $generic: ::core::marker::Copy
+        {
+        }
+
+        impl<$generic> ::core::ops::Deref for $new_type<$generic> {
+            type Target = $generic;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl<$generic> ::core::ops::DerefMut for $new_type<$generic> {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
+    };
+}
 
 // This is a wrapper around a type that implements Debug, but we don't want to print it
 // its kinda like using some libraries that allow you to disable debug for some fields
@@ -19,29 +51,73 @@ impl<T> fmt::Debug for NoDebug<T> {
     }
 }
 
-impl<T> Clone for NoDebug<T>
+impl_copy_clone_deref_wrapper!(NoDebug<T>);
+
+// This is a wrapper around a arrays/vectors to make them display proper hex in 1 line
+#[repr(transparent)]
+pub struct HexArray<T>(pub T);
+
+// a private trait to make the compiler happy about usage of `U` constriant
+trait ArrayTrait {
+    type Item;
+    fn data(&self) -> &[Self::Item];
+}
+
+impl<T> ArrayTrait for T
 where
-    T: Clone,
+    T: AsRef<[u8]>,
 {
-    fn clone(&self) -> Self {
-        NoDebug(self.0.clone())
-    }
-}
-impl<T> Copy for NoDebug<T> where T: Copy {}
-
-impl<T> ops::Deref for NoDebug<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    type Item = u8;
+    fn data(&self) -> &[Self::Item] {
+        self.as_ref()
     }
 }
 
-impl<T> ops::DerefMut for NoDebug<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+impl<T, U> fmt::Debug for HexArray<T>
+where
+    T: ArrayTrait<Item = U>,
+    U: fmt::UpperHex,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // write!(f, "[no_debug]")
+        write!(f, "[")?;
+        for (index, data) in self.0.data().iter().enumerate() {
+            if index > 0 {
+                write!(f, ", ")?;
+            }
+            // for now we use 04 width, which won't work as expected for u16/u32/u64
+            // but we don't use them for now
+            write!(f, "{data:#04X}")?;
+        }
+        write!(f, "]")
     }
 }
+
+impl_copy_clone_deref_wrapper!(HexArray<T>);
+
+// This is a wrapper around a byte array that allows us to print it as a string
+#[repr(transparent)]
+pub struct ByteStr<T>(pub T);
+
+impl<T> fmt::Debug for ByteStr<T>
+where
+    T: AsRef<[u8]>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "b\"")?;
+        // display each char if printable, otherwise replace with \xXX
+        for &c in self.0.as_ref().iter() {
+            if c.is_ascii_graphic() || c == b' ' {
+                write!(f, "{}", c as char)?;
+            } else {
+                write!(f, "\\x{:02X}", c)?;
+            }
+        }
+        write!(f, "\"")
+    }
+}
+
+impl_copy_clone_deref_wrapper!(ByteStr<T>);
 
 #[allow(dead_code)]
 pub fn hexdump(buf: &[u8]) {
