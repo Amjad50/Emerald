@@ -280,12 +280,13 @@ impl IoApicMmio {
 struct IoApic {
     id: u8,
     global_irq_base: u32,
+    n_entries: u8,
     mmio: *mut IoApicMmio,
 }
 
 impl IoApic {
     fn reset_all_interrupts(&mut self) {
-        for i in 0..24 {
+        for i in 0..self.n_entries {
             let b = IoApicRedirectionBuilder::default()
                 .with_vector(0)
                 .with_mask(true);
@@ -320,14 +321,17 @@ impl From<tables::IoApic> for IoApic {
             table.io_apic_address & 0xF == 0,
             "IO APIC address is not aligned"
         );
-        Self {
+        let mut s = Self {
             id: table.io_apic_id,
             global_irq_base: table.global_system_interrupt_base,
+            n_entries: 0, // to be filled next
             mmio: virtual_space::allocate_and_map_virtual_space(
                 table.io_apic_address as _,
                 mem::size_of::<IoApicMmio>() as _,
             ) as *mut IoApicMmio,
-        }
+        };
+        s.n_entries = (s.read_register(io_apic::IO_APIC_VERSION) >> 16) as u8 + 1;
+        s
     }
 }
 
@@ -411,20 +415,19 @@ impl Apic {
                     self.source_overrides.push(s.clone());
                 }
                 InterruptControllerStruct::NonMaskableInterrupt(_) => todo!(),
-                InterruptControllerStruct::LocalApicNmi(s) => {
-                    // for now, make sure we have the values we need
-                    assert!(s.acpi_processor_uid == 0xFF);
-                    assert!(s.flags == 0);
-                    assert!(s.local_apic_lint == 1);
+                InterruptControllerStruct::LocalApicNmi(_s) => {
+                    // for now, we are not using nmi, so we just ignore it
+                    // assert!(s.acpi_processor_uid == 0xFF);
+                    // assert!(s.flags == 0);
+                    // assert!(s.local_apic_lint == 1);
                 }
                 InterruptControllerStruct::LocalApicAddressOverride(s) => {
                     apic_address = s.local_apic_address as usize;
                 }
                 InterruptControllerStruct::Unknown { struct_type, bytes } => {
                     println!(
-                        "WARNING: unknown interrupt controller struct type {:#X} with {:#X} bytes",
-                        struct_type,
-                        bytes.len()
+                        "WARNING: unknown interrupt controller struct type {:#X} with {:#X?} bytes",
+                        struct_type, bytes
                     );
                 }
             }
@@ -550,7 +553,7 @@ impl Apic {
             .iter_mut()
             .find(|io_apic| {
                 io_apic.global_irq_base <= interrupt_num
-                    && interrupt_num < io_apic.global_irq_base + 24
+                    && interrupt_num < io_apic.global_irq_base + io_apic.n_entries as u32
             })
             .expect("Could not find IO APIC for the interrupt");
 
