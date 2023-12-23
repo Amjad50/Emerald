@@ -38,6 +38,16 @@ const ADDR_MASK: u64 = 0x0000_0000_FFFF_F000;
 // only use the last index for the kernel
 // all the other indexes are free to use by the user
 const KERNEL_L4_INDEX: usize = 0x1FF;
+// the user can use all the indexes except the last one
+const NUM_USER_L4_INDEXES: usize = KERNEL_L4_INDEX;
+
+pub const MAX_USER_VIRTUAL_ADDRESS: usize =
+    // sign extension
+    0xFFFF_0000_0000_0000
+        | (KERNEL_L4_INDEX - 1) << 39
+        | (0x1FF << 30)
+        | (0x1FF << 21)
+        | (0x1FF << 12);
 
 #[inline(always)]
 const fn get_l4(addr: u64) -> u64 {
@@ -282,14 +292,18 @@ impl VirtualMemoryMapper {
 
         assert!(!self.page_map_l4.as_ptr().is_null());
         assert!(is_aligned(self.page_map_l4.0 as _, PAGE_4K));
-        if self.is_user {
-            assert!(*flags & flags::PTE_USER != 0);
-            assert!(virtual_address < KERNEL_BASE as u64);
-        }
+
         let (aligned_start, size, _) =
             align_range(virtual_address as _, *requested_size as _, PAGE_4K);
         let mut size = size as u64;
         virtual_address = aligned_start as _;
+
+        if self.is_user {
+            assert!(*flags & flags::PTE_USER != 0);
+            assert!(get_l4(virtual_address) != KERNEL_L4_INDEX as u64);
+            let end = virtual_address + size;
+            assert!(end <= MAX_USER_VIRTUAL_ADDRESS as u64);
+        }
 
         if let Some(start_physical_address) = start_physical_address.as_mut() {
             let (aligned_start, physical_size, _) =
@@ -649,7 +663,7 @@ impl VirtualMemoryMapper {
         page_map_l4
             .entries
             .iter_mut()
-            .take(KERNEL_L4_INDEX) //skip the kernel (the last one)
+            .take(NUM_USER_L4_INDEXES) //skip the kernel (the last one)
             .filter(present)
             .flat_map(as_page_directory_table_flat)
             .filter(present)

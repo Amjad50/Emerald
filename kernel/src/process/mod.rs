@@ -11,7 +11,9 @@ use crate::{
     fs,
     memory_management::{
         memory_layout::{KERNEL_BASE, PAGE_4K},
-        virtual_memory_mapper::{self, VirtualMemoryMapEntry, VirtualMemoryMapper},
+        virtual_memory_mapper::{
+            self, VirtualMemoryMapEntry, VirtualMemoryMapper, MAX_USER_VIRTUAL_ADDRESS,
+        },
     },
 };
 
@@ -121,7 +123,7 @@ impl Process {
     ) -> Result<Self, ProcessError> {
         let id = PROCESS_ID_ALLOCATOR.allocate();
         let mut vm = virtual_memory_mapper::clone_kernel_vm_as_user();
-        let stack_end = KERNEL_BASE - PAGE_4K;
+        let stack_end = MAX_USER_VIRTUAL_ADDRESS - PAGE_4K;
         let stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
         let stack_start = stack_end - stack_size;
         vm.map(&VirtualMemoryMapEntry {
