@@ -154,6 +154,36 @@ impl<T> OnceLock<T> {
         }
     }
 
+    pub fn get_or_init<F>(&self, f: F) -> &T
+    where
+        F: FnOnce() -> T,
+    {
+        match self.get_or_try_init(|| Ok::<T, ()>(f())) {
+            Ok(val) => val,
+            Err(_) => panic!(),
+        }
+    }
+
+    pub fn get_or_try_init<F, E>(&self, f: F) -> Result<&T, E>
+    where
+        F: FnOnce() -> Result<T, E>,
+    {
+        // Fast path check
+        // NOTE: We need to perform an acquire on the state in this method
+        // in order to correctly synchronize `LazyLock::force`. This is
+        // currently done by calling `self.get()`, which in turn calls
+        // `self.is_initialized()`, which in turn performs the acquire.
+        if let Some(value) = self.try_get() {
+            return Ok(value);
+        }
+        self.init(f)?;
+
+        debug_assert!(self.is_completed());
+
+        // SAFETY: The inner value has been initialized
+        Ok(unsafe { self.get_unchecked() })
+    }
+
     #[cold]
     fn init<F, E>(&self, f: F) -> Result<(), E>
     where
