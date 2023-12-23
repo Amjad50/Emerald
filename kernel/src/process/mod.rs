@@ -230,43 +230,40 @@ impl Process {
         self.exit_code = exit_code;
     }
 
-    /// Add/Remove to/from the heap and return the new end of the heap
+    /// Add/Remove to/from the heap and return the previous end of the heap before the change
+    /// If this is an `Add`, it will return the address of the new block
+    /// If this is a `Remove`, the result will generally be useless
     /// Use with `0` to get the current heap end
-    pub fn add_to_heap(&mut self, size: isize) -> Option<usize> {
-        if size == 0 {
+    pub fn add_to_heap(&mut self, increment: isize) -> Option<usize> {
+        if increment == 0 {
             return Some(self.heap_start + self.heap_size);
         }
 
-        assert!(is_aligned(size.unsigned_abs(), PAGE_4K));
+        assert!(is_aligned(increment.unsigned_abs(), PAGE_4K));
 
-        let new_size = self.heap_size as isize + size;
-        if new_size < 0 {
-            return None;
-        }
-        if new_size as usize > self.heap_max {
+        let new_size = self.heap_size as isize + increment;
+        if new_size < 0 || new_size as usize > self.heap_max {
             return None;
         }
         let old_end = self.heap_start + self.heap_size;
-        let new_end;
         self.heap_size = new_size as usize;
-        if size > 0 {
-            new_end = old_end + size.unsigned_abs();
+        if increment > 0 {
             // map the new heap
             let entry = VirtualMemoryMapEntry {
                 virtual_address: old_end as u64,
                 physical_address: None,
-                size: size as u64,
+                size: increment as u64,
                 flags: virtual_memory_mapper::flags::PTE_USER
                     | virtual_memory_mapper::flags::PTE_WRITABLE,
             };
             self.vm.map(&entry);
         } else {
-            new_end = old_end - size.unsigned_abs();
+            let new_end = old_end - increment.unsigned_abs();
             // unmap old heap
             let entry = VirtualMemoryMapEntry {
                 virtual_address: new_end as u64,
                 physical_address: None,
-                size: size.unsigned_abs() as u64,
+                size: increment.unsigned_abs() as u64,
                 flags: virtual_memory_mapper::flags::PTE_USER
                     | virtual_memory_mapper::flags::PTE_WRITABLE,
             };
@@ -274,7 +271,7 @@ impl Process {
             self.vm.unmap(&entry, true);
         }
 
-        Some(new_end)
+        Some(old_end)
     }
 }
 

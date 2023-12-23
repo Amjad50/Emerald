@@ -14,6 +14,7 @@ use crate::{
     cpu::idt::InterruptAllSavedState,
     executable::elf::Elf,
     fs,
+    memory_management::memory_layout::{is_aligned, PAGE_4K},
     process::{scheduler, Process},
 };
 
@@ -22,11 +23,12 @@ use super::scheduler::{exit_current_process, with_current_process};
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
 const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
-    sys_open,  // common::syscalls::SYS_OPEN
-    sys_write, // common::syscalls::SYS_WRITE
-    sys_read,  // common::syscalls::SYS_READ
-    sys_exit,  // common::syscalls::SYS_EXIT
-    sys_spawn, // common::syscalls::SYS_SPAWN
+    sys_open,     // common::syscalls::SYS_OPEN
+    sys_write,    // common::syscalls::SYS_WRITE
+    sys_read,     // common::syscalls::SYS_READ
+    sys_exit,     // common::syscalls::SYS_EXIT
+    sys_spawn,    // common::syscalls::SYS_SPAWN
+    sys_inc_heap, // common::syscalls::SYS_INC_HEAP
 ];
 
 #[inline]
@@ -176,6 +178,21 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     scheduler::push_process(process);
 
     SyscallResult::Ok(new_pid)
+}
+
+fn sys_inc_heap(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (increment, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => i64),
+    };
+
+    if !is_aligned(increment.unsigned_abs() as usize, PAGE_4K) {
+        return Err(to_arg_err!(0, SyscallArgError::InvalidHeapIncrement));
+    }
+
+    let old_heap_end = with_current_process(|process| process.add_to_heap(increment as isize))
+        .ok_or(SyscallError::HeapRangesExceeded)?;
+
+    SyscallResult::Ok(old_heap_end as u64)
 }
 
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {
