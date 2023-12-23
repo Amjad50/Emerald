@@ -2,7 +2,7 @@
 resolver = "2"
 default-members = ["kernel"]
 members = [
-    "common",
+    "libraries/kernel_user_link",
     "kernel",
     "userspace/init", "userspace/shell",
 ]

@@ -28,13 +28,13 @@ mod sync;
 use core::hint;
 
 use alloc::vec::Vec;
-use common::{FD_STDERR, FD_STDIN, FD_STDOUT};
 use cpu::{
     gdt,
     interrupts::{self, apic},
 };
 use executable::elf::Elf;
 use io::console;
+use kernel_user_link::{FD_STDERR, FD_STDIN, FD_STDOUT};
 use memory_management::virtual_memory_mapper;
 use multiboot2::MultiBoot2Info;
 use process::scheduler;

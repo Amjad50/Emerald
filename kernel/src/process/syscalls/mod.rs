@@ -1,7 +1,7 @@
 use core::ffi::CStr;
 
 use alloc::{string::String, vec::Vec};
-use common::{
+use kernel_user_link::{
     sys_arg,
     syscalls::{
         syscall_arg_to_u64, syscall_handler_wrapper, SyscallArgError, SyscallError, SyscallResult,
@@ -23,12 +23,12 @@ use super::scheduler::{exit_current_process, with_current_process};
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
 const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
-    sys_open,     // common::syscalls::SYS_OPEN
-    sys_write,    // common::syscalls::SYS_WRITE
-    sys_read,     // common::syscalls::SYS_READ
-    sys_exit,     // common::syscalls::SYS_EXIT
-    sys_spawn,    // common::syscalls::SYS_SPAWN
-    sys_inc_heap, // common::syscalls::SYS_INC_HEAP
+    sys_open,     // kernel_user_link::syscalls::SYS_OPEN
+    sys_write,    // kernel_user_link::syscalls::SYS_WRITE
+    sys_read,     // kernel_user_link::syscalls::SYS_READ
+    sys_exit,     // kernel_user_link::syscalls::SYS_EXIT
+    sys_spawn,    // kernel_user_link::syscalls::SYS_SPAWN
+    sys_inc_heap, // kernel_user_link::syscalls::SYS_INC_HEAP
 ];
 
 #[inline]

@@ -20,7 +20,7 @@ const USER_INTERRUPTS_START: u8 = 0x20;
 const MAX_USER_INTERRUPTS: u8 = 0xe0 - 0x10;
 pub const SPECIAL_SCHEDULER_INTERRUPT: u8 = 0xdf; // last one (0xFF)
 pub const SPECIAL_SYSCALL_INTERRUPT: u8 =
-    common::syscalls::SYSCALL_INTERRUPT_NUMBER - USER_INTERRUPTS_START;
+    kernel_user_link::syscalls::SYSCALL_INTERRUPT_NUMBER - USER_INTERRUPTS_START;
 
 struct Interrupts {
     idt: InterruptDescriptorTable,

@@ -3,7 +3,7 @@
 
 use core::ffi::{c_char, CStr};
 
-use common::{
+use kernel_user_link::{
     call_syscall,
     syscalls::{SYS_EXIT, SYS_INC_HEAP, SYS_SPAWN, SYS_WRITE},
     FD_STDOUT,
