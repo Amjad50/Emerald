@@ -5,7 +5,7 @@ use core::{ffi::CStr, hint};
 
 use common::{
     call_syscall,
-    syscalls::{SYS_OPEN, SYS_READ, SYS_WRITE},
+    syscalls::{SYS_EXIT, SYS_OPEN, SYS_READ, SYS_WRITE},
     FD_STDOUT,
 };
 
@@ -45,6 +45,17 @@ fn read_file(fd: u64, buf: &mut [u8]) -> u64 {
     }
 }
 
+fn exit(code: u64) -> ! {
+    unsafe {
+        call_syscall!(
+            SYS_EXIT,
+            code, // code
+        )
+        .unwrap();
+    }
+    unreachable!("exit syscall should not return")
+}
+
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     // we are in `init` now
@@ -59,9 +70,7 @@ pub extern "C" fn _start() -> ! {
     buf[read as usize] = 0; // null terminate
     write_to_stdout(CStr::from_bytes_until_nul(&buf[..read as usize + 1]).unwrap());
 
-    loop {
-        hint::spin_loop();
-    }
+    exit(123);
 }
 
 #[panic_handler]

@@ -90,7 +90,7 @@ pub enum ProcessState {
     Running,
     Scheduled,
     Sleeping,
-    Stopped,
+    Exited,
 }
 
 // TODO: implement threads, for now each process acts as a thread also
@@ -109,6 +109,8 @@ pub struct Process {
     stack_size: usize,
 
     state: ProcessState,
+    // split from the state, so that we can keep it as a simple enum
+    exit_code: u64,
 }
 
 impl Process {
@@ -153,10 +155,11 @@ impl Process {
             stack_ptr_end: stack_end - 8, // 8 bytes for padding
             stack_size,
             state: ProcessState::Scheduled,
+            exit_code: 0,
         })
     }
 
-    pub fn switch_to_this(&mut self) {
+    pub fn switch_to_this_vm(&mut self) {
         self.vm.switch_to_this();
     }
 
@@ -196,6 +199,11 @@ impl Process {
 
     pub fn get_file(&mut self, fd: usize) -> Option<&mut fs::File> {
         self.open_files.get_mut(&fd)
+    }
+
+    pub fn exit(&mut self, exit_code: u64) {
+        self.state = ProcessState::Exited;
+        self.exit_code = exit_code;
     }
 }
 

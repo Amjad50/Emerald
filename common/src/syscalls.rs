@@ -6,12 +6,13 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 3;
+pub const NUM_SYSCALLS: usize = 4;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
     pub const SYS_WRITE: u64 = 1;
     pub const SYS_READ: u64 = 2;
+    pub const SYS_EXIT: u64 = 3;
 }
 pub use numbers::*;
 
@@ -19,10 +20,10 @@ pub use numbers::*;
 /// RCX, RDX, RSI, RDI, R8, R9, R10 (7 arguments max)
 #[macro_export]
 macro_rules! call_syscall {
-    ($syscall_num:expr) => {
+    ($syscall_num:expr $(,)?) => {
         call_syscall!(@step $syscall_num; { }; { })
     };
-    ($syscall_num:expr, $($args:expr),*) => {
+    ($syscall_num:expr, $($args:expr),* $(,)?) => {
         call_syscall!(@step $syscall_num; { }; {$($args),*})
     };
     (@step $syscall_num: expr; {$($generated:tt)*}; {}) => {

@@ -11,7 +11,7 @@ use common::{
 
 use crate::{cpu::idt::InterruptAllSavedState, fs};
 
-use super::scheduler::with_current_process;
+use super::scheduler::{exit_current_process, with_current_process};
 
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
@@ -19,6 +19,7 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_open,  // common::syscalls::SYS_OPEN
     sys_write, // common::syscalls::SYS_WRITE
     sys_read,  // common::syscalls::SYS_READ
+    sys_exit,  // common::syscalls::SYS_EXIT
 ];
 
 #[inline]
@@ -108,6 +109,16 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     SyscallResult::Ok(bytes_read as u64)
 }
 
+fn sys_exit(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (exit_code, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => u64),
+    };
+
+    // modify the all_state to go back to the kernel, the current all_state will be dropped
+    exit_current_process(exit_code, all_state);
+    SyscallResult::Ok(exit_code)
+}
+
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {
     let syscall_number = all_state.rest.rax;
 
@@ -117,4 +128,6 @@ pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {
         let syscall_func = SYSCALLS[syscall_number as usize];
         syscall_func(all_state)
     });
+
+    crate::scheduler::yield_current_if_any(all_state);
 }
