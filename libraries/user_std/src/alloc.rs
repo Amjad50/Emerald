@@ -1,16 +1,26 @@
 use core::alloc::{GlobalAlloc, Layout};
 
 use increasing_heap_allocator::{HeapAllocator, HeapStats, PageAllocatorProvider};
-
-use crate::{
-    memory_management::{
-        memory_layout::KERNEL_HEAP_SIZE,
-        virtual_memory_mapper::{self, flags, VirtualMemoryMapEntry},
-    },
-    sync::{once::OnceLock, spin::mutex::Mutex},
+use kernel_user_link::{
+    call_syscall,
+    syscalls::{SyscallError, SYS_INC_HEAP},
 };
 
-use super::memory_layout::{KERNEL_HEAP_BASE, PAGE_4K};
+use crate::sync::{once::OnceLock, spin::mutex::Mutex};
+
+pub extern crate alloc;
+
+const PAGE_4K: usize = 0x1000;
+
+unsafe fn inc_dec_heap(increment: isize) -> Result<*mut u8, SyscallError> {
+    unsafe {
+        call_syscall!(
+            SYS_INC_HEAP,
+            increment as u64, // increment
+        )
+        .map(|addr| addr as *mut u8)
+    }
+}
 
 #[global_allocator]
 pub static ALLOCATOR: LockedKernelHeapAllocator = LockedKernelHeapAllocator::empty();
@@ -23,7 +33,7 @@ struct PageAllocator {
 impl PageAllocator {
     fn new() -> Self {
         Self {
-            heap_start: KERNEL_HEAP_BASE,
+            heap_start: unsafe { inc_dec_heap(0).unwrap() as usize },
             mapped_pages: 0,
         }
     }
@@ -31,27 +41,20 @@ impl PageAllocator {
 
 impl PageAllocatorProvider<PAGE_4K> for PageAllocator {
     fn allocate_pages(&mut self, pages: usize) -> Option<*mut u8> {
-        eprintln!("Allocating {} pages", pages);
+        // eprintln!("Allocating {} pages", pages);
         assert!(pages > 0);
 
         let last_heap_base = self.heap_start + self.mapped_pages * PAGE_4K;
-        let current_heap_base = last_heap_base;
+        let new_addr = unsafe { inc_dec_heap((pages * PAGE_4K) as isize) };
 
-        // do not exceed the heap size
-        if (self.mapped_pages + pages) * PAGE_4K > KERNEL_HEAP_SIZE {
+        let Ok(new_addr) = new_addr else {
             return None;
-        }
-
-        virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
-            virtual_address: current_heap_base as u64,
-            physical_address: None,
-            size: (PAGE_4K * pages) as u64,
-            flags: flags::PTE_WRITABLE,
-        });
+        };
+        assert!(new_addr as usize == last_heap_base);
 
         self.mapped_pages += pages;
 
-        Some(current_heap_base as *mut u8)
+        Some(new_addr)
     }
 
     fn deallocate_pages(&mut self, _pages: usize) -> bool {
@@ -74,6 +77,7 @@ impl LockedKernelHeapAllocator {
         Mutex::new(HeapAllocator::new(PageAllocator::new()))
     }
 
+    #[allow(dead_code)]
     pub fn stats(&self) -> HeapStats {
         let inner = self.inner.get_or_init(Self::init_mutex).lock();
         inner.stats()

@@ -3,16 +3,22 @@
 version = 3
 
 [[package]]
+name = "increasing_heap_allocator"
+version = "0.1.0"
+
+[[package]]
 name = "init"
 version = "0.1.0"
 dependencies = [
  "kernel_user_link",
+ "user_std",
 ]
 
 [[package]]
 name = "kernel"
 version = "0.1.0"
 dependencies = [
+ "increasing_heap_allocator",
  "kernel_user_link",
 ]
 
@@ -24,5 +30,14 @@ version = "0.1.0"
 name = "shell"
 version = "0.1.0"
 dependencies = [
+ "kernel_user_link",
+ "user_std",
+]
+
+[[package]]
+name = "user_std"
+version = "0.1.0"
+dependencies = [
+ "increasing_heap_allocator",
  "kernel_user_link",
 ]

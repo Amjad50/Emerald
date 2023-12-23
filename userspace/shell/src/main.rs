@@ -8,14 +8,17 @@ use kernel_user_link::{
     syscalls::{SYS_EXIT, SYS_OPEN, SYS_READ, SYS_WRITE},
     FD_STDOUT,
 };
+use user_std::alloc::alloc;
 
-fn write_to_stdout(s: &CStr) {
+use alloc::{format, string::String};
+
+fn write_to_stdout(s: &[u8]) {
     unsafe {
         call_syscall!(
             SYS_WRITE,
-            FD_STDOUT,                 // fd
-            s.as_ptr() as u64,         // buf
-            s.to_bytes().len() as u64  // size
+            FD_STDOUT,         // fd
+            s.as_ptr() as u64, // buf
+            s.len() as u64     // size
         )
         .unwrap();
     }
@@ -60,21 +63,21 @@ fn exit(code: u64) -> ! {
 pub extern "C" fn _start() -> ! {
     // we are in `init` now
     // create some delay
-    write_to_stdout(c"[shell] Hello!\n\n");
+    write_to_stdout("[shell] Hello!\n\n".as_bytes());
 
     // open `/message.txt` and print the result
     let fd = open_file(c"/message.txt");
-    write_to_stdout(c"[shell] content of `/message.txt`:\n");
+    write_to_stdout("[shell] content of `/message.txt`:\n".as_bytes());
     let mut buf = [0u8; 1024];
     let read = read_file(fd, &mut buf);
-    buf[read as usize] = 0; // null terminate
-    write_to_stdout(CStr::from_bytes_until_nul(&buf[..read as usize + 1]).unwrap());
+    let data = String::from_utf8_lossy(&buf[..read as usize]);
 
+    write_to_stdout(data.as_bytes());
     exit(222);
 }
 
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    write_to_stdout(c"[shell] panicked!\n");
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    write_to_stdout(format!("{}\n", info).as_bytes());
     exit(0xFF);
 }

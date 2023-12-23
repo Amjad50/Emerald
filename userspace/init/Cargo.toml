@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 kernel_user_link = { path = "../../libraries/kernel_user_link" }
+user_std = { path = "../../libraries/user_std" }
