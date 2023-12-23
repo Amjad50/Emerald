@@ -29,7 +29,7 @@ pub const KERNEL_HEAP_BASE: usize = KERNEL_END;
 pub const KERNEL_HEAP_SIZE: usize = 0x100_0000; // 16MB
 
 // The size of the stack for interrupt handlers
-pub const INTR_STACK_SIZE: usize = PAGE_4K * 4;
+pub const INTR_STACK_SIZE: usize = PAGE_4K * 8;
 pub const INTR_STACK_EMPTY_SIZE: usize = PAGE_4K;
 pub const INTR_STACK_ENTRY_SIZE: usize = INTR_STACK_SIZE + INTR_STACK_EMPTY_SIZE;
 pub const INTR_STACK_BASE: usize = KERNEL_HEAP_BASE + KERNEL_HEAP_SIZE;
