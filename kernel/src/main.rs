@@ -33,6 +33,7 @@ use cpu::{
     interrupts::{self, apic},
 };
 use executable::elf::Elf;
+use increasing_heap_allocator::HeapStats;
 use io::console;
 use kernel_user_link::{FD_STDERR, FD_STDIN, FD_STDOUT};
 use memory_management::virtual_memory_mapper;
@@ -55,7 +56,11 @@ fn finish_boot() {
     let used_mem = MemSize((physical_pages_stats.1 * PAGE_4K) as u64);
     // this stats is recorded at this point, meaning that we could have allocated a lot,
     //  but then it got freed we don't record that
-    let (free_heap, used_heap) = ALLOCATOR.stats();
+    let HeapStats {
+        allocated,
+        free_size,
+        heap_size,
+    } = ALLOCATOR.stats();
     println!("\n\nBoot finished!");
     memory_layout::display_kernel_map();
     println!("Free memory: {}", free_mem);
@@ -64,16 +69,16 @@ fn finish_boot() {
         used_mem,
         used_mem.0 as f64 / (used_mem.0 + free_mem.0) as f64 * 100.
     );
-    println!("Free heap: {}", MemSize(free_heap as u64));
+    println!("Free heap: {}", MemSize(free_size as u64));
     println!(
         "Used heap: {} ({:0.3}%)",
-        MemSize(used_heap as u64),
-        used_heap as f64 / (used_heap + free_heap) as f64 * 100.
+        MemSize(allocated as u64),
+        allocated as f64 / (heap_size) as f64 * 100.
     );
     println!(
         "From possible heap: {} ({:0.3}%)",
         MemSize(KERNEL_HEAP_SIZE as u64),
-        used_heap as f64 / KERNEL_HEAP_SIZE as f64 * 100.
+        allocated as f64 / KERNEL_HEAP_SIZE as f64 * 100.
     );
     virtual_space::debug_blocks();
     println!();

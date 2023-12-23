@@ -27,7 +27,7 @@ args = ["-r", "${OUT_DIR}/${CARGO_MAKE_PROJECT_NAME}", "${FILESYSTEM_PATH}/${CAR
 [tasks.filesystem]
 workspace = false
 # empty array means all members (not sure why need to be explicit)
-env = { CARGO_MAKE_WORKSPACE_INCLUDE_MEMBERS=[], CARGO_MAKE_WORKSPACE_SKIP_MEMBERS=["kernel", "libraries/kernel_user_link"] }
+env = { CARGO_MAKE_WORKSPACE_INCLUDE_MEMBERS=[], CARGO_MAKE_WORKSPACE_SKIP_MEMBERS=["kernel", "libraries/*"] }
 run_task = { name = "copy_to_fs", fork = true }
 
 # kernel tasks
