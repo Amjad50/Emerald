@@ -6,12 +6,15 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 3;
+pub const NUM_SYSCALLS: usize = 6;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
     pub const SYS_WRITE: u64 = 1;
     pub const SYS_READ: u64 = 2;
+    pub const SYS_EXIT: u64 = 3;
+    pub const SYS_SPAWN: u64 = 4;
+    pub const SYS_INC_HEAP: u64 = 5;
 }
 pub use numbers::*;
 
@@ -19,10 +22,10 @@ pub use numbers::*;
 /// RCX, RDX, RSI, RDI, R8, R9, R10 (7 arguments max)
 #[macro_export]
 macro_rules! call_syscall {
-    ($syscall_num:expr) => {
+    ($syscall_num:expr $(,)?) => {
         call_syscall!(@step $syscall_num; { }; { })
     };
-    ($syscall_num:expr, $($args:expr),*) => {
+    ($syscall_num:expr, $($args:expr),* $(,)?) => {
         call_syscall!(@step $syscall_num; { }; {$($args),*})
     };
     (@step $syscall_num: expr; {$($generated:tt)*}; {}) => {
@@ -183,6 +186,7 @@ pub enum SyscallArgError {
     GeneralInvalid = 1,
     InvalidUserPointer = 2,
     NotValidUtf8 = 3,
+    InvalidHeapIncrement = 4,
 }
 
 impl SyscallArgError {
@@ -192,6 +196,7 @@ impl SyscallArgError {
             1 => Ok(Some(SyscallArgError::GeneralInvalid)),
             2 => Ok(Some(SyscallArgError::InvalidUserPointer)),
             3 => Ok(Some(SyscallArgError::NotValidUtf8)),
+            4 => Ok(Some(SyscallArgError::InvalidHeapIncrement)),
             _ => Err(()),
         }
     }
@@ -207,6 +212,9 @@ pub enum SyscallError {
     InvalidFileIndex = 3,
     CouldNotWriteToFile = 4,
     CouldNotReadFromFile = 5,
+    CouldNotLoadElf = 6,
+    CouldNotAllocateProcess = 7,
+    HeapRangesExceeded = 8,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -286,6 +294,9 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::InvalidFileIndex => 3 << 56,
                 SyscallError::CouldNotWriteToFile => 4 << 56,
                 SyscallError::CouldNotReadFromFile => 5 << 56,
+                SyscallError::CouldNotLoadElf => 6 << 56,
+                SyscallError::CouldNotAllocateProcess => 7 << 56,
+                SyscallError::HeapRangesExceeded => 8 << 56,
             };
 
             err_upper | (1 << 63)
@@ -328,6 +339,9 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             3 => SyscallError::InvalidFileIndex,
             4 => SyscallError::CouldNotWriteToFile,
             5 => SyscallError::CouldNotReadFromFile,
+            6 => SyscallError::CouldNotLoadElf,
+            7 => SyscallError::CouldNotAllocateProcess,
+            8 => SyscallError::HeapRangesExceeded,
             _ => invalid_error_code(()),
         };
         SyscallResult::Err(err)

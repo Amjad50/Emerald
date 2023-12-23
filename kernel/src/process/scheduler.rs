@@ -59,23 +59,41 @@ pub fn schedule() -> ! {
         let mut scheduler = SCHEDULER.lock();
         // no context holding, i.e. free to take a new process
         for process in scheduler.processes.iter_mut() {
-            if process.state == ProcessState::Scheduled {
-                current_cpu.push_cli();
-                process.state = ProcessState::Running;
-                process.switch_to_this();
-                current_cpu.process_id = process.id;
-                current_cpu.context = Some(process.context);
+            match process.state {
+                ProcessState::Scheduled if current_cpu.context.is_none() => {
+                    // found a process to run
+                    current_cpu.push_cli();
+                    process.state = ProcessState::Running;
+                    process.switch_to_this_vm();
+                    current_cpu.process_id = process.id;
+                    current_cpu.context = Some(process.context);
 
-                current_cpu.pop_cli();
+                    current_cpu.pop_cli();
+                }
+                ProcessState::Yielded => {
+                    // schedule for next time
+                    process.state = ProcessState::Scheduled;
+                }
+                ProcessState::Exited => {
+                    // keep the process for one time, it will be deleted later.
+                    // this is if we want to do extra stuff later
+                }
+                _ => {}
             }
         }
+        scheduler
+            .processes
+            .retain(|p| p.state != ProcessState::Exited);
         drop(scheduler);
 
         if current_cpu.context.is_some() {
             // call scheduler_interrupt_handler
             // we are using interrupts to switch context since it allows us to save the registers of exit, which is
             // very convenient
-            unsafe { core::arch::asm!("int 0xff") }
+            // The `sys_exit` syscall changes the context from user to kernel,
+            // and because of how we implemented syscalls, the result will be in `rax`, so we tell
+            // the compiler to ignore `rax` as it may be clobbered after this call
+            unsafe { core::arch::asm!("int 0xff", out("rax") _) }
         } else {
             // no process to run, just wait for interrupts
             unsafe { cpu::halt() };
@@ -98,6 +116,32 @@ where
     f(process)
 }
 
+/// Exit the current process, and move the `all_state` to the scheduler.
+/// The caller of this function (i.e. interrupt) will use the `all_state` to go back to the scheduler.
+/// This function will remove the context from the CPU, and thus the value in `all_state` will be dropped.
+pub fn exit_current_process(exit_code: u64, all_state: &mut InterruptAllSavedState) {
+    let current_cpu = cpu::cpu();
+    assert!(current_cpu.context.is_some());
+
+    with_current_process(|process| {
+        assert!(process.state == ProcessState::Running);
+        current_cpu.push_cli();
+        // exit process and go back to scheduler (through the syscall handler)
+        process.exit(exit_code);
+        // TODO: notify listeners for this process
+        println!("Process {} exited with code {}", process.id, exit_code);
+
+        swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+        // clear context from the CPU
+        // move the cpu context,
+        // this may be useful if a process wants to read that context later on
+        // the virtual memory will be cleared once we drop the process
+        process.context = current_cpu.context.take().unwrap();
+    });
+    virtual_memory_mapper::switch_to_kernel();
+    current_cpu.pop_cli();
+}
+
 pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
     let current_cpu = cpu::cpu();
     // do not yield if we don't have context or we are in kernel
@@ -111,7 +155,7 @@ pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
         // clear context from the CPU
         process.context = current_cpu.context.take().unwrap();
-        process.state = ProcessState::Scheduled;
+        process.state = ProcessState::Yielded;
     });
     virtual_memory_mapper::switch_to_kernel();
     current_cpu.pop_cli();

@@ -3,20 +3,27 @@ mod syscalls;
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use alloc::collections::BTreeMap;
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
 use crate::{
     cpu::{self, gdt},
     executable::{elf, load_elf_to_vm},
     fs,
     memory_management::{
-        memory_layout::{KERNEL_BASE, PAGE_4K},
-        virtual_memory_mapper::{self, VirtualMemoryMapEntry, VirtualMemoryMapper},
+        memory_layout::{align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
+        virtual_memory_mapper::{
+            self, VirtualMemoryMapEntry, VirtualMemoryMapper, MAX_USER_VIRTUAL_ADDRESS,
+        },
     },
 };
 
 static PROCESS_ID_ALLOCATOR: GoingUpAllocator = GoingUpAllocator::new();
 const INITIAL_STACK_SIZE_PAGES: usize = 4;
+
+#[allow(clippy::identity_op)]
+const HEAP_OFFSET_FROM_ELF_END: usize = 1 * MB;
+#[allow(clippy::identity_op)]
+const DEAFULT_MAX_HEAP_SIZE: usize = 1 * GB;
 
 #[derive(Debug)]
 pub enum ProcessError {
@@ -88,9 +95,10 @@ pub struct ProcessContext {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessState {
     Running,
+    Yielded, // Not used now, but should be scheduled next
     Scheduled,
     Sleeping,
-    Stopped,
+    Exited,
 }
 
 // TODO: implement threads, for now each process acts as a thread also
@@ -105,10 +113,18 @@ pub struct Process {
     open_files: BTreeMap<usize, fs::File>,
     file_index_allocator: GoingUpAllocator,
 
+    argv: Vec<String>,
+
     stack_ptr_end: usize,
     stack_size: usize,
 
+    heap_start: usize,
+    heap_size: usize,
+    heap_max: usize,
+
     state: ProcessState,
+    // split from the state, so that we can keep it as a simple enum
+    exit_code: u64,
 }
 
 impl Process {
@@ -116,10 +132,11 @@ impl Process {
         parent_id: u64,
         elf: &elf::Elf,
         file: &mut fs::File,
+        argv: Vec<String>,
     ) -> Result<Self, ProcessError> {
         let id = PROCESS_ID_ALLOCATOR.allocate();
         let mut vm = virtual_memory_mapper::clone_kernel_vm_as_user();
-        let stack_end = KERNEL_BASE - PAGE_4K;
+        let stack_end = MAX_USER_VIRTUAL_ADDRESS - PAGE_4K;
         let stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
         let stack_start = stack_end - stack_size;
         vm.map(&VirtualMemoryMapEntry {
@@ -130,7 +147,12 @@ impl Process {
                 | virtual_memory_mapper::flags::PTE_WRITABLE,
         });
 
-        load_elf_to_vm(elf, file, &mut vm)?;
+        let (_min_addr, max_addr) = load_elf_to_vm(elf, file, &mut vm)?;
+
+        // set it quite a distance from the elf and align it to 2MB pages (we are not using 2MB virtual memory, so its not related)
+        let heap_start = align_up(max_addr + HEAP_OFFSET_FROM_ELF_END, PAGE_2M);
+        let heap_size = 0; // start at 0, let user space programs control it
+        let heap_max = DEAFULT_MAX_HEAP_SIZE;
 
         let mut context = ProcessContext::default();
         let entry = elf.entry_point();
@@ -150,13 +172,18 @@ impl Process {
             parent_id,
             open_files: BTreeMap::new(),
             file_index_allocator: GoingUpAllocator::new(),
+            argv,
             stack_ptr_end: stack_end - 8, // 8 bytes for padding
             stack_size,
+            heap_start,
+            heap_size,
+            heap_max,
             state: ProcessState::Scheduled,
+            exit_code: 0,
         })
     }
 
-    pub fn switch_to_this(&mut self) {
+    pub fn switch_to_this_vm(&mut self) {
         self.vm.switch_to_this();
     }
 
@@ -196,6 +223,55 @@ impl Process {
 
     pub fn get_file(&mut self, fd: usize) -> Option<&mut fs::File> {
         self.open_files.get_mut(&fd)
+    }
+
+    pub fn exit(&mut self, exit_code: u64) {
+        self.state = ProcessState::Exited;
+        self.exit_code = exit_code;
+    }
+
+    /// Add/Remove to/from the heap and return the previous end of the heap before the change
+    /// If this is an `Add`, it will return the address of the new block
+    /// If this is a `Remove`, the result will generally be useless
+    /// Use with `0` to get the current heap end
+    pub fn add_to_heap(&mut self, increment: isize) -> Option<usize> {
+        if increment == 0 {
+            return Some(self.heap_start + self.heap_size);
+        }
+
+        assert!(is_aligned(increment.unsigned_abs(), PAGE_4K));
+
+        let new_size = self.heap_size as isize + increment;
+        if new_size < 0 || new_size as usize > self.heap_max {
+            return None;
+        }
+        let old_end = self.heap_start + self.heap_size;
+        self.heap_size = new_size as usize;
+        if increment > 0 {
+            // map the new heap
+            let entry = VirtualMemoryMapEntry {
+                virtual_address: old_end as u64,
+                physical_address: None,
+                size: increment as u64,
+                flags: virtual_memory_mapper::flags::PTE_USER
+                    | virtual_memory_mapper::flags::PTE_WRITABLE,
+            };
+            self.vm.map(&entry);
+        } else {
+            let new_end = old_end - increment.unsigned_abs();
+            // unmap old heap
+            let entry = VirtualMemoryMapEntry {
+                virtual_address: new_end as u64,
+                physical_address: None,
+                size: increment.unsigned_abs() as u64,
+                flags: virtual_memory_mapper::flags::PTE_USER
+                    | virtual_memory_mapper::flags::PTE_WRITABLE,
+            };
+            // `true` because we allocated physical memory using `map`
+            self.vm.unmap(&entry, true);
+        }
+
+        Some(old_end)
     }
 }
 
