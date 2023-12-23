@@ -90,6 +90,7 @@ pub struct ProcessContext {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessState {
     Running,
+    Yielded, // Not used now, but should be scheduled next
     Scheduled,
     Sleeping,
     Exited,

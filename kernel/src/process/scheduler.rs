@@ -70,6 +70,10 @@ pub fn schedule() -> ! {
 
                     current_cpu.pop_cli();
                 }
+                ProcessState::Yielded => {
+                    // schedule for next time
+                    process.state = ProcessState::Scheduled;
+                }
                 ProcessState::Exited => {
                     // keep the process for one time, it will be deleted later.
                     // this is if we want to do extra stuff later
@@ -117,29 +121,23 @@ where
 /// This function will remove the context from the CPU, and thus the value in `all_state` will be dropped.
 pub fn exit_current_process(exit_code: u64, all_state: &mut InterruptAllSavedState) {
     let current_cpu = cpu::cpu();
-    let mut scheduler = SCHEDULER.lock();
-
-    // TODO: find a better way to store processes or store process index/id.
-    let process = scheduler
-        .processes
-        .iter_mut()
-        .find(|p| p.id == current_cpu.process_id)
-        .expect("current process not found");
-
-    assert!(process.state == ProcessState::Running);
     assert!(current_cpu.context.is_some());
 
-    // exit process and go back to scheduler (through the syscall handler)
-    current_cpu.push_cli();
-    process.exit(exit_code);
-    // TODO: notify listeners for this process
-    println!("Process {} exited with code {}", process.id, exit_code);
+    with_current_process(|process| {
+        assert!(process.state == ProcessState::Running);
+        current_cpu.push_cli();
+        // exit process and go back to scheduler (through the syscall handler)
+        process.exit(exit_code);
+        // TODO: notify listeners for this process
+        println!("Process {} exited with code {}", process.id, exit_code);
 
-    // this will have the state of the cpu in the scheduler
-    swap_context(current_cpu.context.as_mut().unwrap(), all_state);
-    // drop the cpu context, i.e. drop the current process context
-    // the virtual memory will be cleared once we drop the process
-    current_cpu.context = None;
+        swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+        // clear context from the CPU
+        // move the cpu context,
+        // this may be useful if a process wants to read that context later on
+        // the virtual memory will be cleared once we drop the process
+        process.context = current_cpu.context.take().unwrap();
+    });
     virtual_memory_mapper::switch_to_kernel();
     current_cpu.pop_cli();
 }
@@ -157,7 +155,7 @@ pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
         // clear context from the CPU
         process.context = current_cpu.context.take().unwrap();
-        process.state = ProcessState::Scheduled;
+        process.state = ProcessState::Yielded;
     });
     virtual_memory_mapper::switch_to_kernel();
     current_cpu.pop_cli();
