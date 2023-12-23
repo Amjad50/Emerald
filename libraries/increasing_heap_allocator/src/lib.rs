@@ -13,6 +13,7 @@ const fn is_aligned(addr: usize, alignment: usize) -> bool {
     (addr & (alignment - 1)) == 0
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct HeapStats {
     pub allocated: usize,
     pub free_size: usize,
