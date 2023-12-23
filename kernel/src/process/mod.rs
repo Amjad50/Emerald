@@ -10,7 +10,7 @@ use crate::{
     executable::{elf, load_elf_to_vm},
     fs,
     memory_management::{
-        memory_layout::{KERNEL_BASE, PAGE_4K},
+        memory_layout::{align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
         virtual_memory_mapper::{
             self, VirtualMemoryMapEntry, VirtualMemoryMapper, MAX_USER_VIRTUAL_ADDRESS,
         },
@@ -19,6 +19,11 @@ use crate::{
 
 static PROCESS_ID_ALLOCATOR: GoingUpAllocator = GoingUpAllocator::new();
 const INITIAL_STACK_SIZE_PAGES: usize = 4;
+
+#[allow(clippy::identity_op)]
+const HEAP_OFFSET_FROM_ELF_END: usize = 1 * MB;
+#[allow(clippy::identity_op)]
+const DEAFULT_MAX_HEAP_SIZE: usize = 1 * GB;
 
 #[derive(Debug)]
 pub enum ProcessError {
@@ -113,6 +118,10 @@ pub struct Process {
     stack_ptr_end: usize,
     stack_size: usize,
 
+    heap_start: usize,
+    heap_size: usize,
+    heap_max: usize,
+
     state: ProcessState,
     // split from the state, so that we can keep it as a simple enum
     exit_code: u64,
@@ -138,7 +147,12 @@ impl Process {
                 | virtual_memory_mapper::flags::PTE_WRITABLE,
         });
 
-        load_elf_to_vm(elf, file, &mut vm)?;
+        let (_min_addr, max_addr) = load_elf_to_vm(elf, file, &mut vm)?;
+
+        // set it quite a distance from the elf and align it to 2MB pages (we are not using 2MB virtual memory, so its not related)
+        let heap_start = align_up(max_addr + HEAP_OFFSET_FROM_ELF_END, PAGE_2M);
+        let heap_size = 0; // start at 0, let user space programs control it
+        let heap_max = DEAFULT_MAX_HEAP_SIZE;
 
         let mut context = ProcessContext::default();
         let entry = elf.entry_point();
@@ -161,6 +175,9 @@ impl Process {
             argv,
             stack_ptr_end: stack_end - 8, // 8 bytes for padding
             stack_size,
+            heap_start,
+            heap_size,
+            heap_max,
             state: ProcessState::Scheduled,
             exit_code: 0,
         })
@@ -211,6 +228,53 @@ impl Process {
     pub fn exit(&mut self, exit_code: u64) {
         self.state = ProcessState::Exited;
         self.exit_code = exit_code;
+    }
+
+    /// Add/Remove to/from the heap and return the new end of the heap
+    /// Use with `0` to get the current heap end
+    pub fn add_to_heap(&mut self, size: isize) -> Option<usize> {
+        if size == 0 {
+            return Some(self.heap_start + self.heap_size);
+        }
+
+        assert!(is_aligned(size.unsigned_abs(), PAGE_4K));
+
+        let new_size = self.heap_size as isize + size;
+        if new_size < 0 {
+            return None;
+        }
+        if new_size as usize > self.heap_max {
+            return None;
+        }
+        let old_end = self.heap_start + self.heap_size;
+        let new_end;
+        self.heap_size = new_size as usize;
+        if size > 0 {
+            new_end = old_end + size.unsigned_abs();
+            // map the new heap
+            let entry = VirtualMemoryMapEntry {
+                virtual_address: old_end as u64,
+                physical_address: None,
+                size: size as u64,
+                flags: virtual_memory_mapper::flags::PTE_USER
+                    | virtual_memory_mapper::flags::PTE_WRITABLE,
+            };
+            self.vm.map(&entry);
+        } else {
+            new_end = old_end - size.unsigned_abs();
+            // unmap old heap
+            let entry = VirtualMemoryMapEntry {
+                virtual_address: new_end as u64,
+                physical_address: None,
+                size: size.unsigned_abs() as u64,
+                flags: virtual_memory_mapper::flags::PTE_USER
+                    | virtual_memory_mapper::flags::PTE_WRITABLE,
+            };
+            // `true` because we allocated physical memory using `map`
+            self.vm.unmap(&entry, true);
+        }
+
+        Some(new_end)
     }
 }
 

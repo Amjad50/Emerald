@@ -155,7 +155,7 @@ pub fn unmap_kernel(entry: &VirtualMemoryMapEntry, is_allocated: bool) {
     assert!(entry.virtual_address >= KERNEL_BASE as u64);
     KERNEL_VIRTUAL_MEMORY_MANAGER
         .lock()
-        .unmap_impl(entry, is_allocated);
+        .unmap(entry, is_allocated);
 }
 
 #[allow(dead_code)]
@@ -269,7 +269,7 @@ impl VirtualMemoryMapper {
         }
 
         // unmap stack guard
-        s.unmap_impl(
+        s.unmap(
             &VirtualMemoryMapEntry {
                 virtual_address: stack_guard_page_ptr() as u64,
                 physical_address: None,
@@ -469,7 +469,7 @@ impl VirtualMemoryMapper {
     }
 
     /// Removes mapping of a virtual entry, it will free it from physical memory if it was allocated
-    fn unmap_impl(&mut self, entry: &VirtualMemoryMapEntry, is_allocated: bool) {
+    pub fn unmap(&mut self, entry: &VirtualMemoryMapEntry, is_allocated: bool) {
         let VirtualMemoryMapEntry {
             mut virtual_address,
             physical_address,

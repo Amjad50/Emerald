@@ -45,6 +45,10 @@ pub const KERNEL_EXTRA_MEMORY_BASE: usize = INTR_STACK_BASE + INTR_STACK_TOTAL_S
 pub const KERNEL_LAST_POSSIBLE_ADDR: usize = 0xFFFF_FFFF_FFFF_F000;
 pub const KERNEL_EXTRA_MEMORY_SIZE: usize = KERNEL_LAST_POSSIBLE_ADDR - KERNEL_EXTRA_MEMORY_BASE;
 
+#[allow(dead_code)]
+pub const KB: usize = 0x400;
+pub const MB: usize = 0x100_000;
+pub const GB: usize = 0x400_00000;
 pub const PAGE_4K: usize = 0x1000;
 pub const PAGE_2M: usize = 0x20_0000;
 
