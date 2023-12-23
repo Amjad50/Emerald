@@ -3,7 +3,7 @@ mod syscalls;
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use alloc::collections::BTreeMap;
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
 use crate::{
     cpu::{self, gdt},
@@ -107,6 +107,8 @@ pub struct Process {
     open_files: BTreeMap<usize, fs::File>,
     file_index_allocator: GoingUpAllocator,
 
+    argv: Vec<String>,
+
     stack_ptr_end: usize,
     stack_size: usize,
 
@@ -120,6 +122,7 @@ impl Process {
         parent_id: u64,
         elf: &elf::Elf,
         file: &mut fs::File,
+        argv: Vec<String>,
     ) -> Result<Self, ProcessError> {
         let id = PROCESS_ID_ALLOCATOR.allocate();
         let mut vm = virtual_memory_mapper::clone_kernel_vm_as_user();
@@ -154,6 +157,7 @@ impl Process {
             parent_id,
             open_files: BTreeMap::new(),
             file_index_allocator: GoingUpAllocator::new(),
+            argv,
             stack_ptr_end: stack_end - 8, // 8 bytes for padding
             stack_size,
             state: ProcessState::Scheduled,

@@ -1,11 +1,11 @@
 #![no_std]
 #![no_main]
 
-use core::{ffi::CStr, hint};
+use core::ffi::{c_char, CStr};
 
 use common::{
     call_syscall,
-    syscalls::{SYS_EXIT, SYS_OPEN, SYS_READ, SYS_WRITE},
+    syscalls::{SYS_EXIT, SYS_SPAWN, SYS_WRITE},
     FD_STDOUT,
 };
 
@@ -21,30 +21,6 @@ fn write_to_stdout(s: &CStr) {
     }
 }
 
-fn open_file(path: &CStr) -> u64 {
-    unsafe {
-        call_syscall!(
-            SYS_OPEN,
-            path.as_ptr() as u64, // path
-            0,                    // flags
-            0                     // mode
-        )
-        .unwrap()
-    }
-}
-
-fn read_file(fd: u64, buf: &mut [u8]) -> u64 {
-    unsafe {
-        call_syscall!(
-            SYS_READ,
-            fd,                      // fd
-            buf.as_mut_ptr() as u64, // buf
-            buf.len() as u64         // size
-        )
-        .unwrap()
-    }
-}
-
 fn exit(code: u64) -> ! {
     unsafe {
         call_syscall!(
@@ -56,27 +32,66 @@ fn exit(code: u64) -> ! {
     unreachable!("exit syscall should not return")
 }
 
+fn spawn(path: &CStr, argv: &[*const c_char]) -> u64 {
+    unsafe {
+        call_syscall!(
+            SYS_SPAWN,
+            path.as_ptr() as u64, // path
+            argv.as_ptr() as u64, // argv
+        )
+        .unwrap()
+    }
+}
+
+fn convert_to_string(mut number: i32, buffer: &mut [u8]) -> usize {
+    let mut i = 0;
+    if number < 0 {
+        buffer[i] = b'-';
+        i += 1;
+        number = -number;
+    }
+    let mut n = number as u32;
+    if n == 0 {
+        buffer[i] = b'0';
+        i += 1;
+    } else {
+        let mut len = 0;
+        while n > 0 {
+            len += 1;
+            n /= 10;
+        }
+        let mut n = number as u32;
+        while n > 0 {
+            i += 1;
+            buffer[len - i] = (n % 10) as u8 + b'0';
+            n /= 10;
+        }
+    }
+    i
+}
+
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     // we are in `init` now
     // create some delay
-    write_to_stdout(c"Hello from init!\n\n");
+    write_to_stdout(c"[init] Hello!\n\n");
 
-    // open `/message.txt` and print the result
-    let fd = open_file(c"/message.txt");
-    write_to_stdout(c"content of `/message.txt`:\n");
-    let mut buf = [0u8; 1024];
-    let read = read_file(fd, &mut buf);
-    buf[read as usize] = 0; // null terminate
-    write_to_stdout(CStr::from_bytes_until_nul(&buf[..read as usize + 1]).unwrap());
+    let shell_path = c"/shell";
+    let shell_argv = [shell_path.as_ptr(), c"".as_ptr()];
+    let shell_pid = spawn(shell_path, &shell_argv);
 
-    exit(123);
+    let mut buf = [0u8; 100];
+    let msg = c"[init] spawned shell with pid ";
+    let msg_len = msg.to_bytes().len();
+    buf[..msg_len].copy_from_slice(msg.to_bytes());
+    let len = convert_to_string(shell_pid as i32, &mut buf[msg_len..]);
+    buf[msg_len + len] = b'\n';
+    write_to_stdout(unsafe { CStr::from_bytes_with_nul_unchecked(&buf) });
+    exit(111);
 }
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    write_to_stdout(c"init panicked!\n");
-    loop {
-        hint::spin_loop();
-    }
+    write_to_stdout(c"[init] panicked!\n");
+    exit(0xFF);
 }

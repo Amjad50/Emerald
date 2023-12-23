@@ -60,7 +60,7 @@ pub fn schedule() -> ! {
         // no context holding, i.e. free to take a new process
         for process in scheduler.processes.iter_mut() {
             match process.state {
-                ProcessState::Scheduled => {
+                ProcessState::Scheduled if current_cpu.context.is_none() => {
                     // found a process to run
                     current_cpu.push_cli();
                     process.state = ProcessState::Running;

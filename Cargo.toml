@@ -4,5 +4,5 @@ default-members = ["kernel"]
 members = [
     "common",
     "kernel",
-    "userspace/init",
+    "userspace/init", "userspace/shell",
 ]

@@ -27,6 +27,7 @@ mod sync;
 
 use core::hint;
 
+use alloc::vec::Vec;
 use common::{FD_STDERR, FD_STDIN, FD_STDOUT};
 use cpu::{
     gdt,
@@ -81,7 +82,7 @@ fn finish_boot() {
 fn load_init_process() {
     let mut init_file = fs::open("/init").expect("Could not find `init` file");
     let elf = Elf::load(&mut init_file).expect("Could not load init file");
-    let mut process = Process::allocate_process(0, &elf, &mut init_file)
+    let mut process = Process::allocate_process(0, &elf, &mut init_file, Vec::new())
         .expect("Could not allocate process for `init`");
     assert!(process.id() == 0, "Must be the first process");
 
