@@ -1,10 +1,10 @@
 [package]
-name = "init"
+name = "user_std"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kernel_user_link = { path = "../../libraries/kernel_user_link" }
-user_std = { path = "../../libraries/user_std" }
+increasing_heap_allocator = { path = "../increasing_heap_allocator" }
+kernel_user_link = { path = "../kernel_user_link" }
