@@ -1,0 +1,3 @@
+[submodule "extern/rust"]
+	path = extern/rust
+	url = git@github.com:Amjad50/rust.git
