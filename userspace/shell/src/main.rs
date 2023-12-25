@@ -5,22 +5,9 @@ use core::ffi::CStr;
 
 use kernel_user_link::{
     call_syscall,
-    syscalls::{SYS_EXIT, SYS_OPEN, SYS_READ, SYS_WRITE},
-    FD_STDOUT,
+    syscalls::{SYS_EXIT, SYS_OPEN, SYS_READ},
 };
 use std::string::String;
-
-fn write_to_stdout(s: &[u8]) {
-    unsafe {
-        call_syscall!(
-            SYS_WRITE,
-            FD_STDOUT,         // fd
-            s.as_ptr() as u64, // buf
-            s.len() as u64     // size
-        )
-        .unwrap();
-    }
-}
 
 fn open_file(path: &CStr) -> u64 {
     unsafe {
@@ -61,15 +48,15 @@ fn exit(code: u64) -> ! {
 pub extern "C" fn _start() -> ! {
     // we are in `init` now
     // create some delay
-    write_to_stdout("[shell] Hello!\n\n".as_bytes());
+    println!("[shell] Hello!\n\n");
 
     // open `/message.txt` and print the result
     let fd = open_file(c"/message.txt");
-    write_to_stdout("[shell] content of `/message.txt`:\n".as_bytes());
+    println!("[shell] content of `/message.txt`:\n");
     let mut buf = [0u8; 1024];
     let read = read_file(fd, &mut buf);
     let data = String::from_utf8_lossy(&buf[..read as usize]);
 
-    write_to_stdout(data.as_bytes());
+    println!("{}", data);
     exit(222);
 }

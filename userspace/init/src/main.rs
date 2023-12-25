@@ -5,21 +5,8 @@ use core::ffi::{c_char, CStr};
 
 use kernel_user_link::{
     call_syscall,
-    syscalls::{SYS_EXIT, SYS_SPAWN, SYS_WRITE},
-    FD_STDOUT,
+    syscalls::{SYS_EXIT, SYS_SPAWN},
 };
-
-fn write_to_stdout(s: &[u8]) {
-    unsafe {
-        call_syscall!(
-            SYS_WRITE,
-            FD_STDOUT,         // fd
-            s.as_ptr() as u64, // buf
-            s.len() as u64     // size
-        )
-        .unwrap();
-    }
-}
 
 fn exit(code: u64) -> ! {
     unsafe {
@@ -46,13 +33,13 @@ fn spawn(path: &CStr, argv: &[*const c_char]) -> u64 {
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     // we are in `init` now
-    write_to_stdout("[init] Hello!\n\n".as_bytes());
+    println!("[init] Hello!\n\n");
 
     let shell_path = c"/shell";
     let shell_argv = [shell_path.as_ptr(), c"".as_ptr()];
     let shell_pid = spawn(shell_path, &shell_argv);
 
-    write_to_stdout(format!("[init] spawned shell with pid {}\n", shell_pid).as_bytes());
+    println!("[init] spawned shell with pid {}\n", shell_pid);
 
     exit(111);
 }
