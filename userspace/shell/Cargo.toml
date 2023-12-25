@@ -7,4 +7,7 @@ edition = "2021"
 
 [dependencies]
 kernel_user_link = { path = "../../libraries/kernel_user_link" }
-user_std = { path = "../../libraries/user_std" }
+std = { path = "../../extern/rust/library/std", default-features = false, features = [
+    "panic_immediate_abort",
+] }
+panic_abort = { path = "../../extern/rust/library/panic_abort" }

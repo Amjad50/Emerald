@@ -1,4 +1,4 @@
-#![no_std]
+#![feature(restricted_std)]
 #![no_main]
 
 use core::ffi::CStr;
@@ -8,9 +8,7 @@ use kernel_user_link::{
     syscalls::{SYS_EXIT, SYS_OPEN, SYS_READ, SYS_WRITE},
     FD_STDOUT,
 };
-use user_std::alloc::alloc;
-
-use alloc::{format, string::String};
+use std::string::String;
 
 fn write_to_stdout(s: &[u8]) {
     unsafe {
@@ -74,10 +72,4 @@ pub extern "C" fn _start() -> ! {
 
     write_to_stdout(data.as_bytes());
     exit(222);
-}
-
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    write_to_stdout(format!("{}\n", info).as_bytes());
-    exit(0xFF);
 }

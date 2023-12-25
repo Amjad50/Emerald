@@ -1,11 +1,8 @@
-#![no_std]
+#![feature(restricted_std)]
 #![no_main]
 
 use core::ffi::{c_char, CStr};
 
-use user_std::alloc::alloc;
-
-use alloc::format;
 use kernel_user_link::{
     call_syscall,
     syscalls::{SYS_EXIT, SYS_SPAWN, SYS_WRITE},
@@ -58,10 +55,4 @@ pub extern "C" fn _start() -> ! {
     write_to_stdout(format!("[init] spawned shell with pid {}\n", shell_pid).as_bytes());
 
     exit(111);
-}
-
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    write_to_stdout(format!("[init] PANIC: {}\n", info).as_bytes());
-    exit(0xFF);
 }
