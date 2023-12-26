@@ -1,0 +1,8 @@
+[submodule "extern/rust"]
+	path = extern/rust
+	url = git@github.com:Amjad50/rust.git
+	branch = amjad50_os
+[submodule "extern/hashbrown"]
+	path = extern/hashbrown
+	url = git@github.com:Amjad50/hashbrown.git
+	branch = amjad50_os

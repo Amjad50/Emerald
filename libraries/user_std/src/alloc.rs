@@ -22,7 +22,6 @@ unsafe fn inc_dec_heap(increment: isize) -> Result<*mut u8, SyscallError> {
     }
 }
 
-#[global_allocator]
 pub static ALLOCATOR: LockedKernelHeapAllocator = LockedKernelHeapAllocator::empty();
 
 struct PageAllocator {
@@ -98,4 +97,30 @@ unsafe impl GlobalAlloc for LockedKernelHeapAllocator {
             .lock()
             .dealloc(ptr, layout)
     }
+}
+
+/// # Safety
+/// This function is unsafe because it performs raw memory allocation using the system allocator.
+/// The caller must ensure that the allocated memory is properly initialized and eventually deallocated
+pub unsafe fn alloc(layout: Layout) -> *mut u8 {
+    ALLOCATOR.alloc(layout)
+}
+
+/// # Safety
+/// This function is unsafe because it deallocates memory from a block previously given by this allocator
+/// The pointer must point to a valid mapped allocated block.
+pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
+    ALLOCATOR.dealloc(ptr, layout)
+}
+
+/// # Safety
+/// See [`self::alloc`] and [`self::dealloc`]
+pub unsafe fn alloc_zeroed(layout: Layout) -> *mut u8 {
+    ALLOCATOR.alloc_zeroed(layout)
+}
+
+/// # Safety
+/// See [`self::alloc`] and [`self::dealloc`]
+pub unsafe fn realloc(ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+    ALLOCATOR.realloc(ptr, layout, new_size)
 }
