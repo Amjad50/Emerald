@@ -498,7 +498,6 @@ dependencies = [
 name = "shell"
 version = "0.1.0"
 dependencies = [
- "kernel_user_link",
  "panic_abort",
  "std",
 ]

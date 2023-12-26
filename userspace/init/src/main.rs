@@ -3,21 +3,7 @@
 
 use core::ffi::{c_char, CStr};
 
-use kernel_user_link::{
-    call_syscall,
-    syscalls::{SYS_EXIT, SYS_SPAWN},
-};
-
-fn exit(code: u64) -> ! {
-    unsafe {
-        call_syscall!(
-            SYS_EXIT,
-            code, // code
-        )
-        .unwrap();
-    }
-    unreachable!("exit syscall should not return")
-}
+use kernel_user_link::{call_syscall, syscalls::SYS_SPAWN};
 
 fn spawn(path: &CStr, argv: &[*const c_char]) -> u64 {
     unsafe {
@@ -41,5 +27,5 @@ pub extern "C" fn _start() -> ! {
 
     println!("[init] spawned shell with pid {}\n", shell_pid);
 
-    exit(111);
+    std::process::exit(111);
 }

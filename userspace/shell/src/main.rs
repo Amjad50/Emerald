@@ -1,19 +1,7 @@
 #![feature(restricted_std)]
 #![no_main]
 
-use kernel_user_link::{call_syscall, syscalls::SYS_EXIT};
 use std::{io::Read, string::String};
-
-fn exit(code: u64) -> ! {
-    unsafe {
-        call_syscall!(
-            SYS_EXIT,
-            code, // code
-        )
-        .unwrap();
-    }
-    unreachable!("exit syscall should not return")
-}
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
@@ -28,5 +16,5 @@ pub extern "C" fn _start() -> ! {
     let mut buf = [0; 100];
     f.read(&mut buf).unwrap();
     println!("{}", String::from_utf8_lossy(&buf));
-    exit(222);
+    std::process::exit(222);
 }
