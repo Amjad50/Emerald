@@ -1,10 +1,8 @@
 #![feature(restricted_std)]
-#![no_main]
 
 use std::{io::Read, string::String};
 
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
+fn main() {
     // we are in `init` now
     // create some delay
     println!("[shell] Hello!\n\n");
@@ -16,5 +14,4 @@ pub extern "C" fn _start() -> ! {
     let mut buf = [0; 100];
     f.read(&mut buf).unwrap();
     println!("{}", String::from_utf8_lossy(&buf));
-    std::process::exit(222);
 }

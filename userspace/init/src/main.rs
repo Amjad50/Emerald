@@ -1,5 +1,4 @@
 #![feature(restricted_std)]
-#![no_main]
 
 use core::ffi::{c_char, CStr};
 
@@ -16,8 +15,7 @@ fn spawn(path: &CStr, argv: &[*const c_char]) -> u64 {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
+fn main() {
     // we are in `init` now
     println!("[init] Hello!\n\n");
 
@@ -26,6 +24,4 @@ pub extern "C" fn _start() -> ! {
     let shell_pid = spawn(shell_path, &shell_argv);
 
     println!("[init] spawned shell with pid {}\n", shell_pid);
-
-    std::process::exit(111);
 }
