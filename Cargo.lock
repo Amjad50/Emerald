@@ -230,7 +230,6 @@ version = "0.1.0"
 name = "init"
 version = "0.1.0"
 dependencies = [
- "kernel_user_link",
  "panic_abort",
  "std",
 ]
