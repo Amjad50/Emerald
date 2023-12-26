@@ -26,16 +26,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alloc"
-version = "0.0.0"
-dependencies = [
- "compiler_builtins",
- "core",
- "rand",
- "rand_xorshift",
-]
-
-[[package]]
 name = "allocator-api2"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -116,18 +106,6 @@ name = "compiler_builtins"
 version = "0.1.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3686cc48897ce1950aa70fd595bd2dc9f767a3c4cca4cd17b2cb52a2d37e6eb4"
-dependencies = [
- "cc",
- "rustc-std-workspace-core",
-]
-
-[[package]]
-name = "core"
-version = "0.0.0"
-dependencies = [
- "rand",
- "rand_xorshift",
-]
 
 [[package]]
 name = "crossbeam-deque"
@@ -218,17 +196,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gimli"
-version = "0.28.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4271d37baee1b8c7e4b708028c57d816cf9d2434acb33a549475f78c181f6253"
-dependencies = [
- "compiler_builtins",
- "rustc-std-workspace-alloc",
- "rustc-std-workspace-core",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -291,9 +258,6 @@ name = "libc"
 version = "0.2.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "302d7ab3130588088d277783b1e2d2e10c9e9e4a16dd9050e6ec93fb3e7048f4"
-dependencies = [
- "rustc-std-workspace-core",
-]
 
 [[package]]
 name = "once_cell"
@@ -306,18 +270,6 @@ name = "panic_abort"
 version = "0.0.0"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "panic_unwind"
-version = "0.0.0"
-dependencies = [
- "alloc",
- "cfg-if",
- "compiler_builtins",
- "core",
- "libc",
- "unwind",
 ]
 
 [[package]]
@@ -340,8 +292,6 @@ name = "profiler_builtins"
 version = "0.0.0"
 dependencies = [
  "cc",
- "compiler_builtins",
- "core",
 ]
 
 [[package]]
@@ -407,15 +357,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom",
-]
-
-[[package]]
-name = "rand_xorshift"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
-dependencies = [
- "rand_core",
 ]
 
 [[package]]
@@ -575,7 +516,6 @@ dependencies = [
  "cfg-if",
  "hashbrown 0.14.3",
  "panic_abort",
- "panic_unwind",
  "profiler_builtins",
  "rustc-demangle",
  "std_detect",
@@ -642,28 +582,6 @@ name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
-
-[[package]]
-name = "unwind"
-version = "0.0.0"
-dependencies = [
- "cfg-if",
- "compiler_builtins",
- "core",
- "libc",
- "unwinding",
-]
-
-[[package]]
-name = "unwinding"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37a19a21a537f635c16c7576f22d0f2f7d63353c1337ad4ce0d8001c7952a25b"
-dependencies = [
- "compiler_builtins",
- "gimli",
- "rustc-std-workspace-core",
-]
 
 [[package]]
 name = "user_std"
