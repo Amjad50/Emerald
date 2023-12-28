@@ -312,6 +312,11 @@ impl IoApic {
             hi,
         );
     }
+
+    fn is_entry_taken(&self, entry: u8) -> bool {
+        let lo = self.read_register(io_apic::IO_APIC_REDIRECTION_TABLE + entry as u32 * 2);
+        lo as u64 & io_apic::RDR_VECTOR_MASK != 0
+    }
 }
 
 impl From<tables::IoApic> for IoApic {
@@ -571,7 +576,12 @@ impl Apic {
             .with_destination(DestinationType::Physical(cpu.apic_id));
 
         let b = modify_entry(b);
-
+        // TODO: this is added for catching bugs early, later will replace
+        // it with a better solution.
+        assert!(
+            !io_apic.is_entry_taken(entry_in_ioapic as u8),
+            "entry is already taken"
+        );
         io_apic.write_redirect_entry(entry_in_ioapic as u8, b);
     }
 }
