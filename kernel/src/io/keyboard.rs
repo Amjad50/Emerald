@@ -418,8 +418,8 @@ impl Keyboard {
         None
     }
 
-    pub fn pop_from_buffer(&mut self) -> Option<Key> {
-        self.input_ring.pop()
+    pub fn get_next_char(&mut self) -> Option<Key> {
+        self.input_ring.pop().or_else(|| self.try_read_char())
     }
 
     #[allow(dead_code)]

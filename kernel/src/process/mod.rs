@@ -225,6 +225,17 @@ impl Process {
         self.open_files.get_mut(&fd)
     }
 
+    pub fn take_file(&mut self, fd: usize) -> Option<fs::File> {
+        self.open_files.remove(&fd)
+    }
+
+    pub fn put_file(&mut self, fd: usize, file: fs::File) {
+        assert!(
+            self.open_files.insert(fd, file).is_none(),
+            "fd already exists"
+        )
+    }
+
     pub fn exit(&mut self, exit_code: u64) {
         self.state = ProcessState::Exited;
         self.exit_code = exit_code;

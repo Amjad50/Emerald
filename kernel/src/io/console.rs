@@ -224,7 +224,7 @@ impl LateConsole {
         let mut i = 0;
         let mut keyboard = self.keyboard.lock();
         while i < dst.len() {
-            if let Some(c) = keyboard.pop_from_buffer() {
+            if let Some(c) = keyboard.get_next_char() {
                 if let Some(c) = c.virtual_char {
                     dst[i] = c;
                     i += 1;
