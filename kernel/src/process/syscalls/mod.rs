@@ -2,6 +2,7 @@ use core::ffi::CStr;
 
 use alloc::{string::String, vec::Vec};
 use kernel_user_link::{
+    file::BlockingMode,
     sys_arg,
     syscalls::{
         syscall_arg_to_u64, syscall_handler_wrapper, SyscallArgError, SyscallError, SyscallResult,
@@ -94,13 +95,16 @@ fn sys_arg_to_str_array(array_ptr: *const u8) -> Result<Vec<String>, SyscallArgE
 }
 
 fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
-    let (path, _access_mode, _flags, ..) = verify_args! {
+    let (path, _access_mode, flags, ..) = verify_args! {
         sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
         sys_arg!(1, all_state.rest => u64),
         sys_arg!(2, all_state.rest => u64),
     };
+    let blocking_mode = kernel_user_link::file::parse_flags(flags)
+        .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
     // TODO: implement flags and access_mode, for now just open file for reading
-    let file = fs::open(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
+    let file =
+        fs::open_blocking(path, blocking_mode).map_err(|_| SyscallError::CouldNotOpenFile)?;
     let file_index = with_current_process(|process| process.push_file(file));
 
     SyscallResult::Ok(file_index as u64)
@@ -169,7 +173,8 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     // TODO: setup inheritance for process files
 
     // add the console manually for now,
-    let console = fs::open("/devices/console").expect("Could not find `/devices/console`");
+    let console = fs::open_blocking("/devices/console", BlockingMode::Line)
+        .expect("Could not find `/devices/console`");
     process.attach_file_to_fd(FD_STDIN, console.clone());
     process.attach_file_to_fd(FD_STDOUT, console.clone());
     process.attach_file_to_fd(FD_STDERR, console);

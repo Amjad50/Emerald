@@ -1,6 +1,7 @@
 use core::{mem, ops};
 
 use alloc::{borrow::Cow, string::String, sync::Arc, vec, vec::Vec};
+use kernel_user_link::file::BlockingMode;
 
 use crate::{
     devices::{
@@ -328,6 +329,14 @@ pub fn ls_dir(path: &str) -> Result<Vec<INode>, FileSystemError> {
 
 #[allow(dead_code)]
 pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
+    open_blocking(path, BlockingMode::None)
+}
+
+#[allow(dead_code)]
+pub(crate) fn open_blocking(
+    path: &str,
+    blocking_mode: BlockingMode,
+) -> Result<File, FileSystemError> {
     let last_slash = path.rfind('/');
 
     let (parent_dir, basename) = match last_slash {
@@ -345,6 +354,7 @@ pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
                 path: String::from(path),
                 inode: entry,
                 position: 0,
+                blocking_mode,
             });
         }
     }
@@ -358,16 +368,48 @@ pub struct File {
     path: String,
     inode: INode,
     position: u64,
+    blocking_mode: BlockingMode,
 }
 
 #[allow(dead_code)]
 impl File {
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
-        let read = self
-            .filesystem
-            .read_file(&self.inode, self.position as u32, buf)?;
-        self.position += read;
-        Ok(read)
+        let count = match self.blocking_mode {
+            BlockingMode::None => {
+                self.filesystem
+                    .read_file(&self.inode, self.position as u32, buf)?
+            }
+            BlockingMode::Line => {
+                // read until \n or \0
+                let mut i = 0;
+                loop {
+                    let mut char_buf = 0;
+                    let read_byte = self.filesystem.read_file(
+                        &self.inode,
+                        self.position as u32,
+                        core::slice::from_mut(&mut char_buf),
+                    )?;
+
+                    // only put if we can, otherwise, eat the byte and continue
+                    if read_byte == 1 {
+                        if i < buf.len() {
+                            buf[i] = char_buf;
+                            i += 1;
+                        }
+                        if char_buf == b'\n' || char_buf == b'\0' {
+                            break;
+                        }
+                    }
+                }
+                i as u64
+            }
+            BlockingMode::Block(_size) => {
+                todo!("BlockingMode::Block")
+            }
+        };
+
+        self.position += count;
+        Ok(count)
     }
 
     pub fn write(&mut self, _buf: &[u8]) -> Result<u64, FileSystemError> {
@@ -411,5 +453,9 @@ impl File {
     pub fn read_to_string(&mut self) -> Result<String, FileSystemError> {
         let buf = self.read_to_end()?;
         String::from_utf8(buf).map_err(|_| FileSystemError::InvalidData)
+    }
+
+    pub fn is_blocking(&self) -> bool {
+        self.blocking_mode != BlockingMode::None
     }
 }
