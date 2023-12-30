@@ -8,10 +8,11 @@ use alloc::sync::Arc;
 use crate::{
     devices::{self, Device},
     fs::FileSystemError,
-    sync::spin::remutex::ReMutex,
+    sync::spin::{mutex::Mutex, remutex::ReMutex},
 };
 
 use super::{
+    keyboard::{self, Keyboard},
     uart::{Uart, UartPort},
     video_memory::{VgaBuffer, DEFAULT_ATTRIB},
 };
@@ -186,6 +187,7 @@ impl Write for EarlyConsole {
 pub(super) struct LateConsole {
     uart: Uart,
     video_buffer: VgaBuffer,
+    keyboard: Arc<Mutex<Keyboard>>,
 }
 
 impl LateConsole {
@@ -194,6 +196,7 @@ impl LateConsole {
         let mut s = Self {
             uart: early.uart.clone(),
             video_buffer: early.video_buffer.clone(),
+            keyboard: keyboard::get_keyboard(),
         };
 
         // split inputs
@@ -216,6 +219,23 @@ impl LateConsole {
         }
         src.len()
     }
+
+    pub unsafe fn read(&mut self, dst: &mut [u8]) -> usize {
+        let mut i = 0;
+        let mut keyboard = self.keyboard.lock();
+        while i < dst.len() {
+            if let Some(c) = keyboard.pop_from_buffer() {
+                if let Some(c) = c.virtual_char {
+                    dst[i] = c;
+                    i += 1;
+                }
+                // ignore if its not a valid char
+            } else {
+                break;
+            }
+        }
+        i
+    }
 }
 
 impl Write for LateConsole {
@@ -236,8 +256,15 @@ impl Device for ReMutex<RefCell<LateConsole>> {
         "console"
     }
 
-    fn read(&self, _offset: u32, _buf: &mut [u8]) -> Result<u64, FileSystemError> {
-        Err(FileSystemError::ReadNotSupported)
+    fn read(&self, _offset: u32, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+        let console = self.lock();
+        let x = if let Ok(mut c) = console.try_borrow_mut() {
+            unsafe { c.read(buf) }
+        } else {
+            // cannot read from console if its taken
+            0
+        };
+        Ok(x as u64)
     }
 
     fn write(&self, _offset: u32, buf: &[u8]) -> Result<u64, FileSystemError> {

@@ -115,14 +115,15 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();
-    // mount
+    // mount devices map before initializing them
     devices::init_devices_mapping();
     let bios_tables = acpi::get_acpi_tables(multiboot_info).expect("BIOS tables not found");
     println!("BIOS tables: {}", bios_tables);
     apic::init(&bios_tables);
     clock::init(&bios_tables);
-    console::init_late_device();
     unsafe { cpu::set_interrupts() };
+    devices::init_legacy_devices();
+    console::init_late_device();
     devices::prope_pci_devices();
     fs::create_disk_mapping(0).expect("Could not load filesystem");
     finish_boot();

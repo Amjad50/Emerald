@@ -1,4 +1,38 @@
-use crate::cpu;
+use core::fmt;
+
+use alloc::sync::Arc;
+
+use crate::{
+    collections::ring::RingBuffer,
+    cpu::{
+        self,
+        idt::{BasicInterruptHandler, InterruptStackFrame64},
+        interrupts::apic,
+    },
+    sync::{once::OnceLock, spin::mutex::Mutex},
+};
+
+static KEYBOARD: OnceLock<Arc<Mutex<Keyboard>>> = OnceLock::new();
+
+pub fn init_keyboard() {
+    let keyboard = Keyboard::empty();
+
+    let device = Arc::new(Mutex::new(keyboard));
+    KEYBOARD
+        .set(device)
+        .unwrap_or_else(|_| panic!("keyboard already initialized"));
+
+    // assign after we have assigned the keyboard
+    apic::assign_io_irq(
+        keyboard_interrupt_handler as BasicInterruptHandler,
+        KEYBOARD_INT_NUM,
+        cpu::cpu(),
+    )
+}
+
+pub fn get_keyboard() -> Arc<Mutex<Keyboard>> {
+    KEYBOARD.get().clone()
+}
 
 // PS/2 keyboard interrupt
 const KEYBOARD_INT_NUM: u8 = 1;
@@ -276,7 +310,7 @@ mod status {
     pub const PARITY_ERROR: u8 = 1 << 7;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Key {
     pub virtual_char: Option<u8>,
     pub key_type: KeyType,
@@ -286,13 +320,21 @@ pub struct Key {
 pub struct Keyboard {
     active_modifiers: u8,
     active_toggles: u8,
+    input_ring: RingBuffer<Key>,
+}
+
+impl fmt::Debug for Keyboard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Keyboard").finish()
+    }
 }
 
 impl Keyboard {
-    pub const fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
             active_modifiers: 0,
             active_toggles: 0,
+            input_ring: RingBuffer::empty(),
         }
     }
 
@@ -312,11 +354,7 @@ impl Keyboard {
         modifiers_only | self.active_toggles
     }
 
-    pub const fn interrupt_num(&self) -> u8 {
-        KEYBOARD_INT_NUM
-    }
-
-    pub fn try_read_char(&mut self) -> Option<Key> {
+    fn try_read_char(&mut self) -> Option<Key> {
         if self.read_status() & status::DATA_READY == 0 {
             return None;
         }
@@ -379,4 +417,23 @@ impl Keyboard {
         }
         None
     }
+
+    pub fn pop_from_buffer(&mut self) -> Option<Key> {
+        self.input_ring.pop()
+    }
+
+    #[allow(dead_code)]
+    pub fn clear_buffer(&mut self) {
+        self.input_ring.clear();
+    }
+}
+
+extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame64) {
+    let mut keyboard = KEYBOARD.get().lock();
+    // fill in the buffer, and replace if filled
+    if let Some(key) = keyboard.try_read_char() {
+        keyboard.input_ring.push_replace(key);
+    }
+
+    apic::return_from_interrupt();
 }
