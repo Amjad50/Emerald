@@ -41,11 +41,11 @@ cargo make run_iso_gdb
 Currently, this project compiles a multiboot2 ELF64 kernel that can be booted by several bootloaders,
 I'm using GRUB using a bootloader like GRUB.
 
-GRUB and probably other bootloaders, will setup protected-mode (32bit) and then pass execution to the kernel starting in [`src/boot.S`].
+GRUB and probably other bootloaders, will setup protected-mode (32bit) and then pass execution to the kernel starting in [`kernel/src/boot.S`].
 > Note here, since we have moved to multiboot2 in #2, we can directly start in 64bit with EFI, but right now
-> since we already have [`src/boot.S`] running in 32bit in boot, let's keep on that, so that we can support both BIOS and EFI.
+> since we already have [`kernel/src/boot.S`] running in 32bit in boot, let's keep on that, so that we can support both BIOS and EFI.
 
-In the start of the kernel, we only do basic setup to switch to long-mode (64bit), this is done in assembly in [`src/boot.S`].
+In the start of the kernel, we only do basic setup to switch to long-mode (64bit), this is done in assembly in [`kernel/src/boot.S`].
 After setting up long-mode, we jump to rust code, and start executing the `kernel_main` function.
 
 when we jump to the `kernel_main`, we have mapped some basic parts of the kernel to virtual memory, a basic GDT with no IDT, and we have interrupts still disabled.
@@ -54,4 +54,4 @@ So we setup all of those and the rest of the OS then.
 ## License
 This project is licensed under the MIT license, see [LICENSE](LICENSE) for more information.
 
-- [`src/boot.S`]: src/boot.S
+[`kernel/src/boot.S`]: kernel/src/boot.S
