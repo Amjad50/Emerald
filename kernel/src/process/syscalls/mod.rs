@@ -2,6 +2,7 @@ use core::ffi::CStr;
 
 use alloc::{string::String, vec::Vec};
 use kernel_user_link::{
+    file::BlockingMode,
     sys_arg,
     syscalls::{
         syscall_arg_to_u64, syscall_handler_wrapper, SyscallArgError, SyscallError, SyscallResult,
@@ -94,13 +95,16 @@ fn sys_arg_to_str_array(array_ptr: *const u8) -> Result<Vec<String>, SyscallArgE
 }
 
 fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
-    let (path, _access_mode, _flags, ..) = verify_args! {
+    let (path, _access_mode, flags, ..) = verify_args! {
         sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
         sys_arg!(1, all_state.rest => u64),
         sys_arg!(2, all_state.rest => u64),
     };
+    let blocking_mode = kernel_user_link::file::parse_flags(flags)
+        .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
     // TODO: implement flags and access_mode, for now just open file for reading
-    let file = fs::open(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
+    let file =
+        fs::open_blocking(path, blocking_mode).map_err(|_| SyscallError::CouldNotOpenFile)?;
     let file_index = with_current_process(|process| process.push_file(file));
 
     SyscallResult::Ok(file_index as u64)
@@ -131,14 +135,48 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(2, all_state.rest => u64),
     };
     let buf = sys_arg_to_mut_byte_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
-    let bytes_read = with_current_process(|process| {
+
+    // TODO: fix this hack
+    //
+    // So, that's this about?
+    // We want to read files in blocking mode, and some of these, for example the `/console` file
+    // relies on the keyboard interrupts, but while we are in `with_current_process` we don't get interrupts
+    // because we are inside a lock.
+    // So instead, we take the file out, read from it, and put it back
+    // this is only done for files that are blocking, otherwise we just read from it directly.
+    //
+    // This is a big issue because when threads come in view later, since reading from another thread will report that
+    // the file is not found which is not correct.
+    //
+    // A good solution would be to have waitable objects.
+    let (bytes_read, file) = with_current_process(|process| {
         let file = process
             .get_file(file_index as _)
             .ok_or(SyscallError::InvalidFileIndex)?;
-
-        file.read(buf)
-            .map_err(|_| SyscallError::CouldNotReadFromFile)
+        if file.is_blocking() {
+            // take file now
+            let file = process
+                .take_file(file_index as _)
+                .ok_or(SyscallError::InvalidFileIndex)?;
+            Ok((0, Some(file)))
+        } else {
+            let bytes_read = file
+                .read(buf)
+                .map_err(|_| SyscallError::CouldNotReadFromFile)?;
+            Ok((bytes_read, None))
+        }
     })?;
+
+    let bytes_read = if let Some(mut file) = file {
+        let bytes_read = file
+            .read(buf)
+            .map_err(|_| SyscallError::CouldNotReadFromFile)?;
+        // put file back
+        with_current_process(|process| process.put_file(file_index as _, file));
+        bytes_read
+    } else {
+        bytes_read
+    };
     SyscallResult::Ok(bytes_read as u64)
 }
 
@@ -169,7 +207,8 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     // TODO: setup inheritance for process files
 
     // add the console manually for now,
-    let console = fs::open("/devices/console").expect("Could not find `/devices/console`");
+    let console = fs::open_blocking("/devices/console", BlockingMode::Line)
+        .expect("Could not find `/devices/console`");
     process.attach_file_to_fd(FD_STDIN, console.clone());
     process.attach_file_to_fd(FD_STDOUT, console.clone());
     process.attach_file_to_fd(FD_STDERR, console);

@@ -4,6 +4,7 @@ use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 
 use crate::{
     fs::{self, FileAttributes, FileSystem, FileSystemError, INode},
+    io,
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
@@ -95,13 +96,18 @@ pub fn init_devices_mapping() {
 #[allow(dead_code)]
 pub fn register_device(device: Arc<dyn Device>) {
     let mut devices = DEVICES.get().lock();
+    assert!(
+        !devices.devices.contains_key(device.name()),
+        "Device {} already registered",
+        device.name()
+    );
     devices.devices.insert(String::from(device.name()), device);
 }
 
 pub fn prope_pci_devices() {
     let pci_device_iter = PciDevicePropeIterator::new();
     for device in pci_device_iter {
-        if probe_driver(&device) {
+        if probe_pci_driver(&device) {
             println!(
                 "[{:02X}.{:02X}.{:02X}] Driver found for device: {:04X}:{:04X} - {}",
                 device.bus,
@@ -125,7 +131,12 @@ pub fn prope_pci_devices() {
     }
 }
 
-pub fn probe_driver(pci_device: &PciDeviceConfig) -> bool {
+pub fn probe_pci_driver(pci_device: &PciDeviceConfig) -> bool {
     ide::try_register_ide_device(pci_device)
     // add more devices here
+}
+
+/// Devices such as PS/2 keyboard, mouse, serial ports, etc.
+pub fn init_legacy_devices() {
+    io::keyboard::init_keyboard()
 }

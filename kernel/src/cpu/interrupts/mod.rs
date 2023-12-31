@@ -122,6 +122,6 @@ pub fn create_syscall_interrupt(handler: InterruptHandlerWithAllState) {
     interrupts.idt.user_defined[SPECIAL_SYSCALL_INTERRUPT as usize]
         .set_handler_with_number(handler, SPECIAL_SYSCALL_INTERRUPT + USER_INTERRUPTS_START)
         .set_privilege_level(USER_RING)
-        .set_disable_interrupts(true)
+        .set_disable_interrupts(false)
         .set_stack_index(Some(stack_index::SYSCALL_STACK));
 }

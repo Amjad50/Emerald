@@ -35,7 +35,7 @@ use cpu::{
 use executable::elf::Elf;
 use increasing_heap_allocator::HeapStats;
 use io::console;
-use kernel_user_link::{FD_STDERR, FD_STDIN, FD_STDOUT};
+use kernel_user_link::{file::BlockingMode, FD_STDERR, FD_STDIN, FD_STDOUT};
 use memory_management::virtual_memory_mapper;
 use multiboot2::MultiBoot2Info;
 use process::scheduler;
@@ -93,7 +93,8 @@ fn load_init_process() {
 
     // add the console to `init` manually, after that processes will either inherit it or open a pipe or something
     // to act as STDIN/STDOUT/STDERR
-    let console = fs::open("/devices/console").expect("Could not find `/devices/console`");
+    let console = fs::open_blocking("/devices/console", BlockingMode::Line)
+        .expect("Could not find `/devices/console`");
     process.attach_file_to_fd(FD_STDIN, console.clone());
     process.attach_file_to_fd(FD_STDOUT, console.clone());
     process.attach_file_to_fd(FD_STDERR, console);
@@ -115,14 +116,15 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();
-    // mount
+    // mount devices map before initializing them
     devices::init_devices_mapping();
     let bios_tables = acpi::get_acpi_tables(multiboot_info).expect("BIOS tables not found");
     println!("BIOS tables: {}", bios_tables);
     apic::init(&bios_tables);
     clock::init(&bios_tables);
-    console::init_late_device();
     unsafe { cpu::set_interrupts() };
+    devices::init_legacy_devices();
+    console::init_late_device();
     devices::prope_pci_devices();
     fs::create_disk_mapping(0).expect("Could not load filesystem");
     finish_boot();

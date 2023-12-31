@@ -1,5 +1,6 @@
 #![no_std]
 
+pub mod file;
 pub mod syscalls;
 
 pub const FD_STDIN: usize = 0;

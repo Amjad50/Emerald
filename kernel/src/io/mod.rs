@@ -1,8 +1,7 @@
 use core::{fmt, sync::atomic::AtomicBool};
 
 pub mod console;
-#[allow(dead_code)]
-mod keyboard;
+pub mod keyboard;
 mod uart;
 mod video_memory;
 
