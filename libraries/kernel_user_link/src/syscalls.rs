@@ -188,6 +188,7 @@ pub enum SyscallArgError {
     InvalidUserPointer = 2,
     NotValidUtf8 = 3,
     InvalidHeapIncrement = 4,
+    DuplicateFileMappings = 5,
 }
 
 impl SyscallArgError {
@@ -198,6 +199,7 @@ impl SyscallArgError {
             2 => Ok(Some(SyscallArgError::InvalidUserPointer)),
             3 => Ok(Some(SyscallArgError::NotValidUtf8)),
             4 => Ok(Some(SyscallArgError::InvalidHeapIncrement)),
+            5 => Ok(Some(SyscallArgError::DuplicateFileMappings)),
             _ => Err(()),
         }
     }

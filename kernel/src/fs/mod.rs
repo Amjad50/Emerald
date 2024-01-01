@@ -512,4 +512,10 @@ impl File {
     pub fn is_blocking(&self) -> bool {
         self.blocking_mode != BlockingMode::None
     }
+
+    pub fn clone_inherit(&self) -> Self {
+        let mut s = self.clone();
+        s.position = 0;
+        s
+    }
 }

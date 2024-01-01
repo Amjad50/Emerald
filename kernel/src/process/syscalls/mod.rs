@@ -1,14 +1,14 @@
-use core::ffi::CStr;
+use core::{ffi::CStr, mem};
 
 use alloc::{string::String, vec::Vec};
 use kernel_user_link::{
-    file::BlockingMode,
+    process::SpawnFileMapping,
     sys_arg,
     syscalls::{
         syscall_arg_to_u64, syscall_handler_wrapper, SyscallArgError, SyscallError, SyscallResult,
         NUM_SYSCALLS,
     },
-    to_arg_err, verify_args, FD_STDERR, FD_STDIN, FD_STDOUT,
+    to_arg_err, verify_args, FD_STDERR,
 };
 
 use crate::{
@@ -91,6 +91,39 @@ fn sys_arg_to_str_array(array_ptr: *const u8) -> Result<Vec<String>, SyscallArgE
         }
         array.push(String::from(str));
         i += 1;
+    }
+
+    Ok(array)
+}
+
+/// Allocates space fro the mapping and copies them
+fn sys_arg_to_file_mappings_array(
+    array_ptr: *const u8,
+    array_size: usize,
+) -> Result<Vec<SpawnFileMapping>, SyscallArgError> {
+    if array_size == 0 {
+        return Ok(Vec::new());
+    }
+    check_ptr(
+        array_ptr,
+        (array_size * mem::size_of::<SpawnFileMapping>()) as u64,
+    )?;
+
+    let array_ptr = array_ptr as *const SpawnFileMapping;
+
+    let mut array: Vec<SpawnFileMapping> = Vec::new();
+    for i in 0..array_size {
+        let mapping = unsafe { array_ptr.add(i).read() };
+
+        // before doing push check that we don't have duplicates
+        if array
+            .iter()
+            .any(|m| m.src_fd == mapping.src_fd || m.dst_fd == mapping.dst_fd)
+        {
+            return Err(SyscallArgError::DuplicateFileMappings);
+        }
+
+        array.push(mapping);
     }
 
     Ok(array)
@@ -193,30 +226,62 @@ fn sys_exit(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 }
 
 fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
-    let (path, argv, ..) = verify_args! {
+    let (path, argv, file_mappings, file_mappings_size, ..) = verify_args! {
         sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
-        sys_arg!(1, all_state.rest => u64),   // array of pointers
+        sys_arg!(1, all_state.rest => *const u8),   // array of pointers
+        sys_arg!(2, all_state.rest => *const u8),   // array of mappings or null
+        sys_arg!(3, all_state.rest => u64),       // size of the array
     };
-    let argv = argv as *const u8;
-
     let argv = sys_arg_to_str_array(argv).map_err(|err| to_arg_err!(1, err))?;
+    let file_mappings = sys_arg_to_file_mappings_array(file_mappings, file_mappings_size as usize)
+        .map_err(|err| to_arg_err!(2, err))?;
+
+    // don't go into lock if no need to
+    if !file_mappings.is_empty() {
+        // a bit unoptimal, but check all files first before taking them and doing any action
+        with_current_process(|process| {
+            for mapping in &file_mappings {
+                process
+                    .get_file(mapping.src_fd as _)
+                    .ok_or(SyscallError::InvalidFileIndex)?;
+            }
+            Ok(())
+        })?;
+    }
+
     let mut file = fs::open(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
     let elf = Elf::load(&mut file).map_err(|_| SyscallError::CouldNotLoadElf)?;
     let current_pid = with_current_process(|process| process.id);
-    let mut process = Process::allocate_process(current_pid, &elf, &mut file, argv)
+    let mut new_process = Process::allocate_process(current_pid, &elf, &mut file, argv)
         .map_err(|_| SyscallError::CouldNotAllocateProcess)?;
 
-    // TODO: setup inheritance for process files
+    let mut std_needed = [true; 3];
+    with_current_process(|process| {
+        // take the files if any
+        for mapping in file_mappings.iter() {
+            let file = process
+                .take_file(mapping.src_fd as _)
+                .ok_or(SyscallError::InvalidFileIndex)?;
+            new_process.attach_file_to_fd(mapping.dst_fd as _, file);
+            if mapping.dst_fd as usize <= FD_STDERR {
+                std_needed[mapping.dst_fd as usize] = false;
+            }
+        }
 
-    // add the console manually for now,
-    let console = fs::open_blocking("/devices/console", BlockingMode::Line)
-        .expect("Could not find `/devices/console`");
-    process.attach_file_to_fd(FD_STDIN, console.clone());
-    process.attach_file_to_fd(FD_STDOUT, console.clone());
-    process.attach_file_to_fd(FD_STDERR, console);
+        // inherit files STD files if not set
+        for (i, _) in std_needed.iter().enumerate().filter(|(_, &b)| b) {
+            let file = process
+                .get_file(i as _)
+                .ok_or(SyscallError::InvalidFileIndex)?;
+            let inherited_file = file.clone_inherit();
+            new_process.attach_file_to_fd(i as _, inherited_file);
+        }
 
-    let new_pid = process.id();
-    scheduler::push_process(process);
+        Ok(())
+    })?;
+
+    let new_pid = new_process.id();
+    scheduler::push_process(new_process);
 
     SyscallResult::Ok(new_pid)
 }
