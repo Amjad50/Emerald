@@ -6,7 +6,7 @@ use kernel_user_link::file::BlockingMode;
 use crate::{
     devices::{
         ide::{self, IdeDeviceIndex, IdeDeviceType},
-        Device,
+        Device, DEVICES_FILESYSTEM_CLUSTER_MAGIC,
     },
     memory_management::memory_layout::align_up,
     sync::spin::mutex::Mutex,
@@ -134,15 +134,13 @@ impl INode {
     pub fn new_device(
         name: String,
         attributes: FileAttributes,
-        start_cluster: u32,
-        size: u32,
         device: Option<Arc<dyn Device>>,
     ) -> Self {
         Self {
             name,
             attributes,
-            start_cluster,
-            size,
+            start_cluster: DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+            size: 0,
             device,
         }
     }
@@ -179,20 +177,25 @@ pub trait FileSystem: Send + Sync {
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
     fn read_file(
         &self,
-        _inode: &INode,
-        _position: u32,
-        _buf: &mut [u8],
+        inode: &INode,
+        position: u32,
+        buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
-        Err(FileSystemError::ReadNotSupported)
+        if let Some(device) = inode.device() {
+            assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            device.read(position, buf)
+        } else {
+            Err(FileSystemError::ReadNotSupported)
+        }
     }
 
-    fn write_file(
-        &self,
-        _inode: &INode,
-        _position: u32,
-        _buf: &[u8],
-    ) -> Result<u64, FileSystemError> {
-        Err(FileSystemError::WriteNotSupported)
+    fn write_file(&self, inode: &INode, position: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+        if let Some(device) = inode.device() {
+            assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            device.write(position, buf)
+        } else {
+            Err(FileSystemError::WriteNotSupported)
+        }
     }
 }
 
@@ -360,6 +363,22 @@ pub(crate) fn open_blocking(
     }
 
     Err(FileSystemError::FileNotFound)
+}
+
+pub(crate) fn inode_to_file(
+    inode: INode,
+    filesystem: Arc<dyn FileSystem>,
+    position: u64,
+    blocking_mode: BlockingMode,
+) -> File {
+    File {
+        filesystem,
+        // TODO: this is just the filename I think, not the full path
+        path: String::from(inode.name()),
+        inode,
+        position,
+        blocking_mode,
+    }
 }
 
 #[derive(Clone)]
