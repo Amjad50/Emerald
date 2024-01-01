@@ -6,7 +6,7 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 6;
+pub const NUM_SYSCALLS: usize = 7;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
@@ -15,6 +15,7 @@ mod numbers {
     pub const SYS_EXIT: u64 = 3;
     pub const SYS_SPAWN: u64 = 4;
     pub const SYS_INC_HEAP: u64 = 5;
+    pub const SYS_CREATE_PIPE: u64 = 6;
 }
 pub use numbers::*;
 

@@ -2,6 +2,7 @@ use core::ffi::CStr;
 
 use kernel_user_link::call_syscall;
 use kernel_user_link::syscalls::SyscallError;
+use kernel_user_link::syscalls::SYS_CREATE_PIPE;
 use kernel_user_link::syscalls::SYS_OPEN;
 use kernel_user_link::syscalls::SYS_READ;
 use kernel_user_link::syscalls::SYS_WRITE;
@@ -53,4 +54,21 @@ pub unsafe fn syscall_open(
             flags as u64          // flags
         )
     }
+}
+
+/// # Safety
+/// This function creates a pipe and return the descriptors.
+/// Callers must ensure to use the descriptors correctly.
+pub unsafe fn syscall_create_pipe() -> Result<(usize, usize), SyscallError> {
+    let mut in_fd: u64 = 0;
+    let mut out_fd: u64 = 0;
+    unsafe {
+        call_syscall!(
+            SYS_CREATE_PIPE,
+            &mut in_fd as *mut u64 as u64,  // in_fd
+            &mut out_fd as *mut u64 as u64  // out_fd
+        )?
+    };
+
+    Ok((in_fd as usize, out_fd as usize))
 }

@@ -442,8 +442,23 @@ impl File {
                 }
                 i as u64
             }
-            BlockingMode::Block(_size) => {
-                todo!("BlockingMode::Block")
+            BlockingMode::Block(size) => {
+                // TODO: support block size > 1
+                assert!(size == 1, "Only block size 1 is supported");
+
+                // try to read until we have something
+                loop {
+                    let read_byte =
+                        self.filesystem
+                            .read_file(&self.inode, self.position as u32, buf)?;
+
+                    // only if the result is not 0, we can return
+                    if read_byte != 0 {
+                        break read_byte;
+                    }
+                    // otherwise we wait
+                    // TODO: add waiting
+                }
             }
         };
 

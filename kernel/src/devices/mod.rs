@@ -13,6 +13,7 @@ use self::pci::{PciDeviceConfig, PciDevicePropeIterator};
 pub mod clock;
 pub mod ide;
 pub mod pci;
+pub mod pipe;
 
 // TODO: replace with rwlock
 static DEVICES: OnceLock<Arc<Mutex<Devices>>> = OnceLock::new();

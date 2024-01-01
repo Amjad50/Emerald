@@ -13,6 +13,7 @@ use kernel_user_link::{
 
 use crate::{
     cpu::idt::InterruptAllSavedState,
+    devices,
     executable::elf::Elf,
     fs,
     memory_management::memory_layout::{is_aligned, PAGE_4K},
@@ -24,12 +25,13 @@ use super::scheduler::{exit_current_process, with_current_process};
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
 const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
-    sys_open,     // kernel_user_link::syscalls::SYS_OPEN
-    sys_write,    // kernel_user_link::syscalls::SYS_WRITE
-    sys_read,     // kernel_user_link::syscalls::SYS_READ
-    sys_exit,     // kernel_user_link::syscalls::SYS_EXIT
-    sys_spawn,    // kernel_user_link::syscalls::SYS_SPAWN
-    sys_inc_heap, // kernel_user_link::syscalls::SYS_INC_HEAP
+    sys_open,        // kernel_user_link::syscalls::SYS_OPEN
+    sys_write,       // kernel_user_link::syscalls::SYS_WRITE
+    sys_read,        // kernel_user_link::syscalls::SYS_READ
+    sys_exit,        // kernel_user_link::syscalls::SYS_EXIT
+    sys_spawn,       // kernel_user_link::syscalls::SYS_SPAWN
+    sys_inc_heap,    // kernel_user_link::syscalls::SYS_INC_HEAP
+    sys_create_pipe, // kernel_user_link::syscalls::SYS_CREATE_PIPE
 ];
 
 #[inline]
@@ -232,6 +234,27 @@ fn sys_inc_heap(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         .ok_or(SyscallError::HeapRangesExceeded)?;
 
     SyscallResult::Ok(old_heap_end as u64)
+}
+
+fn sys_create_pipe(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (read_fd_ptr, write_fd_ptr, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => *mut u64),
+        sys_arg!(1, all_state.rest => *mut u64),
+    };
+    check_ptr(read_fd_ptr as *const u8, 8).map_err(|err| to_arg_err!(0, err))?;
+    check_ptr(write_fd_ptr as *const u8, 8).map_err(|err| to_arg_err!(1, err))?;
+
+    let (read_file, write_file) = devices::pipe::create_pipe_pair();
+    let (read_fd, write_fd) = with_current_process(|process| {
+        (process.push_file(read_file), process.push_file(write_file))
+    });
+
+    unsafe {
+        *read_fd_ptr = read_fd as u64;
+        *write_fd_ptr = write_fd as u64;
+    }
+
+    SyscallResult::Ok(0)
 }
 
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {
