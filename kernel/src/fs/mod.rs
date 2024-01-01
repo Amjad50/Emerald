@@ -9,7 +9,7 @@ use crate::{
         Device, DEVICES_FILESYSTEM_CLUSTER_MAGIC,
     },
     memory_management::memory_layout::align_up,
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 use self::mbr::MbrRaw;
@@ -20,6 +20,14 @@ mod mbr;
 static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
     mappings: Vec::new(),
 });
+
+static EMPTY_FILESYSTEM: OnceLock<Arc<EmptyFileSystem>> = OnceLock::new();
+
+pub fn empty_filesystem() -> Arc<EmptyFileSystem> {
+    EMPTY_FILESYSTEM
+        .get_or_init(|| Arc::new(EmptyFileSystem))
+        .clone()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileAttributes {
@@ -196,6 +204,18 @@ pub trait FileSystem: Send + Sync {
         } else {
             Err(FileSystemError::WriteNotSupported)
         }
+    }
+}
+
+pub struct EmptyFileSystem;
+
+impl FileSystem for EmptyFileSystem {
+    fn open_dir(&self, _path: &str) -> Result<Vec<INode>, FileSystemError> {
+        Err(FileSystemError::FileNotFound)
+    }
+
+    fn read_dir(&self, _inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+        Err(FileSystemError::FileNotFound)
     }
 }
 
