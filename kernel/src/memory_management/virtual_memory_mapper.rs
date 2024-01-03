@@ -148,11 +148,13 @@ pub fn init_kernel_vm() {
     let new_kernel_manager = VirtualMemoryMapper::new_kernel_vm();
     let mut manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
     *manager = new_kernel_manager;
-    manager.switch_to_this();
+    // SAFETY: this is the start VM, so we are sure that we are not inside a process, so its safe to switch
+    unsafe { manager.switch_to_this() };
 }
-
-#[allow(dead_code)]
-pub fn switch_to_kernel() {
+/// # Safety
+/// This must never be called while we are in a process context
+/// and using any process specific memory regions
+pub unsafe fn switch_to_kernel() {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().switch_to_this();
 }
 
@@ -237,7 +239,11 @@ impl VirtualMemoryMapper {
         new_vm
     }
 
-    pub fn add_process_specific_mappings(&mut self) {
+    /// # Safety
+    ///
+    /// After this call, the VM must never be switched to unless
+    /// its from the scheduler or we are sure that the previous kernel regions are not used
+    pub unsafe fn add_process_specific_mappings(&mut self) {
         let mut this_kernel_l4 =
             PageDirectoryTablePtr::from_entry(self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX]);
 
@@ -277,7 +283,10 @@ impl VirtualMemoryMapper {
         }
     }
 
-    pub fn switch_to_this(&self) {
+    /// # Safety
+    /// This must be used with caution, it must never be switched while we are using
+    /// memory from the same regions, i.e. kernel stack while we are in an interrupt
+    pub unsafe fn switch_to_this(&self) {
         Self::load_vm(&self.page_map_l4);
     }
 

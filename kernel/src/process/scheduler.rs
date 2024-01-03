@@ -61,7 +61,9 @@ pub fn schedule() -> ! {
                     // found a process to run
                     current_cpu.push_cli();
                     process.state = ProcessState::Running;
-                    process.switch_to_this_vm();
+                    // SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
+                    // as it has clones of our kernel mappings
+                    unsafe { process.switch_to_this_vm() };
                     current_cpu.process_id = process.id;
                     current_cpu.context = Some(process.context);
                     current_cpu.scheduling = true;
@@ -91,7 +93,8 @@ pub fn schedule() -> ! {
             // and because of how we implemented syscalls, the result will be in `rax`, so we tell
             // the compiler to ignore `rax` as it may be clobbered after this call
             unsafe { core::arch::asm!("int 0xff", out("rax") _) }
-            virtual_memory_mapper::switch_to_kernel();
+            // SAFETY: we are not running in any process context, so its safe to go back to the kernel
+            unsafe { virtual_memory_mapper::switch_to_kernel() };
         } else {
             // no process to run, just wait for interrupts
             unsafe { cpu::halt() };

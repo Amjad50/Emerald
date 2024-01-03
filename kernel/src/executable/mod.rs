@@ -2,8 +2,10 @@ use crate::{cpu, fs, memory_management::virtual_memory_mapper};
 
 pub mod elf;
 
-#[allow(dead_code)]
-pub fn load_elf_to_vm(
+/// # Safety
+/// The `vm` passed must be an exact kernel clone to the current vm
+/// without loading new process specific mappings
+pub unsafe fn load_elf_to_vm(
     elf: &elf::Elf,
     file: &mut fs::File,
     vm: &mut virtual_memory_mapper::VirtualMemoryMapper,
@@ -13,6 +15,8 @@ pub fn load_elf_to_vm(
     let old_vm = virtual_memory_mapper::get_current_vm();
 
     // switch temporaily so we can map the elf
+    // SAFETY: this must be called while the current vm and this new vm must share the same
+    //         kernel regions
     vm.switch_to_this();
 
     let mut min_address = u64::MAX;
