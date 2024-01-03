@@ -13,7 +13,6 @@ static INTERRUPTS: Mutex<Interrupts> = Mutex::new(Interrupts::empty());
 pub(super) mod stack_index {
     pub const FAULTS_STACK: u8 = 0;
     pub const DOUBLE_FAULT_STACK: u8 = 1;
-    pub const SYSCALL_STACK: u8 = 2;
 }
 
 const USER_INTERRUPTS_START: u8 = 0x20;
@@ -80,41 +79,41 @@ pub fn init_interrupts() {
 
 // All Types of interrupt handlers
 pub trait InterruptHandler {
-    fn set_handler(val: Self) -> u8;
+    fn allocate_and_set_handler(val: Self) -> u8;
 }
 
 impl InterruptHandler for BasicInterruptHandler {
-    fn set_handler(handler: Self) -> u8 {
+    fn allocate_and_set_handler(handler: Self) -> u8 {
         INTERRUPTS.lock().allocate_basic_user_interrupt(handler)
     }
 }
 
 impl InterruptHandler for InterruptHandlerWithAllState {
-    fn set_handler(handler: Self) -> u8 {
+    fn allocate_and_set_handler(handler: Self) -> u8 {
         INTERRUPTS.lock().allocate_user_interrupt_all_saved(handler)
     }
 }
 
 /// Puts the handler in the IDT and returns the interrupt/vector number
 pub(super) fn allocate_user_interrupt<F: InterruptHandler>(handler: F) -> u8 {
-    F::set_handler(handler)
+    F::allocate_and_set_handler(handler)
 }
 
 /// Puts the handler in the IDT and returns the interrupt/vector number
 pub(super) fn allocate_basic_user_interrupt(handler: BasicInterruptHandler) -> u8 {
-    BasicInterruptHandler::set_handler(handler)
+    BasicInterruptHandler::allocate_and_set_handler(handler)
 }
 
-#[allow(dead_code)]
 /// Puts the handler in the IDT and returns the interrupt/vector number
 pub(super) fn allocate_user_interrupt_all_saved(handler: InterruptHandlerWithAllState) -> u8 {
-    InterruptHandlerWithAllState::set_handler(handler)
+    InterruptHandlerWithAllState::allocate_and_set_handler(handler)
 }
 
 pub fn create_scheduler_interrupt(handler: InterruptHandlerWithAllState) {
     let mut interrupts = INTERRUPTS.lock();
     interrupts.idt.user_defined[SPECIAL_SCHEDULER_INTERRUPT as usize]
-        .set_handler_with_number(handler, SPECIAL_SCHEDULER_INTERRUPT + USER_INTERRUPTS_START);
+        .set_handler_with_number(handler, SPECIAL_SCHEDULER_INTERRUPT + USER_INTERRUPTS_START)
+        .set_disable_interrupts(true);
 }
 
 pub fn create_syscall_interrupt(handler: InterruptHandlerWithAllState) {
@@ -122,6 +121,5 @@ pub fn create_syscall_interrupt(handler: InterruptHandlerWithAllState) {
     interrupts.idt.user_defined[SPECIAL_SYSCALL_INTERRUPT as usize]
         .set_handler_with_number(handler, SPECIAL_SYSCALL_INTERRUPT + USER_INTERRUPTS_START)
         .set_privilege_level(USER_RING)
-        .set_disable_interrupts(false)
-        .set_stack_index(Some(stack_index::SYSCALL_STACK));
+        .set_disable_interrupts(false);
 }

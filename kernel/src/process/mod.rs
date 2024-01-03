@@ -135,7 +135,7 @@ impl Process {
         argv: Vec<String>,
     ) -> Result<Self, ProcessError> {
         let id = PROCESS_ID_ALLOCATOR.allocate();
-        let mut vm = virtual_memory_mapper::clone_kernel_vm_as_user();
+        let mut vm = virtual_memory_mapper::clone_current_vm_as_user();
         let stack_end = MAX_USER_VIRTUAL_ADDRESS - PAGE_4K;
         let stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
         let stack_start = stack_end - stack_size;
@@ -147,7 +147,11 @@ impl Process {
                 | virtual_memory_mapper::flags::PTE_WRITABLE,
         });
 
-        let (_min_addr, max_addr) = load_elf_to_vm(elf, file, &mut vm)?;
+        // SAFETY: we know that the vm passed is an exact kernel copy of this vm, so its safe to switch to it
+        // TODO: maybe it would be best to create the new vm inside this function?
+        let (_min_addr, max_addr) = unsafe { load_elf_to_vm(elf, file, &mut vm)? };
+        // SAFETY: we know that the vm is never used after this point until scheduling
+        unsafe { vm.add_process_specific_mappings() };
 
         // set it quite a distance from the elf and align it to 2MB pages (we are not using 2MB virtual memory, so its not related)
         let heap_start = align_up(max_addr + HEAP_OFFSET_FROM_ELF_END, PAGE_2M);
@@ -183,7 +187,9 @@ impl Process {
         })
     }
 
-    pub fn switch_to_this_vm(&mut self) {
+    /// # Safety
+    /// Check [`virtual_memory_mapper::VirtualMemoryMapper::switch_to_this`] for more info
+    pub unsafe fn switch_to_this_vm(&mut self) {
         self.vm.switch_to_this();
     }
 
@@ -288,6 +294,6 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
-        self.vm.unmap_user_memory();
+        self.vm.unmap_process_memory();
     }
 }

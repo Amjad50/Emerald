@@ -1,5 +1,7 @@
 use core::fmt;
 
+use super::virtual_memory_mapper;
+
 extern "C" {
     static begin: usize;
     static end: usize;
@@ -9,8 +11,6 @@ extern "C" {
     static stack_guard_page: usize;
 }
 
-// it starts at 0x10000, which is where the kernel is loaded, and grows down
-pub const KERNEL_STACK_END: usize = 0xFFFF_FFFF_8001_0000;
 // The virtual address of the kernel
 // these are information variables, showing the memory mapping of the kernel
 pub const KERNEL_BASE: usize = 0xFFFF_FFFF_8000_0000;
@@ -44,6 +44,18 @@ pub const KERNEL_EXTRA_MEMORY_BASE: usize = INTR_STACK_BASE + INTR_STACK_TOTAL_S
 // to avoid overflow stuff, we don't use the last page
 pub const KERNEL_LAST_POSSIBLE_ADDR: usize = 0xFFFF_FFFF_FFFF_F000;
 pub const KERNEL_EXTRA_MEMORY_SIZE: usize = KERNEL_LAST_POSSIBLE_ADDR - KERNEL_EXTRA_MEMORY_BASE;
+
+// Kernel Data specific to each process (will be mapped differently for each process)
+pub const KERNEL_PROCESS_VIRTUAL_ADDRESS_START: usize =
+    virtual_memory_mapper::KERNEL_PROCESS_VIRTUAL_ADDRESS_START;
+pub const PROCESS_KERNEL_STACK_GUARD: usize = PAGE_4K;
+// process specific kernel stack, this will be where the process is running while in the kernel
+// the process can be interrupted while in the kernel, so we want to save it into a specific stack
+// space so that other processes don't override it when being run
+pub const PROCESS_KERNEL_STACK_BASE: usize =
+    KERNEL_PROCESS_VIRTUAL_ADDRESS_START + PROCESS_KERNEL_STACK_GUARD;
+pub const PROCESS_KERNEL_STACK_SIZE: usize = PAGE_4K * 8;
+pub const PROCESS_KERNEL_STACK_END: usize = PROCESS_KERNEL_STACK_BASE + PROCESS_KERNEL_STACK_SIZE;
 
 #[allow(dead_code)]
 pub const KB: usize = 0x400;

@@ -4,7 +4,7 @@ use crate::{
     memory_management::{
         memory_layout::{
             is_aligned, INTR_STACK_BASE, INTR_STACK_EMPTY_SIZE, INTR_STACK_ENTRY_SIZE,
-            INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, KERNEL_STACK_END, PAGE_4K,
+            INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, PAGE_4K, PROCESS_KERNEL_STACK_END,
         },
         virtual_memory_mapper::{self, VirtualMemoryMapEntry},
     },
@@ -97,9 +97,9 @@ pub fn init_kernel_gdt() {
             TSS.ist[i] = stack_end_virtual as u64 - 8;
         }
 
-        // ADD entry for the kernel stack, for now no need to set a stack for other rings
-        // since the user stack won't be used
-        unsafe { TSS.rsp[KERNEL_RING as usize] = KERNEL_STACK_END as u64 - 8 };
+        // A kernel stack for this process
+        // this will be used on transitions from user to kernel
+        unsafe { TSS.rsp[KERNEL_RING as usize] = PROCESS_KERNEL_STACK_END as u64 - 8 };
     }
 
     let tss_ptr = (unsafe { &TSS } as *const _) as u64;

@@ -1,7 +1,7 @@
 //! This very specific to 64-bit x86 architecture, if this is to be ported to other architectures
 //! this will need to be changed
 
-use core::slice::IterMut;
+use core::{ops::RangeBounds, slice::IterMut};
 
 use crate::{
     cpu,
@@ -16,7 +16,9 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::memory_layout::stack_guard_page_ptr;
+use super::memory_layout::{
+    stack_guard_page_ptr, PROCESS_KERNEL_STACK_BASE, PROCESS_KERNEL_STACK_SIZE,
+};
 
 // TODO: replace by some sort of bitfield
 #[allow(dead_code)]
@@ -38,6 +40,20 @@ const ADDR_MASK: u64 = 0x0000_0000_FFFF_F000;
 // only use the last index for the kernel
 // all the other indexes are free to use by the user
 const KERNEL_L4_INDEX: usize = 0x1FF;
+
+// The L3 positions are used for the non-moving kernel code/data
+const KERNEL_L3_INDEX_START: usize = 0x1FE;
+#[allow(dead_code)]
+const KERNEL_L3_INDEX_END: usize = 0x1FF;
+
+const KERNEL_L3_PROCESS_INDEX_START: usize = 0;
+#[allow(dead_code)]
+const KERNEL_L3_PROCESS_INDEX_END: usize = KERNEL_L3_INDEX_START - 1;
+
+pub const KERNEL_PROCESS_VIRTUAL_ADDRESS_START: usize =
+    // sign extension
+    0xFFFF_0000_0000_0000 | KERNEL_L4_INDEX << 39 | KERNEL_L3_PROCESS_INDEX_START << 30;
+
 // the user can use all the indexes except the last one
 const NUM_USER_L4_INDEXES: usize = KERNEL_L4_INDEX;
 
@@ -132,11 +148,13 @@ pub fn init_kernel_vm() {
     let new_kernel_manager = VirtualMemoryMapper::new_kernel_vm();
     let mut manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
     *manager = new_kernel_manager;
-    manager.switch_to_this();
+    // SAFETY: this is the start VM, so we are sure that we are not inside a process, so its safe to switch
+    unsafe { manager.switch_to_this() };
 }
-
-#[allow(dead_code)]
-pub fn switch_to_kernel() {
+/// # Safety
+/// This must never be called while we are in a process context
+/// and using any process specific memory regions
+pub unsafe fn switch_to_kernel() {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().switch_to_this();
 }
 
@@ -164,9 +182,12 @@ pub fn is_address_mapped_in_kernel(addr: u64) -> bool {
 }
 
 #[allow(dead_code)]
-pub fn clone_kernel_vm_as_user() -> VirtualMemoryMapper {
-    let manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
+pub fn clone_current_vm_as_user() -> VirtualMemoryMapper {
+    // precaution, a sort of manual lock
+    cpu::cpu().push_cli();
+    let manager = get_current_vm();
     let mut new_vm = manager.clone_kernel_mem();
+    cpu::cpu().pop_cli();
     new_vm.is_user = true;
     new_vm
 }
@@ -200,13 +221,48 @@ impl VirtualMemoryMapper {
 
     // create a new virtual memory that maps the kernel only
     pub fn clone_kernel_mem(&self) -> Self {
+        let this_kernel_l4 =
+            PageDirectoryTablePtr::from_entry(self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX]);
+
         let mut new_vm = Self::new();
 
-        // share the same kernel mapping
+        let mut new_kernel_l4 = PageDirectoryTablePtr::alloc_new();
+
+        // copy the whole kernel mapping (process specific will be replaced later)
+        for i in 0..=0x1FF {
+            new_kernel_l4.as_mut().entries[i] = this_kernel_l4.as_ref().entries[i];
+        }
+
         new_vm.page_map_l4.as_mut().entries[KERNEL_L4_INDEX] =
-            (self.page_map_l4.as_ref()).entries[KERNEL_L4_INDEX];
+            new_kernel_l4.to_physical() | flags::PTE_PRESENT | flags::PTE_WRITABLE;
 
         new_vm
+    }
+
+    /// # Safety
+    ///
+    /// After this call, the VM must never be switched to unless
+    /// its from the scheduler or we are sure that the previous kernel regions are not used
+    pub unsafe fn add_process_specific_mappings(&mut self) {
+        let mut this_kernel_l4 =
+            PageDirectoryTablePtr::from_entry(self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX]);
+
+        // clear out the process specific mappings if we have cloned another process
+        // but of course don't deallocate, just remove the mappings
+        for i in KERNEL_L3_PROCESS_INDEX_START..=KERNEL_L3_PROCESS_INDEX_END {
+            this_kernel_l4.as_mut().entries[i] = 0;
+        }
+        // set it temporarily so we can map kernel range
+        // TODO: fix this hack
+        self.is_user = false;
+        // load new kernel stack for this process
+        self.map(&VirtualMemoryMapEntry {
+            virtual_address: PROCESS_KERNEL_STACK_BASE as u64,
+            physical_address: None, // allocate
+            size: PROCESS_KERNEL_STACK_SIZE as u64,
+            flags: flags::PTE_WRITABLE,
+        });
+        self.is_user = true;
     }
 
     fn load_vm(base: &PageDirectoryTablePtr) {
@@ -227,7 +283,10 @@ impl VirtualMemoryMapper {
         }
     }
 
-    pub fn switch_to_this(&self) {
+    /// # Safety
+    /// This must be used with caution, it must never be switched while we are using
+    /// memory from the same regions, i.e. kernel stack while we are in an interrupt
+    pub unsafe fn switch_to_this(&self) {
         Self::load_vm(&self.page_map_l4);
     }
 
@@ -637,8 +696,13 @@ impl VirtualMemoryMapper {
         true
     }
 
-    // the handler function definition is `fn(page_entry: &mut u64)`
-    fn do_for_every_user_entry(&mut self, mut f: impl FnMut(&mut u64)) {
+    // TODO: add tests for this
+    fn do_for_ranges_enteries<R1, R2, F>(&mut self, l4_ranges: R1, l3_ranges: R2, mut f: F)
+    where
+        R1: RangeBounds<usize>,
+        R2: RangeBounds<usize>,
+        F: FnMut(&mut u64),
+    {
         let page_map_l4 = self.page_map_l4.as_mut();
 
         let present = |entry: &&mut u64| **entry & flags::PTE_PRESENT != 0;
@@ -660,20 +724,63 @@ impl VirtualMemoryMapper {
             }
         };
 
+        let l4_start = match l4_ranges.start_bound() {
+            core::ops::Bound::Included(&start) => start,
+            core::ops::Bound::Unbounded => 0,
+            core::ops::Bound::Excluded(_) => unreachable!("Excluded start bound"),
+        };
+        let l4_end = match l4_ranges.end_bound() {
+            core::ops::Bound::Included(&end) => end,
+            core::ops::Bound::Excluded(&end) => end - 1,
+            core::ops::Bound::Unbounded => 0x1FF, // max entries
+        };
+        let l3_start = match l3_ranges.start_bound() {
+            core::ops::Bound::Included(&start) => start,
+            core::ops::Bound::Unbounded => 0,
+            core::ops::Bound::Excluded(_) => unreachable!("Excluded start bound"),
+        };
+        let l3_end = match l3_ranges.end_bound() {
+            core::ops::Bound::Included(&end) => end,
+            core::ops::Bound::Excluded(&end) => end - 1,
+            core::ops::Bound::Unbounded => 0x1FF, // max entries
+        };
+
+        let l4_skip = l4_start;
+        let l4_take = l4_end - l4_skip + 1;
+        let l3_skip = l3_start;
+        let l3_take = l3_end - l3_skip + 1;
+
         page_map_l4
             .entries
             .iter_mut()
-            .take(NUM_USER_L4_INDEXES) //skip the kernel (the last one)
-            .filter(present)
+            .skip(l4_skip)
+            .take(l4_take) //skip the kernel (the last one)
             .flat_map(as_page_directory_table_flat)
+            .skip(l3_skip)
+            .take(l3_take)
             .filter(present)
             .flat_map(as_page_directory_table_flat)
             .filter(present)
             .for_each(handle_2mb_pages);
     }
 
+    // the handler function definition is `fn(page_entry: &mut u64)`
+    fn do_for_every_user_entry(&mut self, f: impl FnMut(&mut u64)) {
+        self.do_for_ranges_enteries(0..NUM_USER_L4_INDEXES, 0..=0x1FF, f)
+    }
+
+    // the handler function definition is `fn(page_entry: &mut u64)`
+    fn do_for_kernel_process_entry(&mut self, f: impl FnMut(&mut u64)) {
+        self.do_for_ranges_enteries(
+            KERNEL_L4_INDEX..=KERNEL_L4_INDEX,
+            KERNEL_L3_PROCESS_INDEX_START..=KERNEL_L3_PROCESS_INDEX_END,
+            f,
+        );
+    }
+
     // search for all the pages that are mapped to the user ranges and unmap them and free their memory
-    pub fn unmap_user_memory(&mut self) {
+    // also unmap any process specific kernel memory
+    pub fn unmap_process_memory(&mut self) {
         let free_page = |entry: &mut u64| {
             assert!(
                 *entry & flags::PTE_HUGE_PAGE == 0,
@@ -685,5 +792,6 @@ impl VirtualMemoryMapper {
         };
 
         self.do_for_every_user_entry(free_page);
+        self.do_for_kernel_process_entry(free_page);
     }
 }
