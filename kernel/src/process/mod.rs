@@ -289,6 +289,6 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
-        self.vm.unmap_user_memory();
+        self.vm.unmap_process_memory();
     }
 }

@@ -1,7 +1,7 @@
 //! This very specific to 64-bit x86 architecture, if this is to be ported to other architectures
 //! this will need to be changed
 
-use core::slice::IterMut;
+use core::{ops::RangeBounds, slice::IterMut};
 
 use crate::{
     cpu,
@@ -687,8 +687,13 @@ impl VirtualMemoryMapper {
         true
     }
 
-    // the handler function definition is `fn(page_entry: &mut u64)`
-    fn do_for_every_user_entry(&mut self, mut f: impl FnMut(&mut u64)) {
+    // TODO: add tests for this
+    fn do_for_ranges_enteries<R1, R2, F>(&mut self, l4_ranges: R1, l3_ranges: R2, mut f: F)
+    where
+        R1: RangeBounds<usize>,
+        R2: RangeBounds<usize>,
+        F: FnMut(&mut u64),
+    {
         let page_map_l4 = self.page_map_l4.as_mut();
 
         let present = |entry: &&mut u64| **entry & flags::PTE_PRESENT != 0;
@@ -710,20 +715,63 @@ impl VirtualMemoryMapper {
             }
         };
 
+        let l4_start = match l4_ranges.start_bound() {
+            core::ops::Bound::Included(&start) => start,
+            core::ops::Bound::Unbounded => 0,
+            core::ops::Bound::Excluded(_) => unreachable!("Excluded start bound"),
+        };
+        let l4_end = match l4_ranges.end_bound() {
+            core::ops::Bound::Included(&end) => end,
+            core::ops::Bound::Excluded(&end) => end - 1,
+            core::ops::Bound::Unbounded => 0x1FF, // max entries
+        };
+        let l3_start = match l3_ranges.start_bound() {
+            core::ops::Bound::Included(&start) => start,
+            core::ops::Bound::Unbounded => 0,
+            core::ops::Bound::Excluded(_) => unreachable!("Excluded start bound"),
+        };
+        let l3_end = match l3_ranges.end_bound() {
+            core::ops::Bound::Included(&end) => end,
+            core::ops::Bound::Excluded(&end) => end - 1,
+            core::ops::Bound::Unbounded => 0x1FF, // max entries
+        };
+
+        let l4_skip = l4_start;
+        let l4_take = l4_end - l4_skip + 1;
+        let l3_skip = l3_start;
+        let l3_take = l3_end - l3_skip + 1;
+
         page_map_l4
             .entries
             .iter_mut()
-            .take(NUM_USER_L4_INDEXES) //skip the kernel (the last one)
-            .filter(present)
+            .skip(l4_skip)
+            .take(l4_take) //skip the kernel (the last one)
             .flat_map(as_page_directory_table_flat)
+            .skip(l3_skip)
+            .take(l3_take)
             .filter(present)
             .flat_map(as_page_directory_table_flat)
             .filter(present)
             .for_each(handle_2mb_pages);
     }
 
+    // the handler function definition is `fn(page_entry: &mut u64)`
+    fn do_for_every_user_entry(&mut self, f: impl FnMut(&mut u64)) {
+        self.do_for_ranges_enteries(0..NUM_USER_L4_INDEXES, 0..=0x1FF, f)
+    }
+
+    // the handler function definition is `fn(page_entry: &mut u64)`
+    fn do_for_kernel_process_entry(&mut self, f: impl FnMut(&mut u64)) {
+        self.do_for_ranges_enteries(
+            KERNEL_L4_INDEX..=KERNEL_L4_INDEX,
+            KERNEL_L3_PROCESS_INDEX_START..=KERNEL_L3_PROCESS_INDEX_END,
+            f,
+        );
+    }
+
     // search for all the pages that are mapped to the user ranges and unmap them and free their memory
-    pub fn unmap_user_memory(&mut self) {
+    // also unmap any process specific kernel memory
+    pub fn unmap_process_memory(&mut self) {
         let free_page = |entry: &mut u64| {
             assert!(
                 *entry & flags::PTE_HUGE_PAGE == 0,
@@ -735,6 +783,6 @@ impl VirtualMemoryMapper {
         };
 
         self.do_for_every_user_entry(free_page);
-        // TODO: unmap kernel process memory
+        self.do_for_kernel_process_entry(free_page);
     }
 }
