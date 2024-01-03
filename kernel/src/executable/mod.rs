@@ -1,4 +1,4 @@
-use crate::{fs, memory_management::virtual_memory_mapper};
+use crate::{cpu, fs, memory_management::virtual_memory_mapper};
 
 pub mod elf;
 
@@ -8,6 +8,8 @@ pub fn load_elf_to_vm(
     file: &mut fs::File,
     vm: &mut virtual_memory_mapper::VirtualMemoryMapper,
 ) -> Result<(usize, usize), fs::FileSystemError> {
+    // we can't be interrupted and load another process vm in the middle of this work
+    cpu::cpu().push_cli();
     let old_vm = virtual_memory_mapper::get_current_vm();
 
     // switch temporaily so we can map the elf
@@ -47,6 +49,8 @@ pub fn load_elf_to_vm(
 
     // switch back to the old vm
     old_vm.switch_to_this();
+    // we can be interrupted again
+    cpu::cpu().pop_cli();
 
     Ok((min_address as usize, max_address as usize))
 }

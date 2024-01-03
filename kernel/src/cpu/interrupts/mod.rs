@@ -13,7 +13,6 @@ static INTERRUPTS: Mutex<Interrupts> = Mutex::new(Interrupts::empty());
 pub(super) mod stack_index {
     pub const FAULTS_STACK: u8 = 0;
     pub const DOUBLE_FAULT_STACK: u8 = 1;
-    pub const SYSCALL_STACK: u8 = 2;
 }
 
 const USER_INTERRUPTS_START: u8 = 0x20;
@@ -122,6 +121,5 @@ pub fn create_syscall_interrupt(handler: InterruptHandlerWithAllState) {
     interrupts.idt.user_defined[SPECIAL_SYSCALL_INTERRUPT as usize]
         .set_handler_with_number(handler, SPECIAL_SYSCALL_INTERRUPT + USER_INTERRUPTS_START)
         .set_privilege_level(USER_RING)
-        .set_disable_interrupts(false)
-        .set_stack_index(Some(stack_index::SYSCALL_STACK));
+        .set_disable_interrupts(false);
 }

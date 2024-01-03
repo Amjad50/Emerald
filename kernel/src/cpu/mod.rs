@@ -53,6 +53,7 @@ pub struct Cpu {
     pub context: Option<ProcessContext>,
     // the process id of the current process
     pub process_id: u64,
+    pub scheduling: bool,
 }
 
 impl Cpu {
@@ -64,6 +65,7 @@ impl Cpu {
             n_cli: 0,
             context: None,
             process_id: 0,
+            scheduling: false,
         }
     }
 

@@ -16,7 +16,9 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::memory_layout::stack_guard_page_ptr;
+use super::memory_layout::{
+    stack_guard_page_ptr, PROCESS_KERNEL_STACK_BASE, PROCESS_KERNEL_STACK_SIZE,
+};
 
 // TODO: replace by some sort of bitfield
 #[allow(dead_code)]
@@ -38,6 +40,20 @@ const ADDR_MASK: u64 = 0x0000_0000_FFFF_F000;
 // only use the last index for the kernel
 // all the other indexes are free to use by the user
 const KERNEL_L4_INDEX: usize = 0x1FF;
+
+// The L3 positions are used for the non-moving kernel code/data
+const KERNEL_L3_INDEX_START: usize = 0x1FE;
+#[allow(dead_code)]
+const KERNEL_L3_INDEX_END: usize = 0x1FF;
+
+const KERNEL_L3_PROCESS_INDEX_START: usize = 0;
+#[allow(dead_code)]
+const KERNEL_L3_PROCESS_INDEX_END: usize = KERNEL_L3_INDEX_START - 1;
+
+pub const KERNEL_PROCESS_VIRTUAL_ADDRESS_START: usize =
+    // sign extension
+    0xFFFF_0000_0000_0000 | KERNEL_L4_INDEX << 39 | KERNEL_L3_PROCESS_INDEX_START << 30;
+
 // the user can use all the indexes except the last one
 const NUM_USER_L4_INDEXES: usize = KERNEL_L4_INDEX;
 
@@ -164,9 +180,12 @@ pub fn is_address_mapped_in_kernel(addr: u64) -> bool {
 }
 
 #[allow(dead_code)]
-pub fn clone_kernel_vm_as_user() -> VirtualMemoryMapper {
-    let manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
+pub fn clone_current_vm_as_user() -> VirtualMemoryMapper {
+    // precaution, a sort of manual lock
+    cpu::cpu().push_cli();
+    let manager = get_current_vm();
     let mut new_vm = manager.clone_kernel_mem();
+    cpu::cpu().pop_cli();
     new_vm.is_user = true;
     new_vm
 }
@@ -200,13 +219,44 @@ impl VirtualMemoryMapper {
 
     // create a new virtual memory that maps the kernel only
     pub fn clone_kernel_mem(&self) -> Self {
+        let this_kernel_l4 =
+            PageDirectoryTablePtr::from_entry(self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX]);
+
         let mut new_vm = Self::new();
 
-        // share the same kernel mapping
+        let mut new_kernel_l4 = PageDirectoryTablePtr::alloc_new();
+
+        // copy the whole kernel mapping (process specific will be replaced later)
+        for i in 0..=0x1FF {
+            new_kernel_l4.as_mut().entries[i] = this_kernel_l4.as_ref().entries[i];
+        }
+
         new_vm.page_map_l4.as_mut().entries[KERNEL_L4_INDEX] =
-            (self.page_map_l4.as_ref()).entries[KERNEL_L4_INDEX];
+            new_kernel_l4.to_physical() | flags::PTE_PRESENT | flags::PTE_WRITABLE;
 
         new_vm
+    }
+
+    pub fn add_process_specific_mappings(&mut self) {
+        let mut this_kernel_l4 =
+            PageDirectoryTablePtr::from_entry(self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX]);
+
+        // clear out the process specific mappings if we have cloned another process
+        // but of course don't deallocate, just remove the mappings
+        for i in KERNEL_L3_PROCESS_INDEX_START..=KERNEL_L3_PROCESS_INDEX_END {
+            this_kernel_l4.as_mut().entries[i] = 0;
+        }
+        // set it temporarily so we can map kernel range
+        // TODO: fix this hack
+        self.is_user = false;
+        // load new kernel stack for this process
+        self.map(&VirtualMemoryMapEntry {
+            virtual_address: PROCESS_KERNEL_STACK_BASE as u64,
+            physical_address: None, // allocate
+            size: PROCESS_KERNEL_STACK_SIZE as u64,
+            flags: flags::PTE_WRITABLE,
+        });
+        self.is_user = true;
     }
 
     fn load_vm(base: &PageDirectoryTablePtr) {
@@ -685,5 +735,6 @@ impl VirtualMemoryMapper {
         };
 
         self.do_for_every_user_entry(free_page);
+        // TODO: unmap kernel process memory
     }
 }

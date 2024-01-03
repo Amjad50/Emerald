@@ -1,4 +1,4 @@
-use core::{hint, mem};
+use core::mem;
 
 use alloc::vec::Vec;
 
@@ -50,16 +50,13 @@ pub fn schedule() -> ! {
 
     loop {
         let current_cpu = cpu::cpu();
-        if current_cpu.context.is_some() {
-            loop {
-                hint::spin_loop();
-            }
-        }
+        assert!(current_cpu.context.is_none());
 
         let mut scheduler = SCHEDULER.lock();
         // no context holding, i.e. free to take a new process
         for process in scheduler.processes.iter_mut() {
             match process.state {
+                // only schedule another if we don't have current process ready to be run
                 ProcessState::Scheduled if current_cpu.context.is_none() => {
                     // found a process to run
                     current_cpu.push_cli();
@@ -67,7 +64,7 @@ pub fn schedule() -> ! {
                     process.switch_to_this_vm();
                     current_cpu.process_id = process.id;
                     current_cpu.context = Some(process.context);
-
+                    current_cpu.scheduling = true;
                     current_cpu.pop_cli();
                 }
                 ProcessState::Yielded => {
@@ -94,6 +91,7 @@ pub fn schedule() -> ! {
             // and because of how we implemented syscalls, the result will be in `rax`, so we tell
             // the compiler to ignore `rax` as it may be clobbered after this call
             unsafe { core::arch::asm!("int 0xff", out("rax") _) }
+            virtual_memory_mapper::switch_to_kernel();
         } else {
             // no process to run, just wait for interrupts
             unsafe { cpu::halt() };
@@ -126,8 +124,6 @@ pub fn exit_current_process(exit_code: u64, all_state: &mut InterruptAllSavedSta
     with_current_process(|process| {
         assert!(process.state == ProcessState::Running);
         current_cpu.push_cli();
-        // exit process and go back to scheduler (through the syscall handler)
-        process.exit(exit_code);
         // TODO: notify listeners for this process
         println!("Process {} exited with code {}", process.id, exit_code);
 
@@ -137,15 +133,16 @@ pub fn exit_current_process(exit_code: u64, all_state: &mut InterruptAllSavedSta
         // this may be useful if a process wants to read that context later on
         // the virtual memory will be cleared once we drop the process
         process.context = current_cpu.context.take().unwrap();
+        process.exit(exit_code);
     });
-    virtual_memory_mapper::switch_to_kernel();
     current_cpu.pop_cli();
+    // go back to the kernel after the scheduler interrupt
 }
 
 pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
     let current_cpu = cpu::cpu();
-    // do not yield if we don't have context or we are in kernel
-    if current_cpu.context.is_none() || all_state.frame.cs & 0x3 == 0 {
+    // do not yield if we don't have context or we are in the middle of scheduling
+    if current_cpu.context.is_none() || current_cpu.scheduling {
         return;
     }
     // save context of this process and mark is as scheduled
@@ -157,8 +154,8 @@ pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
         process.context = current_cpu.context.take().unwrap();
         process.state = ProcessState::Yielded;
     });
-    virtual_memory_mapper::switch_to_kernel();
     current_cpu.pop_cli();
+    // go back to the kernel after the scheduler interrupt
 }
 
 pub fn swap_context(context: &mut ProcessContext, all_state: &mut InterruptAllSavedState) {
@@ -204,6 +201,11 @@ extern "cdecl" fn scheduler_interrupt_handler(all_state: &mut InterruptAllSavedS
     assert!(all_state.frame.cs & 0x3 == 0, "must be from kernel only");
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
+    assert!(current_cpu.scheduling);
+    assert!(current_cpu.interrupts_disabled());
+
+    // we can yield at this point after we go to the process
+    current_cpu.scheduling = false;
 
     swap_context(current_cpu.context.as_mut().unwrap(), all_state);
 }
