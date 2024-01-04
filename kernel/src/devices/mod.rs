@@ -33,6 +33,9 @@ pub trait Device: Sync + Send + fmt::Debug {
     fn write(&self, _offset: u32, _buf: &[u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::WriteNotSupported)
     }
+    fn close(&self) -> Result<(), FileSystemError> {
+        Ok(())
+    }
 }
 
 impl FileSystem for Mutex<Devices> {

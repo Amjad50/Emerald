@@ -179,6 +179,14 @@ impl INode {
     }
 }
 
+impl Drop for INode {
+    fn drop(&mut self) {
+        if let Some(device) = self.device.take() {
+            device.close().expect("Failed to close device");
+        }
+    }
+}
+
 pub trait FileSystem: Send + Sync {
     // TODO: don't use Vector please, use an iterator somehow
     fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError>;
@@ -270,6 +278,7 @@ pub enum FileSystemError {
     InvalidData,
     ReadNotSupported,
     WriteNotSupported,
+    EndOfFile,
 }
 
 pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) {
@@ -427,7 +436,16 @@ impl File {
                         &self.inode,
                         self.position as u32,
                         core::slice::from_mut(&mut char_buf),
-                    )?;
+                    );
+
+                    let read_byte = match read_byte {
+                        Ok(read_byte) => read_byte,
+                        Err(FileSystemError::EndOfFile) => {
+                            // if we reached the end of the file, we return i
+                            return Ok(i as u64);
+                        }
+                        Err(e) => return Err(e),
+                    };
 
                     // only put if we can, otherwise, eat the byte and continue
                     if read_byte == 1 {
@@ -455,7 +473,16 @@ impl File {
                 loop {
                     let read_byte =
                         self.filesystem
-                            .read_file(&self.inode, self.position as u32, buf)?;
+                            .read_file(&self.inode, self.position as u32, buf);
+
+                    let read_byte = match read_byte {
+                        Ok(read_byte) => read_byte,
+                        Err(FileSystemError::EndOfFile) => {
+                            // if we reached the end of the file, we return 0
+                            break 0;
+                        }
+                        Err(e) => return Err(e),
+                    };
 
                     // only if the result is not 0, we can return
                     if read_byte != 0 {
