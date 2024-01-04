@@ -438,6 +438,11 @@ impl File {
                         if char_buf == b'\n' || char_buf == b'\0' {
                             break;
                         }
+                    } else {
+                        // TODO: add IO waiting
+                        for _ in 0..100 {
+                            core::hint::spin_loop();
+                        }
                     }
                 }
                 i as u64
@@ -457,7 +462,10 @@ impl File {
                         break read_byte;
                     }
                     // otherwise we wait
-                    // TODO: add waiting
+                    // TODO: add IO waiting
+                    for _ in 0..100 {
+                        core::hint::spin_loop();
+                    }
                 }
             }
         };
@@ -466,10 +474,10 @@ impl File {
         Ok(count)
     }
 
-    pub fn write(&mut self, _buf: &[u8]) -> Result<u64, FileSystemError> {
+    pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
         let written = self
             .filesystem
-            .write_file(&self.inode, self.position as u32, _buf)?;
+            .write_file(&self.inode, self.position as u32, buf)?;
         self.position += written;
         Ok(written)
     }
