@@ -8,11 +8,11 @@ use kernel_user_link::{
 
 /// # Safety
 /// No guarantees are made about the state of the system after this function returns.
-pub unsafe fn exit(code: u64) -> ! {
+pub unsafe fn exit(code: i32) -> ! {
     unsafe {
         call_syscall!(
             SYS_EXIT,
-            code, // code
+            code as u64, // code
         )
         .unwrap();
     }

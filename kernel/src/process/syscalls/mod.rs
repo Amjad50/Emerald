@@ -232,12 +232,12 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_exit(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (exit_code, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => u64),
+        sys_arg!(0, all_state.rest => i32),
     };
 
     // modify the all_state to go back to the kernel, the current all_state will be dropped
     exit_current_process(exit_code, all_state);
-    SyscallResult::Ok(exit_code)
+    SyscallResult::Ok(exit_code as u64)
 }
 
 fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {

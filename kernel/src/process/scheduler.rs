@@ -120,7 +120,7 @@ where
 /// Exit the current process, and move the `all_state` to the scheduler.
 /// The caller of this function (i.e. interrupt) will use the `all_state` to go back to the scheduler.
 /// This function will remove the context from the CPU, and thus the value in `all_state` will be dropped.
-pub fn exit_current_process(exit_code: u64, all_state: &mut InterruptAllSavedState) {
+pub fn exit_current_process(exit_code: i32, all_state: &mut InterruptAllSavedState) {
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
 

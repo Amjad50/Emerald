@@ -125,8 +125,8 @@ pub struct Process {
 
     state: ProcessState,
     // split from the state, so that we can keep it as a simple enum
-    exit_code: u64,
-    children_exits: BTreeMap<u64, u64>,
+    exit_code: i32,
+    children_exits: BTreeMap<u64, i32>,
 }
 
 impl Process {
@@ -255,19 +255,19 @@ impl Process {
         )
     }
 
-    pub fn exit(&mut self, exit_code: u64) {
+    pub fn exit(&mut self, exit_code: i32) {
         self.state = ProcessState::Exited;
         self.exit_code = exit_code;
     }
 
-    pub fn add_child_exit(&mut self, pid: u64, exit_code: u64) {
+    pub fn add_child_exit(&mut self, pid: u64, exit_code: i32) {
         assert!(
             self.children_exits.insert(pid, exit_code).is_none(),
             "child pid already exists"
         );
     }
 
-    pub fn get_child_exit(&mut self, pid: u64) -> Option<u64> {
+    pub fn get_child_exit(&mut self, pid: u64) -> Option<i32> {
         self.children_exits.remove(&pid)
     }
 
