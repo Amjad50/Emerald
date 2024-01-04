@@ -345,7 +345,7 @@ impl Process {
         let argc = argv.len();
 
         let mut argv_ptrs = Vec::with_capacity(argv.len());
-        for arg in argv.iter().rev() {
+        for arg in argv.iter() {
             let arg_ptr = rsp - arg.len() as u64 - 1;
             rsp = arg_ptr;
             // align to 8 bytes
