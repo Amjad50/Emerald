@@ -70,7 +70,6 @@ pub fn init_devices_mapping() {
     fs::mount("/devices", DEVICES.get().clone());
 }
 
-#[allow(dead_code)]
 pub fn register_device(device: Arc<dyn Device>) {
     let mut devices = DEVICES.get().lock();
     assert!(

@@ -182,7 +182,6 @@ impl Rsdp {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Rsdt {
     pub header: DescriptionHeader,
@@ -220,7 +219,6 @@ pub struct DescriptionHeader {
     pub creator_revision: u32,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DescriptorTable {
     pub header: DescriptionHeader,

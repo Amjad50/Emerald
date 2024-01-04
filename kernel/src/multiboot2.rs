@@ -528,7 +528,6 @@ pub struct MultiBoot2Info {
 }
 
 impl MultiBoot2Info {
-    #[allow(dead_code)]
     fn data_ptr(&self) -> *const u8 {
         unsafe { (self as *const Self as *const u8).add(8) }
     }

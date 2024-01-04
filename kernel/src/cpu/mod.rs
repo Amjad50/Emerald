@@ -193,7 +193,6 @@ pub unsafe fn clear_interrupts() {
     core::arch::asm!("cli", options(nomem, nostack, preserves_flags));
 }
 
-#[allow(dead_code)]
 pub unsafe fn set_interrupts() {
     core::arch::asm!("sti", options(nomem, nostack, preserves_flags));
 }

@@ -47,7 +47,6 @@ const KERNEL_L3_INDEX_START: usize = 0x1FE;
 const KERNEL_L3_INDEX_END: usize = 0x1FF;
 
 const KERNEL_L3_PROCESS_INDEX_START: usize = 0;
-#[allow(dead_code)]
 const KERNEL_L3_PROCESS_INDEX_END: usize = KERNEL_L3_INDEX_START - 1;
 
 pub const KERNEL_PROCESS_VIRTUAL_ADDRESS_START: usize =
@@ -181,7 +180,6 @@ pub fn is_address_mapped_in_kernel(addr: u64) -> bool {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr)
 }
 
-#[allow(dead_code)]
 pub fn clone_current_vm_as_user() -> VirtualMemoryMapper {
     // precaution, a sort of manual lock
     cpu::cpu().push_cli();

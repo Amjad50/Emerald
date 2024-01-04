@@ -28,7 +28,6 @@ pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct AmlCode {
     term_list: Vec<AmlTerm>,
 }
@@ -144,7 +143,6 @@ pub enum Target {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ScopeObj {
     name: String,
     term_list: Vec<AmlTerm>,
@@ -163,7 +161,6 @@ impl ScopeObj {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct RegionObj {
     name: String,
     region_space: u8,
@@ -190,7 +187,6 @@ impl RegionObj {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct FieldDef {
     name: String,
     flags: u8,
@@ -212,7 +208,6 @@ impl FieldDef {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct IndexFieldDef {
     name: String,
     index_name: String,
@@ -244,7 +239,6 @@ pub enum FieldElement {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct MethodObj {
     name: String,
     flags: u8,
@@ -274,7 +268,6 @@ impl MethodObj {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct PredicateBlock {
     predicate: TermArg,
     term_list: Vec<AmlTerm>,
@@ -297,7 +290,6 @@ impl PredicateBlock {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ProcessorDeprecated {
     name: String,
     unk1: u8,
@@ -335,7 +327,6 @@ impl ProcessorDeprecated {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct PowerResource {
     name: String,
     system_level: u8,

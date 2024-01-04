@@ -123,7 +123,6 @@ pub const fn physical2virtual(addr: usize) -> usize {
     addr + KERNEL_BASE
 }
 
-#[allow(dead_code)]
 pub fn display_kernel_map() {
     println!("Kernel map:");
     let nothing = KERNEL_BASE..KERNEL_LINK;

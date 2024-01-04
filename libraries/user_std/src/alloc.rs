@@ -76,7 +76,6 @@ impl LockedKernelHeapAllocator {
         Mutex::new(HeapAllocator::new(PageAllocator::new()))
     }
 
-    #[allow(dead_code)]
     pub fn stats(&self) -> HeapStats {
         let inner = self.inner.get_or_init(Self::init_mutex).lock();
         inner.stats()

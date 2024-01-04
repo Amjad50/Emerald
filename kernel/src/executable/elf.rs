@@ -39,7 +39,6 @@ mod consts {
     pub const PROG_FLAG_READ: u32 = 0x4;
 }
 
-#[allow(dead_code)]
 pub fn to_virtual_memory_flags(flags: u32) -> u64 {
     // 0 means read-only
     let mut vm_flags = 0;
@@ -390,7 +389,6 @@ impl fmt::Debug for ElfProgram {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct Elf {
     header: ElfHeader,
     prg_headers: Vec<ElfProgram>,
@@ -430,7 +428,6 @@ impl Elf {
         self.header.entry()
     }
 
-    #[allow(dead_code)]
     pub fn program_headers(&self) -> &[ElfProgram] {
         &self.prg_headers
     }

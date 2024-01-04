@@ -54,14 +54,12 @@ pub enum IdeDeviceType {
     Atapi,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct IdeDeviceIndex {
     pub ty: IdeDeviceType,
     pub index: usize,
 }
 
-#[allow(dead_code)]
 pub fn get_ide_device(index: IdeDeviceIndex) -> Option<Arc<IdeDevice>> {
     let ide_devices = unsafe { &IDE_DEVICES };
     let mut passed = 0;
@@ -207,7 +205,6 @@ impl IdeIo {
         unsafe { cpu::io_in(self.command_block + ata::DATA) }
     }
 
-    #[allow(dead_code)]
     pub fn write_data(&self, value: u16) {
         unsafe { cpu::io_out(self.command_block + ata::DATA, value) }
     }
@@ -296,7 +293,6 @@ impl AtaCommand {
         self
     }
 
-    #[allow(dead_code)]
     pub fn with_second_drive(mut self, is_second: bool) -> Self {
         if is_second {
             self.drive |= 1 << 4;
@@ -306,13 +302,11 @@ impl AtaCommand {
         self
     }
 
-    #[allow(dead_code)]
     pub fn with_lba(mut self, lba: u64) -> Self {
         self.lba = lba;
         self
     }
 
-    #[allow(dead_code)]
     pub fn with_sector_count(mut self, sector_count: u16) -> Self {
         self.sector_count = sector_count;
         self
@@ -375,7 +369,6 @@ impl AtapiPacketCommand {
         self
     }
 
-    #[allow(dead_code)]
     pub fn with_second_drive(mut self, is_second: bool) -> Self {
         if is_second {
             self.drive |= 1 << 4;
@@ -398,14 +391,12 @@ impl AtapiPacketCommand {
     }
 
     // msb first, lsb last
-    #[allow(dead_code)]
     pub fn push_param_u16(self, param: u16) -> Self {
         self.push_param((param >> 8) as u8)
             .push_param((param & 0xFF) as u8)
     }
 
     // msb first, lsb last
-    #[allow(dead_code)]
     pub fn push_param_u32(self, param: u32) -> Self {
         self.push_param((param >> 24) as u8)
             .push_param((param >> 16) as u8)
@@ -587,7 +578,6 @@ impl CommandIdentifyDataRaw {
         self.capabilities[0] & (1 << 9) != 0
     }
 
-    #[allow(dead_code)]
     fn is_lba48_supported(&self) -> bool {
         self.command_set_supported_or_enabled[1] & (1 << 10) != 0
     }
@@ -675,12 +665,10 @@ impl IdeDevice {
         self.number_of_sectors
     }
 
-    #[allow(dead_code)]
     pub fn sector_size(&self) -> u32 {
         self.sector_size
     }
 
-    #[allow(dead_code)]
     pub fn read_sync(&self, start_sector: u64, data: &mut [u8]) -> Result<(), IdeError> {
         let sector_size = self.sector_size as u64;
         let buffer_len = data.len() as u64;

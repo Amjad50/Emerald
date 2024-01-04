@@ -186,7 +186,7 @@ pub fn wait_for_pid(all_state: &mut InterruptAllSavedState, pid: u64) -> bool {
     let scheduler = SCHEDULER.lock();
     // we can't wait for a process that doesn't exist now, unless we are a parent of a process that has exited
     // see [`exit_current_process`]
-    let process_found = scheduler.processes.iter().find(|p| p.id == pid).is_some();
+    let process_found = scheduler.processes.iter().any(|p| p.id == pid);
     if !process_found {
         return false;
     }

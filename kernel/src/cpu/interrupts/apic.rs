@@ -294,7 +294,6 @@ impl IoApic {
         }
     }
 
-    #[allow(dead_code)]
     fn read_register(&self, register: u32) -> u32 {
         unsafe { (*self.mmio).read_register(register) }
     }

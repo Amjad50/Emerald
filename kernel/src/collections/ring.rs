@@ -65,7 +65,6 @@ impl<T> RingBuffer<T> {
     }
 }
 
-#[allow(dead_code)]
 impl<T: Copy> RingBuffer<T> {
     pub const fn empty() -> Self {
         Self {

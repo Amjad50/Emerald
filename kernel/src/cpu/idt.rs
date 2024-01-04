@@ -118,7 +118,6 @@ impl<T> InterruptDescriptorTableEntry<T> {
         self
     }
 
-    #[allow(dead_code)]
     pub fn set_disable_interrupts(&mut self, disable_interrupts: bool) -> &mut Self {
         if disable_interrupts {
             self.flags &= !flags::KEEP_INTERRUPTS;
@@ -134,21 +133,18 @@ impl<T> InterruptDescriptorTableEntry<T> {
         self
     }
 
-    #[allow(dead_code)]
     pub fn set_privilege_level(&mut self, ring: u8) -> &mut Self {
         self.flags = (self.flags & !flags::dpl(0b11)) | flags::dpl(ring);
         self
     }
 }
 
-#[allow(dead_code)]
 impl InterruptDescriptorTableEntry<BasicInterruptHandler> {
     pub fn set_handler(&mut self, handler: BasicInterruptHandler) -> &mut Self {
         self.set_handler_ptr(handler as *const u8 as u64)
     }
 }
 
-#[allow(dead_code)]
 impl InterruptDescriptorTableEntry<InterruptHandlerWithError> {
     pub fn set_handler(&mut self, handler: InterruptHandlerWithError) -> &mut Self {
         self.set_handler_ptr(handler as *const u8 as u64)

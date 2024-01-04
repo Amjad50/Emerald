@@ -79,7 +79,6 @@ struct InterruptRouteCapabilityBitmap {
     bitmap: u32,
 }
 
-#[allow(dead_code)]
 impl InterruptRouteCapabilityBitmap {
     fn is_set(&self, bit: u8) -> bool {
         self.bitmap & (1 << bit) != 0

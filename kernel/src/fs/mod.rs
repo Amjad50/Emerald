@@ -359,12 +359,10 @@ pub fn ls_dir(path: &str) -> Result<Vec<INode>, FileSystemError> {
     filesystem.open_dir(new_path)
 }
 
-#[allow(dead_code)]
 pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
     open_blocking(path, BlockingMode::None)
 }
 
-#[allow(dead_code)]
 pub(crate) fn open_blocking(
     path: &str,
     blocking_mode: BlockingMode,
@@ -419,7 +417,6 @@ pub struct File {
     blocking_mode: BlockingMode,
 }
 
-#[allow(dead_code)]
 impl File {
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let count = match self.blocking_mode {
@@ -509,7 +506,6 @@ impl File {
         Ok(written)
     }
 
-    #[allow(dead_code)]
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {
         if position > self.inode.size() as u64 {
             return Err(FileSystemError::InvalidOffset);

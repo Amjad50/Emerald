@@ -74,37 +74,6 @@ impl<T> Mutex<T> {
             None
         }
     }
-
-    /// A special method to allow accessing the variable inside
-    /// the lock after locking it.
-    ///
-    /// The difference between this and using `Deref` is that
-    /// the lifetime of the returned reference is tied to main value of the lock.
-    #[allow(dead_code)]
-    pub fn run_with<'a, R>(&'a self, f: impl FnOnce(&'a T) -> R) -> R {
-        let guard: MutexGuard<'a, T> = self.lock();
-        let d = unsafe { guard.lock.data.get().as_ref().unwrap() };
-        f(d)
-    }
-
-    /// A special method to allow accessing the variable inside
-    /// the lock after locking it.
-    ///
-    /// The difference between this and using `DerefMut` is that
-    /// the lifetime of the returned reference is tied to main value of the lock.
-    #[allow(dead_code)]
-    pub fn run_with_mut<'a, R>(&'a self, f: impl FnOnce(&'a mut T) -> R) -> R {
-        let guard: MutexGuard<'a, T> = self.lock();
-        let d = unsafe { guard.lock.data.get().as_mut().unwrap() };
-        f(d)
-    }
-
-    /// We know statically that no one else is accessing the lock, so we can
-    /// just return a reference to the data without acquiring the lock.
-    #[allow(dead_code)]
-    pub fn get_mut(&mut self) -> &mut T {
-        self.data.get_mut()
-    }
 }
 
 impl<T> Deref for MutexGuard<'_, T> {

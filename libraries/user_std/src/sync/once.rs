@@ -121,7 +121,6 @@ impl<T: Clone> Clone for OnceLock<T> {
     }
 }
 
-#[allow(dead_code)]
 impl<T> OnceLock<T> {
     pub const fn new() -> Self {
         OnceLock {
@@ -136,14 +135,6 @@ impl<T> OnceLock<T> {
             return Err(value);
         }
         self.init(|| Ok(value))
-    }
-
-    pub fn get(&self) -> &T {
-        if self.once.is_completed() {
-            unsafe { self.get_unchecked() }
-        } else {
-            panic!("OnceLock::get called before OnceLock::set");
-        }
     }
 
     pub fn try_get(&self) -> Option<&T> {

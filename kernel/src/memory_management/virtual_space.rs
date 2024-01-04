@@ -53,7 +53,6 @@ pub fn ensure_at_least_size(virtual_start: u64, size: u64) {
     drop(allocator);
 }
 
-#[allow(dead_code)]
 pub fn allocate_and_map_virtual_space(physical_start: u64, size: u64) -> u64 {
     let (aligned_start, size, offset) = align_range(physical_start as _, size as _, PAGE_4K);
 
@@ -92,7 +91,6 @@ pub fn deallocate_virtual_space(virtual_start: u64, size: u64) {
     drop(allocator);
 }
 
-#[allow(dead_code)]
 pub fn debug_blocks() {
     let allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
     allocator.debug_blocks();

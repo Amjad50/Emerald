@@ -729,7 +729,6 @@ impl FatFilesystem {
         DirectoryIterator::new(self, dir)
     }
 
-    #[allow(dead_code)]
     pub fn open_dir_inode(&self, inode: &INode) -> Result<DirectoryIterator, FileSystemError> {
         if !inode.is_dir() {
             return Err(FileSystemError::IsNotDirectory);
@@ -740,7 +739,6 @@ impl FatFilesystem {
         DirectoryIterator::new(self, dir)
     }
 
-    #[allow(dead_code)]
     pub fn read_file(
         &self,
         inode: &INode,
