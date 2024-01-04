@@ -218,6 +218,8 @@ pub enum SyscallError {
     CouldNotLoadElf = 6,
     CouldNotAllocateProcess = 7,
     HeapRangesExceeded = 8,
+    EndOfFile = 9,
+    FileNotFound = 10,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -300,6 +302,8 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::CouldNotLoadElf => 6 << 56,
                 SyscallError::CouldNotAllocateProcess => 7 << 56,
                 SyscallError::HeapRangesExceeded => 8 << 56,
+                SyscallError::EndOfFile => 9 << 56,
+                SyscallError::FileNotFound => 10 << 56,
             };
 
             err_upper | (1 << 63)
@@ -345,6 +349,8 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             6 => SyscallError::CouldNotLoadElf,
             7 => SyscallError::CouldNotAllocateProcess,
             8 => SyscallError::HeapRangesExceeded,
+            9 => SyscallError::EndOfFile,
+            10 => SyscallError::FileNotFound,
             _ => invalid_error_code(()),
         };
         SyscallResult::Err(err)

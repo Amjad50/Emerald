@@ -15,7 +15,7 @@ use crate::{
     cpu::idt::InterruptAllSavedState,
     devices,
     executable::elf::Elf,
-    fs,
+    fs::{self, FileSystemError},
     memory_management::memory_layout::{is_aligned, PAGE_4K},
     process::{scheduler, Process},
 };
@@ -33,6 +33,26 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_inc_heap,    // kernel_user_link::syscalls::SYS_INC_HEAP
     sys_create_pipe, // kernel_user_link::syscalls::SYS_CREATE_PIPE
 ];
+
+impl From<FileSystemError> for SyscallError {
+    fn from(e: FileSystemError) -> Self {
+        match e {
+            FileSystemError::InvalidPath => SyscallError::CouldNotOpenFile,
+            FileSystemError::FileNotFound => SyscallError::FileNotFound,
+            FileSystemError::ReadNotSupported => SyscallError::CouldNotReadFromFile,
+            FileSystemError::WriteNotSupported => SyscallError::CouldNotWriteToFile,
+            FileSystemError::EndOfFile => SyscallError::EndOfFile,
+            FileSystemError::IsNotDirectory
+            | FileSystemError::IsDirectory
+            | FileSystemError::DeviceNotFound => todo!(),
+            FileSystemError::DiskReadError { .. }
+            | FileSystemError::InvalidOffset
+            | FileSystemError::FatError(_)
+            | FileSystemError::InvalidData
+            | FileSystemError::PartitionTableNotFound => panic!("should not happen?"),
+        }
+    }
+}
 
 #[inline]
 fn check_ptr(arg: *const u8, len: u64) -> Result<(), SyscallArgError> {
@@ -138,8 +158,7 @@ fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let blocking_mode = kernel_user_link::file::parse_flags(flags)
         .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
     // TODO: implement flags and access_mode, for now just open file for reading
-    let file =
-        fs::open_blocking(path, blocking_mode).map_err(|_| SyscallError::CouldNotOpenFile)?;
+    let file = fs::open_blocking(path, blocking_mode)?;
     let file_index = with_current_process(|process| process.push_file(file));
 
     SyscallResult::Ok(file_index as u64)
@@ -152,15 +171,14 @@ fn sys_write(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(2, all_state.rest => u64),
     };
     let buf = sys_arg_to_byte_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
-    let bytes_written = with_current_process(|process| {
+    let bytes_written = with_current_process(|process| -> Result<u64, SyscallError> {
         let file = process
             .get_file(file_index as _)
             .ok_or(SyscallError::InvalidFileIndex)?;
 
-        file.write(buf)
-            .map_err(|_| SyscallError::CouldNotWriteToFile)
+        file.write(buf).map_err(|e| e.into())
     })?;
-    SyscallResult::Ok(bytes_written as u64)
+    SyscallResult::Ok(bytes_written)
 }
 
 fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
@@ -195,17 +213,13 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
                 .ok_or(SyscallError::InvalidFileIndex)?;
             Ok((0, Some(file)))
         } else {
-            let bytes_read = file
-                .read(buf)
-                .map_err(|_| SyscallError::CouldNotReadFromFile)?;
-            Ok((bytes_read, None))
+            let bytes_read = file.read(buf)?;
+            Ok::<_, SyscallError>((bytes_read, None))
         }
     })?;
 
     let bytes_read = if let Some(mut file) = file {
-        let bytes_read = file
-            .read(buf)
-            .map_err(|_| SyscallError::CouldNotReadFromFile)?;
+        let bytes_read = file.read(buf)?;
         // put file back
         with_current_process(|process| process.put_file(file_index as _, file));
         bytes_read
@@ -245,7 +259,7 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
                     .get_file(mapping.src_fd as _)
                     .ok_or(SyscallError::InvalidFileIndex)?;
             }
-            Ok(())
+            Ok::<_, SyscallError>(())
         })?;
     }
 
@@ -277,7 +291,7 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
             new_process.attach_file_to_fd(i as _, inherited_file);
         }
 
-        Ok(())
+        Ok::<_, SyscallError>(())
     })?;
 
     let new_pid = new_process.id();
