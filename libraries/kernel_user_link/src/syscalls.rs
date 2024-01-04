@@ -6,7 +6,7 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 7;
+pub const NUM_SYSCALLS: usize = 8;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
@@ -16,6 +16,7 @@ mod numbers {
     pub const SYS_SPAWN: u64 = 4;
     pub const SYS_INC_HEAP: u64 = 5;
     pub const SYS_CREATE_PIPE: u64 = 6;
+    pub const SYS_WAIT_PID: u64 = 7;
 }
 pub use numbers::*;
 
@@ -220,6 +221,7 @@ pub enum SyscallError {
     HeapRangesExceeded = 8,
     EndOfFile = 9,
     FileNotFound = 10,
+    PidNotFound = 11,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -304,6 +306,7 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::HeapRangesExceeded => 8 << 56,
                 SyscallError::EndOfFile => 9 << 56,
                 SyscallError::FileNotFound => 10 << 56,
+                SyscallError::PidNotFound => 11 << 56,
             };
 
             err_upper | (1 << 63)
@@ -351,6 +354,7 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             8 => SyscallError::HeapRangesExceeded,
             9 => SyscallError::EndOfFile,
             10 => SyscallError::FileNotFound,
+            11 => SyscallError::PidNotFound,
             _ => invalid_error_code(()),
         };
         SyscallResult::Err(err)

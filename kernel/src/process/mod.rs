@@ -99,6 +99,7 @@ pub enum ProcessState {
     Scheduled,
     Sleeping,
     Exited,
+    WaitingForPid(u64),
 }
 
 // TODO: implement threads, for now each process acts as a thread also
@@ -125,6 +126,7 @@ pub struct Process {
     state: ProcessState,
     // split from the state, so that we can keep it as a simple enum
     exit_code: u64,
+    children_exits: BTreeMap<u64, u64>,
 }
 
 impl Process {
@@ -184,6 +186,7 @@ impl Process {
             heap_max,
             state: ProcessState::Scheduled,
             exit_code: 0,
+            children_exits: BTreeMap::new(),
         })
     }
 
@@ -255,6 +258,17 @@ impl Process {
     pub fn exit(&mut self, exit_code: u64) {
         self.state = ProcessState::Exited;
         self.exit_code = exit_code;
+    }
+
+    pub fn add_child_exit(&mut self, pid: u64, exit_code: u64) {
+        assert!(
+            self.children_exits.insert(pid, exit_code).is_none(),
+            "child pid already exists"
+        );
+    }
+
+    pub fn get_child_exit(&mut self, pid: u64) -> Option<u64> {
+        self.children_exits.remove(&pid)
     }
 
     /// Add/Remove to/from the heap and return the previous end of the heap before the change

@@ -124,10 +124,12 @@ pub fn exit_current_process(exit_code: u64, all_state: &mut InterruptAllSavedSta
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
 
+    let pid = current_cpu.process_id;
+    let mut ppid = 0;
     with_current_process(|process| {
         assert!(process.state == ProcessState::Running);
         current_cpu.push_cli();
-        // TODO: notify listeners for this process
+        ppid = process.parent_id;
         println!("Process {} exited with code {}", process.id, exit_code);
 
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
@@ -138,6 +140,22 @@ pub fn exit_current_process(exit_code: u64, all_state: &mut InterruptAllSavedSta
         process.context = current_cpu.context.take().unwrap();
         process.exit(exit_code);
     });
+    // notify listeners for this process
+    // TODO: do it better with general waiting mechanism not just for pids
+    let mut scheduler = SCHEDULER.lock();
+    for proc in scheduler.processes.iter_mut() {
+        if proc.state == ProcessState::WaitingForPid(pid) {
+            // put the exit code in rax
+            // this should return to user mode directly
+            assert!(proc.context.cs & 0x3 == 3, "must be from user only");
+            proc.context.rax = exit_code as u64;
+            proc.state = ProcessState::Scheduled;
+        }
+        if proc.id == ppid {
+            proc.add_child_exit(pid, exit_code);
+        }
+    }
+
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
 }
@@ -159,6 +177,33 @@ pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
     });
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
+}
+
+pub fn wait_for_pid(all_state: &mut InterruptAllSavedState, pid: u64) -> bool {
+    let current_cpu = cpu::cpu();
+    assert!(current_cpu.context.is_some());
+
+    let scheduler = SCHEDULER.lock();
+    // we can't wait for a process that doesn't exist now, unless we are a parent of a process that has exited
+    // see [`exit_current_process`]
+    let process_found = scheduler.processes.iter().find(|p| p.id == pid).is_some();
+    if !process_found {
+        return false;
+    }
+    drop(scheduler);
+
+    // save context of this process and mark it as waiting
+    with_current_process(|process| {
+        assert!(process.state == ProcessState::Running);
+        current_cpu.push_cli();
+        swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+        // clear context from the CPU
+        process.context = current_cpu.context.take().unwrap();
+        process.state = ProcessState::WaitingForPid(pid);
+    });
+    current_cpu.pop_cli();
+    // go back to the kernel after the scheduler interrupt
+    true
 }
 
 pub fn swap_context(context: &mut ProcessContext, all_state: &mut InterruptAllSavedState) {
