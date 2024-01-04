@@ -130,7 +130,7 @@ pub fn exit_current_process(exit_code: i32, all_state: &mut InterruptAllSavedSta
         assert!(process.state == ProcessState::Running);
         current_cpu.push_cli();
         ppid = process.parent_id;
-        println!("Process {} exited with code {}", process.id, exit_code);
+        eprintln!("Process {} exited with code {}", process.id, exit_code);
 
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
         // clear context from the CPU
