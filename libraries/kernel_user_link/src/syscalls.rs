@@ -6,7 +6,7 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 6;
+pub const NUM_SYSCALLS: usize = 7;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
@@ -15,6 +15,7 @@ mod numbers {
     pub const SYS_EXIT: u64 = 3;
     pub const SYS_SPAWN: u64 = 4;
     pub const SYS_INC_HEAP: u64 = 5;
+    pub const SYS_CREATE_PIPE: u64 = 6;
 }
 pub use numbers::*;
 
@@ -187,6 +188,7 @@ pub enum SyscallArgError {
     InvalidUserPointer = 2,
     NotValidUtf8 = 3,
     InvalidHeapIncrement = 4,
+    DuplicateFileMappings = 5,
 }
 
 impl SyscallArgError {
@@ -197,6 +199,7 @@ impl SyscallArgError {
             2 => Ok(Some(SyscallArgError::InvalidUserPointer)),
             3 => Ok(Some(SyscallArgError::NotValidUtf8)),
             4 => Ok(Some(SyscallArgError::InvalidHeapIncrement)),
+            5 => Ok(Some(SyscallArgError::DuplicateFileMappings)),
             _ => Err(()),
         }
     }
@@ -215,6 +218,8 @@ pub enum SyscallError {
     CouldNotLoadElf = 6,
     CouldNotAllocateProcess = 7,
     HeapRangesExceeded = 8,
+    EndOfFile = 9,
+    FileNotFound = 10,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -297,6 +302,8 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::CouldNotLoadElf => 6 << 56,
                 SyscallError::CouldNotAllocateProcess => 7 << 56,
                 SyscallError::HeapRangesExceeded => 8 << 56,
+                SyscallError::EndOfFile => 9 << 56,
+                SyscallError::FileNotFound => 10 << 56,
             };
 
             err_upper | (1 << 63)
@@ -342,6 +349,8 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             6 => SyscallError::CouldNotLoadElf,
             7 => SyscallError::CouldNotAllocateProcess,
             8 => SyscallError::HeapRangesExceeded,
+            9 => SyscallError::EndOfFile,
+            10 => SyscallError::FileNotFound,
             _ => invalid_error_code(()),
         };
         SyscallResult::Err(err)

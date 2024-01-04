@@ -13,11 +13,12 @@ use self::pci::{PciDeviceConfig, PciDevicePropeIterator};
 pub mod clock;
 pub mod ide;
 pub mod pci;
+pub mod pipe;
 
 // TODO: replace with rwlock
 static DEVICES: OnceLock<Arc<Mutex<Devices>>> = OnceLock::new();
 
-const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u32 = 0xdef1ce5;
+pub(crate) const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u32 = 0xdef1ce5;
 
 #[derive(Debug)]
 struct Devices {
@@ -32,6 +33,9 @@ pub trait Device: Sync + Send + fmt::Debug {
     fn write(&self, _offset: u32, _buf: &[u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::WriteNotSupported)
     }
+    fn close(&self) -> Result<(), FileSystemError> {
+        Ok(())
+    }
 }
 
 impl FileSystem for Mutex<Devices> {
@@ -42,13 +46,7 @@ impl FileSystem for Mutex<Devices> {
                 .devices
                 .iter()
                 .map(|(name, device)| {
-                    INode::new_device(
-                        name.clone(),
-                        FileAttributes::EMPTY,
-                        DEVICES_FILESYSTEM_CLUSTER_MAGIC,
-                        0,
-                        Some(device.clone()),
-                    )
+                    INode::new_device(name.clone(), FileAttributes::EMPTY, Some(device.clone()))
                 })
                 .collect())
         } else {
@@ -59,27 +57,6 @@ impl FileSystem for Mutex<Devices> {
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
         assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_CLUSTER_MAGIC);
         self.open_dir(inode.name())
-    }
-
-    fn read_file(
-        &self,
-        inode: &INode,
-        position: u32,
-        buf: &mut [u8],
-    ) -> Result<u64, FileSystemError> {
-        assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_CLUSTER_MAGIC);
-        inode
-            .device()
-            .ok_or(FileSystemError::FileNotFound)?
-            .read(position, buf)
-    }
-
-    fn write_file(&self, inode: &INode, position: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
-        assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_CLUSTER_MAGIC);
-        inode
-            .device()
-            .ok_or(FileSystemError::FileNotFound)?
-            .write(position, buf)
     }
 }
 

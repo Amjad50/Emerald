@@ -24,5 +24,7 @@ impl_convert_for_args![
     u8,
     usize,
     *const u8,
-    *mut u8
+    *mut u8,
+    *const u64,
+    *mut u64
 ];

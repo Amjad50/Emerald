@@ -6,10 +6,10 @@ use kernel_user_link::file::BlockingMode;
 use crate::{
     devices::{
         ide::{self, IdeDeviceIndex, IdeDeviceType},
-        Device,
+        Device, DEVICES_FILESYSTEM_CLUSTER_MAGIC,
     },
     memory_management::memory_layout::align_up,
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 use self::mbr::MbrRaw;
@@ -20,6 +20,14 @@ mod mbr;
 static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
     mappings: Vec::new(),
 });
+
+static EMPTY_FILESYSTEM: OnceLock<Arc<EmptyFileSystem>> = OnceLock::new();
+
+pub fn empty_filesystem() -> Arc<EmptyFileSystem> {
+    EMPTY_FILESYSTEM
+        .get_or_init(|| Arc::new(EmptyFileSystem))
+        .clone()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileAttributes {
@@ -134,15 +142,13 @@ impl INode {
     pub fn new_device(
         name: String,
         attributes: FileAttributes,
-        start_cluster: u32,
-        size: u32,
         device: Option<Arc<dyn Device>>,
     ) -> Self {
         Self {
             name,
             attributes,
-            start_cluster,
-            size,
+            start_cluster: DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+            size: 0,
             device,
         }
     }
@@ -173,26 +179,51 @@ impl INode {
     }
 }
 
+impl Drop for INode {
+    fn drop(&mut self) {
+        if let Some(device) = self.device.take() {
+            device.close().expect("Failed to close device");
+        }
+    }
+}
+
 pub trait FileSystem: Send + Sync {
     // TODO: don't use Vector please, use an iterator somehow
     fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError>;
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
     fn read_file(
         &self,
-        _inode: &INode,
-        _position: u32,
-        _buf: &mut [u8],
+        inode: &INode,
+        position: u32,
+        buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
-        Err(FileSystemError::ReadNotSupported)
+        if let Some(device) = inode.device() {
+            assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            device.read(position, buf)
+        } else {
+            Err(FileSystemError::ReadNotSupported)
+        }
     }
 
-    fn write_file(
-        &self,
-        _inode: &INode,
-        _position: u32,
-        _buf: &[u8],
-    ) -> Result<u64, FileSystemError> {
-        Err(FileSystemError::WriteNotSupported)
+    fn write_file(&self, inode: &INode, position: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+        if let Some(device) = inode.device() {
+            assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            device.write(position, buf)
+        } else {
+            Err(FileSystemError::WriteNotSupported)
+        }
+    }
+}
+
+pub struct EmptyFileSystem;
+
+impl FileSystem for EmptyFileSystem {
+    fn open_dir(&self, _path: &str) -> Result<Vec<INode>, FileSystemError> {
+        Err(FileSystemError::FileNotFound)
+    }
+
+    fn read_dir(&self, _inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+        Err(FileSystemError::FileNotFound)
     }
 }
 
@@ -247,6 +278,7 @@ pub enum FileSystemError {
     InvalidData,
     ReadNotSupported,
     WriteNotSupported,
+    EndOfFile,
 }
 
 pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) {
@@ -362,6 +394,22 @@ pub(crate) fn open_blocking(
     Err(FileSystemError::FileNotFound)
 }
 
+pub(crate) fn inode_to_file(
+    inode: INode,
+    filesystem: Arc<dyn FileSystem>,
+    position: u64,
+    blocking_mode: BlockingMode,
+) -> File {
+    File {
+        filesystem,
+        // TODO: this is just the filename I think, not the full path
+        path: String::from(inode.name()),
+        inode,
+        position,
+        blocking_mode,
+    }
+}
+
 #[derive(Clone)]
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
@@ -388,7 +436,16 @@ impl File {
                         &self.inode,
                         self.position as u32,
                         core::slice::from_mut(&mut char_buf),
-                    )?;
+                    );
+
+                    let read_byte = match read_byte {
+                        Ok(read_byte) => read_byte,
+                        Err(FileSystemError::EndOfFile) => {
+                            // if we reached the end of the file, we return i
+                            return Ok(i as u64);
+                        }
+                        Err(e) => return Err(e),
+                    };
 
                     // only put if we can, otherwise, eat the byte and continue
                     if read_byte == 1 {
@@ -399,12 +456,44 @@ impl File {
                         if char_buf == b'\n' || char_buf == b'\0' {
                             break;
                         }
+                    } else {
+                        // TODO: add IO waiting
+                        for _ in 0..100 {
+                            core::hint::spin_loop();
+                        }
                     }
                 }
                 i as u64
             }
-            BlockingMode::Block(_size) => {
-                todo!("BlockingMode::Block")
+            BlockingMode::Block(size) => {
+                // TODO: support block size > 1
+                assert!(size == 1, "Only block size 1 is supported");
+
+                // try to read until we have something
+                loop {
+                    let read_byte =
+                        self.filesystem
+                            .read_file(&self.inode, self.position as u32, buf);
+
+                    let read_byte = match read_byte {
+                        Ok(read_byte) => read_byte,
+                        Err(FileSystemError::EndOfFile) => {
+                            // if we reached the end of the file, we return 0
+                            break 0;
+                        }
+                        Err(e) => return Err(e),
+                    };
+
+                    // only if the result is not 0, we can return
+                    if read_byte != 0 {
+                        break read_byte;
+                    }
+                    // otherwise we wait
+                    // TODO: add IO waiting
+                    for _ in 0..100 {
+                        core::hint::spin_loop();
+                    }
+                }
             }
         };
 
@@ -412,10 +501,10 @@ impl File {
         Ok(count)
     }
 
-    pub fn write(&mut self, _buf: &[u8]) -> Result<u64, FileSystemError> {
+    pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
         let written = self
             .filesystem
-            .write_file(&self.inode, self.position as u32, _buf)?;
+            .write_file(&self.inode, self.position as u32, buf)?;
         self.position += written;
         Ok(written)
     }
@@ -457,5 +546,11 @@ impl File {
 
     pub fn is_blocking(&self) -> bool {
         self.blocking_mode != BlockingMode::None
+    }
+
+    pub fn clone_inherit(&self) -> Self {
+        let mut s = self.clone();
+        s.position = 0;
+        s
     }
 }
