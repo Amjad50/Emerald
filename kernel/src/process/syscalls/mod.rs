@@ -32,6 +32,7 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_spawn,       // kernel_user_link::syscalls::SYS_SPAWN
     sys_inc_heap,    // kernel_user_link::syscalls::SYS_INC_HEAP
     sys_create_pipe, // kernel_user_link::syscalls::SYS_CREATE_PIPE
+    sys_wait_pid,    // kernel_user_link::syscalls::SYS_WAIT_PID
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -231,12 +232,12 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_exit(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (exit_code, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => u64),
+        sys_arg!(0, all_state.rest => i32),
     };
 
     // modify the all_state to go back to the kernel, the current all_state will be dropped
     exit_current_process(exit_code, all_state);
-    SyscallResult::Ok(exit_code)
+    SyscallResult::Ok(exit_code as u64)
 }
 
 fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
@@ -335,6 +336,27 @@ fn sys_create_pipe(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         *write_fd_ptr = write_fd as u64;
     }
 
+    SyscallResult::Ok(0)
+}
+
+fn sys_wait_pid(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (pid, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => u64),
+    };
+
+    // see if this is a child process
+    let process_exit = with_current_process(|process| process.get_child_exit(pid));
+    if let Some(exit_code) = process_exit {
+        return SyscallResult::Ok(exit_code as u64);
+    }
+
+    // if not, wait for it
+    // this stash the current process until the other process exits
+    if !scheduler::wait_for_pid(all_state, pid) {
+        return Err(SyscallError::PidNotFound);
+    }
+    // if we are waiting by the scheduler, this result is not important since it will be overwritten
+    // when we get back
     SyscallResult::Ok(0)
 }
 
