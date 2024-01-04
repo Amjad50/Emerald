@@ -149,6 +149,10 @@ impl Process {
                 | virtual_memory_mapper::flags::PTE_WRITABLE,
         });
 
+        let rsp = stack_end as u64 - 8;
+        let (new_rsp, argc, argv_ptr) =
+            Self::load_argv_into_stack(&mut vm, &argv, rsp, stack_start as u64);
+
         // SAFETY: we know that the vm passed is an exact kernel copy of this vm, so its safe to switch to it
         // TODO: maybe it would be best to create the new vm inside this function?
         let (_min_addr, max_addr) = unsafe { load_elf_to_vm(elf, file, &mut vm)? };
@@ -165,11 +169,16 @@ impl Process {
         assert!(vm.is_address_mapped(entry as _) && entry < KERNEL_BASE as u64);
 
         context.rip = entry;
-        context.rsp = stack_end as u64 - 8;
         context.cs = gdt::get_user_code_seg_index().0 | gdt::USER_RING as u64;
         context.ds = gdt::get_user_data_seg_index().0 | gdt::USER_RING as u64;
         context.ss = context.ds;
         context.rflags = cpu::flags::IF;
+
+        // setup main function arguments and stack
+        context.rsp = new_rsp;
+        // NOTE: This is very specific to x86_64 SYSV abi
+        context.rdi = argc;
+        context.rsi = argv_ptr;
 
         Ok(Self {
             vm,
@@ -313,6 +322,82 @@ impl Process {
         }
 
         Some(old_end)
+    }
+}
+
+impl Process {
+    // NOTE: this is very specific to 64bit x86
+    fn load_argv_into_stack(
+        vm: &mut VirtualMemoryMapper,
+        argv: &[String],
+        mut rsp: u64,
+        stack_top: u64,
+    ) -> (u64, u64, u64) {
+        // dealing with vm, so we must disable interrupts
+        cpu::cpu().push_cli();
+        let old_vm = virtual_memory_mapper::get_current_vm();
+
+        // switch temporaily so we can map the elf
+        // SAFETY: this must be called while the current vm and this new vm must share the same
+        //         kernel regions
+        unsafe { vm.switch_to_this() };
+
+        let argc = argv.len();
+
+        let mut argv_ptrs = Vec::with_capacity(argv.len());
+        for arg in argv.iter().rev() {
+            let arg_ptr = rsp - arg.len() as u64 - 1;
+            rsp = arg_ptr;
+            // align to 8 bytes
+            rsp -= rsp % 8;
+            assert!(rsp >= stack_top);
+
+            // convert arg_ptr to slice
+            let arg_ptr_slice =
+                unsafe { core::slice::from_raw_parts_mut(arg_ptr as *mut u8, arg.len() + 1) };
+            // copy the arg
+            arg_ptr_slice[..arg.len()].copy_from_slice(arg.as_bytes());
+            // put null terminator
+            arg_ptr_slice[arg.len()] = 0;
+
+            argv_ptrs.push(arg_ptr);
+        }
+        // align to 8 bytes
+        rsp -= rsp % 8;
+        assert!(rsp >= stack_top);
+        // add null terminator
+        let null_ptr = rsp - 1;
+        rsp = null_ptr;
+        unsafe { (null_ptr as *mut u8).write(0) };
+        argv_ptrs.push(null_ptr);
+        // align to 8 bytes
+        rsp -= rsp % 8;
+        assert!(rsp >= stack_top);
+
+        // write the argv array
+        let argv_array_ptr = rsp - (argv_ptrs.len() * 8) as u64;
+        rsp = argv_array_ptr;
+        let argv_array_ptr_slice =
+            unsafe { core::slice::from_raw_parts_mut(argv_array_ptr as *mut u64, argv_ptrs.len()) };
+        argv_array_ptr_slice.copy_from_slice(&argv_ptrs);
+
+        // these are not needed really, since in x86_64 we are using the registers to pass arguments
+        // but we can keep it for the future
+        // add pointer to argv array
+        rsp -= 8;
+        assert!(rsp >= stack_top);
+        unsafe { (rsp as *mut u64).write(argv_array_ptr) };
+        // add argc
+        rsp -= 8;
+        assert!(rsp >= stack_top);
+        unsafe { (rsp as *mut u64).write(argc as u64) };
+
+        // switch back to the old vm
+        unsafe { old_vm.switch_to_this() };
+        // we can be interrupted again
+        cpu::cpu().pop_cli();
+
+        (rsp, argc as u64, argv_array_ptr)
     }
 }
 
