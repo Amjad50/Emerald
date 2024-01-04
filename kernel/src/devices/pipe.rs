@@ -76,7 +76,7 @@ impl Device for PipeSide {
             return Err(FileSystemError::ReadNotSupported);
         }
         let mut pipe = self.inner.lock();
-        if !pipe.write_side_available {
+        if !pipe.write_side_available && pipe.buffer.is_empty() {
             return Err(FileSystemError::EndOfFile);
         }
         let mut bytes_read = 0;
