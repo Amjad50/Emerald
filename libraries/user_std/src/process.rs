@@ -1,8 +1,8 @@
 use core::ffi::{c_char, CStr};
 
+pub use kernel_user_link::process::SpawnFileMapping;
 use kernel_user_link::{
     call_syscall,
-    process::SpawnFileMapping,
     syscalls::{SyscallError, SYS_EXIT, SYS_SPAWN},
 };
 
