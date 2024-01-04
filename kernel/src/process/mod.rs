@@ -205,6 +205,16 @@ impl Process {
         self.vm.is_address_mapped(address)
     }
 
+    pub fn finish_stdio(&mut self) {
+        // make sure we have STDIN/STDOUT/STDERR, and the allocator is after them
+        assert!(self.open_files.len() >= 3);
+        if self.file_index_allocator.next_id.load(Ordering::Relaxed) < 3 {
+            self.file_index_allocator
+                .next_id
+                .store(3, Ordering::Relaxed);
+        }
+    }
+
     pub fn push_file(&mut self, file: fs::File) -> usize {
         let fd = self.file_index_allocator.allocate() as usize;
         assert!(

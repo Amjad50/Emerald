@@ -295,6 +295,8 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     })?;
 
     let new_pid = new_process.id();
+    // make sure fds are setup correctly
+    new_process.finish_stdio();
     scheduler::push_process(new_process);
 
     SyscallResult::Ok(new_pid)
