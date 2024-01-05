@@ -320,8 +320,9 @@ extern "x86-interrupt" fn default_handler_with_error<const N: u8>(
     unsafe {
         core::arch:: asm!("mov {}, cr2", out(reg) cr2);
     }
+    let current_cpu = super::cpu();
+    let proc_id = current_cpu.context.map(|_| current_cpu.process_id);
     panic!(
-        "[{N}] Got exception: \n frame: {:x?}\n error: {:016X}\n cr2: {:X}",
-        frame, error_code, cr2
+        "[{N}] {proc_id:?} Got exception: \n frame: {frame:x?}\n error: {error_code:016X}\n cr2: {cr2:X}",
     );
 }
