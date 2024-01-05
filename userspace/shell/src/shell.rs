@@ -19,9 +19,6 @@ fn main() {
         let mut input = String::new();
         io::stdin().read_line(&mut input).unwrap();
 
-        // for now, forward back to stdout, since we don't have interactive control yet
-        io::stdout().write(&input.as_bytes()).unwrap();
-
         let input = input.trim();
         let args = input.split_whitespace().collect::<Vec<_>>();
 
