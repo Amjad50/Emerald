@@ -1,15 +1,17 @@
 #![feature(restricted_std)]
 
+use std::process::ExitCode;
+
 /// Echo shell program
 ///
 /// Usage: echo [string]
 
-fn main() {
+fn main() -> ExitCode {
     let args = std::env::args().collect::<Vec<_>>();
 
     if args.len() < 2 {
         println!("Usage: {} [string]", args[0]);
-        return;
+        return ExitCode::FAILURE;
     }
 
     // output directly to stdout all args
@@ -17,4 +19,6 @@ fn main() {
         print!("{} ", arg);
     }
     println!();
+
+    ExitCode::SUCCESS
 }

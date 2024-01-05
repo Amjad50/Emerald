@@ -1,17 +1,17 @@
 #![feature(restricted_std)]
 
-use std::io::Read;
+use std::{io::Read, process::ExitCode};
 
 /// Cat shell program
 ///
 /// Usage: cat [file]
 
-fn main() {
+fn main() -> ExitCode {
     let args = std::env::args().collect::<Vec<_>>();
 
     if args.len() < 2 {
         println!("Usage: {} [file]", args[0]);
-        return;
+        return ExitCode::FAILURE;
     }
 
     let file = &args[1];
@@ -20,7 +20,7 @@ fn main() {
         Ok(f) => f,
         Err(e) => {
             println!("[!] error: {}", e);
-            return;
+            return ExitCode::FAILURE;
         }
     };
 
@@ -34,8 +34,10 @@ fn main() {
             }
             Err(e) => {
                 println!("[!] error: {}", e);
-                return;
+                return ExitCode::FAILURE;
             }
         }
     }
+
+    ExitCode::SUCCESS
 }
