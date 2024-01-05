@@ -16,7 +16,11 @@ For building just the kernel ELF file:
 ```sh
 cargo build
 ```
-For building the ISO image:
+For building the ISO image, you can use `make` but you need to have other dependencies installed to build and run the ISO:
+```
+xorriso mtools grub-pc-bin qemu-system-x86
+```
+Build:
 ```sh
 cargo make kernel_iso
 ```
