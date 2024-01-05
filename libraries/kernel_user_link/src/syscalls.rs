@@ -6,18 +6,19 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 9;
+pub const NUM_SYSCALLS: usize = 10;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
     pub const SYS_WRITE: u64 = 1;
     pub const SYS_READ: u64 = 2;
     pub const SYS_CLOSE: u64 = 3;
-    pub const SYS_EXIT: u64 = 4;
-    pub const SYS_SPAWN: u64 = 5;
-    pub const SYS_INC_HEAP: u64 = 6;
-    pub const SYS_CREATE_PIPE: u64 = 7;
-    pub const SYS_WAIT_PID: u64 = 8;
+    pub const SYS_BLOCKING_MODE: u64 = 4;
+    pub const SYS_EXIT: u64 = 5;
+    pub const SYS_SPAWN: u64 = 6;
+    pub const SYS_INC_HEAP: u64 = 7;
+    pub const SYS_CREATE_PIPE: u64 = 8;
+    pub const SYS_WAIT_PID: u64 = 9;
 }
 pub use numbers::*;
 

@@ -25,15 +25,16 @@ use super::scheduler::{exit_current_process, with_current_process};
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
 const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
-    sys_open,        // kernel_user_link::syscalls::SYS_OPEN
-    sys_write,       // kernel_user_link::syscalls::SYS_WRITE
-    sys_read,        // kernel_user_link::syscalls::SYS_READ
-    sys_close,       // kernel_user_link::syscalls::SYS_CLOSE
-    sys_exit,        // kernel_user_link::syscalls::SYS_EXIT
-    sys_spawn,       // kernel_user_link::syscalls::SYS_SPAWN
-    sys_inc_heap,    // kernel_user_link::syscalls::SYS_INC_HEAP
-    sys_create_pipe, // kernel_user_link::syscalls::SYS_CREATE_PIPE
-    sys_wait_pid,    // kernel_user_link::syscalls::SYS_WAIT_PID
+    sys_open,          // kernel_user_link::syscalls::SYS_OPEN
+    sys_write,         // kernel_user_link::syscalls::SYS_WRITE
+    sys_read,          // kernel_user_link::syscalls::SYS_READ
+    sys_close,         // kernel_user_link::syscalls::SYS_CLOSE
+    sys_blocking_mode, // kernel_user_link::syscalls::SYS_BLOCKING_MODE
+    sys_exit,          // kernel_user_link::syscalls::SYS_EXIT
+    sys_spawn,         // kernel_user_link::syscalls::SYS_SPAWN
+    sys_inc_heap,      // kernel_user_link::syscalls::SYS_INC_HEAP
+    sys_create_pipe,   // kernel_user_link::syscalls::SYS_CREATE_PIPE
+    sys_wait_pid,      // kernel_user_link::syscalls::SYS_WAIT_PID
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -240,6 +241,26 @@ fn sys_close(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         process
             .take_file(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
+        Ok::<_, SyscallError>(())
+    })?;
+
+    SyscallResult::Ok(0)
+}
+
+fn sys_blocking_mode(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (file_index, blocking_mode, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => usize),
+        sys_arg!(1, all_state.rest => u64),
+    };
+
+    let blocking_mode = kernel_user_link::file::parse_blocking_mode(blocking_mode)
+        .ok_or(to_arg_err!(1, SyscallArgError::GeneralInvalid))?;
+
+    with_current_process(|process| {
+        let file = process
+            .get_file(file_index)
+            .ok_or(SyscallError::InvalidFileIndex)?;
+        file.set_blocking(blocking_mode);
         Ok::<_, SyscallError>(())
     })?;
 
