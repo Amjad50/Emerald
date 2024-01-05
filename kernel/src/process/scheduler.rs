@@ -179,18 +179,21 @@ pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
     // go back to the kernel after the scheduler interrupt
 }
 
+pub fn is_process_running(pid: u64) -> bool {
+    let scheduler = SCHEDULER.lock();
+    scheduler.processes.iter().any(|p| p.id == pid)
+}
+
 pub fn wait_for_pid(all_state: &mut InterruptAllSavedState, pid: u64) -> bool {
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
 
-    let scheduler = SCHEDULER.lock();
     // we can't wait for a process that doesn't exist now, unless we are a parent of a process that has exited
     // see [`exit_current_process`]
-    let process_found = scheduler.processes.iter().any(|p| p.id == pid);
+    let process_found = is_process_running(pid);
     if !process_found {
         return false;
     }
-    drop(scheduler);
 
     // save context of this process and mark it as waiting
     with_current_process(|process| {

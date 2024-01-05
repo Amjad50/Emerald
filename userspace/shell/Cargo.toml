@@ -5,6 +5,18 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "shell"
+path = "src/shell.rs"
+
+[[bin]]
+name = "echo"
+path = "src/echo.rs"
+
+[[bin]]
+name = "cat"
+path = "src/cat.rs"
+
 [dependencies]
 std = { path = "../../extern/rust/library/std", default-features = false }
 panic_abort = { path = "../../extern/rust/library/panic_abort" }

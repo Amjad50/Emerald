@@ -1,7 +1,10 @@
 use core::ffi::CStr;
 
 use kernel_user_link::call_syscall;
+pub use kernel_user_link::file::BlockingMode;
 use kernel_user_link::syscalls::SyscallError;
+use kernel_user_link::syscalls::SYS_BLOCKING_MODE;
+use kernel_user_link::syscalls::SYS_CLOSE;
 use kernel_user_link::syscalls::SYS_CREATE_PIPE;
 use kernel_user_link::syscalls::SYS_OPEN;
 use kernel_user_link::syscalls::SYS_READ;
@@ -45,7 +48,7 @@ pub unsafe fn syscall_open(
     path: &CStr,
     access_mode: usize,
     flags: usize,
-) -> Result<u64, SyscallError> {
+) -> Result<usize, SyscallError> {
     unsafe {
         call_syscall!(
             SYS_OPEN,
@@ -53,6 +56,19 @@ pub unsafe fn syscall_open(
             access_mode as u64,   // access_mode
             flags as u64          // flags
         )
+        .map(|fd| fd as usize)
+    }
+}
+
+/// # Safety
+/// This function assumes that `fd` is a valid file descriptor.
+pub unsafe fn syscall_close(fd: usize) -> Result<(), SyscallError> {
+    unsafe {
+        call_syscall!(
+            SYS_CLOSE,
+            fd,                  // fd
+        )
+        .map(|e| assert!(e == 0))
     }
 }
 
@@ -71,4 +87,21 @@ pub unsafe fn syscall_create_pipe() -> Result<(usize, usize), SyscallError> {
     };
 
     Ok((in_fd as usize, out_fd as usize))
+}
+
+/// # Safety
+/// This function assumes that `fd` is a valid file descriptor.
+pub unsafe fn syscall_blocking_mode(
+    fd: usize,
+    blocking_mode: BlockingMode,
+) -> Result<(), SyscallError> {
+    let mode = blocking_mode.to_u64();
+    unsafe {
+        call_syscall!(
+            SYS_BLOCKING_MODE,
+            fd,   // fd
+            mode  // mode
+        )
+        .map(|e| assert!(e == 0))
+    }
 }

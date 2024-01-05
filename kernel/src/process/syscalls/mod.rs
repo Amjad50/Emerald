@@ -25,14 +25,16 @@ use super::scheduler::{exit_current_process, with_current_process};
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
 const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
-    sys_open,        // kernel_user_link::syscalls::SYS_OPEN
-    sys_write,       // kernel_user_link::syscalls::SYS_WRITE
-    sys_read,        // kernel_user_link::syscalls::SYS_READ
-    sys_exit,        // kernel_user_link::syscalls::SYS_EXIT
-    sys_spawn,       // kernel_user_link::syscalls::SYS_SPAWN
-    sys_inc_heap,    // kernel_user_link::syscalls::SYS_INC_HEAP
-    sys_create_pipe, // kernel_user_link::syscalls::SYS_CREATE_PIPE
-    sys_wait_pid,    // kernel_user_link::syscalls::SYS_WAIT_PID
+    sys_open,          // kernel_user_link::syscalls::SYS_OPEN
+    sys_write,         // kernel_user_link::syscalls::SYS_WRITE
+    sys_read,          // kernel_user_link::syscalls::SYS_READ
+    sys_close,         // kernel_user_link::syscalls::SYS_CLOSE
+    sys_blocking_mode, // kernel_user_link::syscalls::SYS_BLOCKING_MODE
+    sys_exit,          // kernel_user_link::syscalls::SYS_EXIT
+    sys_spawn,         // kernel_user_link::syscalls::SYS_SPAWN
+    sys_inc_heap,      // kernel_user_link::syscalls::SYS_INC_HEAP
+    sys_create_pipe,   // kernel_user_link::syscalls::SYS_CREATE_PIPE
+    sys_wait_pid,      // kernel_user_link::syscalls::SYS_WAIT_PID
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -167,14 +169,14 @@ fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_write(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (file_index, buf, size, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => u64),
+        sys_arg!(0, all_state.rest => usize),
         sys_arg!(1, all_state.rest => *const u8),
         sys_arg!(2, all_state.rest => u64),
     };
     let buf = sys_arg_to_byte_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
     let bytes_written = with_current_process(|process| -> Result<u64, SyscallError> {
         let file = process
-            .get_file(file_index as _)
+            .get_file(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
 
         file.write(buf).map_err(|e| e.into())
@@ -184,7 +186,7 @@ fn sys_write(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (file_index, buf, size, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => u64),
+        sys_arg!(0, all_state.rest => usize),
         sys_arg!(1, all_state.rest => *mut u8),
         sys_arg!(2, all_state.rest => u64),
     };
@@ -205,12 +207,12 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     // A good solution would be to have waitable objects.
     let (bytes_read, file) = with_current_process(|process| {
         let file = process
-            .get_file(file_index as _)
+            .get_file(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
         if file.is_blocking() {
             // take file now
             let file = process
-                .take_file(file_index as _)
+                .take_file(file_index)
                 .ok_or(SyscallError::InvalidFileIndex)?;
             Ok((0, Some(file)))
         } else {
@@ -222,12 +224,47 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let bytes_read = if let Some(mut file) = file {
         let bytes_read = file.read(buf)?;
         // put file back
-        with_current_process(|process| process.put_file(file_index as _, file));
+        with_current_process(|process| process.put_file(file_index, file));
         bytes_read
     } else {
         bytes_read
     };
     SyscallResult::Ok(bytes_read as u64)
+}
+
+fn sys_close(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (file_index, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => usize),
+    };
+
+    with_current_process(|process| {
+        process
+            .take_file(file_index)
+            .ok_or(SyscallError::InvalidFileIndex)?;
+        Ok::<_, SyscallError>(())
+    })?;
+
+    SyscallResult::Ok(0)
+}
+
+fn sys_blocking_mode(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (file_index, blocking_mode, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => usize),
+        sys_arg!(1, all_state.rest => u64),
+    };
+
+    let blocking_mode = kernel_user_link::file::parse_blocking_mode(blocking_mode)
+        .ok_or(to_arg_err!(1, SyscallArgError::GeneralInvalid))?;
+
+    with_current_process(|process| {
+        let file = process
+            .get_file(file_index)
+            .ok_or(SyscallError::InvalidFileIndex)?;
+        file.set_blocking(blocking_mode);
+        Ok::<_, SyscallError>(())
+    })?;
+
+    SyscallResult::Ok(0)
 }
 
 fn sys_exit(all_state: &mut InterruptAllSavedState) -> SyscallResult {
@@ -245,10 +282,10 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
         sys_arg!(1, all_state.rest => *const u8),   // array of pointers
         sys_arg!(2, all_state.rest => *const u8),   // array of mappings or null
-        sys_arg!(3, all_state.rest => u64),       // size of the array
+        sys_arg!(3, all_state.rest => usize),       // size of the array
     };
     let argv = sys_arg_to_str_array(argv).map_err(|err| to_arg_err!(1, err))?;
-    let file_mappings = sys_arg_to_file_mappings_array(file_mappings, file_mappings_size as usize)
+    let file_mappings = sys_arg_to_file_mappings_array(file_mappings, file_mappings_size)
         .map_err(|err| to_arg_err!(2, err))?;
 
     // don't go into lock if no need to
@@ -278,8 +315,8 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
                 .take_file(mapping.src_fd as _)
                 .ok_or(SyscallError::InvalidFileIndex)?;
             new_process.attach_file_to_fd(mapping.dst_fd as _, file);
-            if mapping.dst_fd as usize <= FD_STDERR {
-                std_needed[mapping.dst_fd as usize] = false;
+            if mapping.dst_fd <= FD_STDERR {
+                std_needed[mapping.dst_fd] = false;
             }
         }
 
@@ -320,8 +357,8 @@ fn sys_inc_heap(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_create_pipe(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (read_fd_ptr, write_fd_ptr, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => *mut u64),
-        sys_arg!(1, all_state.rest => *mut u64),
+        sys_arg!(0, all_state.rest => *mut usize),
+        sys_arg!(1, all_state.rest => *mut usize),
     };
     check_ptr(read_fd_ptr as *const u8, 8).map_err(|err| to_arg_err!(0, err))?;
     check_ptr(write_fd_ptr as *const u8, 8).map_err(|err| to_arg_err!(1, err))?;
@@ -332,22 +369,31 @@ fn sys_create_pipe(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     });
 
     unsafe {
-        *read_fd_ptr = read_fd as u64;
-        *write_fd_ptr = write_fd as u64;
+        *read_fd_ptr = read_fd;
+        *write_fd_ptr = write_fd;
     }
 
     SyscallResult::Ok(0)
 }
 
 fn sys_wait_pid(all_state: &mut InterruptAllSavedState) -> SyscallResult {
-    let (pid, ..) = verify_args! {
+    let (pid, block, ..) = verify_args! {
         sys_arg!(0, all_state.rest => u64),
+        sys_arg!(1, all_state.rest => u64),
     };
+    let block = block != 0;
 
     // see if this is a child process
     let process_exit = with_current_process(|process| process.get_child_exit(pid));
     if let Some(exit_code) = process_exit {
         return SyscallResult::Ok(exit_code as u64);
+    }
+
+    if !block {
+        if scheduler::is_process_running(pid) {
+            return Err(SyscallError::ProcessStillRunning);
+        }
+        return Err(SyscallError::PidNotFound);
     }
 
     // if not, wait for it

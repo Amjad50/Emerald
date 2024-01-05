@@ -33,7 +33,12 @@ pub trait Device: Sync + Send + fmt::Debug {
     fn write(&self, _offset: u32, _buf: &[u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::WriteNotSupported)
     }
+    /// Informs the device that it is closed.
     fn close(&self) -> Result<(), FileSystemError> {
+        Ok(())
+    }
+    /// Informs the device that it is cloned.
+    fn clone_device(&self) -> Result<(), FileSystemError> {
         Ok(())
     }
 }

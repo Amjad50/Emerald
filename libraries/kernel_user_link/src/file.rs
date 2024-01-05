@@ -3,14 +3,13 @@
 /// 0 - non-blocking
 /// 1 - line buffered
 ///
-/// In order to use `Block` mode, you need to issue a special syscall to modify the
-/// properties of the file blocking mode
-/// TODO: add this syscall
+/// In order to use `Block` mode, you need to issue `syscall_blocking_mode`
+///  with the whole range of blocking modes available for usage
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockingMode {
     None,
     Line,
-    Block(usize),
+    Block(u32),
 }
 
 impl BlockingMode {
@@ -19,6 +18,26 @@ impl BlockingMode {
             0 => BlockingMode::None,
             1 => BlockingMode::Line,
             _ => unreachable!(),
+        }
+    }
+
+    pub fn from_blocking_mode_num(blocking_mode: u64) -> Option<BlockingMode> {
+        let mode = blocking_mode & 3;
+        let rest = blocking_mode >> 2;
+
+        match mode {
+            0 if rest == 0 => Some(BlockingMode::None),
+            1 if rest == 0 => Some(BlockingMode::Line),
+            3 if rest != 0 && rest <= 0xFFFF_FFFF => Some(BlockingMode::Block(rest as u32)),
+            _ => None,
+        }
+    }
+
+    pub fn to_u64(&self) -> u64 {
+        match self {
+            BlockingMode::None => 0,
+            BlockingMode::Line => 1,
+            BlockingMode::Block(num) => (*num as u64) << 2 | 3,
         }
     }
 }
@@ -34,4 +53,8 @@ pub fn parse_flags(flags: u64) -> Option<BlockingMode> {
     } else {
         None
     }
+}
+
+pub fn parse_blocking_mode(blocking_mode: u64) -> Option<BlockingMode> {
+    BlockingMode::from_blocking_mode_num(blocking_mode)
 }
