@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicUsize, Ordering};
+
 use alloc::{collections::VecDeque, string::String, sync::Arc};
 use kernel_user_link::file::BlockingMode;
 
@@ -21,10 +23,12 @@ pub fn create_pipe_pair() -> (fs::File, fs::File) {
     let read_device = Arc::new(PipeSide {
         inner: pipe.clone(),
         is_read_side: true,
+        clones: AtomicUsize::new(1),
     });
     let write_device = Arc::new(PipeSide {
         inner: pipe.clone(),
         is_read_side: false,
+        clones: AtomicUsize::new(1),
     });
 
     let read_inode = INode::new_device(
@@ -63,6 +67,7 @@ struct InnerPipe {
 #[derive(Debug)]
 pub struct PipeSide {
     inner: Arc<Mutex<InnerPipe>>,
+    clones: AtomicUsize,
     is_read_side: bool,
 }
 
@@ -105,7 +110,17 @@ impl Device for PipeSide {
         Ok(buf.len() as u64)
     }
 
+    fn clone_device(&self) -> Result<(), FileSystemError> {
+        self.clones.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
     fn close(&self) -> Result<(), FileSystemError> {
+        // only close the pipe when all clones are closed
+        if self.clones.fetch_sub(1, Ordering::AcqRel) != 1 {
+            return Ok(());
+        }
+
         let mut pipe = self.inner.lock();
         if self.is_read_side {
             pipe.read_side_available = false;

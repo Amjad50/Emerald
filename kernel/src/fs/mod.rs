@@ -408,7 +408,6 @@ pub(crate) fn inode_to_file(
     }
 }
 
-#[derive(Clone)]
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
     path: String,
@@ -548,9 +547,25 @@ impl File {
         self.blocking_mode = blocking_mode;
     }
 
+    /// This is a move verbose method than `Clone::clone`, as I want it to be
+    /// more explicit to the user that this is not a normal `clone` operation.
     pub fn clone_inherit(&self) -> Self {
-        let mut s = self.clone();
-        s.position = 0;
+        let s = Self {
+            filesystem: self.filesystem.clone(),
+            path: self.path.clone(),
+            inode: self.inode.clone(),
+            position: 0,
+            blocking_mode: self.blocking_mode,
+        };
+
+        // inform the device of a clone operation
+        s.inode.device.as_ref().map(|device| {
+            device
+                .clone_device()
+                // TODO: maybe use error handling instead
+                .expect("Failed to clone device for file")
+        });
+
         s
     }
 }
