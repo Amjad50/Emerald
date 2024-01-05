@@ -223,6 +223,7 @@ pub enum SyscallError {
     EndOfFile = 9,
     FileNotFound = 10,
     PidNotFound = 11,
+    ProcessStillRunning = 12,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -308,6 +309,7 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::EndOfFile => 9 << 56,
                 SyscallError::FileNotFound => 10 << 56,
                 SyscallError::PidNotFound => 11 << 56,
+                SyscallError::ProcessStillRunning => 12 << 56,
             };
 
             err_upper | (1 << 63)
@@ -356,6 +358,7 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             9 => SyscallError::EndOfFile,
             10 => SyscallError::FileNotFound,
             11 => SyscallError::PidNotFound,
+            12 => SyscallError::ProcessStillRunning,
             _ => invalid_error_code(()),
         };
         SyscallResult::Err(err)

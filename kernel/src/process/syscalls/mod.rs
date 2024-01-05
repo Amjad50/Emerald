@@ -356,14 +356,23 @@ fn sys_create_pipe(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 }
 
 fn sys_wait_pid(all_state: &mut InterruptAllSavedState) -> SyscallResult {
-    let (pid, ..) = verify_args! {
+    let (pid, block, ..) = verify_args! {
         sys_arg!(0, all_state.rest => u64),
+        sys_arg!(1, all_state.rest => u64),
     };
+    let block = block != 0;
 
     // see if this is a child process
     let process_exit = with_current_process(|process| process.get_child_exit(pid));
     if let Some(exit_code) = process_exit {
         return SyscallResult::Ok(exit_code as u64);
+    }
+
+    if !block {
+        if scheduler::is_process_running(pid) {
+            return Err(SyscallError::ProcessStillRunning);
+        }
+        return Err(SyscallError::PidNotFound);
     }
 
     // if not, wait for it
