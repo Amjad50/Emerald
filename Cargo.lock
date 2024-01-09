@@ -33,16 +33,15 @@ checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
 
 [[package]]
 name = "amjad_os_kernel_user_link"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "compiler_builtins",
- "rustc-std-workspace-alloc",
  "rustc-std-workspace-core",
 ]
 
 [[package]]
 name = "amjad_os_user_std"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "amjad_os_kernel_user_link",
  "compiler_builtins",
@@ -244,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "increasing_heap_allocator"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-alloc",

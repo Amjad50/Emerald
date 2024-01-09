@@ -1,6 +1,6 @@
 [package]
 name = "amjad_os_user_std"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 readme = "README.md"
 authors = ["Amjad Alsharafi"]
@@ -13,8 +13,8 @@ categories = ["os"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-increasing_heap_allocator = { version="0.1.0", path = "../increasing_heap_allocator" }
-kernel_user_link = { version="0.1.0", path = "../kernel_user_link", package = "amjad_os_kernel_user_link" }
+increasing_heap_allocator = { version="0.1.1", path = "../increasing_heap_allocator" }
+kernel_user_link = { version="0.1.1", path = "../kernel_user_link", package = "amjad_os_kernel_user_link" }
 
 core = { version = "1.0.0", optional = true, package = "rustc-std-workspace-core" }
 compiler_builtins = { version = "0.1.2", optional = true }
@@ -25,6 +25,7 @@ rustc-dep-of-std = [
     "core",
     "compiler_builtins",
     "alloc",
+    "compiler_builtins/mem",
     "kernel_user_link/rustc-dep-of-std",
     "increasing_heap_allocator/rustc-dep-of-std"
 ]

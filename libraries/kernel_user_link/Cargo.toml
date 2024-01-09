@@ -1,6 +1,6 @@
 [package]
 name = "amjad_os_kernel_user_link"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 readme = "README.md"
 authors = ["Amjad Alsharafi"]
@@ -15,11 +15,9 @@ categories = ["kernel", "os"]
 [dependencies]
 core = { version = "1.0.0", optional = true, package = "rustc-std-workspace-core" }
 compiler_builtins = { version = "0.1.2", optional = true }
-alloc = { version = "1.0.0", optional = true, package = "rustc-std-workspace-alloc" }
 
 [features]
 rustc-dep-of-std = [
     "core",
     "compiler_builtins",
-    "alloc",
 ]
