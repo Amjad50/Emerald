@@ -198,6 +198,9 @@ pub trait FileSystem: Send + Sync {
         position: u64,
         buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
+        if inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
         if let Some(device) = inode.device() {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.read(position, buf)
@@ -207,6 +210,9 @@ pub trait FileSystem: Send + Sync {
     }
 
     fn write_file(&self, inode: &INode, position: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
+        if inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
         if let Some(device) = inode.device() {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.write(position, buf)

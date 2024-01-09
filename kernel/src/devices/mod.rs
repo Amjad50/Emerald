@@ -69,6 +69,9 @@ impl FileSystem for Mutex<Devices> {
     }
 
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+        if !inode.is_dir() {
+            return Err(FileSystemError::IsNotDirectory);
+        }
         assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_CLUSTER_MAGIC);
         self.open_dir(inode.name())
     }
