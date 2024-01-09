@@ -378,25 +378,64 @@ pub(crate) fn open_blocking(
     path: &str,
     blocking_mode: BlockingMode,
 ) -> Result<File, FileSystemError> {
+    let (filesystem, inode) = open_inode(path)?;
+
+    if inode.is_dir() {
+        return Err(FileSystemError::IsDirectory);
+    }
+
+    Ok(File {
+        filesystem,
+        path: String::from(path),
+        inode,
+        position: 0,
+        blocking_mode,
+    })
+}
+
+/// Open the inode of a path, this include directories and files.
+pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), FileSystemError> {
     let last_slash = path.rfind('/');
 
-    let (parent_dir, basename) = match last_slash {
+    let (parent_dir, mut basename) = match last_slash {
         Some(index) => path.split_at(index + 1),
         None => return Err(FileSystemError::InvalidPath),
     };
 
-    let (parent_dir, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(parent_dir)?;
+    let (mut parent_dir, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(parent_dir)?;
 
-    let filesystem_clone = filesystem.clone();
+    let mut opening_dir = false;
+    // if no basename, this is a directory (either root or inner directory)
+    if basename == "" {
+        if parent_dir == "/" || parent_dir == "" {
+            // we are opening the root of this filesystem
+            return filesystem.open_root().map(|inode| (filesystem, inode));
+        } else {
+            // we are opening a folder in this filesystem
+            // split the `parent_dir` again
+            // remove the last slash first so we can find the one after it
+            parent_dir = &parent_dir[..parent_dir.len() - 1];
+            let last_slash = parent_dir.rfind('/');
+            match last_slash {
+                Some(index) => {
+                    basename = &parent_dir[index + 1..];
+                    parent_dir = &parent_dir[..index + 1];
+                }
+                None => return Err(FileSystemError::InvalidPath),
+            }
+
+            // we are opening a folder (i.e. the path ends with /)
+            opening_dir = true;
+        }
+    }
+
     for entry in filesystem.open_dir(parent_dir)? {
         if entry.name() == basename {
-            return Ok(File {
-                filesystem: filesystem_clone,
-                path: String::from(path),
-                inode: entry,
-                position: 0,
-                blocking_mode,
-            });
+            // if this is a file, return error if we requst a directory (using "/")
+            if !entry.is_dir() && opening_dir {
+                return Err(FileSystemError::IsNotDirectory);
+            }
+            return Ok((filesystem, entry));
         }
     }
 
