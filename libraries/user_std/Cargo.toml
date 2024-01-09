@@ -1,6 +1,6 @@
 [package]
 name = "amjad_os_user_std"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 readme = "README.md"
 authors = ["Amjad Alsharafi"]

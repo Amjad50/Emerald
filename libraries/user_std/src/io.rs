@@ -10,6 +10,7 @@ use kernel_user_link::syscalls::SYS_CLOSE;
 use kernel_user_link::syscalls::SYS_CREATE_PIPE;
 use kernel_user_link::syscalls::SYS_OPEN;
 use kernel_user_link::syscalls::SYS_READ;
+use kernel_user_link::syscalls::SYS_STAT;
 use kernel_user_link::syscalls::SYS_WRITE;
 pub use kernel_user_link::FD_STDERR;
 pub use kernel_user_link::FD_STDIN;
@@ -115,7 +116,7 @@ pub unsafe fn syscall_stat(path: &CStr, stat: &mut FileStat) -> Result<(), Sysca
     let stat_ptr = stat as *mut FileStat as u64;
     unsafe {
         call_syscall!(
-            SYS_BLOCKING_MODE,
+            SYS_STAT,
             path.as_ptr() as u64, // path
             stat_ptr              // stat_ptr
         )
