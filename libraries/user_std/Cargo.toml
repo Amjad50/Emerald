@@ -8,3 +8,16 @@ edition = "2021"
 [dependencies]
 increasing_heap_allocator = { path = "../increasing_heap_allocator" }
 kernel_user_link = { path = "../kernel_user_link" }
+
+core = { version = "1.0.0", optional = true, package = "rustc-std-workspace-core" }
+compiler_builtins = { version = "0.1.2", optional = true }
+alloc = { version = "1.0.0", optional = true, package = "rustc-std-workspace-alloc" }
+
+[features]
+rustc-dep-of-std = [
+    "core",
+    "compiler_builtins",
+    "alloc",
+    "kernel_user_link/rustc-dep-of-std",
+    "increasing_heap_allocator/rustc-dep-of-std"
+]

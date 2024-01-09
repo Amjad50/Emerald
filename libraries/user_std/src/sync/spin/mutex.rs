@@ -31,7 +31,7 @@ where
 }
 
 #[must_use]
-pub struct MutexGuard<'a, T: ?Sized + 'a> {
+pub struct MutexGuard<'a, T: ?Sized> {
     lock: &'a Mutex<T>,
     marker: PhantomData<*const ()>, // !Send
 }
@@ -55,7 +55,7 @@ impl<T> Mutex<T> {
         }
     }
 
-    pub fn lock(&self) -> MutexGuard<T> {
+    pub fn lock(&self) -> MutexGuard<'_, T> {
         // SAFETY: we are the only accessor, and we are locking it, its never locked again until unlocked
         self.lock.lock();
         MutexGuard {
@@ -64,7 +64,7 @@ impl<T> Mutex<T> {
         }
     }
 
-    pub fn try_lock(&self) -> Option<MutexGuard<T>> {
+    pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
         if self.lock.try_lock() {
             Some(MutexGuard {
                 lock: self,

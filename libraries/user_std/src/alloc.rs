@@ -8,8 +8,6 @@ use kernel_user_link::{
 
 use crate::sync::{once::OnceLock, spin::mutex::Mutex};
 
-pub extern crate alloc;
-
 const PAGE_4K: usize = 0x1000;
 
 unsafe fn inc_dec_heap(increment: isize) -> Result<*mut u8, SyscallError> {
