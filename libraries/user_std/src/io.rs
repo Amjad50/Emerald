@@ -2,6 +2,8 @@ use core::ffi::CStr;
 
 use kernel_user_link::call_syscall;
 pub use kernel_user_link::file::BlockingMode;
+pub use kernel_user_link::file::FileStat;
+pub use kernel_user_link::file::FileType;
 use kernel_user_link::syscalls::SyscallError;
 use kernel_user_link::syscalls::SYS_BLOCKING_MODE;
 use kernel_user_link::syscalls::SYS_CLOSE;
@@ -101,6 +103,21 @@ pub unsafe fn syscall_blocking_mode(
             SYS_BLOCKING_MODE,
             fd,   // fd
             mode  // mode
+        )
+        .map(|e| assert!(e == 0))
+    }
+}
+
+/// # Safety
+/// This function assumes that `path` is a valid C string.
+/// Also assume `stat` is a valid pointer to a valid `FileStat` struct.
+pub unsafe fn syscall_stat(path: &CStr, stat: &mut FileStat) -> Result<(), SyscallError> {
+    let stat_ptr = stat as *mut FileStat as u64;
+    unsafe {
+        call_syscall!(
+            SYS_BLOCKING_MODE,
+            path.as_ptr() as u64, // path
+            stat_ptr              // stat_ptr
         )
         .map(|e| assert!(e == 0))
     }
