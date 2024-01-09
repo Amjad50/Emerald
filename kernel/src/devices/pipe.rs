@@ -41,14 +41,15 @@ pub fn create_pipe_pair() -> (fs::File, fs::File) {
         FileAttributes::EMPTY,
         Some(write_device),
     );
-    let read_file = fs::inode_to_file(
+    let read_file = fs::File::from_inode(
         read_inode,
         fs::empty_filesystem(),
         0,
         BlockingMode::Block(1),
     );
     // no blocking for write
-    let write_file = fs::inode_to_file(write_inode, fs::empty_filesystem(), 0, BlockingMode::None);
+    let write_file =
+        fs::File::from_inode(write_inode, fs::empty_filesystem(), 0, BlockingMode::None);
 
     (read_file, write_file)
 }

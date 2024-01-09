@@ -370,29 +370,6 @@ pub fn ls_dir(path: &str) -> Result<Vec<INode>, FileSystemError> {
     filesystem.open_dir(new_path)
 }
 
-pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
-    open_blocking(path, BlockingMode::None)
-}
-
-pub(crate) fn open_blocking(
-    path: &str,
-    blocking_mode: BlockingMode,
-) -> Result<File, FileSystemError> {
-    let (filesystem, inode) = open_inode(path)?;
-
-    if inode.is_dir() {
-        return Err(FileSystemError::IsDirectory);
-    }
-
-    Ok(File {
-        filesystem,
-        path: String::from(path),
-        inode,
-        position: 0,
-        blocking_mode,
-    })
-}
-
 /// Open the inode of a path, this include directories and files.
 pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), FileSystemError> {
     let last_slash = path.rfind('/');
@@ -442,22 +419,6 @@ pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), Fil
     Err(FileSystemError::FileNotFound)
 }
 
-pub(crate) fn inode_to_file(
-    inode: INode,
-    filesystem: Arc<dyn FileSystem>,
-    position: u64,
-    blocking_mode: BlockingMode,
-) -> File {
-    File {
-        filesystem,
-        // TODO: this is just the filename I think, not the full path
-        path: String::from(inode.name()),
-        inode,
-        position,
-        blocking_mode,
-    }
-}
-
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
     path: String,
@@ -467,6 +428,41 @@ pub struct File {
 }
 
 impl File {
+    pub fn open(path: &str) -> Result<Self, FileSystemError> {
+        Self::open_blocking(path, BlockingMode::None)
+    }
+    pub fn open_blocking(path: &str, blocking_mode: BlockingMode) -> Result<Self, FileSystemError> {
+        let (filesystem, inode) = open_inode(path)?;
+
+        if inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
+
+        Ok(Self {
+            filesystem,
+            path: String::from(path),
+            inode,
+            position: 0,
+            blocking_mode,
+        })
+    }
+
+    pub fn from_inode(
+        inode: INode,
+        filesystem: Arc<dyn FileSystem>,
+        position: u64,
+        blocking_mode: BlockingMode,
+    ) -> Self {
+        Self {
+            filesystem,
+            // TODO: this is just the filename I think, not the full path
+            path: String::from(inode.name()),
+            inode,
+            position,
+            blocking_mode,
+        }
+    }
+
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let count = match self.blocking_mode {
             BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,

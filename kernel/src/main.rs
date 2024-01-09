@@ -85,7 +85,7 @@ fn finish_boot() {
 }
 
 fn load_init_process() {
-    let mut init_file = fs::open("/init").expect("Could not find `init` file");
+    let mut init_file = fs::File::open("/init").expect("Could not find `init` file");
     let elf = Elf::load(&mut init_file).expect("Could not load init file");
     let mut process = Process::allocate_process(0, &elf, &mut init_file, Vec::new())
         .expect("Could not allocate process for `init`");
@@ -93,7 +93,7 @@ fn load_init_process() {
 
     // add the console to `init` manually, after that processes will either inherit it or open a pipe or something
     // to act as STDIN/STDOUT/STDERR
-    let console = fs::open_blocking("/devices/console", BlockingMode::Line)
+    let console = fs::File::open_blocking("/devices/console", BlockingMode::Line)
         .expect("Could not find `/devices/console`");
     process.attach_file_to_fd(FD_STDIN, console.clone_inherit());
     process.attach_file_to_fd(FD_STDOUT, console.clone_inherit());
