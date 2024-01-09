@@ -15,7 +15,7 @@ jobs:
           sudo apt install -y xorriso mtools grub-pc-bin qemu-system-x86
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2024-01-04
           components: rust-src
       - uses: davidB/rust-cargo-make@v1
       - uses: actions/checkout@v2
