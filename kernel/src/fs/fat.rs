@@ -381,11 +381,11 @@ impl DirectoryIterator<'_> {
                 (start_sector, 0, filesystem.read_sectors(start_sector, 1)?)
             }
             Directory::Normal { ref inode } => {
-                let start_sector = filesystem.first_sector_of_cluster(inode.start_cluster);
+                let start_sector = filesystem.first_sector_of_cluster(inode.start_cluster as u32);
 
                 (
                     start_sector,
-                    inode.start_cluster,
+                    inode.start_cluster as u32,
                     filesystem.read_sectors(start_sector, 1)?,
                 )
             }
@@ -569,8 +569,8 @@ impl Iterator for DirectoryIterator<'_> {
         let inode = INode::new_file(
             name,
             file_attribute_from_fat(attributes),
-            start_cluster,
-            size,
+            start_cluster as u64,
+            size as u64,
         );
 
         Some(inode)
@@ -689,10 +689,38 @@ impl FatFilesystem {
                 let inode = INode::new_file(
                     String::from("/"),
                     file_attribute_from_fat(attrs::DIRECTORY),
-                    root_cluster,
+                    root_cluster as u64,
                     0,
                 );
                 Ok(Directory::Normal { inode })
+            }
+        }
+    }
+
+    fn open_root_dir_inode(&self) -> Result<INode, FileSystemError> {
+        match self.boot_sector.ty {
+            FatType::Fat12 | FatType::Fat16 => {
+                // use a special inode for root
+                let inode = INode::new_file(
+                    String::from("/"),
+                    file_attribute_from_fat(attrs::DIRECTORY),
+                    self.boot_sector.root_dir_start_sector() as u64,
+                    self.boot_sector.root_dir_sectors() as u64
+                        * self.boot_sector.bytes_per_sector() as u64,
+                );
+
+                Ok(inode)
+            }
+            FatType::Fat32 => {
+                let root_cluster =
+                    unsafe { self.boot_sector.boot_sector.extended.fat32.root_cluster };
+                let inode = INode::new_file(
+                    String::from("/"),
+                    file_attribute_from_fat(attrs::DIRECTORY),
+                    root_cluster as u64,
+                    0,
+                );
+                Ok(inode)
             }
         }
     }
@@ -733,9 +761,30 @@ impl FatFilesystem {
         if !inode.is_dir() {
             return Err(FileSystemError::IsNotDirectory);
         }
-        let dir = Directory::Normal {
-            inode: inode.clone(),
+
+        let dir = match self.boot_sector.ty {
+            FatType::Fat12 | FatType::Fat16 => {
+                // try to see if this is the root
+                if inode.start_cluster() == self.boot_sector.root_dir_start_sector() as u64
+                    && inode.size()
+                        == self.boot_sector.root_dir_sectors() as u64
+                            * self.boot_sector.bytes_per_sector() as u64
+                {
+                    self.open_root_dir()?
+                } else {
+                    Directory::Normal {
+                        inode: inode.clone(),
+                    }
+                }
+            }
+            FatType::Fat32 => {
+                assert!(inode.size() == 0);
+                Directory::Normal {
+                    inode: inode.clone(),
+                }
+            }
         };
+
         DirectoryIterator::new(self, dir)
     }
 
@@ -748,16 +797,16 @@ impl FatFilesystem {
         if inode.is_dir() {
             return Err(FileSystemError::IsDirectory);
         }
-        if position >= inode.size {
+        if position >= inode.size as u32 {
             return Ok(0);
         }
-        let remaining_file = inode.size - position;
+        let remaining_file = inode.size as u32 - position;
         let max_to_read = (buf.len() as u32).min(remaining_file);
 
-        let mut cluster = inode.start_cluster;
+        let mut cluster = inode.start_cluster as u32;
         let cluster_index = position / self.boot_sector.bytes_per_cluster();
         for _ in 0..cluster_index {
-            cluster = match self.read_fat_entry(cluster) {
+            cluster = match self.read_fat_entry(cluster as u32) {
                 FatEntry::Next(next_cluster) => next_cluster,
                 FatEntry::EndOfChain => return Err(FatError::UnexpectedFatEntry.into()),
                 FatEntry::Bad => return Err(FatError::UnexpectedFatEntry.into()),
@@ -804,10 +853,11 @@ impl FileSystem for Mutex<FatFilesystem> {
     fn read_file(
         &self,
         inode: &INode,
-        position: u32,
+        position: u64,
         buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
-        self.lock().read_file(inode, position, buf)
+        assert!(position <= u32::MAX as u64);
+        self.lock().read_file(inode, position as u32, buf)
     }
 
     fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError> {
@@ -816,5 +866,9 @@ impl FileSystem for Mutex<FatFilesystem> {
 
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
         Ok(self.lock().open_dir_inode(inode)?.collect())
+    }
+
+    fn open_root(&self) -> Result<INode, FileSystemError> {
+        self.lock().open_root_dir_inode()
     }
 }

@@ -41,14 +41,15 @@ pub fn create_pipe_pair() -> (fs::File, fs::File) {
         FileAttributes::EMPTY,
         Some(write_device),
     );
-    let read_file = fs::inode_to_file(
+    let read_file = fs::File::from_inode(
         read_inode,
         fs::empty_filesystem(),
         0,
         BlockingMode::Block(1),
     );
     // no blocking for write
-    let write_file = fs::inode_to_file(write_inode, fs::empty_filesystem(), 0, BlockingMode::None);
+    let write_file =
+        fs::File::from_inode(write_inode, fs::empty_filesystem(), 0, BlockingMode::None);
 
     (read_file, write_file)
 }
@@ -76,7 +77,7 @@ impl Device for PipeSide {
         "pipe"
     }
 
-    fn read(&self, _offset: u32, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+    fn read(&self, _offset: u64, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         if !self.is_read_side {
             return Err(FileSystemError::ReadNotSupported);
         }
@@ -93,10 +94,10 @@ impl Device for PipeSide {
                 break;
             }
         }
-        Ok(bytes_read as u64)
+        Ok(bytes_read)
     }
 
-    fn write(&self, _offset: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+    fn write(&self, _offset: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
         if self.is_read_side {
             return Err(FileSystemError::WriteNotSupported);
         }

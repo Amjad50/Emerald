@@ -18,7 +18,7 @@ pub mod pipe;
 // TODO: replace with rwlock
 static DEVICES: OnceLock<Arc<Mutex<Devices>>> = OnceLock::new();
 
-pub(crate) const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u32 = 0xdef1ce5;
+pub(crate) const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u64 = 0xdef1ce5;
 
 #[derive(Debug)]
 struct Devices {
@@ -27,10 +27,10 @@ struct Devices {
 
 pub trait Device: Sync + Send + fmt::Debug {
     fn name(&self) -> &str;
-    fn read(&self, _offset: u32, _buf: &mut [u8]) -> Result<u64, FileSystemError> {
+    fn read(&self, _offset: u64, _buf: &mut [u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::ReadNotSupported)
     }
-    fn write(&self, _offset: u32, _buf: &[u8]) -> Result<u64, FileSystemError> {
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::WriteNotSupported)
     }
     /// Informs the device that it is closed.
@@ -44,6 +44,15 @@ pub trait Device: Sync + Send + fmt::Debug {
 }
 
 impl FileSystem for Mutex<Devices> {
+    fn open_root(&self) -> Result<INode, FileSystemError> {
+        Ok(INode::new_file(
+            String::from("/"),
+            FileAttributes::DIRECTORY,
+            DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+            0,
+        ))
+    }
+
     fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError> {
         if path == "/" {
             Ok(self
@@ -60,6 +69,9 @@ impl FileSystem for Mutex<Devices> {
     }
 
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+        if !inode.is_dir() {
+            return Err(FileSystemError::IsNotDirectory);
+        }
         assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_CLUSTER_MAGIC);
         self.open_dir(inode.name())
     }

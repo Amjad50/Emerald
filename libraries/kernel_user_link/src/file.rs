@@ -58,3 +58,23 @@ pub fn parse_flags(flags: u64) -> Option<BlockingMode> {
 pub fn parse_blocking_mode(blocking_mode: u64) -> Option<BlockingMode> {
     BlockingMode::from_blocking_mode_num(blocking_mode)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum FileType {
+    File,
+    Directory,
+}
+
+impl Default for FileType {
+    fn default() -> Self {
+        FileType::File
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[repr(C)]
+pub struct FileStat {
+    pub size: u64,
+    pub file_type: FileType,
+}

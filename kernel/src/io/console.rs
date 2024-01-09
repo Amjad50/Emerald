@@ -256,7 +256,7 @@ impl Device for ReMutex<RefCell<LateConsole>> {
         "console"
     }
 
-    fn read(&self, _offset: u32, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+    fn read(&self, _offset: u64, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let console = self.lock();
         let x = if let Ok(mut c) = console.try_borrow_mut() {
             unsafe { c.read(buf) }
@@ -267,7 +267,7 @@ impl Device for ReMutex<RefCell<LateConsole>> {
         Ok(x as u64)
     }
 
-    fn write(&self, _offset: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+    fn write(&self, _offset: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
         let console = self.lock();
         let x = if let Ok(mut c) = console.try_borrow_mut() {
             unsafe { c.write(buf) }

@@ -118,8 +118,8 @@ impl ops::BitOr for FileAttributes {
 pub struct INode {
     name: String,
     attributes: FileAttributes,
-    start_cluster: u32,
-    size: u32,
+    start_cluster: u64,
+    size: u64,
     device: Option<Arc<dyn Device>>,
 }
 
@@ -127,8 +127,8 @@ impl INode {
     pub fn new_file(
         name: String,
         attributes: FileAttributes,
-        start_cluster: u32,
-        size: u32,
+        start_cluster: u64,
+        size: u64,
     ) -> Self {
         Self {
             name,
@@ -157,7 +157,7 @@ impl INode {
         self.attributes.directory
     }
 
-    pub fn size(&self) -> u32 {
+    pub fn size(&self) -> u64 {
         self.size
     }
 
@@ -170,7 +170,7 @@ impl INode {
         self.attributes
     }
 
-    pub fn start_cluster(&self) -> u32 {
+    pub fn start_cluster(&self) -> u64 {
         self.start_cluster
     }
 
@@ -188,15 +188,19 @@ impl Drop for INode {
 }
 
 pub trait FileSystem: Send + Sync {
+    fn open_root(&self) -> Result<INode, FileSystemError>;
     // TODO: don't use Vector please, use an iterator somehow
     fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError>;
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
     fn read_file(
         &self,
         inode: &INode,
-        position: u32,
+        position: u64,
         buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
+        if inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
         if let Some(device) = inode.device() {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.read(position, buf)
@@ -205,7 +209,10 @@ pub trait FileSystem: Send + Sync {
         }
     }
 
-    fn write_file(&self, inode: &INode, position: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+    fn write_file(&self, inode: &INode, position: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
+        if inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
         if let Some(device) = inode.device() {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.write(position, buf)
@@ -218,6 +225,10 @@ pub trait FileSystem: Send + Sync {
 pub struct EmptyFileSystem;
 
 impl FileSystem for EmptyFileSystem {
+    fn open_root(&self) -> Result<INode, FileSystemError> {
+        Err(FileSystemError::FileNotFound)
+    }
+
     fn open_dir(&self, _path: &str) -> Result<Vec<INode>, FileSystemError> {
         Err(FileSystemError::FileNotFound)
     }
@@ -359,53 +370,53 @@ pub fn ls_dir(path: &str) -> Result<Vec<INode>, FileSystemError> {
     filesystem.open_dir(new_path)
 }
 
-pub(crate) fn open(path: &str) -> Result<File, FileSystemError> {
-    open_blocking(path, BlockingMode::None)
-}
-
-pub(crate) fn open_blocking(
-    path: &str,
-    blocking_mode: BlockingMode,
-) -> Result<File, FileSystemError> {
+/// Open the inode of a path, this include directories and files.
+pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), FileSystemError> {
     let last_slash = path.rfind('/');
 
-    let (parent_dir, basename) = match last_slash {
+    let (parent_dir, mut basename) = match last_slash {
         Some(index) => path.split_at(index + 1),
         None => return Err(FileSystemError::InvalidPath),
     };
 
-    let (parent_dir, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(parent_dir)?;
+    let (mut parent_dir, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(parent_dir)?;
 
-    let filesystem_clone = filesystem.clone();
+    let mut opening_dir = false;
+    // if no basename, this is a directory (either root or inner directory)
+    if basename == "" {
+        if parent_dir == "/" || parent_dir == "" {
+            // we are opening the root of this filesystem
+            return filesystem.open_root().map(|inode| (filesystem, inode));
+        } else {
+            // we are opening a folder in this filesystem
+            // split the `parent_dir` again
+            // remove the last slash first so we can find the one after it
+            parent_dir = &parent_dir[..parent_dir.len() - 1];
+            let last_slash = parent_dir.rfind('/');
+            match last_slash {
+                Some(index) => {
+                    basename = &parent_dir[index + 1..];
+                    parent_dir = &parent_dir[..index + 1];
+                }
+                None => return Err(FileSystemError::InvalidPath),
+            }
+
+            // we are opening a folder (i.e. the path ends with /)
+            opening_dir = true;
+        }
+    }
+
     for entry in filesystem.open_dir(parent_dir)? {
         if entry.name() == basename {
-            return Ok(File {
-                filesystem: filesystem_clone,
-                path: String::from(path),
-                inode: entry,
-                position: 0,
-                blocking_mode,
-            });
+            // if this is a file, return error if we requst a directory (using "/")
+            if !entry.is_dir() && opening_dir {
+                return Err(FileSystemError::IsNotDirectory);
+            }
+            return Ok((filesystem, entry));
         }
     }
 
     Err(FileSystemError::FileNotFound)
-}
-
-pub(crate) fn inode_to_file(
-    inode: INode,
-    filesystem: Arc<dyn FileSystem>,
-    position: u64,
-    blocking_mode: BlockingMode,
-) -> File {
-    File {
-        filesystem,
-        // TODO: this is just the filename I think, not the full path
-        path: String::from(inode.name()),
-        inode,
-        position,
-        blocking_mode,
-    }
 }
 
 pub struct File {
@@ -417,12 +428,44 @@ pub struct File {
 }
 
 impl File {
+    pub fn open(path: &str) -> Result<Self, FileSystemError> {
+        Self::open_blocking(path, BlockingMode::None)
+    }
+    pub fn open_blocking(path: &str, blocking_mode: BlockingMode) -> Result<Self, FileSystemError> {
+        let (filesystem, inode) = open_inode(path)?;
+
+        if inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
+
+        Ok(Self {
+            filesystem,
+            path: String::from(path),
+            inode,
+            position: 0,
+            blocking_mode,
+        })
+    }
+
+    pub fn from_inode(
+        inode: INode,
+        filesystem: Arc<dyn FileSystem>,
+        position: u64,
+        blocking_mode: BlockingMode,
+    ) -> Self {
+        Self {
+            filesystem,
+            // TODO: this is just the filename I think, not the full path
+            path: String::from(inode.name()),
+            inode,
+            position,
+            blocking_mode,
+        }
+    }
+
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let count = match self.blocking_mode {
-            BlockingMode::None => {
-                self.filesystem
-                    .read_file(&self.inode, self.position as u32, buf)?
-            }
+            BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,
             BlockingMode::Line => {
                 // read until \n or \0
                 let mut i = 0;
@@ -430,7 +473,7 @@ impl File {
                     let mut char_buf = 0;
                     let read_byte = self.filesystem.read_file(
                         &self.inode,
-                        self.position as u32,
+                        self.position,
                         core::slice::from_mut(&mut char_buf),
                     );
 
@@ -467,9 +510,7 @@ impl File {
 
                 // try to read until we have something
                 loop {
-                    let read_byte =
-                        self.filesystem
-                            .read_file(&self.inode, self.position as u32, buf);
+                    let read_byte = self.filesystem.read_file(&self.inode, self.position, buf);
 
                     let read_byte = match read_byte {
                         Ok(read_byte) => read_byte,
@@ -500,7 +541,7 @@ impl File {
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
         let written = self
             .filesystem
-            .write_file(&self.inode, self.position as u32, buf)?;
+            .write_file(&self.inode, self.position, buf)?;
         self.position += written;
         Ok(written)
     }

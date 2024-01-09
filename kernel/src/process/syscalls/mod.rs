@@ -35,6 +35,7 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_inc_heap,      // kernel_user_link::syscalls::SYS_INC_HEAP
     sys_create_pipe,   // kernel_user_link::syscalls::SYS_CREATE_PIPE
     sys_wait_pid,      // kernel_user_link::syscalls::SYS_WAIT_PID
+    sys_stat,          // kernel_user_link::syscalls::SYS_STAT
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -161,7 +162,7 @@ fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let blocking_mode = kernel_user_link::file::parse_flags(flags)
         .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
     // TODO: implement flags and access_mode, for now just open file for reading
-    let file = fs::open_blocking(path, blocking_mode)?;
+    let file = fs::File::open_blocking(path, blocking_mode)?;
     let file_index = with_current_process(|process| process.push_file(file));
 
     SyscallResult::Ok(file_index as u64)
@@ -301,7 +302,7 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         })?;
     }
 
-    let mut file = fs::open(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
+    let mut file = fs::File::open(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
     let elf = Elf::load(&mut file).map_err(|_| SyscallError::CouldNotLoadElf)?;
     let current_pid = with_current_process(|process| process.id);
     let mut new_process = Process::allocate_process(current_pid, &elf, &mut file, argv)
@@ -403,6 +404,34 @@ fn sys_wait_pid(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     }
     // if we are waiting by the scheduler, this result is not important since it will be overwritten
     // when we get back
+    SyscallResult::Ok(0)
+}
+
+fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (path, stat_ptr, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+        sys_arg!(1, all_state.rest => *mut u8),
+    };
+    check_ptr(
+        stat_ptr as *const u8,
+        mem::size_of::<kernel_user_link::file::FileStat>() as u64,
+    )
+    .map_err(|err| to_arg_err!(1, err))?;
+    let stat_ptr = stat_ptr as *mut kernel_user_link::file::FileStat;
+
+    let (_, inode) = fs::open_inode(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
+
+    unsafe {
+        *stat_ptr = kernel_user_link::file::FileStat {
+            size: inode.size(),
+            file_type: if inode.is_dir() {
+                kernel_user_link::file::FileType::Directory
+            } else {
+                kernel_user_link::file::FileType::File
+            },
+        };
+    }
+
     SyscallResult::Ok(0)
 }
 
