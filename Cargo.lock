@@ -32,6 +32,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
 
 [[package]]
+name = "amjad_os_kernel_user_link"
+version = "0.1.0"
+dependencies = [
+ "compiler_builtins",
+ "rustc-std-workspace-alloc",
+ "rustc-std-workspace-core",
+]
+
+[[package]]
+name = "amjad_os_user_std"
+version = "0.1.0"
+dependencies = [
+ "amjad_os_kernel_user_link",
+ "compiler_builtins",
+ "increasing_heap_allocator",
+ "rustc-std-workspace-alloc",
+ "rustc-std-workspace-core",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -243,17 +263,8 @@ dependencies = [
 name = "kernel"
 version = "0.1.0"
 dependencies = [
+ "amjad_os_kernel_user_link",
  "increasing_heap_allocator",
- "kernel_user_link",
-]
-
-[[package]]
-name = "kernel_user_link"
-version = "0.1.0"
-dependencies = [
- "compiler_builtins",
- "rustc-std-workspace-alloc",
- "rustc-std-workspace-core",
 ]
 
 [[package]]
@@ -521,13 +532,13 @@ checksum = "f27f6278552951f1f2b8cf9da965d10969b2efdea95a6ec47987ab46edfe263a"
 name = "std"
 version = "0.0.0"
 dependencies = [
+ "amjad_os_user_std",
  "cfg-if",
  "hashbrown 0.14.3",
  "panic_abort",
  "profiler_builtins",
  "rustc-demangle",
  "std_detect",
- "user_std",
 ]
 
 [[package]]
@@ -590,17 +601,6 @@ name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
-
-[[package]]
-name = "user_std"
-version = "0.1.0"
-dependencies = [
- "compiler_builtins",
- "increasing_heap_allocator",
- "kernel_user_link",
- "rustc-std-workspace-alloc",
- "rustc-std-workspace-core",
-]
 
 [[package]]
 name = "uuid"

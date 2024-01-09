@@ -2,6 +2,13 @@
 name = "increasing_heap_allocator"
 version = "0.1.0"
 edition = "2021"
+readme = "README.md"
+authors = ["Amjad Alsharafi"]
+license = "MIT"
+repository = "https://github.com/Amjad50/OS"
+description = "A heap allocator framework that can be implemented based on increasing page allocator, usable anywhere."
+keywords = ["heap", "allocator", "kernel", "os"]
+categories = ["no-std", "kernel", "os"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
