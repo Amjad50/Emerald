@@ -44,6 +44,15 @@ pub trait Device: Sync + Send + fmt::Debug {
 }
 
 impl FileSystem for Mutex<Devices> {
+    fn open_root(&self) -> Result<INode, FileSystemError> {
+        Ok(INode::new_file(
+            String::from("/"),
+            FileAttributes::DIRECTORY,
+            DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+            0,
+        ))
+    }
+
     fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError> {
         if path == "/" {
             Ok(self

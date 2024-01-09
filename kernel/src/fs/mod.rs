@@ -188,6 +188,7 @@ impl Drop for INode {
 }
 
 pub trait FileSystem: Send + Sync {
+    fn open_root(&self) -> Result<INode, FileSystemError>;
     // TODO: don't use Vector please, use an iterator somehow
     fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError>;
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
@@ -218,6 +219,10 @@ pub trait FileSystem: Send + Sync {
 pub struct EmptyFileSystem;
 
 impl FileSystem for EmptyFileSystem {
+    fn open_root(&self) -> Result<INode, FileSystemError> {
+        Err(FileSystemError::FileNotFound)
+    }
+
     fn open_dir(&self, _path: &str) -> Result<Vec<INode>, FileSystemError> {
         Err(FileSystemError::FileNotFound)
     }
