@@ -76,7 +76,7 @@ impl Device for PipeSide {
         "pipe"
     }
 
-    fn read(&self, _offset: u32, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+    fn read(&self, _offset: u64, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         if !self.is_read_side {
             return Err(FileSystemError::ReadNotSupported);
         }
@@ -93,10 +93,10 @@ impl Device for PipeSide {
                 break;
             }
         }
-        Ok(bytes_read as u64)
+        Ok(bytes_read)
     }
 
-    fn write(&self, _offset: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+    fn write(&self, _offset: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
         if self.is_read_side {
             return Err(FileSystemError::WriteNotSupported);
         }

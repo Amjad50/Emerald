@@ -118,8 +118,8 @@ impl ops::BitOr for FileAttributes {
 pub struct INode {
     name: String,
     attributes: FileAttributes,
-    start_cluster: u32,
-    size: u32,
+    start_cluster: u64,
+    size: u64,
     device: Option<Arc<dyn Device>>,
 }
 
@@ -127,8 +127,8 @@ impl INode {
     pub fn new_file(
         name: String,
         attributes: FileAttributes,
-        start_cluster: u32,
-        size: u32,
+        start_cluster: u64,
+        size: u64,
     ) -> Self {
         Self {
             name,
@@ -157,7 +157,7 @@ impl INode {
         self.attributes.directory
     }
 
-    pub fn size(&self) -> u32 {
+    pub fn size(&self) -> u64 {
         self.size
     }
 
@@ -170,7 +170,7 @@ impl INode {
         self.attributes
     }
 
-    pub fn start_cluster(&self) -> u32 {
+    pub fn start_cluster(&self) -> u64 {
         self.start_cluster
     }
 
@@ -194,7 +194,7 @@ pub trait FileSystem: Send + Sync {
     fn read_file(
         &self,
         inode: &INode,
-        position: u32,
+        position: u64,
         buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
         if let Some(device) = inode.device() {
@@ -205,7 +205,7 @@ pub trait FileSystem: Send + Sync {
         }
     }
 
-    fn write_file(&self, inode: &INode, position: u32, buf: &[u8]) -> Result<u64, FileSystemError> {
+    fn write_file(&self, inode: &INode, position: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
         if let Some(device) = inode.device() {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.write(position, buf)
@@ -419,10 +419,7 @@ pub struct File {
 impl File {
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let count = match self.blocking_mode {
-            BlockingMode::None => {
-                self.filesystem
-                    .read_file(&self.inode, self.position as u32, buf)?
-            }
+            BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,
             BlockingMode::Line => {
                 // read until \n or \0
                 let mut i = 0;
@@ -430,7 +427,7 @@ impl File {
                     let mut char_buf = 0;
                     let read_byte = self.filesystem.read_file(
                         &self.inode,
-                        self.position as u32,
+                        self.position,
                         core::slice::from_mut(&mut char_buf),
                     );
 
@@ -467,9 +464,7 @@ impl File {
 
                 // try to read until we have something
                 loop {
-                    let read_byte =
-                        self.filesystem
-                            .read_file(&self.inode, self.position as u32, buf);
+                    let read_byte = self.filesystem.read_file(&self.inode, self.position, buf);
 
                     let read_byte = match read_byte {
                         Ok(read_byte) => read_byte,
@@ -500,7 +495,7 @@ impl File {
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
         let written = self
             .filesystem
-            .write_file(&self.inode, self.position as u32, buf)?;
+            .write_file(&self.inode, self.position, buf)?;
         self.position += written;
         Ok(written)
     }

@@ -18,7 +18,7 @@ pub mod pipe;
 // TODO: replace with rwlock
 static DEVICES: OnceLock<Arc<Mutex<Devices>>> = OnceLock::new();
 
-pub(crate) const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u32 = 0xdef1ce5;
+pub(crate) const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u64 = 0xdef1ce5;
 
 #[derive(Debug)]
 struct Devices {
@@ -27,10 +27,10 @@ struct Devices {
 
 pub trait Device: Sync + Send + fmt::Debug {
     fn name(&self) -> &str;
-    fn read(&self, _offset: u32, _buf: &mut [u8]) -> Result<u64, FileSystemError> {
+    fn read(&self, _offset: u64, _buf: &mut [u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::ReadNotSupported)
     }
-    fn write(&self, _offset: u32, _buf: &[u8]) -> Result<u64, FileSystemError> {
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::WriteNotSupported)
     }
     /// Informs the device that it is closed.
