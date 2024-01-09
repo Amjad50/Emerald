@@ -404,7 +404,7 @@ where
         let base = free_block as usize;
         let possible_next_offset = align_up(base, layout.align()) - base;
         let allocated_block_offset = if possible_next_offset < KERNEL_HEAP_BLOCK_INFO_SIZE {
-            possible_next_offset + KERNEL_HEAP_BLOCK_INFO_SIZE
+            possible_next_offset + KERNEL_HEAP_BLOCK_INFO_SIZE.max(layout.align())
         } else {
             possible_next_offset
         };
@@ -414,11 +414,9 @@ where
         let allocated_block_info =
             allocated_ptr.sub(KERNEL_HEAP_BLOCK_INFO_SIZE) as *mut AllocatedHeapBlockInfo;
         // make sure we are aligned
-        assert!(
-                    is_aligned(allocated_ptr as _, layout.align()),
-                    "base_block={allocated_block_info:p}, offset={allocated_block_offset}, ptr={allocated_ptr:?}, layout={layout:?}, should_be_addr={:x}",
-                    align_up(allocated_block_info as usize, layout.align())
-                );
+        assert!(is_aligned(allocated_ptr as _, layout.align()),
+            "base_block={allocated_block_info:p}, offset={allocated_block_offset}, ptr={allocated_ptr:?}, layout={layout:?}, should_be_addr={:x}",
+            align_up(allocated_block_info as usize, layout.align()));
 
         // write the info header
         (*allocated_block_info).magic = HEAP_MAGIC;

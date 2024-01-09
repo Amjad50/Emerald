@@ -41,7 +41,7 @@ dependencies = [
 
 [[package]]
 name = "amjad_os_user_std"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "amjad_os_kernel_user_link",
  "compiler_builtins",
@@ -243,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "increasing_heap_allocator"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-alloc",
