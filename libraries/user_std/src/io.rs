@@ -1,20 +1,26 @@
 use core::ffi::CStr;
 
-use kernel_user_link::call_syscall;
 pub use kernel_user_link::file::BlockingMode;
+pub use kernel_user_link::file::DirEntry;
+pub use kernel_user_link::file::DirFilename;
 pub use kernel_user_link::file::FileStat;
 pub use kernel_user_link::file::FileType;
+pub use kernel_user_link::file::DIR_ENTRY_MAX_NAME_LEN;
+pub use kernel_user_link::FD_STDERR;
+pub use kernel_user_link::FD_STDIN;
+pub use kernel_user_link::FD_STDOUT;
+
+use kernel_user_link::call_syscall;
 use kernel_user_link::syscalls::SyscallError;
 use kernel_user_link::syscalls::SYS_BLOCKING_MODE;
 use kernel_user_link::syscalls::SYS_CLOSE;
 use kernel_user_link::syscalls::SYS_CREATE_PIPE;
 use kernel_user_link::syscalls::SYS_OPEN;
+use kernel_user_link::syscalls::SYS_OPEN_DIR;
 use kernel_user_link::syscalls::SYS_READ;
+use kernel_user_link::syscalls::SYS_READ_DIR;
 use kernel_user_link::syscalls::SYS_STAT;
 use kernel_user_link::syscalls::SYS_WRITE;
-pub use kernel_user_link::FD_STDERR;
-pub use kernel_user_link::FD_STDIN;
-pub use kernel_user_link::FD_STDOUT;
 
 /// # Safety
 /// This function assumes that `fd` is a valid file descriptor.
@@ -121,5 +127,33 @@ pub unsafe fn syscall_stat(path: &CStr, stat: &mut FileStat) -> Result<(), Sysca
             stat_ptr              // stat_ptr
         )
         .map(|e| assert!(e == 0))
+    }
+}
+
+/// # Safety
+/// This function assumes that `path` is a valid C string.
+pub unsafe fn syscall_open_dir(path: &CStr) -> Result<usize, SyscallError> {
+    unsafe {
+        call_syscall!(
+            SYS_OPEN_DIR,
+            path.as_ptr() as u64, // path
+        )
+        .map(|fd| fd as usize)
+    }
+}
+
+/// # Safety
+/// This function assumes that `fd` is a valid file descriptor.
+/// Also assume `entry` is a valid pointer to a valid `DirEntry` struct.
+pub unsafe fn syscall_read_dir(fd: usize, entries: &mut [DirEntry]) -> Result<usize, SyscallError> {
+    let entries_ptr = entries.as_mut_ptr() as u64;
+    unsafe {
+        call_syscall!(
+            SYS_READ_DIR,
+            fd,                   // fd
+            entries_ptr,          // entries_ptr
+            entries.len() as u64  // len
+        )
+        .map(|written| written as usize)
     }
 }

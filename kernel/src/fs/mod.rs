@@ -1,7 +1,7 @@
 use core::{mem, ops};
 
 use alloc::{borrow::Cow, string::String, sync::Arc, vec, vec::Vec};
-use kernel_user_link::file::BlockingMode;
+use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType};
 
 use crate::{
     devices::{
@@ -653,17 +653,19 @@ impl File {
 #[allow(dead_code)]
 impl Directory {
     pub fn open(path: &str) -> Result<Self, FileSystemError> {
-        let (_, inode) = open_inode(path)?;
+        let (filesystem, inode) = open_inode(path)?;
 
         if !inode.is_dir() {
             return Err(FileSystemError::IsNotDirectory);
         }
 
+        let dir_entries = filesystem.read_dir(&inode)?;
+
         Ok(Self {
             path: String::from(path),
             inode,
             position: 0,
-            dir_entries: Vec::new(),
+            dir_entries,
         })
     }
 
@@ -683,6 +685,27 @@ impl Directory {
             position,
             dir_entries: Vec::new(),
         })
+    }
+
+    pub fn read(&mut self, entries: &mut [DirEntry]) -> Result<usize, FileSystemError> {
+        assert!(self.inode.is_dir());
+
+        let mut i = 0;
+        while i < entries.len() {
+            if self.position >= self.dir_entries.len() as u64 {
+                break;
+            }
+
+            let entry = &self.dir_entries[self.position as usize];
+            entries[i] = DirEntry {
+                stat: entry.as_file_stat(),
+                name: entry.name().into(),
+            };
+            i += 1;
+            self.position += 1;
+        }
+
+        Ok(i)
     }
 }
 
@@ -730,7 +753,7 @@ impl FilesystemNode {
         }
     }
 
-    pub fn as_dir(&self) -> Result<&Directory, FileSystemError> {
+    pub fn as_dir_mut(&mut self) -> Result<&mut Directory, FileSystemError> {
         match self {
             Self::File(_) => Err(FileSystemError::IsNotDirectory),
             Self::Directory(dir) => Ok(dir),

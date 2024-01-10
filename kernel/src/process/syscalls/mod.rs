@@ -2,6 +2,7 @@ use core::{ffi::CStr, mem};
 
 use alloc::{string::String, vec::Vec};
 use kernel_user_link::{
+    file::DirEntry,
     process::SpawnFileMapping,
     sys_arg,
     syscalls::{
@@ -36,6 +37,8 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_create_pipe,   // kernel_user_link::syscalls::SYS_CREATE_PIPE
     sys_wait_pid,      // kernel_user_link::syscalls::SYS_WAIT_PID
     sys_stat,          // kernel_user_link::syscalls::SYS_STAT
+    sys_open_dir,      // kernel_user_link::syscalls::SYS_OPEN_DIR
+    sys_read_dir,      // kernel_user_link::syscalls::SYS_READ_DIR
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -46,9 +49,9 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::ReadNotSupported => SyscallError::CouldNotReadFromFile,
             FileSystemError::WriteNotSupported => SyscallError::CouldNotWriteToFile,
             FileSystemError::EndOfFile => SyscallError::EndOfFile,
-            FileSystemError::IsNotDirectory
-            | FileSystemError::IsDirectory
-            | FileSystemError::DeviceNotFound => todo!(),
+            FileSystemError::IsNotDirectory => SyscallError::IsNotDirectory,
+            FileSystemError::IsDirectory => SyscallError::IsDirectory,
+            FileSystemError::DeviceNotFound => todo!(),
             FileSystemError::DiskReadError { .. }
             | FileSystemError::InvalidOffset
             | FileSystemError::FatError(_)
@@ -429,6 +432,35 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     }
 
     SyscallResult::Ok(0)
+}
+
+fn sys_open_dir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (path, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+    };
+
+    let dir = fs::Directory::open(path)?;
+    let dir_index = with_current_process(|process| process.push_fs_node(dir));
+
+    SyscallResult::Ok(dir_index as u64)
+}
+
+fn sys_read_dir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (dir_index, buf, len, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => usize),
+        sys_arg!(1, all_state.rest => *mut u8),
+        sys_arg!(2, all_state.rest => usize),
+    };
+    let buf = sys_arg_to_mut_slice::<DirEntry>(buf, len).map_err(|err| to_arg_err!(1, err))?;
+
+    let entries_read = with_current_process(|process| -> Result<usize, SyscallError> {
+        let file = process
+            .get_fs_node(dir_index)
+            .ok_or(SyscallError::InvalidFileIndex)?;
+        file.as_dir_mut()?.read(buf).map_err(|e| e.into())
+    })?;
+
+    SyscallResult::Ok(entries_read as u64)
 }
 
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {

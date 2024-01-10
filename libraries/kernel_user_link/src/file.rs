@@ -1,3 +1,5 @@
+use core::ffi::CStr;
+
 /// A blocking flag when dealing with files
 /// When using [`crate::syscalls::SYS_OPEN`], Bit 0 of `flags` argument can be:
 /// 0 - non-blocking
@@ -59,17 +61,12 @@ pub fn parse_blocking_mode(blocking_mode: u64) -> Option<BlockingMode> {
     BlockingMode::from_blocking_mode_num(blocking_mode)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[repr(C)]
 pub enum FileType {
+    #[default]
     File,
     Directory,
-}
-
-impl Default for FileType {
-    fn default() -> Self {
-        FileType::File
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -77,4 +74,44 @@ impl Default for FileType {
 pub struct FileStat {
     pub size: u64,
     pub file_type: FileType,
+}
+
+pub const DIR_ENTRY_MAX_NAME_LEN: usize = 255;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DirFilename([u8; DIR_ENTRY_MAX_NAME_LEN + 1]);
+
+impl Default for DirFilename {
+    fn default() -> Self {
+        Self([0; DIR_ENTRY_MAX_NAME_LEN + 1])
+    }
+}
+
+impl DirFilename {
+    pub fn as_cstr(&self) -> &CStr {
+        CStr::from_bytes_until_nul(&self.0).unwrap()
+    }
+}
+
+impl From<&str> for DirFilename {
+    fn from(s: &str) -> Self {
+        let mut name = [0; DIR_ENTRY_MAX_NAME_LEN + 1];
+        let bytes = s.as_bytes();
+        assert!(bytes.len() < DIR_ENTRY_MAX_NAME_LEN);
+        name[..bytes.len()].copy_from_slice(bytes);
+        Self(name)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[repr(C)]
+pub struct DirEntry {
+    pub stat: FileStat,
+    pub name: DirFilename,
+}
+
+impl DirEntry {
+    pub fn filename_cstr(&self) -> &CStr {
+        self.name.as_cstr()
+    }
 }

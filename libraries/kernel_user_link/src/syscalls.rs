@@ -6,7 +6,7 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 11;
+pub const NUM_SYSCALLS: usize = 13;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
@@ -20,6 +20,8 @@ mod numbers {
     pub const SYS_CREATE_PIPE: u64 = 8;
     pub const SYS_WAIT_PID: u64 = 9;
     pub const SYS_STAT: u64 = 10;
+    pub const SYS_OPEN_DIR: u64 = 11;
+    pub const SYS_READ_DIR: u64 = 12;
 }
 pub use numbers::*;
 
@@ -226,6 +228,8 @@ pub enum SyscallError {
     FileNotFound = 10,
     PidNotFound = 11,
     ProcessStillRunning = 12,
+    IsNotDirectory = 13,
+    IsDirectory = 14,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -312,6 +316,8 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::FileNotFound => 10 << 56,
                 SyscallError::PidNotFound => 11 << 56,
                 SyscallError::ProcessStillRunning => 12 << 56,
+                SyscallError::IsNotDirectory => 13 << 56,
+                SyscallError::IsDirectory => 14 << 56,
             };
 
             err_upper | (1 << 63)
@@ -361,6 +367,8 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             10 => SyscallError::FileNotFound,
             11 => SyscallError::PidNotFound,
             12 => SyscallError::ProcessStillRunning,
+            13 => SyscallError::IsNotDirectory,
+            14 => SyscallError::IsDirectory,
             _ => invalid_error_code(()),
         };
         SyscallResult::Err(err)
