@@ -489,9 +489,7 @@ impl File {
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
-        if self.inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
+        assert!(!self.inode.is_dir());
 
         let count = match self.blocking_mode {
             BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,
@@ -568,9 +566,7 @@ impl File {
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
-        if self.inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
+        assert!(!self.inode.is_dir());
 
         let written = self
             .filesystem
