@@ -383,8 +383,8 @@ pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), Fil
 
     let mut opening_dir = false;
     // if no basename, this is a directory (either root or inner directory)
-    if basename == "" {
-        if parent_dir == "/" || parent_dir == "" {
+    if basename.is_empty() {
+        if parent_dir == "/" || parent_dir.is_empty() {
             // we are opening the root of this filesystem
             return filesystem.open_root().map(|inode| (filesystem, inode));
         } else {
@@ -419,6 +419,11 @@ pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), Fil
     Err(FileSystemError::FileNotFound)
 }
 
+/// A handle to a file/directory, it has the inode which controls the properties of the node in the filesystem
+///
+/// I could have called this `FsNode` or `FsEntry` or something like that, but `File` is much better
+/// The issue is that this is not just a file.
+/// TODO: find better name
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
     path: String,
@@ -431,12 +436,9 @@ impl File {
     pub fn open(path: &str) -> Result<Self, FileSystemError> {
         Self::open_blocking(path, BlockingMode::None)
     }
+
     pub fn open_blocking(path: &str, blocking_mode: BlockingMode) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path)?;
-
-        if inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
 
         Ok(Self {
             filesystem,
@@ -463,7 +465,11 @@ impl File {
         }
     }
 
-    pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+    pub fn read_file(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+        if self.inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
+
         let count = match self.blocking_mode {
             BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,
             BlockingMode::Line => {
@@ -538,7 +544,11 @@ impl File {
         Ok(count)
     }
 
-    pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
+    pub fn write_file(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
+        if self.inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
+
         let written = self
             .filesystem
             .write_file(&self.inode, self.position, buf)?;
@@ -547,7 +557,11 @@ impl File {
     }
 
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {
-        if position > self.inode.size() as u64 {
+        if self.inode.is_dir() {
+            return Err(FileSystemError::IsDirectory);
+        }
+
+        if position > self.inode.size() {
             return Err(FileSystemError::InvalidOffset);
         }
         self.position = position;
@@ -555,7 +569,7 @@ impl File {
     }
 
     pub fn filesize(&self) -> u64 {
-        self.inode.size() as u64
+        self.inode.size()
     }
 
     pub fn path(&self) -> &str {
@@ -566,18 +580,13 @@ impl File {
         let mut buf = vec![0; self.inode.size() as usize];
         let mut position = 0;
         loop {
-            let read = self.read(&mut buf[position..])?;
+            let read = self.read_file(&mut buf[position..])?;
             if read == 0 {
                 break;
             }
             position += read as usize;
         }
         Ok(buf)
-    }
-
-    pub fn read_to_string(&mut self) -> Result<String, FileSystemError> {
-        let buf = self.read_to_end()?;
-        String::from_utf8(buf).map_err(|_| FileSystemError::InvalidData)
     }
 
     pub fn is_blocking(&self) -> bool {
@@ -600,12 +609,12 @@ impl File {
         };
 
         // inform the device of a clone operation
-        s.inode.device.as_ref().map(|device| {
+        if let Some(device) = s.inode.device.as_ref() {
             device
                 .clone_device()
                 // TODO: maybe use error handling instead
                 .expect("Failed to clone device for file")
-        });
+        }
 
         s
     }

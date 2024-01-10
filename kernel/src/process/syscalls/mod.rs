@@ -179,7 +179,7 @@ fn sys_write(all_state: &mut InterruptAllSavedState) -> SyscallResult {
             .get_file(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
 
-        file.write(buf).map_err(|e| e.into())
+        file.write_file(buf).map_err(|e| e.into())
     })?;
     SyscallResult::Ok(bytes_written)
 }
@@ -216,13 +216,13 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
                 .ok_or(SyscallError::InvalidFileIndex)?;
             Ok((0, Some(file)))
         } else {
-            let bytes_read = file.read(buf)?;
+            let bytes_read = file.read_file(buf)?;
             Ok::<_, SyscallError>((bytes_read, None))
         }
     })?;
 
     let bytes_read = if let Some(mut file) = file {
-        let bytes_read = file.read(buf)?;
+        let bytes_read = file.read_file(buf)?;
         // put file back
         with_current_process(|process| process.put_file(file_index, file));
         bytes_read

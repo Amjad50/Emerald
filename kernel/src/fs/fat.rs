@@ -806,7 +806,7 @@ impl FatFilesystem {
         let mut cluster = inode.start_cluster as u32;
         let cluster_index = position / self.boot_sector.bytes_per_cluster();
         for _ in 0..cluster_index {
-            cluster = match self.read_fat_entry(cluster as u32) {
+            cluster = match self.read_fat_entry(cluster) {
                 FatEntry::Next(next_cluster) => next_cluster,
                 FatEntry::EndOfChain => return Err(FatError::UnexpectedFatEntry.into()),
                 FatEntry::Bad => return Err(FatError::UnexpectedFatEntry.into()),

@@ -47,7 +47,7 @@ pub unsafe fn load_elf_to_vm(
                 unsafe { core::slice::from_raw_parts_mut(ptr, segment.file_size() as usize) };
 
             // read the whole segment
-            assert_eq!(file.read(slice)?, segment.file_size());
+            assert_eq!(file.read_file(slice)?, segment.file_size());
         }
     }
 
