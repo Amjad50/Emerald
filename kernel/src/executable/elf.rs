@@ -296,7 +296,7 @@ impl ElfProgram {
                 return Err(ElfLoadError::InvalidElfOrNotSupported);
             }
             let mut header_bytes = [0u8; mem::size_of::<ElfProgram64>()];
-            if file.read_file(&mut header_bytes)? != header_bytes.len() as u64 {
+            if file.read(&mut header_bytes)? != header_bytes.len() as u64 {
                 return Err(ElfLoadError::UnexpectedEndOfFile);
             }
             let program = unsafe { &*(header_bytes.as_ptr() as *const ElfProgram64) };
@@ -306,7 +306,7 @@ impl ElfProgram {
                 return Err(ElfLoadError::InvalidElfOrNotSupported);
             }
             let mut header_bytes = [0u8; mem::size_of::<ElfProgram32>()];
-            if file.read_file(&mut header_bytes)? != header_bytes.len() as u64 {
+            if file.read(&mut header_bytes)? != header_bytes.len() as u64 {
                 return Err(ElfLoadError::UnexpectedEndOfFile);
             }
             let program = unsafe { &*(header_bytes.as_ptr() as *const ElfProgram32) };
@@ -398,7 +398,7 @@ impl Elf {
     pub fn load(file: &mut fs::File) -> Result<Self, ElfLoadError> {
         // take the largest
         let mut header = [0u8; mem::size_of::<ElfHeader>()];
-        if file.read_file(&mut header)? != header.len() as u64 {
+        if file.read(&mut header)? != header.len() as u64 {
             return Err(ElfLoadError::UnexpectedEndOfFile);
         }
         let header = unsafe { &*(header.as_ptr() as *const ElfHeader) };
