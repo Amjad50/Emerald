@@ -381,6 +381,13 @@ impl DirectoryIterator<'_> {
                 (start_sector, 0, filesystem.read_sectors(start_sector, 1)?)
             }
             Directory::Normal { ref inode } => {
+                if matches!(filesystem.fat_type(), FatType::Fat12 | FatType::Fat16)
+                    && inode.start_cluster == 0
+                {
+                    // looks like we got back using `..` to the root, thus, we should use the root directly
+                    return Self::new(filesystem, filesystem.open_root_dir()?);
+                }
+
                 let start_sector = filesystem.first_sector_of_cluster(inode.start_cluster as u32);
 
                 (
@@ -652,7 +659,7 @@ impl FatFilesystem {
     }
 
     fn read_fat_entry(&self, entry: u32) -> FatEntry {
-        let fat_offset = match self.boot_sector.ty {
+        let fat_offset = match self.fat_type() {
             FatType::Fat12 => entry * 3 / 2,
             FatType::Fat16 => entry * 2,
             FatType::Fat32 => entry * 4,
@@ -660,7 +667,7 @@ impl FatFilesystem {
         assert!(fat_offset < self.fat.0.len(), "FAT entry out of bounds");
         let ptr = unsafe { self.fat.0.as_ptr().add(fat_offset) };
 
-        let entry = match self.boot_sector.ty {
+        let entry = match self.fat_type() {
             FatType::Fat12 => {
                 let byte1 = self.fat.0[fat_offset];
                 let byte2 = self.fat.0[fat_offset + 1];
@@ -674,11 +681,11 @@ impl FatFilesystem {
             FatType::Fat32 => unsafe { (*(ptr as *const u32)) & 0x0FFF_FFFF },
         };
 
-        FatEntry::from_u32(self.boot_sector.ty, entry)
+        FatEntry::from_u32(self.fat_type(), entry)
     }
 
     fn open_root_dir(&self) -> Result<Directory, FileSystemError> {
-        match self.boot_sector.ty {
+        match self.fat_type() {
             FatType::Fat12 | FatType::Fat16 => Ok(Directory::RootFat12_16 {
                 start_sector: self.boot_sector.root_dir_start_sector(),
                 size_in_sectors: self.boot_sector.root_dir_sectors(),
@@ -698,7 +705,7 @@ impl FatFilesystem {
     }
 
     fn open_root_dir_inode(&self) -> Result<INode, FileSystemError> {
-        match self.boot_sector.ty {
+        match self.fat_type() {
             FatType::Fat12 | FatType::Fat16 => {
                 // use a special inode for root
                 let inode = INode::new_file(
@@ -762,13 +769,15 @@ impl FatFilesystem {
             return Err(FileSystemError::IsNotDirectory);
         }
 
-        let dir = match self.boot_sector.ty {
+        let dir = match self.fat_type() {
             FatType::Fat12 | FatType::Fat16 => {
                 // try to see if this is the root
-                if inode.start_cluster() == self.boot_sector.root_dir_start_sector() as u64
-                    && inode.size()
-                        == self.boot_sector.root_dir_sectors() as u64
-                            * self.boot_sector.bytes_per_sector() as u64
+                // this could be 0 if we are back from using `..` to the root
+                if inode.start_cluster() == 0
+                    || inode.start_cluster() == self.boot_sector.root_dir_start_sector() as u64
+                        && inode.size()
+                            == self.boot_sector.root_dir_sectors() as u64
+                                * self.boot_sector.bytes_per_sector() as u64
                 {
                     self.open_root_dir()?
                 } else {
