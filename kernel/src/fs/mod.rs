@@ -177,6 +177,17 @@ impl INode {
     pub fn device(&self) -> Option<&Arc<dyn Device>> {
         self.device.as_ref()
     }
+
+    pub fn as_file_stat(&self) -> FileStat {
+        FileStat {
+            size: self.size(),
+            file_type: if self.is_dir() {
+                FileType::Directory
+            } else {
+                FileType::File
+            },
+        }
+    }
 }
 
 impl Drop for INode {

@@ -302,7 +302,7 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         })?;
     }
 
-    let mut file = fs::File::open(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
+    let mut file = fs::File::open(path)?;
     let elf = Elf::load(&mut file).map_err(|_| SyscallError::CouldNotLoadElf)?;
     let current_pid = with_current_process(|process| process.id);
     let mut new_process = Process::allocate_process(current_pid, &elf, &mut file, argv)
@@ -422,17 +422,10 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     .map_err(|err| to_arg_err!(1, err))?;
     let stat_ptr = stat_ptr as *mut kernel_user_link::file::FileStat;
 
-    let (_, inode) = fs::open_inode(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
+    let (_, inode) = fs::open_inode(path)?;
 
     unsafe {
-        *stat_ptr = kernel_user_link::file::FileStat {
-            size: inode.size(),
-            file_type: if inode.is_dir() {
-                kernel_user_link::file::FileType::Directory
-            } else {
-                kernel_user_link::file::FileType::File
-            },
-        };
+        *stat_ptr = inode.as_file_stat();
     }
 
     SyscallResult::Ok(0)
