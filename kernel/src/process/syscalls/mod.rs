@@ -162,7 +162,7 @@ fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
     // TODO: implement flags and access_mode, for now just open file for reading
     let file = fs::File::open_blocking(path, blocking_mode)?;
-    let file_index = with_current_process(|process| process.push_file(file));
+    let file_index = with_current_process(|process| process.push_fs_node(file));
 
     SyscallResult::Ok(file_index as u64)
 }
@@ -176,10 +176,10 @@ fn sys_write(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let buf = sys_arg_to_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
     let bytes_written = with_current_process(|process| -> Result<u64, SyscallError> {
         let file = process
-            .get_file(file_index)
+            .get_fs_node(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
 
-        file.write(buf).map_err(|e| e.into())
+        file.as_file_mut()?.write(buf).map_err(|e| e.into())
     })?;
     SyscallResult::Ok(bytes_written)
 }
@@ -207,12 +207,13 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     // A good solution would be to have waitable objects.
     let (bytes_read, file) = with_current_process(|process| {
         let file = process
-            .get_file(file_index)
-            .ok_or(SyscallError::InvalidFileIndex)?;
+            .get_fs_node(file_index)
+            .ok_or(SyscallError::InvalidFileIndex)?
+            .as_file_mut()?;
         if file.is_blocking() {
             // take file now
             let file = process
-                .take_file(file_index)
+                .take_fs_node(file_index)
                 .ok_or(SyscallError::InvalidFileIndex)?;
             Ok((0, Some(file)))
         } else {
@@ -222,9 +223,9 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     })?;
 
     let bytes_read = if let Some(mut file) = file {
-        let bytes_read = file.read(buf)?;
+        let bytes_read = file.as_file_mut()?.read(buf)?;
         // put file back
-        with_current_process(|process| process.put_file(file_index, file));
+        with_current_process(|process| process.put_fs_node(file_index, file));
         bytes_read
     } else {
         bytes_read
@@ -239,7 +240,7 @@ fn sys_close(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     with_current_process(|process| {
         process
-            .take_file(file_index)
+            .take_fs_node(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
         Ok::<_, SyscallError>(())
     })?;
@@ -258,9 +259,9 @@ fn sys_blocking_mode(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     with_current_process(|process| {
         let file = process
-            .get_file(file_index)
+            .get_fs_node(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
-        file.set_blocking(blocking_mode);
+        file.as_file_mut()?.set_blocking(blocking_mode);
         Ok::<_, SyscallError>(())
     })?;
 
@@ -294,7 +295,7 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         with_current_process(|process| {
             for mapping in file_mappings {
                 process
-                    .get_file(mapping.src_fd as _)
+                    .get_fs_node(mapping.src_fd as _)
                     .ok_or(SyscallError::InvalidFileIndex)?;
             }
             Ok::<_, SyscallError>(())
@@ -312,9 +313,9 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         // take the files if any
         for mapping in file_mappings.iter() {
             let file = process
-                .take_file(mapping.src_fd as _)
+                .take_fs_node(mapping.src_fd as _)
                 .ok_or(SyscallError::InvalidFileIndex)?;
-            new_process.attach_file_to_fd(mapping.dst_fd as _, file);
+            new_process.attach_fs_node_to_fd(mapping.dst_fd as _, file);
             if mapping.dst_fd <= FD_STDERR {
                 std_needed[mapping.dst_fd] = false;
             }
@@ -323,10 +324,10 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         // inherit files STD files if not set
         for (i, _) in std_needed.iter().enumerate().filter(|(_, &b)| b) {
             let file = process
-                .get_file(i as _)
+                .get_fs_node(i as _)
                 .ok_or(SyscallError::InvalidFileIndex)?;
-            let inherited_file = file.clone_inherit();
-            new_process.attach_file_to_fd(i as _, inherited_file);
+            let inherited_file = file.as_file()?.clone_inherit();
+            new_process.attach_fs_node_to_fd(i as _, inherited_file);
         }
 
         Ok::<_, SyscallError>(())
@@ -365,7 +366,10 @@ fn sys_create_pipe(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     let (read_file, write_file) = devices::pipe::create_pipe_pair();
     let (read_fd, write_fd) = with_current_process(|process| {
-        (process.push_file(read_file), process.push_file(write_file))
+        (
+            process.push_fs_node(read_file),
+            process.push_fs_node(write_file),
+        )
     });
 
     unsafe {

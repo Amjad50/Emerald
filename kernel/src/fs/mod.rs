@@ -708,4 +708,37 @@ impl FilesystemNode {
             Self::Directory(dir) => &dir.inode,
         }
     }
+
+    pub fn as_file(&self) -> Result<&File, FileSystemError> {
+        match self {
+            Self::File(file) => Ok(file),
+            Self::Directory(_) => Err(FileSystemError::IsDirectory),
+        }
+    }
+
+    pub fn as_file_mut(&mut self) -> Result<&mut File, FileSystemError> {
+        match self {
+            Self::File(file) => Ok(file),
+            Self::Directory(_) => Err(FileSystemError::IsDirectory),
+        }
+    }
+
+    pub fn as_dir(&self) -> Result<&Directory, FileSystemError> {
+        match self {
+            Self::File(_) => Err(FileSystemError::IsNotDirectory),
+            Self::Directory(dir) => Ok(dir),
+        }
+    }
+}
+
+impl From<File> for FilesystemNode {
+    fn from(file: File) -> Self {
+        Self::File(file)
+    }
+}
+
+impl From<Directory> for FilesystemNode {
+    fn from(dir: Directory) -> Self {
+        Self::Directory(dir)
+    }
 }
