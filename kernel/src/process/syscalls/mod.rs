@@ -59,7 +59,7 @@ impl From<FileSystemError> for SyscallError {
 }
 
 #[inline]
-fn check_ptr(arg: *const u8, len: u64) -> Result<(), SyscallArgError> {
+fn check_ptr(arg: *const u8, len: usize) -> Result<(), SyscallArgError> {
     if arg.is_null() {
         return Err(SyscallArgError::InvalidUserPointer);
     }
@@ -67,7 +67,7 @@ fn check_ptr(arg: *const u8, len: u64) -> Result<(), SyscallArgError> {
         process.is_user_address_mapped(arg as _)
         // very basic check, just check the last byte
         // TODO: check all mapped pages
-            && process.is_user_address_mapped((arg as usize + len as usize - 1) as _)
+            && process.is_user_address_mapped((arg as usize + len - 1) as _)
     }) {
         return Err(SyscallArgError::InvalidUserPointer);
     }
@@ -83,17 +83,28 @@ fn sys_arg_to_str<'a>(arg: *const u8) -> Result<&'a str, SyscallArgError> {
     Ok(string)
 }
 
-fn sys_arg_to_byte_slice<'a>(buf: *const u8, size: u64) -> Result<&'a [u8], SyscallArgError> {
-    check_ptr(buf, size)?;
+fn sys_arg_to_slice<'a, T: Sized>(buf: *const u8, len: usize) -> Result<&'a [T], SyscallArgError> {
+    if len == 0 {
+        return Ok(&[]);
+    }
 
-    let slice = unsafe { core::slice::from_raw_parts(buf as _, size as _) };
+    check_ptr(buf, len * mem::size_of::<T>())?;
+
+    let slice = unsafe { core::slice::from_raw_parts(buf as _, len as _) };
     Ok(slice)
 }
 
-fn sys_arg_to_mut_byte_slice<'a>(buf: *mut u8, size: u64) -> Result<&'a mut [u8], SyscallArgError> {
-    check_ptr(buf, size)?;
+fn sys_arg_to_mut_slice<'a, T: Sized>(
+    buf: *mut u8,
+    len: usize,
+) -> Result<&'a mut [T], SyscallArgError> {
+    if len == 0 {
+        return Ok(&mut []);
+    }
 
-    let slice = unsafe { core::slice::from_raw_parts_mut(buf as _, size as _) };
+    check_ptr(buf, len * mem::size_of::<T>())?;
+
+    let slice = unsafe { core::slice::from_raw_parts_mut(buf as _, len as _) };
     Ok(slice)
 }
 
@@ -121,36 +132,24 @@ fn sys_arg_to_str_array(array_ptr: *const u8) -> Result<Vec<String>, SyscallArgE
 }
 
 /// Allocates space fro the mapping and copies them
-fn sys_arg_to_file_mappings_array(
+fn sys_arg_to_file_mappings_array<'a>(
     array_ptr: *const u8,
     array_size: usize,
-) -> Result<Vec<SpawnFileMapping>, SyscallArgError> {
-    if array_size == 0 {
-        return Ok(Vec::new());
-    }
-    check_ptr(
-        array_ptr,
-        (array_size * mem::size_of::<SpawnFileMapping>()) as u64,
-    )?;
+) -> Result<&'a [SpawnFileMapping], SyscallArgError> {
+    let mappings_array = sys_arg_to_slice::<SpawnFileMapping>(array_ptr, array_size)?;
 
-    let array_ptr = array_ptr as *const SpawnFileMapping;
-
-    let mut array: Vec<SpawnFileMapping> = Vec::new();
     for i in 0..array_size {
-        let mapping = unsafe { array_ptr.add(i).read() };
+        let mapping = mappings_array[i];
 
         // before doing push check that we don't have duplicates
-        if array
-            .iter()
-            .any(|m| m.src_fd == mapping.src_fd || m.dst_fd == mapping.dst_fd)
-        {
-            return Err(SyscallArgError::DuplicateFileMappings);
+        for other_mapping in mappings_array.iter().take(i) {
+            if mapping.src_fd == other_mapping.src_fd || mapping.dst_fd == other_mapping.dst_fd {
+                return Err(SyscallArgError::DuplicateFileMappings);
+            }
         }
-
-        array.push(mapping);
     }
 
-    Ok(array)
+    Ok(mappings_array)
 }
 
 fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
@@ -172,9 +171,9 @@ fn sys_write(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (file_index, buf, size, ..) = verify_args! {
         sys_arg!(0, all_state.rest => usize),
         sys_arg!(1, all_state.rest => *const u8),
-        sys_arg!(2, all_state.rest => u64),
+        sys_arg!(2, all_state.rest => usize),
     };
-    let buf = sys_arg_to_byte_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
+    let buf = sys_arg_to_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
     let bytes_written = with_current_process(|process| -> Result<u64, SyscallError> {
         let file = process
             .get_file(file_index)
@@ -189,9 +188,9 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (file_index, buf, size, ..) = verify_args! {
         sys_arg!(0, all_state.rest => usize),
         sys_arg!(1, all_state.rest => *mut u8),
-        sys_arg!(2, all_state.rest => u64),
+        sys_arg!(2, all_state.rest => usize),
     };
-    let buf = sys_arg_to_mut_byte_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
+    let buf = sys_arg_to_mut_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
 
     // TODO: fix this hack
     //
@@ -293,7 +292,7 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     if !file_mappings.is_empty() {
         // a bit unoptimal, but check all files first before taking them and doing any action
         with_current_process(|process| {
-            for mapping in &file_mappings {
+            for mapping in file_mappings {
                 process
                     .get_file(mapping.src_fd as _)
                     .ok_or(SyscallError::InvalidFileIndex)?;
@@ -414,7 +413,7 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     };
     check_ptr(
         stat_ptr as *const u8,
-        mem::size_of::<kernel_user_link::file::FileStat>() as u64,
+        mem::size_of::<kernel_user_link::file::FileStat>(),
     )
     .map_err(|err| to_arg_err!(1, err))?;
     let stat_ptr = stat_ptr as *mut kernel_user_link::file::FileStat;
