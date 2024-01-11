@@ -331,38 +331,85 @@ where
         // info header
         let block_info_layout = core::alloc::Layout::new::<AllocatedHeapBlockInfo>();
 
-        let (whole_layout, whole_block_offset) = block_info_layout
-            .extend(layout.align_to(16).unwrap())
+        // use minimum alignment AllocatedHeapBlockInfo
+        // whole_layout here is the layout of the requested block + the info header
+        // whole_block_offset is the offset of the block after the info header
+        let (whole_layout, block_offset_from_header) = block_info_layout
+            .extend(layout.align_to(block_info_layout.align()).unwrap())
             .unwrap();
-        // at least align to 16 bytes
-        let size_to_allocate = whole_layout.pad_to_align().size();
+        // at least align to AllocatedHeapBlockInfo (see above)
+        // `allocation_size` is the size of the block we are going to allocate as a whole
+        // this block include the info header and the requested block and maybe some padding
+        let mut allocation_size = whole_layout.pad_to_align().size();
 
-        let free_block = self.get_free_block(size_to_allocate);
+        let free_block = self.get_free_block(allocation_size);
 
         if free_block.is_null() {
             return core::ptr::null_mut();
         }
 
+        // work on the pointer and add the info of the block before it, and handle alignment
+        // so we can use it to deallocate later
+        let base = free_block as usize;
+        // this should never fail, we are allocating of `block_info_layout.align()` alignment always
+        assert!(is_aligned(base, block_info_layout.align()));
+        let possible_next_offset = align_up(base, layout.align()) - base;
+        let allocated_block_offset = if possible_next_offset < KERNEL_HEAP_BLOCK_INFO_SIZE {
+            // if we can't fit the info header, we need to add to the offset
+            possible_next_offset + KERNEL_HEAP_BLOCK_INFO_SIZE.max(layout.align())
+        } else {
+            possible_next_offset
+        };
+        assert!(allocated_block_offset >= KERNEL_HEAP_BLOCK_INFO_SIZE);
+        if allocated_block_offset > block_offset_from_header {
+            // we can exceed the calculated block sizes from the layout above, if that happens
+            // we must increase the allocation size to account for that
+            // this can happen when the alignment of the requested block is more than the info block
+            //
+            // example:
+            //   requested layout: size=512, align=64
+            //   info layout: size=32, align=16
+            //   the above calculation `block_offset_from_header` will be 64
+            //   the allocator, i.e. `free_block` will always be aligned to 16 (the info block)
+            //   then, if the `possible_next_offset` happens to be 16, i.e. we are 48 bytes into a 64 bytes block
+            //
+            //       [ 16 bytes ][ 16 bytes ][ 16 bytes ][ 16 bytes ]
+            //       ^ <64 byte alignment>               ^ free_block
+            //
+            //   since 16 is less than 32, we need to add more offset, but `layout.size()` is 64. So we are going to
+            //   add 80 (64 + 16) as the `allocated_block_offset`, but that already exceed `64`.
+            //   the `allocation_size` before this fix would have been 512+64=576,
+            //   but the actual size we need 512+80=592. That's why we need this fix.
+            //   (as you might have expected, these numbers are from an actual bug I found and debugged -_-)
+            allocation_size += allocated_block_offset - block_offset_from_header;
+        }
+        let allocated_ptr = (free_block as *mut u8).add(allocated_block_offset);
+        let allocated_block_info =
+            allocated_ptr.sub(KERNEL_HEAP_BLOCK_INFO_SIZE) as *mut AllocatedHeapBlockInfo;
+
         let free_block_size = (*free_block).size;
-        let free_block_end = free_block as usize + size_to_allocate;
+        // for now, we hope we get enough size
+        // FIXME: get a new block if this is not enough
+        assert!(free_block_size >= allocation_size);
+        let free_block_end = free_block as usize + allocation_size;
         let new_free_block = free_block_end as *mut HeapFreeBlock;
 
         // we have to make sure that the block after us has enough space to write the metadat
         // and we won't corrupt the block that comes after (if there is anys)
-        let whole_size = size_to_allocate + mem::size_of::<HeapFreeBlock>();
+        let required_safe_size = allocation_size + mem::size_of::<HeapFreeBlock>();
 
         // store the actual size of the block
         // if we needed to extend (since the next free block is to small)
         // this will include the whole size and not just the size that
         // we were asked to allocate
-        let mut this_allocation_size = size_to_allocate;
+        let mut this_allocation_size = allocation_size;
 
         // do we have empty space left?
-        if free_block_size > whole_size {
+        if free_block_size > required_safe_size {
             // update the previous block to point to this new subblock instead
             (*new_free_block).prev = (*free_block).prev;
             (*new_free_block).next = (*free_block).next;
-            (*new_free_block).size = free_block_size - size_to_allocate;
+            (*new_free_block).size = free_block_size - allocation_size;
 
             // update the next block to point to this new subblock instead
             if !(*new_free_block).next.is_null() {
@@ -399,20 +446,6 @@ where
             panic!("Found issues in `alloc`");
         }
 
-        // work on the pointer and add the info of the block before it
-        // so we can use it to deallocate later
-        let base = free_block as usize;
-        let possible_next_offset = align_up(base, layout.align()) - base;
-        let allocated_block_offset = if possible_next_offset < KERNEL_HEAP_BLOCK_INFO_SIZE {
-            possible_next_offset + KERNEL_HEAP_BLOCK_INFO_SIZE.max(layout.align())
-        } else {
-            possible_next_offset
-        };
-        assert!(allocated_block_offset >= KERNEL_HEAP_BLOCK_INFO_SIZE);
-        assert!(allocated_block_offset <= whole_block_offset);
-        let allocated_ptr = (free_block as *mut u8).add(allocated_block_offset);
-        let allocated_block_info =
-            allocated_ptr.sub(KERNEL_HEAP_BLOCK_INFO_SIZE) as *mut AllocatedHeapBlockInfo;
         // make sure we are aligned
         assert!(is_aligned(allocated_ptr as _, layout.align()),
             "base_block={allocated_block_info:p}, offset={allocated_block_offset}, ptr={allocated_ptr:?}, layout={layout:?}, should_be_addr={:x}",
