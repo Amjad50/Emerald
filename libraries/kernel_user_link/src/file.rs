@@ -76,14 +76,14 @@ pub struct FileStat {
     pub file_type: FileType,
 }
 
-pub const DIR_ENTRY_MAX_NAME_LEN: usize = 255;
+pub const MAX_FILENAME_LEN: usize = 255;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DirFilename([u8; DIR_ENTRY_MAX_NAME_LEN + 1]);
+pub struct DirFilename([u8; MAX_FILENAME_LEN + 1]);
 
 impl Default for DirFilename {
     fn default() -> Self {
-        Self([0; DIR_ENTRY_MAX_NAME_LEN + 1])
+        Self([0; MAX_FILENAME_LEN + 1])
     }
 }
 
@@ -95,9 +95,9 @@ impl DirFilename {
 
 impl From<&str> for DirFilename {
     fn from(s: &str) -> Self {
-        let mut name = [0; DIR_ENTRY_MAX_NAME_LEN + 1];
+        let mut name = [0; MAX_FILENAME_LEN + 1];
         let bytes = s.as_bytes();
-        assert!(bytes.len() < DIR_ENTRY_MAX_NAME_LEN);
+        assert!(bytes.len() < MAX_FILENAME_LEN);
         name[..bytes.len()].copy_from_slice(bytes);
         Self(name)
     }

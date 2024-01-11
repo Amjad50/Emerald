@@ -5,7 +5,7 @@ pub use kernel_user_link::file::DirEntry;
 pub use kernel_user_link::file::DirFilename;
 pub use kernel_user_link::file::FileStat;
 pub use kernel_user_link::file::FileType;
-pub use kernel_user_link::file::DIR_ENTRY_MAX_NAME_LEN;
+pub use kernel_user_link::file::MAX_FILENAME_LEN;
 pub use kernel_user_link::FD_STDERR;
 pub use kernel_user_link::FD_STDIN;
 pub use kernel_user_link::FD_STDOUT;
