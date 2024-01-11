@@ -111,7 +111,7 @@ pub struct Process {
     parent_id: u64,
 
     // use BTreeMap to keep FDs even after closing some of them
-    open_files: BTreeMap<usize, fs::File>,
+    open_filesystem_nodes: BTreeMap<usize, fs::FilesystemNode>,
     file_index_allocator: GoingUpAllocator,
 
     argv: Vec<String>,
@@ -185,7 +185,7 @@ impl Process {
             context,
             id,
             parent_id,
-            open_files: BTreeMap::new(),
+            open_filesystem_nodes: BTreeMap::new(),
             file_index_allocator: GoingUpAllocator::new(),
             argv,
             stack_ptr_end: stack_end - 8, // 8 bytes for padding
@@ -219,7 +219,7 @@ impl Process {
 
     pub fn finish_stdio(&mut self) {
         // make sure we have STDIN/STDOUT/STDERR, and the allocator is after them
-        assert!(self.open_files.len() >= 3);
+        assert!(self.open_filesystem_nodes.len() >= 3);
         if self.file_index_allocator.next_id.load(Ordering::Relaxed) < 3 {
             self.file_index_allocator
                 .next_id
@@ -227,18 +227,22 @@ impl Process {
         }
     }
 
-    pub fn push_file(&mut self, file: fs::File) -> usize {
+    pub fn push_fs_node<F: Into<fs::FilesystemNode>>(&mut self, file: F) -> usize {
         let fd = self.file_index_allocator.allocate() as usize;
         assert!(
-            self.open_files.insert(fd, file).is_none(),
+            self.open_filesystem_nodes.insert(fd, file.into()).is_none(),
             "fd already exists"
         );
         fd
     }
 
-    pub fn attach_file_to_fd(&mut self, fd: usize, file: fs::File) -> bool {
+    pub fn attach_fs_node_to_fd<F: Into<fs::FilesystemNode>>(
+        &mut self,
+        fd: usize,
+        file: F,
+    ) -> bool {
         // fail first
-        if self.open_files.contains_key(&fd) {
+        if self.open_filesystem_nodes.contains_key(&fd) {
             return false;
         }
         // update allocator so that next push_file will not overwrite this fd
@@ -246,20 +250,20 @@ impl Process {
             .next_id
             .store(fd as u64 + 1, Ordering::SeqCst);
         // must always return `true`
-        self.open_files.insert(fd, file).is_none()
+        self.open_filesystem_nodes.insert(fd, file.into()).is_none()
     }
 
-    pub fn get_file(&mut self, fd: usize) -> Option<&mut fs::File> {
-        self.open_files.get_mut(&fd)
+    pub fn get_fs_node(&mut self, fd: usize) -> Option<&mut fs::FilesystemNode> {
+        self.open_filesystem_nodes.get_mut(&fd)
     }
 
-    pub fn take_file(&mut self, fd: usize) -> Option<fs::File> {
-        self.open_files.remove(&fd)
+    pub fn take_fs_node(&mut self, fd: usize) -> Option<fs::FilesystemNode> {
+        self.open_filesystem_nodes.remove(&fd)
     }
 
-    pub fn put_file(&mut self, fd: usize, file: fs::File) {
+    pub fn put_fs_node(&mut self, fd: usize, file: fs::FilesystemNode) {
         assert!(
-            self.open_files.insert(fd, file).is_none(),
+            self.open_filesystem_nodes.insert(fd, file).is_none(),
             "fd already exists"
         )
     }

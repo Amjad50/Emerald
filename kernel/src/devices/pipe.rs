@@ -43,13 +43,21 @@ pub fn create_pipe_pair() -> (fs::File, fs::File) {
     );
     let read_file = fs::File::from_inode(
         read_inode,
+        String::from("read_pipe"),
         fs::empty_filesystem(),
         0,
         BlockingMode::Block(1),
-    );
+    )
+    .expect("This is a file, shouldn't fail");
     // no blocking for write
-    let write_file =
-        fs::File::from_inode(write_inode, fs::empty_filesystem(), 0, BlockingMode::None);
+    let write_file = fs::File::from_inode(
+        write_inode,
+        String::from("write_pipe"),
+        fs::empty_filesystem(),
+        0,
+        BlockingMode::None,
+    )
+    .expect("This is a file, shouldn't fail");
 
     (read_file, write_file)
 }

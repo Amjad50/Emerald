@@ -95,9 +95,9 @@ fn load_init_process() {
     // to act as STDIN/STDOUT/STDERR
     let console = fs::File::open_blocking("/devices/console", BlockingMode::Line)
         .expect("Could not find `/devices/console`");
-    process.attach_file_to_fd(FD_STDIN, console.clone_inherit());
-    process.attach_file_to_fd(FD_STDOUT, console.clone_inherit());
-    process.attach_file_to_fd(FD_STDERR, console);
+    process.attach_fs_node_to_fd(FD_STDIN, console.clone_inherit());
+    process.attach_fs_node_to_fd(FD_STDOUT, console.clone_inherit());
+    process.attach_fs_node_to_fd(FD_STDERR, console);
 
     println!("Added `init` process pid={}", process.id());
     scheduler::push_process(process);

@@ -2,6 +2,7 @@ use core::{ffi::CStr, mem};
 
 use alloc::{string::String, vec::Vec};
 use kernel_user_link::{
+    file::DirEntry,
     process::SpawnFileMapping,
     sys_arg,
     syscalls::{
@@ -36,6 +37,8 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_create_pipe,   // kernel_user_link::syscalls::SYS_CREATE_PIPE
     sys_wait_pid,      // kernel_user_link::syscalls::SYS_WAIT_PID
     sys_stat,          // kernel_user_link::syscalls::SYS_STAT
+    sys_open_dir,      // kernel_user_link::syscalls::SYS_OPEN_DIR
+    sys_read_dir,      // kernel_user_link::syscalls::SYS_READ_DIR
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -46,9 +49,9 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::ReadNotSupported => SyscallError::CouldNotReadFromFile,
             FileSystemError::WriteNotSupported => SyscallError::CouldNotWriteToFile,
             FileSystemError::EndOfFile => SyscallError::EndOfFile,
-            FileSystemError::IsNotDirectory
-            | FileSystemError::IsDirectory
-            | FileSystemError::DeviceNotFound => todo!(),
+            FileSystemError::IsNotDirectory => SyscallError::IsNotDirectory,
+            FileSystemError::IsDirectory => SyscallError::IsDirectory,
+            FileSystemError::DeviceNotFound => todo!(),
             FileSystemError::DiskReadError { .. }
             | FileSystemError::InvalidOffset
             | FileSystemError::FatError(_)
@@ -59,7 +62,7 @@ impl From<FileSystemError> for SyscallError {
 }
 
 #[inline]
-fn check_ptr(arg: *const u8, len: u64) -> Result<(), SyscallArgError> {
+fn check_ptr(arg: *const u8, len: usize) -> Result<(), SyscallArgError> {
     if arg.is_null() {
         return Err(SyscallArgError::InvalidUserPointer);
     }
@@ -67,7 +70,7 @@ fn check_ptr(arg: *const u8, len: u64) -> Result<(), SyscallArgError> {
         process.is_user_address_mapped(arg as _)
         // very basic check, just check the last byte
         // TODO: check all mapped pages
-            && process.is_user_address_mapped((arg as usize + len as usize - 1) as _)
+            && process.is_user_address_mapped((arg as usize + len - 1) as _)
     }) {
         return Err(SyscallArgError::InvalidUserPointer);
     }
@@ -83,17 +86,28 @@ fn sys_arg_to_str<'a>(arg: *const u8) -> Result<&'a str, SyscallArgError> {
     Ok(string)
 }
 
-fn sys_arg_to_byte_slice<'a>(buf: *const u8, size: u64) -> Result<&'a [u8], SyscallArgError> {
-    check_ptr(buf, size)?;
+fn sys_arg_to_slice<'a, T: Sized>(buf: *const u8, len: usize) -> Result<&'a [T], SyscallArgError> {
+    if len == 0 {
+        return Ok(&[]);
+    }
 
-    let slice = unsafe { core::slice::from_raw_parts(buf as _, size as _) };
+    check_ptr(buf, len * mem::size_of::<T>())?;
+
+    let slice = unsafe { core::slice::from_raw_parts(buf as _, len as _) };
     Ok(slice)
 }
 
-fn sys_arg_to_mut_byte_slice<'a>(buf: *mut u8, size: u64) -> Result<&'a mut [u8], SyscallArgError> {
-    check_ptr(buf, size)?;
+fn sys_arg_to_mut_slice<'a, T: Sized>(
+    buf: *mut u8,
+    len: usize,
+) -> Result<&'a mut [T], SyscallArgError> {
+    if len == 0 {
+        return Ok(&mut []);
+    }
 
-    let slice = unsafe { core::slice::from_raw_parts_mut(buf as _, size as _) };
+    check_ptr(buf, len * mem::size_of::<T>())?;
+
+    let slice = unsafe { core::slice::from_raw_parts_mut(buf as _, len as _) };
     Ok(slice)
 }
 
@@ -121,36 +135,24 @@ fn sys_arg_to_str_array(array_ptr: *const u8) -> Result<Vec<String>, SyscallArgE
 }
 
 /// Allocates space fro the mapping and copies them
-fn sys_arg_to_file_mappings_array(
+fn sys_arg_to_file_mappings_array<'a>(
     array_ptr: *const u8,
     array_size: usize,
-) -> Result<Vec<SpawnFileMapping>, SyscallArgError> {
-    if array_size == 0 {
-        return Ok(Vec::new());
-    }
-    check_ptr(
-        array_ptr,
-        (array_size * mem::size_of::<SpawnFileMapping>()) as u64,
-    )?;
+) -> Result<&'a [SpawnFileMapping], SyscallArgError> {
+    let mappings_array = sys_arg_to_slice::<SpawnFileMapping>(array_ptr, array_size)?;
 
-    let array_ptr = array_ptr as *const SpawnFileMapping;
-
-    let mut array: Vec<SpawnFileMapping> = Vec::new();
     for i in 0..array_size {
-        let mapping = unsafe { array_ptr.add(i).read() };
+        let mapping = mappings_array[i];
 
         // before doing push check that we don't have duplicates
-        if array
-            .iter()
-            .any(|m| m.src_fd == mapping.src_fd || m.dst_fd == mapping.dst_fd)
-        {
-            return Err(SyscallArgError::DuplicateFileMappings);
+        for other_mapping in mappings_array.iter().take(i) {
+            if mapping.src_fd == other_mapping.src_fd || mapping.dst_fd == other_mapping.dst_fd {
+                return Err(SyscallArgError::DuplicateFileMappings);
+            }
         }
-
-        array.push(mapping);
     }
 
-    Ok(array)
+    Ok(mappings_array)
 }
 
 fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
@@ -163,7 +165,7 @@ fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
     // TODO: implement flags and access_mode, for now just open file for reading
     let file = fs::File::open_blocking(path, blocking_mode)?;
-    let file_index = with_current_process(|process| process.push_file(file));
+    let file_index = with_current_process(|process| process.push_fs_node(file));
 
     SyscallResult::Ok(file_index as u64)
 }
@@ -172,15 +174,15 @@ fn sys_write(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (file_index, buf, size, ..) = verify_args! {
         sys_arg!(0, all_state.rest => usize),
         sys_arg!(1, all_state.rest => *const u8),
-        sys_arg!(2, all_state.rest => u64),
+        sys_arg!(2, all_state.rest => usize),
     };
-    let buf = sys_arg_to_byte_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
+    let buf = sys_arg_to_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
     let bytes_written = with_current_process(|process| -> Result<u64, SyscallError> {
         let file = process
-            .get_file(file_index)
+            .get_fs_node(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
 
-        file.write(buf).map_err(|e| e.into())
+        file.as_file_mut()?.write(buf).map_err(|e| e.into())
     })?;
     SyscallResult::Ok(bytes_written)
 }
@@ -189,9 +191,9 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (file_index, buf, size, ..) = verify_args! {
         sys_arg!(0, all_state.rest => usize),
         sys_arg!(1, all_state.rest => *mut u8),
-        sys_arg!(2, all_state.rest => u64),
+        sys_arg!(2, all_state.rest => usize),
     };
-    let buf = sys_arg_to_mut_byte_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
+    let buf = sys_arg_to_mut_slice(buf, size).map_err(|err| to_arg_err!(0, err))?;
 
     // TODO: fix this hack
     //
@@ -208,12 +210,13 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     // A good solution would be to have waitable objects.
     let (bytes_read, file) = with_current_process(|process| {
         let file = process
-            .get_file(file_index)
-            .ok_or(SyscallError::InvalidFileIndex)?;
+            .get_fs_node(file_index)
+            .ok_or(SyscallError::InvalidFileIndex)?
+            .as_file_mut()?;
         if file.is_blocking() {
             // take file now
             let file = process
-                .take_file(file_index)
+                .take_fs_node(file_index)
                 .ok_or(SyscallError::InvalidFileIndex)?;
             Ok((0, Some(file)))
         } else {
@@ -223,9 +226,9 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     })?;
 
     let bytes_read = if let Some(mut file) = file {
-        let bytes_read = file.read(buf)?;
+        let bytes_read = file.as_file_mut()?.read(buf)?;
         // put file back
-        with_current_process(|process| process.put_file(file_index, file));
+        with_current_process(|process| process.put_fs_node(file_index, file));
         bytes_read
     } else {
         bytes_read
@@ -240,7 +243,7 @@ fn sys_close(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     with_current_process(|process| {
         process
-            .take_file(file_index)
+            .take_fs_node(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
         Ok::<_, SyscallError>(())
     })?;
@@ -259,9 +262,9 @@ fn sys_blocking_mode(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     with_current_process(|process| {
         let file = process
-            .get_file(file_index)
+            .get_fs_node(file_index)
             .ok_or(SyscallError::InvalidFileIndex)?;
-        file.set_blocking(blocking_mode);
+        file.as_file_mut()?.set_blocking(blocking_mode);
         Ok::<_, SyscallError>(())
     })?;
 
@@ -293,16 +296,16 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     if !file_mappings.is_empty() {
         // a bit unoptimal, but check all files first before taking them and doing any action
         with_current_process(|process| {
-            for mapping in &file_mappings {
+            for mapping in file_mappings {
                 process
-                    .get_file(mapping.src_fd as _)
+                    .get_fs_node(mapping.src_fd as _)
                     .ok_or(SyscallError::InvalidFileIndex)?;
             }
             Ok::<_, SyscallError>(())
         })?;
     }
 
-    let mut file = fs::File::open(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
+    let mut file = fs::File::open(path)?;
     let elf = Elf::load(&mut file).map_err(|_| SyscallError::CouldNotLoadElf)?;
     let current_pid = with_current_process(|process| process.id);
     let mut new_process = Process::allocate_process(current_pid, &elf, &mut file, argv)
@@ -313,9 +316,9 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         // take the files if any
         for mapping in file_mappings.iter() {
             let file = process
-                .take_file(mapping.src_fd as _)
+                .take_fs_node(mapping.src_fd as _)
                 .ok_or(SyscallError::InvalidFileIndex)?;
-            new_process.attach_file_to_fd(mapping.dst_fd as _, file);
+            new_process.attach_fs_node_to_fd(mapping.dst_fd as _, file);
             if mapping.dst_fd <= FD_STDERR {
                 std_needed[mapping.dst_fd] = false;
             }
@@ -324,10 +327,10 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         // inherit files STD files if not set
         for (i, _) in std_needed.iter().enumerate().filter(|(_, &b)| b) {
             let file = process
-                .get_file(i as _)
+                .get_fs_node(i as _)
                 .ok_or(SyscallError::InvalidFileIndex)?;
-            let inherited_file = file.clone_inherit();
-            new_process.attach_file_to_fd(i as _, inherited_file);
+            let inherited_file = file.as_file()?.clone_inherit();
+            new_process.attach_fs_node_to_fd(i as _, inherited_file);
         }
 
         Ok::<_, SyscallError>(())
@@ -366,7 +369,10 @@ fn sys_create_pipe(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     let (read_file, write_file) = devices::pipe::create_pipe_pair();
     let (read_fd, write_fd) = with_current_process(|process| {
-        (process.push_file(read_file), process.push_file(write_file))
+        (
+            process.push_fs_node(read_file),
+            process.push_fs_node(write_file),
+        )
     });
 
     unsafe {
@@ -414,25 +420,47 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     };
     check_ptr(
         stat_ptr as *const u8,
-        mem::size_of::<kernel_user_link::file::FileStat>() as u64,
+        mem::size_of::<kernel_user_link::file::FileStat>(),
     )
     .map_err(|err| to_arg_err!(1, err))?;
     let stat_ptr = stat_ptr as *mut kernel_user_link::file::FileStat;
 
-    let (_, inode) = fs::open_inode(path).map_err(|_| SyscallError::CouldNotOpenFile)?;
+    let (_, inode) = fs::open_inode(path)?;
 
     unsafe {
-        *stat_ptr = kernel_user_link::file::FileStat {
-            size: inode.size(),
-            file_type: if inode.is_dir() {
-                kernel_user_link::file::FileType::Directory
-            } else {
-                kernel_user_link::file::FileType::File
-            },
-        };
+        *stat_ptr = inode.as_file_stat();
     }
 
     SyscallResult::Ok(0)
+}
+
+fn sys_open_dir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (path, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+    };
+
+    let dir = fs::Directory::open(path)?;
+    let dir_index = with_current_process(|process| process.push_fs_node(dir));
+
+    SyscallResult::Ok(dir_index as u64)
+}
+
+fn sys_read_dir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (dir_index, buf, len, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => usize),
+        sys_arg!(1, all_state.rest => *mut u8),
+        sys_arg!(2, all_state.rest => usize),
+    };
+    let buf = sys_arg_to_mut_slice::<DirEntry>(buf, len).map_err(|err| to_arg_err!(1, err))?;
+
+    let entries_read = with_current_process(|process| -> Result<usize, SyscallError> {
+        let file = process
+            .get_fs_node(dir_index)
+            .ok_or(SyscallError::InvalidFileIndex)?;
+        file.as_dir_mut()?.read(buf).map_err(|e| e.into())
+    })?;
+
+    SyscallResult::Ok(entries_read as u64)
 }
 
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {

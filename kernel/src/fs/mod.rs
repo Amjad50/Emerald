@@ -1,7 +1,7 @@
 use core::{mem, ops};
 
 use alloc::{borrow::Cow, string::String, sync::Arc, vec, vec::Vec};
-use kernel_user_link::file::BlockingMode;
+use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType};
 
 use crate::{
     devices::{
@@ -176,6 +176,17 @@ impl INode {
 
     pub fn device(&self) -> Option<&Arc<dyn Device>> {
         self.device.as_ref()
+    }
+
+    pub fn as_file_stat(&self) -> FileStat {
+        FileStat {
+            size: self.size(),
+            file_type: if self.is_dir() {
+                FileType::Directory
+            } else {
+                FileType::File
+            },
+        }
     }
 }
 
@@ -383,8 +394,8 @@ pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), Fil
 
     let mut opening_dir = false;
     // if no basename, this is a directory (either root or inner directory)
-    if basename == "" {
-        if parent_dir == "/" || parent_dir == "" {
+    if basename.is_empty() {
+        if parent_dir == "/" || parent_dir.is_empty() {
             // we are opening the root of this filesystem
             return filesystem.open_root().map(|inode| (filesystem, inode));
         } else {
@@ -419,6 +430,7 @@ pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), Fil
     Err(FileSystemError::FileNotFound)
 }
 
+/// A handle to a file, it has the inode which controls the properties of the node in the filesystem
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
     path: String,
@@ -427,43 +439,59 @@ pub struct File {
     blocking_mode: BlockingMode,
 }
 
+/// A handle to a directory, it has the inode which controls the properties of the node in the filesystem
+#[allow(dead_code)]
+pub struct Directory {
+    inode: INode,
+    path: String,
+    position: u64,
+    // TODO: replace by iter so that new files can be added in the middle
+    dir_entries: Vec<INode>,
+    // now we don't need the filesystem, but if we implement dynamic directory read, we will
+    // filesystem: Arc<dyn FileSystem>,
+}
+
+/// A node in the filesystem, can be a file or a directory
+#[allow(dead_code)]
+pub enum FilesystemNode {
+    File(File),
+    Directory(Directory),
+}
+
 impl File {
     pub fn open(path: &str) -> Result<Self, FileSystemError> {
         Self::open_blocking(path, BlockingMode::None)
     }
+
     pub fn open_blocking(path: &str, blocking_mode: BlockingMode) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path)?;
 
+        Self::from_inode(inode, String::from(path), filesystem, 0, blocking_mode)
+    }
+
+    pub fn from_inode(
+        inode: INode,
+        path: String,
+        filesystem: Arc<dyn FileSystem>,
+        position: u64,
+        blocking_mode: BlockingMode,
+    ) -> Result<Self, FileSystemError> {
         if inode.is_dir() {
             return Err(FileSystemError::IsDirectory);
         }
 
         Ok(Self {
             filesystem,
-            path: String::from(path),
+            path,
             inode,
-            position: 0,
+            position,
             blocking_mode,
         })
     }
 
-    pub fn from_inode(
-        inode: INode,
-        filesystem: Arc<dyn FileSystem>,
-        position: u64,
-        blocking_mode: BlockingMode,
-    ) -> Self {
-        Self {
-            filesystem,
-            // TODO: this is just the filename I think, not the full path
-            path: String::from(inode.name()),
-            inode,
-            position,
-            blocking_mode,
-        }
-    }
-
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+        assert!(!self.inode.is_dir());
+
         let count = match self.blocking_mode {
             BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,
             BlockingMode::Line => {
@@ -539,6 +567,8 @@ impl File {
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
+        assert!(!self.inode.is_dir());
+
         let written = self
             .filesystem
             .write_file(&self.inode, self.position, buf)?;
@@ -547,7 +577,9 @@ impl File {
     }
 
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {
-        if position > self.inode.size() as u64 {
+        assert!(!self.inode.is_dir());
+
+        if position > self.inode.size() {
             return Err(FileSystemError::InvalidOffset);
         }
         self.position = position;
@@ -555,7 +587,7 @@ impl File {
     }
 
     pub fn filesize(&self) -> u64 {
-        self.inode.size() as u64
+        self.inode.size()
     }
 
     pub fn path(&self) -> &str {
@@ -573,11 +605,6 @@ impl File {
             position += read as usize;
         }
         Ok(buf)
-    }
-
-    pub fn read_to_string(&mut self) -> Result<String, FileSystemError> {
-        let buf = self.read_to_end()?;
-        String::from_utf8(buf).map_err(|_| FileSystemError::InvalidData)
     }
 
     pub fn is_blocking(&self) -> bool {
@@ -600,13 +627,127 @@ impl File {
         };
 
         // inform the device of a clone operation
-        s.inode.device.as_ref().map(|device| {
+        if let Some(device) = s.inode.device.as_ref() {
             device
                 .clone_device()
                 // TODO: maybe use error handling instead
                 .expect("Failed to clone device for file")
-        });
+        }
 
         s
+    }
+}
+
+#[allow(dead_code)]
+impl Directory {
+    pub fn open(path: &str) -> Result<Self, FileSystemError> {
+        let (filesystem, inode) = open_inode(path)?;
+
+        Self::from_inode(inode, String::from(path), filesystem, 0)
+    }
+
+    pub fn from_inode(
+        inode: INode,
+        path: String,
+        filesystem: Arc<dyn FileSystem>,
+        position: u64,
+    ) -> Result<Self, FileSystemError> {
+        if !inode.is_dir() {
+            return Err(FileSystemError::IsNotDirectory);
+        }
+
+        let dir_entries = filesystem.read_dir(&inode)?;
+
+        Ok(Self {
+            path,
+            inode,
+            position,
+            dir_entries,
+        })
+    }
+
+    pub fn read(&mut self, entries: &mut [DirEntry]) -> Result<usize, FileSystemError> {
+        assert!(self.inode.is_dir());
+
+        let mut i = 0;
+        while i < entries.len() {
+            if self.position >= self.dir_entries.len() as u64 {
+                break;
+            }
+
+            let entry = &self.dir_entries[self.position as usize];
+            entries[i] = DirEntry {
+                stat: entry.as_file_stat(),
+                name: entry.name().into(),
+            };
+            i += 1;
+            self.position += 1;
+        }
+
+        Ok(i)
+    }
+}
+
+#[allow(dead_code)]
+impl FilesystemNode {
+    pub fn open(path: &str) -> Result<Self, FileSystemError> {
+        let (filesystem, inode) = open_inode(path)?;
+
+        if inode.is_dir() {
+            Ok(Self::Directory(Directory::from_inode(
+                inode,
+                String::from(path),
+                filesystem,
+                0,
+            )?))
+        } else {
+            Ok(Self::File(File::from_inode(
+                inode,
+                String::from(path),
+                filesystem,
+                0,
+                BlockingMode::None,
+            )?))
+        }
+    }
+
+    pub fn inode(&self) -> &INode {
+        match self {
+            Self::File(file) => &file.inode,
+            Self::Directory(dir) => &dir.inode,
+        }
+    }
+
+    pub fn as_file(&self) -> Result<&File, FileSystemError> {
+        match self {
+            Self::File(file) => Ok(file),
+            Self::Directory(_) => Err(FileSystemError::IsDirectory),
+        }
+    }
+
+    pub fn as_file_mut(&mut self) -> Result<&mut File, FileSystemError> {
+        match self {
+            Self::File(file) => Ok(file),
+            Self::Directory(_) => Err(FileSystemError::IsDirectory),
+        }
+    }
+
+    pub fn as_dir_mut(&mut self) -> Result<&mut Directory, FileSystemError> {
+        match self {
+            Self::File(_) => Err(FileSystemError::IsNotDirectory),
+            Self::Directory(dir) => Ok(dir),
+        }
+    }
+}
+
+impl From<File> for FilesystemNode {
+    fn from(file: File) -> Self {
+        Self::File(file)
+    }
+}
+
+impl From<Directory> for FilesystemNode {
+    fn from(dir: Directory) -> Self {
+        Self::Directory(dir)
     }
 }
