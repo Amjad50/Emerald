@@ -18,7 +18,8 @@ use crate::{
 };
 
 static PROCESS_ID_ALLOCATOR: GoingUpAllocator = GoingUpAllocator::new();
-const INITIAL_STACK_SIZE_PAGES: usize = 4;
+// TODO: add dynamic stack allocation
+const INITIAL_STACK_SIZE_PAGES: usize = 256; // 1MB
 
 #[allow(clippy::identity_op)]
 const HEAP_OFFSET_FROM_ELF_END: usize = 1 * MB;
