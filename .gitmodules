@@ -2,7 +2,3 @@
 	path = extern/rust
 	url = https://github.com/Amjad50/rust.git
 	branch = amjad50_os
-[submodule "extern/hashbrown"]
-	path = extern/hashbrown
-	url = https://github.com/Amjad50/hashbrown.git
-	branch = amjad50_os
