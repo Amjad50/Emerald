@@ -466,17 +466,7 @@ impl File {
     pub fn open_blocking(path: &str, blocking_mode: BlockingMode) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path)?;
 
-        if inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
-
-        Ok(Self {
-            filesystem,
-            path: String::from(path),
-            inode,
-            position: 0,
-            blocking_mode,
-        })
+        Self::from_inode(inode, String::from(path), filesystem, 0, blocking_mode)
     }
 
     pub fn from_inode(
@@ -587,9 +577,7 @@ impl File {
     }
 
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {
-        if self.inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
+        assert!(!self.inode.is_dir());
 
         if position > self.inode.size() {
             return Err(FileSystemError::InvalidOffset);
@@ -655,6 +643,15 @@ impl Directory {
     pub fn open(path: &str) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path)?;
 
+        Self::from_inode(inode, String::from(path), filesystem, 0)
+    }
+
+    pub fn from_inode(
+        inode: INode,
+        path: String,
+        filesystem: Arc<dyn FileSystem>,
+        position: u64,
+    ) -> Result<Self, FileSystemError> {
         if !inode.is_dir() {
             return Err(FileSystemError::IsNotDirectory);
         }
@@ -662,28 +659,10 @@ impl Directory {
         let dir_entries = filesystem.read_dir(&inode)?;
 
         Ok(Self {
-            path: String::from(path),
-            inode,
-            position: 0,
-            dir_entries,
-        })
-    }
-
-    pub fn from_inode(
-        inode: INode,
-        path: String,
-        _filesystem: Arc<dyn FileSystem>,
-        position: u64,
-    ) -> Result<Self, FileSystemError> {
-        if !inode.is_dir() {
-            return Err(FileSystemError::IsNotDirectory);
-        }
-
-        Ok(Self {
             path,
             inode,
             position,
-            dir_entries: Vec::new(),
+            dir_entries,
         })
     }
 
