@@ -188,6 +188,7 @@ pub fn syscall_arg_to_u64<T: FromSyscallArgU64>(value: u64) -> Result<T, Syscall
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum SyscallArgError {
     // 0 is valid (used by Option::None)
     GeneralInvalid = 1,
@@ -214,6 +215,7 @@ impl SyscallArgError {
 #[repr(align(8))]
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum SyscallError {
     SyscallNotFound = 0,
     InvalidErrorCode(u64) = 1,
