@@ -56,8 +56,14 @@ After setting up long-mode, we jump to rust code, and start executing the `kerne
 when we jump to the `kernel_main`, we have mapped some basic parts of the kernel to virtual memory, a basic GDT with no IDT, and we have interrupts still disabled.
 So we setup all of those and the rest of the OS then.
 
+## Demo to userspace programs
+
+Currently we have a basic shell, and I'm using a clone of [`rust`] with my target. Anyway, here is a demo of a program I can run on my OS, [see the repo here](https://github.com/Amjad50/lprs)
+![gif demo](https://github.com/Amjad50/lprs/blob/master/demo.gif)
+
 ## License
 This project is licensed under the MIT license, see [LICENSE](LICENSE) for more information.
 
 [#2]: https://github.com/Amjad50/OS/pull/2
 [`kernel/src/boot.S`]: kernel/src/boot.S
+[`rust`]: https://github.com/Amjad50/rust/tree/amjad50_os_new_target
