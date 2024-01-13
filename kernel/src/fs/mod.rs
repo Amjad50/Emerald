@@ -444,8 +444,7 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
         }
     }
 
-    let root = Path::new("/");
-    for entry in filesystem.open_dir(&root.join(parent))? {
+    for entry in filesystem.open_dir(parent)? {
         if entry.name() == filename {
             // if this is a file, return error if we requst a directory (using "/")
             if !entry.is_dir() && opening_dir {

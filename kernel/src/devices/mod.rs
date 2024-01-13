@@ -19,6 +19,7 @@ pub mod pipe;
 static DEVICES: OnceLock<Arc<Mutex<Devices>>> = OnceLock::new();
 
 pub(crate) const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u64 = 0xdef1ce5;
+pub(crate) const DEVICES_FILESYSTEM_ROOT_INODE_MAGIC: u64 = 0xdef1ce55007;
 
 #[derive(Debug)]
 struct Devices {
@@ -48,13 +49,13 @@ impl FileSystem for Mutex<Devices> {
         Ok(INode::new_file(
             String::from("/"),
             FileAttributes::DIRECTORY,
-            DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+            DEVICES_FILESYSTEM_ROOT_INODE_MAGIC,
             0,
         ))
     }
 
     fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError> {
-        if path.is_root() {
+        if path.is_root() || path.is_empty() {
             Ok(self
                 .lock()
                 .devices
@@ -72,7 +73,7 @@ impl FileSystem for Mutex<Devices> {
         if !inode.is_dir() {
             return Err(FileSystemError::IsNotDirectory);
         }
-        assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+        assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_ROOT_INODE_MAGIC);
         self.open_dir(Path::new(inode.name()))
     }
 }
