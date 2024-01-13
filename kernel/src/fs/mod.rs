@@ -1,6 +1,6 @@
 use core::{mem, ops};
 
-use alloc::{borrow::Cow, string::String, sync::Arc, vec, vec::Vec};
+use alloc::{string::String, sync::Arc, vec, vec::Vec};
 use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType};
 
 use crate::{
@@ -266,15 +266,37 @@ impl FileSystemMapping {
             .find(|(fs_path, _)| path.starts_with(fs_path))
             .ok_or(FileSystemError::FileNotFound)?;
 
-        let prefix_len = if prefix.ends_with('/') {
-            // keep the last /, so we can open the directory
-            prefix.len() - 1
+        let path = if prefix == "/" {
+            // if this is the root, we can just return
+            path
         } else {
-            prefix.len()
+            path.trim_start_matches(prefix)
         };
-        let path = &path[prefix_len..];
 
         Ok((path, filesystem.clone()))
+    }
+
+    fn mount(&mut self, arg: &str, filesystem: Arc<dyn FileSystem>) {
+        // remove `/` at the end unless this is the root, this makes matching work later in
+        // `get_mapping` as we can match directories without including `/`
+        let arg = if arg == "/" {
+            arg
+        } else {
+            arg.trim_end_matches('/')
+        };
+
+        assert!(
+            !self.mappings.iter().any(|(fs_path, _)| fs_path == &arg),
+            "Mounting {} twice",
+            arg
+        );
+
+        let mapping = String::from(arg);
+        self.mappings.push((mapping, filesystem));
+        // must be kept sorted by length, so we can find the best/correct mapping,
+        // as mappings can be inside each other in structure
+        self.mappings
+            .sort_unstable_by(|(a, _), (b, _)| a.len().cmp(&b.len()));
     }
 }
 
@@ -303,23 +325,12 @@ pub enum FileSystemError {
     EndOfFile,
 }
 
+fn get_mapping<'p>(path: &'p str) -> Result<(&'p str, Arc<dyn FileSystem>), FileSystemError> {
+    FILESYSTEM_MAPPING.lock().get_mapping(path)
+}
+
 pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) {
-    let mut mappings = FILESYSTEM_MAPPING.lock();
-
-    assert!(
-        !mappings.mappings.iter().any(|(fs_path, _)| fs_path == arg),
-        "Mounting {} twice",
-        arg
-    );
-
-    let base = String::from(arg);
-    let mapping = if arg.ends_with('/') { base } else { base + "/" };
-
-    mappings.mappings.push((mapping, filesystem));
-    // must be kept sorted by length, so we can find the best/correct mapping faster
-    mappings
-        .mappings
-        .sort_unstable_by(|(a, _), (b, _)| a.len().cmp(&b.len()));
+    FILESYSTEM_MAPPING.lock().mount(arg, filesystem);
 }
 
 /// Loads the hard disk specified in the argument
@@ -369,52 +380,38 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
     }
 }
 
-#[allow(dead_code)]
-pub fn ls_dir(path: &str) -> Result<Vec<INode>, FileSystemError> {
-    let mut path = Cow::from(path);
-
-    if !path.ends_with('/') {
-        path += "/";
-    }
-
-    let (new_path, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(&path)?;
-    filesystem.open_dir(new_path)
-}
-
 /// Open the inode of a path, this include directories and files.
 pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), FileSystemError> {
-    let last_slash = path.rfind('/');
+    if !path.starts_with('/') {
+        return Err(FileSystemError::InvalidPath);
+    }
 
-    let (parent_dir, mut basename) = match last_slash {
-        Some(index) => path.split_at(index + 1),
-        None => return Err(FileSystemError::InvalidPath),
+    let (mut remaining, filesystem) = get_mapping(path)?;
+
+    // if no basename, this is a directory (either root or inner directory)
+    if remaining == "/" || remaining.is_empty() {
+        // we are opening the root of this filesystem
+        return filesystem.open_root().map(|inode| (filesystem, inode));
+    }
+
+    let parent_dir;
+    let basename;
+    let opening_dir = if let Some(new_remaining) = remaining.strip_suffix('/') {
+        remaining = new_remaining;
+        true
+    } else {
+        false
     };
 
-    let (mut parent_dir, filesystem) = FILESYSTEM_MAPPING.lock().get_mapping(parent_dir)?;
-
-    let mut opening_dir = false;
-    // if no basename, this is a directory (either root or inner directory)
-    if basename.is_empty() {
-        if parent_dir == "/" || parent_dir.is_empty() {
-            // we are opening the root of this filesystem
-            return filesystem.open_root().map(|inode| (filesystem, inode));
-        } else {
-            // we are opening a folder in this filesystem
-            // split the `parent_dir` again
-            // remove the last slash first so we can find the one after it
-            parent_dir = &parent_dir[..parent_dir.len() - 1];
-            let last_slash = parent_dir.rfind('/');
-            match last_slash {
-                Some(index) => {
-                    basename = &parent_dir[index + 1..];
-                    parent_dir = &parent_dir[..index + 1];
-                }
-                None => return Err(FileSystemError::InvalidPath),
-            }
-
-            // we are opening a folder (i.e. the path ends with /)
-            opening_dir = true;
+    // we are opening a folder in this filesystem
+    // split the `remaining` into `parent_dir` and `basename`
+    let last_slash = remaining.rfind('/');
+    match last_slash {
+        Some(index) => {
+            basename = &remaining[index + 1..];
+            parent_dir = &remaining[..index + 1];
         }
+        None => return Err(FileSystemError::InvalidPath),
     }
 
     for entry in filesystem.open_dir(parent_dir)? {
