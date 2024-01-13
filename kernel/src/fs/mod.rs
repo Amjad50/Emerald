@@ -16,6 +16,7 @@ use self::mbr::MbrRaw;
 
 mod fat;
 mod mbr;
+mod path;
 
 static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
     mappings: Vec::new(),
