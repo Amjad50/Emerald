@@ -13,8 +13,10 @@ pub use kernel_user_link::FD_STDOUT;
 use kernel_user_link::call_syscall;
 use kernel_user_link::syscalls::SyscallError;
 use kernel_user_link::syscalls::SYS_BLOCKING_MODE;
+use kernel_user_link::syscalls::SYS_CHDIR;
 use kernel_user_link::syscalls::SYS_CLOSE;
 use kernel_user_link::syscalls::SYS_CREATE_PIPE;
+use kernel_user_link::syscalls::SYS_GET_CWD;
 use kernel_user_link::syscalls::SYS_OPEN;
 use kernel_user_link::syscalls::SYS_OPEN_DIR;
 use kernel_user_link::syscalls::SYS_READ;
@@ -153,6 +155,32 @@ pub unsafe fn syscall_read_dir(fd: usize, entries: &mut [DirEntry]) -> Result<us
             fd,                   // fd
             entries_ptr,          // entries_ptr
             entries.len() as u64  // len
+        )
+        .map(|written| written as usize)
+    }
+}
+
+/// # Safety
+/// This function assumes that `path` is a valid C string.
+pub unsafe fn syscall_chdir(path: &CStr) -> Result<(), SyscallError> {
+    unsafe {
+        call_syscall!(
+            SYS_CHDIR,
+            path.as_ptr() as u64, // path
+        )
+        .map(|e| assert!(e == 0))
+    }
+}
+
+/// # Safety
+/// This function assumes that `path` is a valid buffer.
+/// The result will be a string written in the buffer, NULL won't be written, but the written length will be returned
+pub unsafe fn syscall_get_cwd(path: &mut [u8]) -> Result<usize, SyscallError> {
+    unsafe {
+        call_syscall!(
+            SYS_GET_CWD,
+            path.as_mut_ptr() as u64, // path buffer
+            path.len() as u64         // len
         )
         .map(|written| written as usize)
     }
