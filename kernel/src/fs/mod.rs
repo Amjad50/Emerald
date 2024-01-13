@@ -12,7 +12,10 @@ use crate::{
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
-use self::{mbr::MbrRaw, path::Path};
+use self::{
+    mbr::MbrRaw,
+    path::{Component, Path},
+};
 
 mod fat;
 mod mbr;
@@ -404,28 +407,46 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
 }
 
 /// Open the inode of a path, this include directories and files.
-pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), FileSystemError> {
-    if !path.starts_with('/') {
+pub(crate) fn open_inode<P: AsRef<Path>>(
+    path: P,
+) -> Result<(Arc<dyn FileSystem>, INode), FileSystemError> {
+    if !path.as_ref().is_absolute() {
         return Err(FileSystemError::InvalidPath);
     }
-
     let (remaining, filesystem) = get_mapping(path.as_ref())?;
 
-    // if no basename, this is a directory (either root or inner directory)
-    if remaining.components().count() == 0 {
-        // we are opening the root of this filesystem
-        return filesystem.open_root().map(|inode| (filesystem, inode));
+    let opening_dir = path.as_ref().has_last_separator();
+    let mut comp = remaining.components();
+    let filename;
+    let parent;
+    // remove leading `.` and `..` from the path
+    // TODO: this actually causes a bug where doing `/devices/../../..` will boil to `/devices` and not `/` as it should\
+    //       Fix it
+    loop {
+        match comp.next_back() {
+            Some(Component::Normal(segment)) => {
+                filename = segment;
+                parent = comp.as_path();
+                break;
+            }
+            Some(Component::RootDir) | None => {
+                // we reached root, return it directly
+                return filesystem.open_root().map(|inode| (filesystem, inode));
+            }
+            Some(Component::CurDir) => {
+                // ignore
+            }
+            Some(Component::ParentDir) => {
+                // ignore
+                // drop next component
+                comp.next_back();
+            }
+        }
     }
 
-    let opening_dir = remaining.has_last_separator();
     let root = Path::new("/");
-    let parent = remaining.parent().ok_or(FileSystemError::InvalidPath)?;
-    // TODO: handle path ending in `..`
-    let basename = remaining.file_name().ok_or(FileSystemError::InvalidPath)?;
-
-    // FIXME: don't prepend "/" to the path, fix the implementors to respect without root
-    for entry in filesystem.open_dir(root.join(parent).as_ref())? {
-        if entry.name() == basename {
+    for entry in filesystem.open_dir(&root.join(parent))? {
+        if entry.name() == filename {
             // if this is a file, return error if we requst a directory (using "/")
             if !entry.is_dir() && opening_dir {
                 return Err(FileSystemError::IsNotDirectory);
@@ -440,7 +461,7 @@ pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), Fil
 /// A handle to a file, it has the inode which controls the properties of the node in the filesystem
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
-    path: String,
+    path: Box<Path>,
     inode: INode,
     position: u64,
     blocking_mode: BlockingMode,
@@ -450,7 +471,7 @@ pub struct File {
 #[allow(dead_code)]
 pub struct Directory {
     inode: INode,
-    path: String,
+    path: Box<Path>,
     position: u64,
     // TODO: replace by iter so that new files can be added in the middle
     dir_entries: Vec<INode>,
@@ -466,19 +487,22 @@ pub enum FilesystemNode {
 }
 
 impl File {
-    pub fn open(path: &str) -> Result<Self, FileSystemError> {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
         Self::open_blocking(path, BlockingMode::None)
     }
 
-    pub fn open_blocking(path: &str, blocking_mode: BlockingMode) -> Result<Self, FileSystemError> {
-        let (filesystem, inode) = open_inode(path)?;
+    pub fn open_blocking<P: AsRef<Path>>(
+        path: P,
+        blocking_mode: BlockingMode,
+    ) -> Result<Self, FileSystemError> {
+        let (filesystem, inode) = open_inode(path.as_ref())?;
 
-        Self::from_inode(inode, String::from(path), filesystem, 0, blocking_mode)
+        Self::from_inode(inode, path, filesystem, 0, blocking_mode)
     }
 
-    pub fn from_inode(
+    pub fn from_inode<P: AsRef<Path>>(
         inode: INode,
-        path: String,
+        path: P,
         filesystem: Arc<dyn FileSystem>,
         position: u64,
         blocking_mode: BlockingMode,
@@ -489,7 +513,7 @@ impl File {
 
         Ok(Self {
             filesystem,
-            path,
+            path: path.as_ref().into(),
             inode,
             position,
             blocking_mode,
@@ -597,7 +621,7 @@ impl File {
         self.inode.size()
     }
 
-    pub fn path(&self) -> &str {
+    pub fn path(&self) -> &Path {
         &self.path
     }
 
@@ -647,15 +671,15 @@ impl File {
 
 #[allow(dead_code)]
 impl Directory {
-    pub fn open(path: &str) -> Result<Self, FileSystemError> {
-        let (filesystem, inode) = open_inode(path)?;
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
+        let (filesystem, inode) = open_inode(path.as_ref())?;
 
-        Self::from_inode(inode, String::from(path), filesystem, 0)
+        Self::from_inode(inode, path, filesystem, 0)
     }
 
-    pub fn from_inode(
+    pub fn from_inode<P: AsRef<Path>>(
         inode: INode,
-        path: String,
+        path: P,
         filesystem: Arc<dyn FileSystem>,
         position: u64,
     ) -> Result<Self, FileSystemError> {
@@ -667,14 +691,14 @@ impl Directory {
         let dir_entries = filesystem.read_dir(&inode)?;
 
         Ok(Self {
-            path,
+            path: path.as_ref().into(),
             inode,
             position,
             dir_entries,
         })
     }
 
-    pub fn path(&self) -> &str {
+    pub fn path(&self) -> &Path {
         &self.path
     }
 
@@ -713,20 +737,17 @@ impl Clone for Directory {
 
 #[allow(dead_code)]
 impl FilesystemNode {
-    pub fn open(path: &str) -> Result<Self, FileSystemError> {
-        let (filesystem, inode) = open_inode(path)?;
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
+        let (filesystem, inode) = open_inode(path.as_ref())?;
 
         if inode.is_dir() {
             Ok(Self::Directory(Directory::from_inode(
-                inode,
-                String::from(path),
-                filesystem,
-                0,
+                inode, path, filesystem, 0,
             )?))
         } else {
             Ok(Self::File(File::from_inode(
                 inode,
-                String::from(path),
+                path,
                 filesystem,
                 0,
                 BlockingMode::None,
