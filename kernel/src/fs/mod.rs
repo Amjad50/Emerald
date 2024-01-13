@@ -337,6 +337,7 @@ pub enum FileSystemError {
     FatError(fat::FatError),
     FileNotFound,
     InvalidPath,
+    MustBeAbsolute,
     IsNotDirectory,
     IsDirectory,
     InvalidOffset,
@@ -407,11 +408,14 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
 }
 
 /// Open the inode of a path, this include directories and files.
+///
+/// This function must be called with an absolute path. Otherwise it will return [`FileSystemError::MustBeAbsolute`].
 pub(crate) fn open_inode<P: AsRef<Path>>(
     path: P,
 ) -> Result<(Arc<dyn FileSystem>, INode), FileSystemError> {
     if !path.as_ref().is_absolute() {
-        return Err(FileSystemError::InvalidPath);
+        // this is an internal kernel only result, this function must be called with an absolute path
+        return Err(FileSystemError::MustBeAbsolute);
     }
     let (remaining, filesystem) = get_mapping(path.as_ref())?;
 

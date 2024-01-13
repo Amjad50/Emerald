@@ -1,6 +1,6 @@
 use core::{ffi::CStr, mem};
 
-use alloc::{string::String, vec::Vec};
+use alloc::{borrow::Cow, string::String, vec::Vec};
 use kernel_user_link::{
     file::DirEntry,
     process::SpawnFileMapping,
@@ -16,7 +16,7 @@ use crate::{
     cpu::idt::InterruptAllSavedState,
     devices,
     executable::elf::Elf,
-    fs::{self, FileSystemError},
+    fs::{self, path::Path, FileSystemError},
     memory_management::memory_layout::{is_aligned, PAGE_4K},
     process::{scheduler, Process},
 };
@@ -58,6 +58,7 @@ impl From<FileSystemError> for SyscallError {
             | FileSystemError::InvalidOffset
             | FileSystemError::FatError(_)
             | FileSystemError::InvalidData
+            | FileSystemError::MustBeAbsolute   // should not happen from user mode
             | FileSystemError::PartitionTableNotFound => panic!("should not happen?"),
         }
     }
@@ -86,6 +87,10 @@ fn sys_arg_to_str<'a>(arg: *const u8) -> Result<&'a str, SyscallArgError> {
     let slice = unsafe { CStr::from_ptr(arg as _) };
     let string = CStr::to_str(slice).map_err(|_| SyscallArgError::NotValidUtf8)?;
     Ok(string)
+}
+
+fn sys_arg_to_path<'a>(arg: *const u8) -> Result<&'a Path, SyscallArgError> {
+    sys_arg_to_str(arg).map(Path::new)
 }
 
 fn sys_arg_to_slice<'a, T: Sized>(buf: *const u8, len: usize) -> Result<&'a [T], SyscallArgError> {
@@ -157,16 +162,33 @@ fn sys_arg_to_file_mappings_array<'a>(
     Ok(mappings_array)
 }
 
+/// Get the absolute path, if the `path` is relative, it will use the current process working directory to get the absolute path.
+/// If the `path` is absolute, it will return it as is.
+fn path_to_proc_absolute_path(path: &Path) -> Cow<'_, Path> {
+    let absolute_path = if path.is_absolute() {
+        Cow::Borrowed(path)
+    } else {
+        let current_dir =
+            with_current_process(|process| process.get_current_dir().path().to_path_buf());
+        Cow::Owned(current_dir.join(path))
+    };
+    assert!(absolute_path.is_absolute());
+
+    absolute_path
+}
+
 fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (path, _access_mode, flags, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+        sys_arg!(0, all_state.rest => sys_arg_to_path(*const u8)),
         sys_arg!(1, all_state.rest => u64),
         sys_arg!(2, all_state.rest => u64),
     };
     let blocking_mode = kernel_user_link::file::parse_flags(flags)
         .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
+
+    let absolute_path = path_to_proc_absolute_path(path);
     // TODO: implement flags and access_mode, for now just open file for reading
-    let file = fs::File::open_blocking(path, blocking_mode)?;
+    let file = fs::File::open_blocking(absolute_path, blocking_mode)?;
     let file_index = with_current_process(|process| process.push_fs_node(file));
 
     SyscallResult::Ok(file_index as u64)
@@ -285,7 +307,7 @@ fn sys_exit(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (path, argv, file_mappings, file_mappings_size, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+        sys_arg!(0, all_state.rest => sys_arg_to_path(*const u8)),
         sys_arg!(1, all_state.rest => *const u8),   // array of pointers
         sys_arg!(2, all_state.rest => *const u8),   // array of mappings or null
         sys_arg!(3, all_state.rest => usize),       // size of the array
@@ -307,7 +329,9 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         })?;
     }
 
-    let mut file = fs::File::open(path)?;
+    let absolute_path = path_to_proc_absolute_path(path);
+
+    let mut file = fs::File::open(absolute_path)?;
     let elf = Elf::load(&mut file).map_err(|_| SyscallError::CouldNotLoadElf)?;
     let (current_pid, current_dir) =
         with_current_process(|process| (process.id, process.get_current_dir().clone()));
@@ -419,7 +443,7 @@ fn sys_wait_pid(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (path, stat_ptr, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+        sys_arg!(0, all_state.rest => sys_arg_to_path(*const u8)),
         sys_arg!(1, all_state.rest => *mut u8),
     };
     check_ptr(
@@ -429,7 +453,8 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     .map_err(|err| to_arg_err!(1, err))?;
     let stat_ptr = stat_ptr as *mut kernel_user_link::file::FileStat;
 
-    let (_, inode) = fs::open_inode(path)?;
+    let absolute_path = path_to_proc_absolute_path(path);
+    let (_, inode) = fs::open_inode(absolute_path)?;
 
     unsafe {
         *stat_ptr = inode.as_file_stat();
@@ -440,10 +465,11 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_open_dir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (path, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+        sys_arg!(0, all_state.rest => sys_arg_to_path(*const u8)),
     };
 
-    let dir = fs::Directory::open(path)?;
+    let absolute_path = path_to_proc_absolute_path(path);
+    let dir = fs::Directory::open(absolute_path)?;
     let dir_index = with_current_process(|process| process.push_fs_node(dir));
 
     SyscallResult::Ok(dir_index as u64)
@@ -489,9 +515,11 @@ fn sys_get_cwd(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
 fn sys_chdir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (path, ..) = verify_args! {
-        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+        sys_arg!(0, all_state.rest => sys_arg_to_path(*const u8)),
     };
-    let dir = fs::Directory::open(path)?;
+
+    let absolute_path = path_to_proc_absolute_path(path);
+    let dir = fs::Directory::open(absolute_path)?;
     with_current_process(|process| process.set_current_dir(dir));
 
     SyscallResult::Ok(0)
