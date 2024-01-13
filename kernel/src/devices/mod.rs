@@ -3,7 +3,7 @@ use core::fmt;
 use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 
 use crate::{
-    fs::{self, FileAttributes, FileSystem, FileSystemError, INode},
+    fs::{self, path::Path, FileAttributes, FileSystem, FileSystemError, INode},
     io,
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
@@ -53,8 +53,8 @@ impl FileSystem for Mutex<Devices> {
         ))
     }
 
-    fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError> {
-        if path == "/" {
+    fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError> {
+        if path.is_root() {
             Ok(self
                 .lock()
                 .devices
@@ -73,7 +73,7 @@ impl FileSystem for Mutex<Devices> {
             return Err(FileSystemError::IsNotDirectory);
         }
         assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_CLUSTER_MAGIC);
-        self.open_dir(inode.name())
+        self.open_dir(Path::new(inode.name()))
     }
 }
 

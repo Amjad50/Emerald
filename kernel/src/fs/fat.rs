@@ -15,7 +15,7 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::{FileAttributes, FileSystem, FileSystemError, INode};
+use super::{path::Path, FileAttributes, FileSystem, FileSystemError, INode};
 
 const DIRECTORY_ENTRY_SIZE: u32 = 32;
 
@@ -869,8 +869,9 @@ impl FileSystem for Mutex<FatFilesystem> {
         self.lock().read_file(inode, position as u32, buf)
     }
 
-    fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError> {
-        Ok(self.lock().open_dir(path)?.collect())
+    fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError> {
+        // TODO: handle `Path` here
+        Ok(self.lock().open_dir(path.as_str())?.collect())
     }
 
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {

@@ -1198,6 +1198,56 @@ impl Path {
             .unwrap_or(false)
     }
 
+    /// Checks if the path is the root directory.
+    ///
+    /// This function compares the path string with "/", the root directory.
+    /// If the path is "/", it returns `true`. For any other path, it returns `false`.
+    ///
+    /// # Returns
+    ///
+    /// * `true` if the path is the root directory ("/").
+    /// * `false` if the path is not the root directory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use your_module::Path;
+    ///
+    /// let p = Path::new("/");
+    /// assert_eq!(p.is_root(), true);
+    ///
+    /// let p = Path::new("/some/path");
+    /// assert_eq!(p.is_root(), false);
+    /// ```
+    pub fn is_root(&self) -> bool {
+        self.as_str() == "/"
+    }
+
+    /// Checks if the path is empty.
+    ///
+    /// This function checks if the path string is empty. If the path is an empty string, it returns `true`.
+    /// For any non-empty path, it returns `false`.
+    ///
+    /// # Returns
+    ///
+    /// * `true` if the path is an empty string.
+    /// * `false` if the path is not an empty string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use your_module::Path;
+    ///
+    /// let p = Path::new("");
+    /// assert_eq!(p.is_empty(), true);
+    ///
+    /// let p = Path::new("/some/path");
+    /// assert_eq!(p.is_empty(), false);
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.as_str().is_empty()
+    }
+
     /// Returns the `Path` without its final component, if there is one.
     ///
     /// Returns `None` if the path terminates in a root or prefix.

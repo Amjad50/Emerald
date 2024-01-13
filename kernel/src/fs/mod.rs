@@ -1,6 +1,6 @@
 use core::{mem, ops};
 
-use alloc::{string::String, sync::Arc, vec, vec::Vec};
+use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType};
 
 use crate::{
@@ -12,11 +12,11 @@ use crate::{
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
-use self::mbr::MbrRaw;
+use self::{mbr::MbrRaw, path::Path};
 
 mod fat;
 mod mbr;
-mod path;
+pub mod path;
 
 static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
     mappings: Vec::new(),
@@ -202,7 +202,7 @@ impl Drop for INode {
 pub trait FileSystem: Send + Sync {
     fn open_root(&self) -> Result<INode, FileSystemError>;
     // TODO: don't use Vector please, use an iterator somehow
-    fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError>;
+    fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError>;
     fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
     fn read_file(
         &self,
@@ -241,7 +241,7 @@ impl FileSystem for EmptyFileSystem {
         Err(FileSystemError::FileNotFound)
     }
 
-    fn open_dir(&self, _path: &str) -> Result<Vec<INode>, FileSystemError> {
+    fn open_dir(&self, _path: &Path) -> Result<Vec<INode>, FileSystemError> {
         Err(FileSystemError::FileNotFound)
     }
 
@@ -251,53 +251,75 @@ impl FileSystem for EmptyFileSystem {
 }
 
 struct FileSystemMapping {
-    mappings: Vec<(String, Arc<dyn FileSystem>)>,
+    mappings: Vec<(Box<Path>, Arc<dyn FileSystem>)>,
 }
 
 impl FileSystemMapping {
+    /// Retrieves the file system mapping for a given path.
+    ///
+    /// This function iterates over the stored mappings in reverse order and returns the first
+    /// file system and the stripped path for which the given path has a prefix that matches
+    /// the file system's path.
+    ///
+    /// # Parameters
+    ///
+    /// * `path`: A reference to the path for which to find the file system mapping.
+    ///
+    /// # Returns
+    ///
+    /// * A tuple containing the stripped path and an `Arc` to the file system, if a matching mapping is found.
+    /// * `FileSystemError::FileNotFound` if no matching mapping is found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assume fs_map has been populated with some mappings
+    /// let mut fs_map = FileSystemMap::new();
+    ///
+    /// let path = Path::new("/some/path");
+    /// match fs_map.get_mapping(&path) {
+    ///     Ok((stripped_path, fs)) => {
+    ///         println!("Found file system: {:?}", fs);
+    ///         println!("Stripped path: {:?}", stripped_path);
+    ///     }
+    ///     Err(FileSystemError::FileNotFound) => {
+    ///         println!("No file system found for path: {:?}", path);
+    ///     }
+    ///     _ => {}
+    /// }
+    /// ```
     fn get_mapping<'p>(
         &mut self,
-        path: &'p str,
-    ) -> Result<(&'p str, Arc<dyn FileSystem>), FileSystemError> {
-        let (prefix, filesystem) = self
+        path: &'p Path,
+    ) -> Result<(&'p Path, Arc<dyn FileSystem>), FileSystemError> {
+        let (stripped_path, filesystem) = self
             .mappings
             .iter()
             // look from the back for best match
             .rev()
-            .find(|(fs_path, _)| path.starts_with(fs_path))
+            .find_map(|(fs_path, fs)| Some((path.strip_prefix(fs_path).ok()?, fs.clone())))
             .ok_or(FileSystemError::FileNotFound)?;
 
-        let path = if prefix == "/" {
-            // if this is the root, we can just return
-            path
-        } else {
-            path.trim_start_matches(prefix)
-        };
-
-        Ok((path, filesystem.clone()))
+        Ok((stripped_path, filesystem.clone()))
     }
 
-    fn mount(&mut self, arg: &str, filesystem: Arc<dyn FileSystem>) {
-        // remove `/` at the end unless this is the root, this makes matching work later in
-        // `get_mapping` as we can match directories without including `/`
-        let arg = if arg == "/" {
-            arg
-        } else {
-            arg.trim_end_matches('/')
-        };
-
+    fn mount<P: AsRef<Path>>(&mut self, arg: P, filesystem: Arc<dyn FileSystem>) {
+        // TODO: replace with error
         assert!(
-            !self.mappings.iter().any(|(fs_path, _)| fs_path == &arg),
-            "Mounting {} twice",
-            arg
+            !self
+                .mappings
+                .iter()
+                .any(|(fs_path, _)| fs_path.as_ref() == arg.as_ref()),
+            "Mounting {:?} twice",
+            arg.as_ref().display()
         );
 
-        let mapping = String::from(arg);
-        self.mappings.push((mapping, filesystem));
+        self.mappings.push((arg.as_ref().into(), filesystem));
+
         // must be kept sorted by length, so we can find the best/correct mapping,
         // as mappings can be inside each other in structure
         self.mappings
-            .sort_unstable_by(|(a, _), (b, _)| a.len().cmp(&b.len()));
+            .sort_unstable_by(|(a, _), (b, _)| a.as_str().len().cmp(&b.as_str().len()));
     }
 }
 
@@ -326,7 +348,7 @@ pub enum FileSystemError {
     EndOfFile,
 }
 
-fn get_mapping<'p>(path: &'p str) -> Result<(&'p str, Arc<dyn FileSystem>), FileSystemError> {
+fn get_mapping<'p>(path: &'p Path) -> Result<(&'p Path, Arc<dyn FileSystem>), FileSystemError> {
     FILESYSTEM_MAPPING.lock().get_mapping(path)
 }
 
@@ -387,35 +409,22 @@ pub(crate) fn open_inode(path: &str) -> Result<(Arc<dyn FileSystem>, INode), Fil
         return Err(FileSystemError::InvalidPath);
     }
 
-    let (mut remaining, filesystem) = get_mapping(path)?;
+    let (remaining, filesystem) = get_mapping(path.as_ref())?;
 
     // if no basename, this is a directory (either root or inner directory)
-    if remaining == "/" || remaining.is_empty() {
+    if remaining.components().count() == 0 {
         // we are opening the root of this filesystem
         return filesystem.open_root().map(|inode| (filesystem, inode));
     }
 
-    let parent_dir;
-    let basename;
-    let opening_dir = if let Some(new_remaining) = remaining.strip_suffix('/') {
-        remaining = new_remaining;
-        true
-    } else {
-        false
-    };
+    let opening_dir = remaining.has_last_separator();
+    let root = Path::new("/");
+    let parent = remaining.parent().ok_or(FileSystemError::InvalidPath)?;
+    // TODO: handle path ending in `..`
+    let basename = remaining.file_name().ok_or(FileSystemError::InvalidPath)?;
 
-    // we are opening a folder in this filesystem
-    // split the `remaining` into `parent_dir` and `basename`
-    let last_slash = remaining.rfind('/');
-    match last_slash {
-        Some(index) => {
-            basename = &remaining[index + 1..];
-            parent_dir = &remaining[..index + 1];
-        }
-        None => return Err(FileSystemError::InvalidPath),
-    }
-
-    for entry in filesystem.open_dir(parent_dir)? {
+    // FIXME: don't prepend "/" to the path, fix the implementors to respect without root
+    for entry in filesystem.open_dir(root.join(parent).as_ref())? {
         if entry.name() == basename {
             // if this is a file, return error if we requst a directory (using "/")
             if !entry.is_dir() && opening_dir {
