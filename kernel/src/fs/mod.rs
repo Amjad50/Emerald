@@ -656,6 +656,7 @@ impl Directory {
             return Err(FileSystemError::IsNotDirectory);
         }
 
+        // TODO: read dynamically, not at creation, as we sometimes don't use this (e.g. current_dir in `Process`)
         let dir_entries = filesystem.read_dir(&inode)?;
 
         Ok(Self {
@@ -664,6 +665,10 @@ impl Directory {
             position,
             dir_entries,
         })
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
     }
 
     pub fn read(&mut self, entries: &mut [DirEntry]) -> Result<usize, FileSystemError> {
@@ -685,6 +690,17 @@ impl Directory {
         }
 
         Ok(i)
+    }
+}
+
+impl Clone for Directory {
+    fn clone(&self) -> Self {
+        Self {
+            inode: self.inode.clone(),
+            path: self.path.clone(),
+            position: 0,
+            dir_entries: self.dir_entries.clone(),
+        }
     }
 }
 

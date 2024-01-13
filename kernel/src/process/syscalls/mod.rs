@@ -39,6 +39,8 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_stat,          // kernel_user_link::syscalls::SYS_STAT
     sys_open_dir,      // kernel_user_link::syscalls::SYS_OPEN_DIR
     sys_read_dir,      // kernel_user_link::syscalls::SYS_READ_DIR
+    sys_get_cwd,       // kernel_user_link::syscalls::SYS_GET_CWD
+    sys_chdir,         // kernel_user_link::syscalls::SYS_CHDIR
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -307,9 +309,11 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     let mut file = fs::File::open(path)?;
     let elf = Elf::load(&mut file).map_err(|_| SyscallError::CouldNotLoadElf)?;
-    let current_pid = with_current_process(|process| process.id);
-    let mut new_process = Process::allocate_process(current_pid, &elf, &mut file, argv)
-        .map_err(|_| SyscallError::CouldNotAllocateProcess)?;
+    let (current_pid, current_dir) =
+        with_current_process(|process| (process.id, process.get_current_dir().clone()));
+    let mut new_process =
+        Process::allocate_process(current_pid, &elf, &mut file, argv, current_dir)
+            .map_err(|_| SyscallError::CouldNotAllocateProcess)?;
 
     let mut std_needed = [true; 3];
     with_current_process(|process| {
@@ -461,6 +465,36 @@ fn sys_read_dir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     })?;
 
     SyscallResult::Ok(entries_read as u64)
+}
+
+fn sys_get_cwd(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (buf, len, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => *mut u8),
+        sys_arg!(1, all_state.rest => usize),
+    };
+    let buf = sys_arg_to_mut_slice::<u8>(buf, len).map_err(|err| to_arg_err!(0, err))?;
+
+    let needed_bytes = with_current_process(|process| -> Result<usize, SyscallError> {
+        let cwd = process.get_current_dir().path();
+        let needed_bytes = cwd.as_bytes().len();
+        if needed_bytes > len {
+            return Err(SyscallError::BufferTooSmall);
+        }
+        buf[..needed_bytes].copy_from_slice(cwd.as_bytes());
+        Ok(needed_bytes)
+    })?;
+
+    SyscallResult::Ok(needed_bytes as u64)
+}
+
+fn sys_chdir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (path, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => sys_arg_to_str(*const u8)),
+    };
+    let dir = fs::Directory::open(path)?;
+    with_current_process(|process| process.set_current_dir(dir));
+
+    SyscallResult::Ok(0)
 }
 
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {

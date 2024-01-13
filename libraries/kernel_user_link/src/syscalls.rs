@@ -6,7 +6,7 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 13;
+pub const NUM_SYSCALLS: usize = 15;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
@@ -22,6 +22,8 @@ mod numbers {
     pub const SYS_STAT: u64 = 10;
     pub const SYS_OPEN_DIR: u64 = 11;
     pub const SYS_READ_DIR: u64 = 12;
+    pub const SYS_GET_CWD: u64 = 13;
+    pub const SYS_CHDIR: u64 = 14;
 }
 pub use numbers::*;
 
@@ -232,6 +234,7 @@ pub enum SyscallError {
     ProcessStillRunning = 12,
     IsNotDirectory = 13,
     IsDirectory = 14,
+    BufferTooSmall = 15,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -320,6 +323,7 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::ProcessStillRunning => 12 << 56,
                 SyscallError::IsNotDirectory => 13 << 56,
                 SyscallError::IsDirectory => 14 << 56,
+                SyscallError::BufferTooSmall => 15 << 56,
             };
 
             err_upper | (1 << 63)
@@ -371,6 +375,7 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             12 => SyscallError::ProcessStillRunning,
             13 => SyscallError::IsNotDirectory,
             14 => SyscallError::IsDirectory,
+            15 => SyscallError::BufferTooSmall,
             _ => invalid_error_code(()),
         };
         SyscallResult::Err(err)
