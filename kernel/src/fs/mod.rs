@@ -443,6 +443,9 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
             Some(Component::ParentDir) => {
                 // ignore
                 // drop next component
+                // FIXME: there is a bug here, `/welcome/../..` will be treated as `/welcome`
+                //       as the first `..` will drop the second `..`
+                //       implement better handling of this and make it global, probably in [`Path`]
                 comp.next_back();
             }
         }
