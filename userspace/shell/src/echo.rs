@@ -1,5 +1,3 @@
-#![feature(restricted_std)]
-
 use std::process::ExitCode;
 
 /// Echo shell program

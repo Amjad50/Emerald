@@ -1,5 +1,3 @@
-#![feature(restricted_std)]
-
 use std::{
     borrow::Cow,
     io::{self, Write},

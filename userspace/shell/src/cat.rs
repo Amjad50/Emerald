@@ -1,5 +1,3 @@
-#![feature(restricted_std)]
-
 use std::{io::Read, process::ExitCode};
 
 /// Cat shell program

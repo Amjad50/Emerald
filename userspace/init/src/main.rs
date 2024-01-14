@@ -6,7 +6,6 @@
 //!
 //! It acts as a wrapper, where it takes stdin stream as bytes,
 //! and forwards it to the shell making sure to render them on each button press
-#![feature(restricted_std)]
 
 use std::{
     fs::File,

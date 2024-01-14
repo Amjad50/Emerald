@@ -1,4 +1,3 @@
-#![feature(restricted_std)]
 #![feature(io_error_more)]
 
 use std::process::ExitCode;

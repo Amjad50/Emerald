@@ -3,7 +3,7 @@ build-std-features = ["compiler-builtins-mem"]
 build-std = ["core", "alloc", "compiler_builtins"]
 
 [build]
-target = "x86-64-os.json"
+target = "x86-64-amjad_os.json"
 
 [target.'cfg(target_os = "none")']
 runner = "qemu-system-x86_64 -serial mon:stdio -m 512 -kernel"
