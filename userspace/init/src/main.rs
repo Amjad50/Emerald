@@ -31,12 +31,18 @@ fn main() {
 
         // running busy loop
         let mut line_buffer = Vec::new();
-        let res = loop {
+        let res = 'outer: loop {
             if let Some(status) = child.try_wait().unwrap() {
                 break status;
             }
             let mut buf = [0u8; 1];
+            let mut counter = 0;
             while stdin_file.read(&mut buf).unwrap() == 0 {
+                counter += 1;
+                if counter > 20 {
+                    // break outer, so that we can check the status of the child
+                    continue 'outer;
+                }
                 core::hint::spin_loop();
             }
             // also output to our stdout
@@ -45,7 +51,11 @@ fn main() {
             line_buffer.push(buf[0]);
 
             if buf[0] == b'\n' {
-                child_stdin.write_all(&line_buffer).unwrap();
+                if child_stdin.write_all(&line_buffer).is_err() {
+                    // pipe closed, the process must have stopped, go back and check
+                    // so that we can get the exit status
+                    continue;
+                }
                 line_buffer.clear();
             }
         };
