@@ -60,8 +60,8 @@ fn main() -> ExitCode {
     let args = std::env::args().collect::<Vec<_>>();
 
     if args.len() < 2 {
-        println!("Usage: {} [paths...]", args[0]);
-        return ExitCode::FAILURE;
+        ls(".", false);
+        return ExitCode::SUCCESS;
     }
 
     let print_parent = args.len() > 2;

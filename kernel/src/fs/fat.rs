@@ -15,7 +15,10 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::{FileAttributes, FileSystem, FileSystemError, INode};
+use super::{
+    path::{Component, Path},
+    FileAttributes, FileSystem, FileSystemError, INode,
+};
 
 const DIRECTORY_ENTRY_SIZE: u32 = 32;
 
@@ -732,20 +735,20 @@ impl FatFilesystem {
         }
     }
 
-    pub fn open_dir(&self, path: &str) -> Result<DirectoryIterator, FileSystemError> {
-        if path.is_empty() {
-            return Err(FileSystemError::InvalidPath);
-        }
-        if !path.starts_with('/') {
-            return Err(FileSystemError::InvalidPath);
-        }
+    pub fn open_dir(&self, path: &Path) -> Result<DirectoryIterator, FileSystemError> {
         let root = self.open_root_dir()?;
-        if path == "/" {
+        if path.is_root() || path.is_empty() {
             return DirectoryIterator::new(self, root);
         }
 
         let mut dir = root;
-        'component_loop: for component in path[1..].split('/') {
+        'component_loop: for component in path.components() {
+            let component = match component {
+                Component::RootDir | Component::CurDir => {
+                    continue;
+                }
+                keep @ (Component::ParentDir | Component::Normal(_)) => keep.as_str(),
+            };
             if component.is_empty() {
                 continue;
             }
@@ -869,7 +872,8 @@ impl FileSystem for Mutex<FatFilesystem> {
         self.lock().read_file(inode, position as u32, buf)
     }
 
-    fn open_dir(&self, path: &str) -> Result<Vec<INode>, FileSystemError> {
+    fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError> {
+        // TODO: handle `Path` here
         Ok(self.lock().open_dir(path)?.collect())
     }
 

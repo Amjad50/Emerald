@@ -117,6 +117,8 @@ pub struct Process {
 
     argv: Vec<String>,
 
+    current_dir: fs::Directory,
+
     stack_ptr_end: usize,
     stack_size: usize,
 
@@ -136,6 +138,7 @@ impl Process {
         elf: &elf::Elf,
         file: &mut fs::File,
         argv: Vec<String>,
+        current_dir: fs::Directory,
     ) -> Result<Self, ProcessError> {
         let id = PROCESS_ID_ALLOCATOR.allocate();
         let mut vm = virtual_memory_mapper::clone_current_vm_as_user();
@@ -189,6 +192,7 @@ impl Process {
             open_filesystem_nodes: BTreeMap::new(),
             file_index_allocator: GoingUpAllocator::new(),
             argv,
+            current_dir,
             stack_ptr_end: stack_end - 8, // 8 bytes for padding
             stack_size,
             heap_start,
@@ -327,6 +331,14 @@ impl Process {
         }
 
         Some(old_end)
+    }
+
+    pub fn get_current_dir(&self) -> &fs::Directory {
+        &self.current_dir
+    }
+
+    pub fn set_current_dir(&mut self, current_dir: fs::Directory) {
+        self.current_dir = current_dir;
     }
 }
 

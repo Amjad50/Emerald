@@ -87,8 +87,14 @@ fn finish_boot() {
 fn load_init_process() {
     let mut init_file = fs::File::open("/init").expect("Could not find `init` file");
     let elf = Elf::load(&mut init_file).expect("Could not load init file");
-    let mut process = Process::allocate_process(0, &elf, &mut init_file, Vec::new())
-        .expect("Could not allocate process for `init`");
+    let mut process = Process::allocate_process(
+        0,
+        &elf,
+        &mut init_file,
+        Vec::new(),
+        fs::Directory::open("/").expect("No root"),
+    )
+    .expect("Could not allocate process for `init`");
     assert!(process.id() == 0, "Must be the first process");
 
     // add the console to `init` manually, after that processes will either inherit it or open a pipe or something
