@@ -15,13 +15,7 @@
  * We are going to setup the pages tables in the first 512KB of ram.
  */
 
-MULTIBOOT_FLAG_ALIGN_4K = 1 << 0
-MULTIBOOT_FLAG_MEM_INFO = 1 << 1
-MULTIBOOT_FLAG_VIDEO_INFO = 1 << 2
-MULTIBOOT_FLAG_CUSTOM_LOAD_INFO = 1 << 16
-
-MULTIBOOT_VIDEO_MODE_GRAPHICS = 0
-MULTIBOOT_VIDEO_MODE_TEXT = 1
+MULTIBOOT2_CHECK_MAGIC = 0x36d76289
 
 PHY_PAGE_SIZE_4K = 0x1000
 PHY_PAGE_SIZE_2M = 0x200000
@@ -46,9 +40,14 @@ CR0_PG   = 1 << 31
 CR4_PAE  = 1 << 5
 EFER_LME = 1 << 8
 
-CPUID_FEAT_ID_CMD  = 0x80000001
-CPUID_FEAT_EDX_PAE = 1 << 6
-CPUID_FEAT_EDX_LM  = 1 << 29
+EFER_REG = 0xC0000080
+
+CPUID_FEAT_CMD        = 0x1
+CPUID_FEAT_EX_CMD     = 0x80000001
+# Physical Address Extension available
+CPUID_FEAT_EDX_PAE    = 1 << 6
+# Intel 64/Long Mode available
+CPUID_FEAT_EX_EDX_LM  = 1 << 29
 
 # some helper macros that converts a virtual address to a physical address
 # this should be used when loading any address while paging is disabled
@@ -113,17 +112,21 @@ mb2_header_end:
 .section .text
 .global entry
 entry:
-    cmp eax, 0x36d76289
+    cmp eax, MULTIBOOT2_CHECK_MAGIC
     jne not_multiboot2
     # check if we are running on a 64-bit CPU
     # save ebx, since its important containing the multiboot info
     # no stack yet, so lets use registers
     mov edi, ebx
-    mov eax, CPUID_FEAT_ID_CMD
+    # check for PEA
+    mov eax, CPUID_FEAT_CMD
     cpuid
     test edx, CPUID_FEAT_EDX_PAE
     jz not_64bit
-    test edx, CPUID_FEAT_EDX_LM
+    # check for long mode
+    mov eax, CPUID_FEAT_EX_CMD
+    cpuid
+    test edx, CPUID_FEAT_EX_EDX_LM
     jz not_64bit
 
     # restore ebx
@@ -196,7 +199,7 @@ fill_pdt_loop:
     or eax, CR4_PAE
     mov cr4, eax
 # enable long mode
-    mov ecx, 0xC0000080
+    mov ecx, EFER_REG
     rdmsr
     or eax, EFER_LME
     wrmsr
