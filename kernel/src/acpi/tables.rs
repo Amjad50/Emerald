@@ -1,7 +1,7 @@
 use core::{
     any::Any,
     fmt,
-    mem::{self, size_of},
+    mem::{self, size_of, MaybeUninit},
     slice,
 };
 
@@ -43,6 +43,21 @@ fn ensure_at_least_size(addr: usize, size: usize) {
         let virtual_start = align_down(addr, PAGE_4K);
         virtual_space::ensure_at_least_size(virtual_start as _, align_up(size, PAGE_4K) as _);
     }
+}
+
+/// Will fill the table from the header data, and zero out remaining bytes if any are left
+fn get_table_from_header<T>(header: &DescriptionHeader) -> T {
+    let data_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
+    let data_len = header.length as usize - size_of::<DescriptionHeader>();
+    let data_slice = unsafe { slice::from_raw_parts(data_ptr, data_len) };
+
+    let mut our_data_value = MaybeUninit::zeroed();
+    let out_data_slice = unsafe {
+        slice::from_raw_parts_mut(our_data_value.as_mut_ptr() as *mut u8, mem::size_of::<T>())
+    };
+    out_data_slice[..data_len].copy_from_slice(data_slice);
+
+    unsafe { our_data_value.assume_init() }
 }
 
 // Note: this requires allocation, so it should be called after the heap is initialized
@@ -236,11 +251,11 @@ impl DescriptorTable {
 
         let body = match &header.signature.0 {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
-            b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
-            b"HPET" => DescriptorTableBody::Hpet(Box::new(Hpet::from_header(header))),
+            b"FACP" => DescriptorTableBody::Facp(Box::new(get_table_from_header(header))),
+            b"HPET" => DescriptorTableBody::Hpet(Box::new(get_table_from_header(header))),
             b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Dsdt::from_header(header))),
-            b"BGRT" => DescriptorTableBody::Bgrt(Box::new(Bgrt::from_header(header))),
-            b"WAET" => DescriptorTableBody::Waet(Box::new(Waet::from_header(header))),
+            b"BGRT" => DescriptorTableBody::Bgrt(Box::new(get_table_from_header(header))),
+            b"WAET" => DescriptorTableBody::Waet(Box::new(get_table_from_header(header))),
             _ => DescriptorTableBody::Unknown(HexArray(
                 unsafe {
                     slice::from_raw_parts(
@@ -494,15 +509,6 @@ pub struct Facp {
     hypervisor_vendor_id: u64,
 }
 
-impl Facp {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
-        let facp = unsafe { &*(facp_ptr as *const Facp) };
-        // SAFETY: I'm using this to copy from the same struct
-        unsafe { core::mem::transmute_copy(facp) }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 pub struct ApicGenericAddress {
@@ -521,15 +527,6 @@ pub struct Hpet {
     pub hpet_number: u8,
     pub main_counter_minimum_clock_tick: u16,
     pub page_protection: u8,
-}
-
-impl Hpet {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
-        let facp = unsafe { &*(facp_ptr as *const Hpet) };
-        // SAFETY: I'm using this to copy from the same struct
-        unsafe { core::mem::transmute_copy(facp) }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -559,29 +556,10 @@ pub struct Bgrt {
     pub image_offset_y: u32,
 }
 
-impl Bgrt {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let bgrt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
-        let bgrt = unsafe { &*(bgrt_ptr as *const Bgrt) };
-        // SAFETY: I'm using this to copy from the same struct
-        unsafe { core::mem::transmute_copy(bgrt) }
-    }
-}
-
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct Waet {
     emulated_device_flags: u32,
-}
-
-impl Waet {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let waet_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u32 };
-        let flags = unsafe { *waet_ptr };
-        Self {
-            emulated_device_flags: flags,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
