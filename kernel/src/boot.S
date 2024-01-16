@@ -30,12 +30,14 @@ PGE_USER      = 1 << 2
 PGE_PAGE_SIZE = 1 << 7
 
 # GDT flags
-GDT_PRESENT   = 1 << 7
-GDT_NOT_SYS   = 1 << 4
+GDT_WRITE     = 1 << 1
 GDT_CODE      = 1 << 3
+GDT_NOT_SYS   = 1 << 4
 GDT_LONG_MODE = 1 << 5
+GDT_PRESENT   = 1 << 7
 
 # cpu registers flags
+CR0_PE   = 1 << 0
 CR0_PG   = 1 << 31
 CR4_PAE  = 1 << 5
 EFER_LME = 1 << 8
@@ -190,48 +192,55 @@ fill_pdt_loop:
     add edi, 8
     loop fill_pdt_loop
 
-# Complete setting up the page tables
-    virtual_to_physical_mov eax, boot_page_tables
-    mov cr3, eax
+# Setup empty IDT
+    lidt [idtr - 0xFFFFFFFF80000000]
 
 # enable PAE
     mov eax, cr4
     or eax, CR4_PAE
     mov cr4, eax
+# Complete setting up the page tables
+    virtual_to_physical_mov eax, boot_page_tables
+    mov cr3, eax
 # enable long mode
     mov ecx, EFER_REG
     rdmsr
     or eax, EFER_LME
     wrmsr
-# enable paging
+# enable paging, and protection (should be enabled already)
     mov eax, cr0
-    or eax, CR0_PG
+    or eax, CR0_PG | CR0_PE
     mov cr0, eax
 
 # setup gdt and jump
     lgdt [gdtr64 - 0xFFFFFFFF80000000]
-    ljmp 0x08, offset kernel_main_low - 0xFFFFFFFF80000000
+    jmp 0x08, offset kernel_main_low - 0xFFFFFFFF80000000
 
 .align 16
 gdtr64:
     .word gdtr64_end - gdt64 - 1
-    virtual_to_physical_put .quad, gdt64
+    virtual_to_physical_put .long, gdt64
+
+.align 16
+idtr:
+    .word 0
+    .long 0
 
 .align 16
 gdt64:
     .quad 0x0000000000000000    # null descriptor
     # Code segment (0x8)
-    .long 0x00000000                               # Limit & Base (low, bits 0-15)
-    .byte 0                                        # Base (mid, bits 16-23)
-    .byte GDT_CODE | GDT_NOT_SYS | GDT_PRESENT     # Access
-    .byte GDT_LONG_MODE                            # Flags & Limit (high, bits 16-19)
-    .byte 0x00                                     # Base (high, bits 24-31)
+    .long 0x00000000                                       # Limit & Base (low, bits 0-15)
+    .byte 0                                                # Base (mid, bits 16-23)
+    .byte GDT_CODE | GDT_NOT_SYS | GDT_PRESENT | GDT_WRITE # Access
+    .byte GDT_LONG_MODE                                    # Flags & Limit (high, bits 16-19)
+    .byte 0x00                                             # Base (high, bits 24-31)
     # Data segment (0x10)
-    .long 0x00000000                               # Limit & Base (low, bits 0-15)
-    .byte 0                                        # Base (mid, bits 16-23)
-    .byte GDT_NOT_SYS | GDT_PRESENT                # Access
-    .byte 0x00                                     # Flags & Limit (high, bits 16-19)
-    .byte 0x00                                     # Base (high, bits 24-31)
+    .long 0x00000000                                       # Limit & Base (low, bits 0-15)
+    .byte 0                                                # Base (mid, bits 16-23)
+    .byte GDT_NOT_SYS | GDT_PRESENT | GDT_WRITE            # Access
+    .byte 0x00                                             # Flags & Limit (high, bits 16-19)
+    .byte 0x00                                             # Base (high, bits 24-31)
 gdtr64_end:
 
 
@@ -272,8 +281,8 @@ message_not_64bit:
 kernel_main_low:
     # clear interrupts (just in case)
     cli
-    # reset the segments
-    xor rax, rax
+    # set the data segment
+    mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov fs, ax
