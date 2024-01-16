@@ -1,18 +1,12 @@
 /* 
  * This is where the boot happens.
- * The multiboot loader will load the KERNEL at 0x100000 (extended memory)
+ * The multiboot2 loader will load the KERNEL at 0x100000 (extended memory)
  * 
  * Here, we are starting in 32-bit protected mode, with paging disabled.
  * We will setup long mode, and then jump to the kernel.
  *
- * We have 2 regions of the ram that are important to us:
- * - [0x00000000..0x0007FFFF] - the first 512KB of ram, which is usable memory.
- *   the memory mapping we got from the BIOS gives us [0x00000000..0x0009fbff] which is 127KB more
- *   but for starters, lets use the lower 512KB until we read the memory map from the BIOS in the kernel.
- * - [0x00100000..0x????????] - this is the extended memory, and it spans to cover the whole ram 
- *   (I think, I didn't try with more than 512MB of ram)
- *
- * We are going to setup the pages tables in the first 512KB of ram.
+ * We are setting up the virtual memory pages in the `.boot_page_tables` section.
+ * This is inside the `.data` section with `PAGE_TABLE_ALLOC_PAGES` pages in size.
  */
 
 MULTIBOOT2_CHECK_MAGIC = 0x36d76289
@@ -217,14 +211,14 @@ fill_pdt_loop:
     jmp 0x08, offset kernel_main_low - 0xFFFFFFFF80000000
 
 .align 16
-gdtr64:
-    .word gdtr64_end - gdt64 - 1
-    virtual_to_physical_put .long, gdt64
-
-.align 16
 idtr:
     .word 0
     .long 0
+
+.align 16
+gdtr64:
+    .word gdtr64_end - gdt64 - 1
+    virtual_to_physical_put .long, gdt64
 
 .align 16
 gdt64:
