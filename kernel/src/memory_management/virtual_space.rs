@@ -131,7 +131,7 @@ impl VirtualSpaceAllocator {
                     // is it fully inside?
                     if current_phy_start + entry.size >= req_phy_start + req_size {
                         // yes, it is fully inside
-                        return entry.virtual_start + req_phy_start - current_phy_start;
+                        return entry.virtual_start + (req_phy_start - current_phy_start);
                     } else {
                         // no, it is not fully inside, but there is an overlap
                         // we can't allocate this and we can't relocate
