@@ -31,28 +31,6 @@ pub fn get_virtual_for_physical(physical_start: u64, size: u64) -> u64 {
     virtual_addr + offset as u64
 }
 
-pub fn ensure_at_least_size(virtual_start: u64, size: u64) {
-    let (aligned_start, size, _) = align_range(virtual_start as _, size as _, PAGE_4K);
-
-    let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    if let Some((allocated, physical_addr)) =
-        allocator.ensure_at_least_size(aligned_start as u64, size as u64)
-    {
-        if allocated {
-            // ensure its mapped
-            virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
-                virtual_address: virtual_start,
-                physical_address: Some(physical_addr),
-                size: size as _,
-                flags: virtual_memory_mapper::flags::PTE_WRITABLE,
-            });
-        }
-    } else {
-        panic!("Could not ensure at least size")
-    }
-    drop(allocator);
-}
-
 pub fn allocate_and_map_virtual_space(physical_start: u64, size: u64) -> u64 {
     let (aligned_start, size, offset) = align_range(physical_start as _, size as _, PAGE_4K);
 
@@ -88,7 +66,6 @@ pub fn deallocate_virtual_space(virtual_start: u64, size: u64) {
         // we did specify our own physical address on allocation, so we must set this to false
         false,
     );
-    drop(allocator);
 }
 
 pub fn debug_blocks() {
@@ -102,6 +79,20 @@ struct VirtualSpaceEntry {
     size: u64,
 }
 
+impl VirtualSpaceEntry {
+    /// Return `None` if its not mapped, or if the `physical_start` is not inside this entry
+    fn virtual_for_physical(&self, physical_start: u64) -> Option<u64> {
+        if let Some(current_phy_start) = self.physical_start {
+            // is inside?
+            if current_phy_start <= physical_start && current_phy_start + self.size > physical_start
+            {
+                return Some(self.virtual_start + (physical_start - current_phy_start));
+            }
+        }
+        None
+    }
+}
+
 struct VirtualSpaceAllocator {
     entries: LinkedList<VirtualSpaceEntry>,
 }
@@ -113,9 +104,12 @@ impl VirtualSpaceAllocator {
         }
     }
 
-    /// Checks if we have this range allocated, returns it, otherwise perform an allocation, map it, and return
-    /// the new address
-    fn get_virtual_for_physical(&mut self, req_phy_start: u64, req_size: u64) -> u64 {
+    /// Returns `(virtual_start, is_fully_inside)`
+    fn get_entry_containing(
+        &mut self,
+        req_phy_start: u64,
+        req_size: u64,
+    ) -> Option<(&VirtualSpaceEntry, bool)> {
         assert!(req_size > 0);
         assert!(is_aligned(req_phy_start as _, PAGE_4K));
         assert!(is_aligned(req_size as _, PAGE_4K));
@@ -131,86 +125,40 @@ impl VirtualSpaceAllocator {
                     // is it fully inside?
                     if current_phy_start + entry.size >= req_phy_start + req_size {
                         // yes, it is fully inside
-                        return entry.virtual_start + (req_phy_start - current_phy_start);
+                        return Some((entry, true));
                     } else {
                         // no, it is not fully inside, but there is an overlap
                         // we can't allocate this and we can't relocate
-                        panic!("Requested {:016X}..{:016X} is inside {:016X}..{:016X} but it is not fully inside, and we can't relocate it", 
-                            req_phy_start, req_phy_start + req_size, current_phy_start, current_phy_start + entry.size);
+                        return Some((entry, false));
                     }
                 }
             }
             cursor.move_next();
         }
-        // we didn't find it, allocate it
-        self.allocate(req_phy_start, req_size)
+        None
     }
 
-    // Returns `Some` if it ensures the space
-    // Returns `None` if it can't ensure the space
-    //  Return true if it needs to be mapped, i.e. allocated
-    //  Return false if it is already allocated
-    fn ensure_at_least_size(
-        &mut self,
-        req_virtual_start: u64,
-        req_size: u64,
-    ) -> Option<(bool, u64)> {
-        assert!(req_size > 0);
-        assert!(is_aligned(req_virtual_start as _, PAGE_4K));
-        assert!(is_aligned(req_size as _, PAGE_4K));
-
-        let mut cursor = self.entries.cursor_front_mut();
-        while let Some(entry) = cursor.current() {
-            let entry_virtual_end = entry.virtual_start + entry.size;
-            // is inside?
-            if entry.virtual_start <= req_virtual_start && entry_virtual_end > req_virtual_start {
-                let Some(current_phy_start) = entry.physical_start else {
-                    // it is not allocated
-                    panic!(
-                        "Could not ensure size for {:016X}..{:016X}, it is not allocated",
-                        req_virtual_start,
-                        req_virtual_start + req_size
-                    );
-                };
-                // get the offset from the start of this block
-                let virt_offset = req_virtual_start - entry.virtual_start;
-                // this has parts of it inside
-                // is it fully inside?
-                if entry_virtual_end >= req_virtual_start + req_size {
-                    // yes, it is fully inside
-                    return Some((false, current_phy_start + virt_offset));
+    /// Checks if we have this range allocated, returns it, otherwise perform an allocation, map it, and return
+    /// the new address
+    fn get_virtual_for_physical(&mut self, req_phy_start: u64, req_size: u64) -> u64 {
+        match self.get_entry_containing(req_phy_start, req_size) {
+            Some((entry, is_fully_inside)) => {
+                if is_fully_inside {
+                    // we already have it, return it
+                    // we know its inside, so we can unwrap, it may not be fully, but that's fine
+                    let virtual_start: u64 = entry.virtual_for_physical(req_phy_start).unwrap();
+                    return virtual_start;
                 } else {
-                    let addition_size = (req_virtual_start + req_size) - entry_virtual_end;
-                    assert!(addition_size > 0);
-                    let new_size = entry.size + addition_size;
-                    // try to allocate from the next entry only if it is not allocated
-                    let current = cursor.remove_current().unwrap();
-                    if let Some(next_entry) = cursor.current() {
-                        if next_entry.physical_start.is_none() {
-                            // next is not taken, take part of it
-                            let new_entry = VirtualSpaceEntry {
-                                physical_start: Some(current_phy_start),
-                                virtual_start: current.virtual_start,
-                                size: new_size,
-                            };
-                            next_entry.size -= addition_size;
-                            next_entry.virtual_start += addition_size;
-                            cursor.insert_before(new_entry);
-                            return Some((true, current_phy_start + virt_offset));
-                        } else {
-                            // add `current` back
-                            cursor.insert_before(current);
-                            // next is already taken, we can't allocate
-                            // TODO: merge them together as one `allocated` chunk,
-                            //       would need the deallocator to be able to deallocate part as well
-                            return None;
-                        }
-                    }
+                    // we have it, but not fully inside, we need to allocate
+                    panic!("Could not get virtual space for {:016X}..{:016X}, it is not fully inside {:016X}..{:016X}",
+                        req_phy_start, req_phy_start + req_size, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size);
                 }
             }
-            cursor.move_next();
+            None => {}
         }
-        panic!("Could not find virtual space to ensure at least size")
+
+        // we didn't find it, allocate it
+        self.allocate(req_phy_start, req_size)
     }
 
     fn allocate(&mut self, phy_start: u64, size: u64) -> u64 {
