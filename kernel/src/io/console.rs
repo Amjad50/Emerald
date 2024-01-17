@@ -107,17 +107,13 @@ impl Console {
     where
         F: FnMut(&mut dyn core::fmt::Write) -> U,
     {
-        match self {
+        let ret = match self {
             Console::Early(console) => {
                 let console = console.lock();
                 let x = if let Ok(mut c) = console.try_borrow_mut() {
-                    f(&mut *c)
+                    Some(f(&mut *c))
                 } else {
-                    // if we can't get the lock, we are inside `panic`
-                    //  create a new early console and print to it
-                    let mut console = unsafe { EarlyConsole::empty() };
-                    console.init();
-                    f(&mut console)
+                    None
                 };
                 x
             }
@@ -126,16 +122,22 @@ impl Console {
             Console::Late(console) => {
                 let console = console.lock();
                 let x = if let Ok(mut c) = console.try_borrow_mut() {
-                    f(&mut *c)
+                    Some(f(&mut *c))
                 } else {
-                    // if we can't get the lock, we are inside `panic`
-                    //  create a new early console and print to it
-                    let mut console = unsafe { EarlyConsole::empty() };
-                    console.init();
-                    f(&mut console)
+                    None
                 };
                 x
             }
+        };
+
+        if let Some(ret) = ret {
+            ret
+        } else {
+            // if we can't get the lock, we are inside `panic`
+            //  create a new early console and print to it
+            let mut console = unsafe { EarlyConsole::empty() };
+            console.init();
+            f(&mut console)
         }
     }
 }

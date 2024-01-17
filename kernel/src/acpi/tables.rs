@@ -1,7 +1,7 @@
 use core::{
     any::Any,
     fmt,
-    mem::{self, size_of},
+    mem::{self, size_of, MaybeUninit},
     slice,
 };
 
@@ -10,10 +10,11 @@ use alloc::{boxed::Box, vec::Vec};
 use crate::{
     io::{ByteStr, HexArray},
     memory_management::{
-        memory_layout::{align_down, align_up, virtual2physical, KERNEL_BASE, KERNEL_END, PAGE_4K},
+        memory_layout::{physical2virtual, virtual2physical, KERNEL_BASE, KERNEL_END},
         virtual_space,
     },
     multiboot2::MultiBoot2Info,
+    sync::once::OnceLock,
 };
 
 use super::aml::{parse_aml, AmlCode};
@@ -21,66 +22,152 @@ use super::aml::{parse_aml, AmlCode};
 const BIOS_RO_MEM_START: usize = 0x000E0000;
 const BIOS_RO_MEM_END: usize = 0x000FFFFF;
 
-fn physical_to_acpi_memory(addr: usize, size: usize) -> usize {
-    if addr < virtual2physical(KERNEL_END) {
-        assert!(addr + size <= virtual2physical(KERNEL_END));
-        addr + KERNEL_BASE
+/// # Safety
+///
+/// Must ensure the `physical_addr` is valid and point to correct DescriptionHeader
+/// Must ensure that the `physical_address` is not used in virtual_space before calling this function
+/// If any address is used, this may panic, and undefined behavior may occur due to aliasing memory referenced by other code
+/// call `deallocate_acpi_mapping` after using any memory in the acpi region
+unsafe fn get_acpi_header_with_len(physical_addr: usize) -> (*const DescriptionHeader, usize) {
+    if physical_addr < virtual2physical(KERNEL_END) {
+        assert!(
+            physical_addr + mem::size_of::<DescriptionHeader>() <= virtual2physical(KERNEL_END)
+        );
+
+        let header_virtual = (physical_addr + KERNEL_BASE) as *const DescriptionHeader;
+        let len = (*header_virtual).length as usize;
+        assert!(physical_addr + len <= virtual2physical(KERNEL_END));
+        return (header_virtual, len);
     } else {
-        virtual_space::get_virtual_for_physical(addr as _, size as _) as usize
+        let header = virtual_space::get_virtual_for_physical(
+            physical_addr as _,
+            mem::size_of::<DescriptionHeader>() as _,
+        ) as *const DescriptionHeader;
+
+        let len = (*header).length as usize;
+        // remove this entry
+        virtual_space::deallocate_virtual_space(
+            header as _,
+            mem::size_of::<DescriptionHeader>() as _,
+        );
+        let header_ptr = virtual_space::get_virtual_for_physical(physical_addr as _, len as _)
+            as *const DescriptionHeader;
+
+        // check sum
+        let struct_slice = slice::from_raw_parts(header_ptr as *const u8, len);
+        let sum = struct_slice.iter().fold(0u8, |acc, &x| acc.wrapping_add(x));
+        assert_eq!(sum, 0);
+
+        // after this point, the header is valid and can be used safely
+
+        (header_ptr, len)
     }
 }
 
-// this is used after parsing headers and determining the size of the table
-// it tells the `virtual_space` module to ensure that the new size is still
-// mapped, otherwise try to allocate next blocks if they are free.
-// in our case since its done immidiately after parsing the headers, we know it
-// should work unless someone else is executing concurrently
-// at the time of writing this comment, this is done in startup so there shouldn't be anyne else.
-fn ensure_at_least_size(addr: usize, size: usize) {
+/// # Safety
+///
+/// The data pointed by `addr` will become invalid and must not be used.
+///
+/// This will affect all pages of memory that are touching the address space of `addr` and `size`
+/// Thus, this should only be used when we are sure that we are not holding any references to any data of this space.
+unsafe fn deallocate_acpi_mapping(addr: usize, size: usize) {
     if addr < virtual2physical(KERNEL_END) {
         assert!(addr + size <= virtual2physical(KERNEL_END));
     } else {
-        let virtual_start = align_down(addr, PAGE_4K);
-        virtual_space::ensure_at_least_size(virtual_start as _, align_up(size, PAGE_4K) as _);
+        virtual_space::deallocate_virtual_space(addr as _, size as _);
     }
 }
+
+/// Will fill the table from the header data, and zero out remaining bytes if any are left
+///
+/// # Safety
+/// the pointer must be valid and point to a valid table
+/// Also, <T> must be valid when some parts of it is zero
+unsafe fn get_table_from_header<T>(header: *const DescriptionHeader) -> T {
+    let data_ptr = header.add(1) as *const u8;
+    let data_len = (*header).length as usize - size_of::<DescriptionHeader>();
+    let data_slice = slice::from_raw_parts(data_ptr, data_len);
+
+    let mut our_data_value = MaybeUninit::zeroed();
+    let out_data_slice =
+        slice::from_raw_parts_mut(our_data_value.as_mut_ptr() as *mut u8, mem::size_of::<T>());
+    out_data_slice[..data_len].copy_from_slice(data_slice);
+
+    our_data_value.assume_init()
+}
+
+/// Will fill the table from the header data, and zero out remaining bytes if any are left
+///
+/// # Safety
+///
+/// type <T> must be valid when some parts of it is zero
+///
+/// TODO: should this be unsafe?
+fn get_struct_from_bytes<T>(data: &[u8]) -> T {
+    assert_eq!(data.len(), mem::size_of::<T>());
+
+    let mut our_data_value = MaybeUninit::zeroed();
+    // Safety: it is safe to create a slice of bytes for the struct, since we know the pointer is valid
+    let out_data_slice = unsafe {
+        slice::from_raw_parts_mut(our_data_value.as_mut_ptr() as *mut u8, mem::size_of::<T>())
+    };
+    out_data_slice.copy_from_slice(data);
+
+    // Safety: we are sure that the data is valid, since we assume that in the function doc,
+    // assured from the caller
+    unsafe { our_data_value.assume_init() }
+}
+
+// cache the tables
+static BIOS_TABLES: OnceLock<Result<BiosTables, ()>> = OnceLock::new();
 
 // Note: this requires allocation, so it should be called after the heap is initialized
-pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<BiosTables, ()> {
-    let rdsp = multiboot_info
-        .get_most_recent_rsdp()
-        .or_else(|| {
-            // look for RSDP PTR
-            let mut rsdp_ptr =
-                physical_to_acpi_memory(BIOS_RO_MEM_START, mem::size_of::<Rsdp>()) as *const u8;
-            let end = physical_to_acpi_memory(BIOS_RO_MEM_END, mem::size_of::<Rsdp>()) as *const u8;
+pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<&'static BiosTables, ()> {
+    BIOS_TABLES
+        .get_or_init(|| {
+            let rdsp = multiboot_info
+                .get_most_recent_rsdp()
+                .or_else(|| {
+                    // look for RSDP PTR
+                    // this is inside the kernel low virtual range, so we can just convert to virtual directly without allocating space
+                    let mut rsdp_ptr = physical2virtual(BIOS_RO_MEM_START) as *const u8;
+                    let end = physical2virtual(BIOS_RO_MEM_END) as *const u8;
 
-            while rsdp_ptr < end {
-                let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
-                if str == b"RSD PTR " {
-                    // calculate checksum
-                    let sum = unsafe {
-                        slice::from_raw_parts(rsdp_ptr, 20)
-                            .iter()
-                            .fold(0u8, |acc, &x| acc.wrapping_add(x))
-                    };
-                    if sum == 0 {
-                        let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
-                        if rsdp_ref.rsdp_v1.revision >= 2 {
-                            return Some(Rsdp::from_v2(rsdp_ref));
-                        } else {
-                            return Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1));
+                    while rsdp_ptr < end {
+                        // Safety: this is a valid mapped range, as we are sure that the kernel is
+                        // mapped since boot and we are inside the kernel lower range
+                        let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
+                        if str == b"RSD PTR " {
+                            // calculate checksum
+                            // Safety: same as above, this pointer is mapped
+                            let sum = unsafe {
+                                slice::from_raw_parts(rsdp_ptr, 20)
+                                    .iter()
+                                    .fold(0u8, |acc, &x| acc.wrapping_add(x))
+                            };
+                            if sum == 0 {
+                                // Safety: same as above, this pointer is mapped
+                                let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
+                                if rsdp_ref.rsdp_v1.revision >= 2 {
+                                    return Some(Rsdp::from_v2(rsdp_ref));
+                                } else {
+                                    return Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1));
+                                }
+                            }
                         }
+                        // Safety: same as above, this pointer is mapped
+                        rsdp_ptr = unsafe { rsdp_ptr.add(1) };
                     }
-                }
-                rsdp_ptr = unsafe { rsdp_ptr.add(1) };
-            }
 
-            None
+                    None
+                })
+                .ok_or(())?;
+
+            // Safety: this is called only once and we are sure no other call is using the ACPI memory
+            Ok(unsafe { BiosTables::new(rdsp) })
         })
-        .ok_or(())?;
-
-    Ok(BiosTables::new(rdsp))
+        .as_ref()
+        .map_err(|_| ())
 }
 
 #[repr(C, packed)]
@@ -147,32 +234,47 @@ impl Rsdp {
         }
     }
 
-    // allocates a new RDST
-    fn rdst(&self) -> Rsdt {
-        let header =
-            physical_to_acpi_memory(self.rsdt_address as _, mem::size_of::<DescriptionHeader>())
-                as *const DescriptionHeader;
-        let len = unsafe { (*header).length } as usize;
-        ensure_at_least_size(header as _, len);
+    /// allocates a new RDST
+    ///
+    /// # Safety
+    ///
+    /// This should only be called once and not overlapping with any operation done to the region containing ACPI tables
+    /// this uses virtual space for the regions that the `rsdt` is inside and all its other children structures
+    unsafe fn rdst(&self) -> Rsdt {
+        // Safety: here we are the first
+        let (header_ptr, len) = get_acpi_header_with_len(self.rsdt_address as _);
+        // copy the header as value, for later storing in the struct
+        let header = *header_ptr;
 
         let entries_len = (len - size_of::<DescriptionHeader>()) / size_of::<u32>();
-        let entries_ptr = unsafe { header.add(1) as *const u32 };
+        let entries_ptr = header_ptr.add(1) as *const u32;
         // use slice of u8 since we can't use u32 since its not aligned
-        let entries = unsafe { slice::from_raw_parts(entries_ptr as *const u8, entries_len * 4) };
-        let entries = entries
+        let entries_slice = slice::from_raw_parts(entries_ptr as *const u8, entries_len * 4);
+        // we copy the addresses here, we can't sadly use iter to iterate over them since inside `from_physical_ptr` we need to be
+        // sure that we don't own any references to the ACPI memory regions
+        let entries_ptrs = entries_slice
             .chunks(4)
             .map(|a| u32::from_le_bytes(a.try_into().unwrap()))
             .filter(|&a| a != 0)
-            // SAEFTY: these entries are static and never change, and not null
-            .map(DescriptorTable::from_physical_ptr)
+            .collect::<Vec<_>>();
+
+        // after this call, the `header` pointer is invalid
+        // remove allocation so that they can be used below in `from_physical_ptr`
+        // Safety: the `header_ptr` is never used after this call
+        deallocate_acpi_mapping(header_ptr as _, len);
+
+        let entries = entries_ptrs
+            .into_iter()
+            // Safety: `from_physical_ptr` require we don't overlap usage of ACPI memory, we are `deallocating` the memory above
+            //         before going into this function, and it will handle its own deallocation, so we are safe on that side
+            .map(|p| unsafe { DescriptorTable::from_physical_ptr(p) })
             .collect();
-        let mut s = Rsdt {
-            header: unsafe { *header },
-            entries,
-        };
+
+        let mut s = Rsdt { header, entries };
         // add extra entries
         if let Some(facp) = s.get_table::<Facp>() {
             if facp.dsdt != 0 {
+                // Safety: same as above, we are sure that we are not overlapping with any ACPI memory
                 s.entries
                     .push(DescriptorTable::from_physical_ptr(facp.dsdt));
             }
@@ -198,8 +300,10 @@ impl Rsdt {
                 DescriptorTableBody::Facp(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Hpet(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Dsdt(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Ssdt(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Bgrt(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Waet(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Srat(a) => Some(a.as_ref() as &dyn Any),
             })
             .find_map(|obj| obj.downcast_ref::<T>())
     }
@@ -226,33 +330,39 @@ pub struct DescriptorTable {
 }
 
 impl DescriptorTable {
-    pub fn from_physical_ptr(ptr: u32) -> Self {
-        let header_ptr = physical_to_acpi_memory(ptr as _, mem::size_of::<DescriptionHeader>())
-            as *const DescriptionHeader;
+    /// # Safety
+    ///
+    /// This should not overlap any reference to the ACPI memory, it will own a reference to virtual space
+    /// that points to the physical address, and then yields the reference before it returns.
+    /// Thus it must never be called concurrently as well
+    pub unsafe fn from_physical_ptr(ptr: u32) -> Self {
+        // Safety: here we are relying on the caller to ensure that the `ptr` is valid and no one is using ACPI memory
+        let (header_ptr, len) = unsafe { get_acpi_header_with_len(ptr as _) };
 
-        let header = unsafe { &*header_ptr };
-        let len = header.length as usize;
-        ensure_at_least_size(header_ptr as _, len);
+        // this must not be used as a reference to the header when creating values, as these values use
+        // data present after the header in memory
+        let header_copy = *header_ptr;
 
-        let body = match &header.signature.0 {
-            b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header))),
-            b"FACP" => DescriptorTableBody::Facp(Box::new(Facp::from_header(header))),
-            b"HPET" => DescriptorTableBody::Hpet(Box::new(Hpet::from_header(header))),
-            b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Dsdt::from_header(header))),
-            b"BGRT" => DescriptorTableBody::Bgrt(Box::new(Bgrt::from_header(header))),
-            b"WAET" => DescriptorTableBody::Waet(Box::new(Waet::from_header(header))),
+        let body = match &header_copy.signature.0 {
+            b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header_ptr))),
+            b"FACP" => DescriptorTableBody::Facp(Box::new(get_table_from_header(header_ptr))),
+            b"HPET" => DescriptorTableBody::Hpet(Box::new(get_table_from_header(header_ptr))),
+            b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Xsdt::from_header(header_ptr))),
+            b"SSDT" => DescriptorTableBody::Ssdt(Box::new(Xsdt::from_header(header_ptr))),
+            b"BGRT" => DescriptorTableBody::Bgrt(Box::new(get_table_from_header(header_ptr))),
+            b"WAET" => DescriptorTableBody::Waet(Box::new(get_table_from_header(header_ptr))),
+            b"SRAT" => DescriptorTableBody::Srat(Box::new(Srat::from_header(header_ptr))),
             _ => DescriptorTableBody::Unknown(HexArray(
-                unsafe {
-                    slice::from_raw_parts(
-                        header as *const DescriptionHeader as *const u8,
-                        header.length as usize,
-                    )
-                }
-                .to_vec(),
+                slice::from_raw_parts(header_ptr as *const u8, header_copy.length as usize)
+                    .to_vec(),
             )),
         };
+        // after this point, `header_ref` and `header_ptr` are invalid
+        // Safety: the `header_ptr` is never used after this call
+        deallocate_acpi_mapping(header_ptr as _, len);
+
         Self {
-            header: *header,
+            header: header_copy,
             body,
         }
     }
@@ -263,9 +373,11 @@ pub enum DescriptorTableBody {
     Apic(Box<Apic>),
     Facp(Box<Facp>),
     Hpet(Box<Hpet>),
-    Dsdt(Box<Dsdt>),
+    Dsdt(Box<Xsdt>),
+    Ssdt(Box<Xsdt>),
     Bgrt(Box<Bgrt>),
     Waet(Box<Waet>),
+    Srat(Box<Srat>),
     Unknown(HexArray<Vec<u8>>),
 }
 
@@ -277,29 +389,30 @@ pub struct Apic {
 }
 
 impl Apic {
-    fn from_header(header: &DescriptionHeader) -> Self {
+    /// # Safety
+    /// the pointer must be valid and point to a valid table
+    unsafe fn from_header(header: *const DescriptionHeader) -> Self {
         let mut apic = Self {
             local_apic_address: 0,
             flags: 0,
             interrupt_controller_structs: Vec::new(),
         };
-        let after_header = unsafe { (header as *const DescriptionHeader).add(1) as *const u32 };
-        apic.local_apic_address = unsafe { after_header.read_unaligned() };
-        apic.flags = unsafe { after_header.add(1).read_unaligned() };
+        let after_header = header.add(1) as *const u32;
+        apic.local_apic_address = after_header.read_unaligned();
+        apic.flags = after_header.add(1).read_unaligned();
 
-        let mut ptr = unsafe { after_header.add(2) as *const u8 };
-        let mut remaining = header.length - size_of::<DescriptionHeader>() as u32 - 8;
+        let mut ptr = after_header.add(2) as *const u8;
+        let mut remaining = (*header).length - size_of::<DescriptionHeader>() as u32 - 8;
         while remaining > 0 {
-            let struct_type = unsafe { *ptr };
-            let struct_len = unsafe { *(ptr.add(1)) };
-            let struct_bytes =
-                unsafe { slice::from_raw_parts(ptr.add(2), struct_len as usize - 2) };
+            let struct_type = *ptr;
+            let struct_len = *(ptr.add(1));
+            let struct_bytes = slice::from_raw_parts(ptr.add(2), struct_len as usize - 2);
             apic.interrupt_controller_structs
                 .push(InterruptControllerStruct::from_type_and_bytes(
                     struct_type,
                     struct_bytes,
                 ));
-            ptr = unsafe { ptr.add(struct_len as usize) };
+            ptr = ptr.add(struct_len as usize);
             remaining -= struct_len as u32;
         }
         apic
@@ -321,6 +434,23 @@ pub enum InterruptControllerStruct {
     } = 255,
 }
 
+impl InterruptControllerStruct {
+    fn from_type_and_bytes(struct_type: u8, bytes: &[u8]) -> Self {
+        match struct_type {
+            0 => Self::ProcessorLocalApic(get_struct_from_bytes(bytes)),
+            1 => Self::IoApic(get_struct_from_bytes(bytes)),
+            2 => Self::InterruptSourceOverride(get_struct_from_bytes(bytes)),
+            3 => Self::NonMaskableInterrupt(get_struct_from_bytes(bytes)),
+            4 => Self::LocalApicNmi(get_struct_from_bytes(bytes)),
+            5 => Self::LocalApicAddressOverride(get_struct_from_bytes(bytes)),
+            _ => Self::Unknown {
+                struct_type,
+                bytes: HexArray(bytes.to_vec()),
+            },
+        }
+    }
+}
+
 // extract enum into outside structs
 #[repr(C, packed)]
 #[derive(Debug, Clone)]
@@ -334,6 +464,7 @@ pub struct ProcessorLocalApic {
 #[derive(Debug, Clone)]
 pub struct IoApic {
     pub io_apic_id: u8,
+    pub reserved: u8,
     pub io_apic_address: u32,
     pub global_system_interrupt_base: u32,
 }
@@ -365,73 +496,8 @@ pub struct LocalApicNmi {
 #[repr(C, packed)]
 #[derive(Debug, Clone)]
 pub struct LocalApicAddressOverride {
+    pub reserved: u16,
     pub local_apic_address: u64,
-}
-
-impl InterruptControllerStruct {
-    fn from_type_and_bytes(struct_type: u8, bytes: &[u8]) -> Self {
-        match struct_type {
-            0 => {
-                let acpi_processor_id = bytes[0];
-                let apic_id = bytes[1];
-                let flags = u32::from_le_bytes(bytes[2..6].try_into().unwrap());
-                Self::ProcessorLocalApic(ProcessorLocalApic {
-                    acpi_processor_id,
-                    apic_id,
-                    flags,
-                })
-            }
-            1 => {
-                let io_apic_id = bytes[0];
-                let io_apic_address = u32::from_le_bytes(bytes[2..6].try_into().unwrap());
-                let global_system_interrupt_base =
-                    u32::from_le_bytes(bytes[6..10].try_into().unwrap());
-                Self::IoApic(IoApic {
-                    io_apic_id,
-                    io_apic_address,
-                    global_system_interrupt_base,
-                })
-            }
-            2 => {
-                let bus = bytes[0];
-                let source = bytes[1];
-                let global_system_interrupt = u32::from_le_bytes(bytes[2..6].try_into().unwrap());
-                let flags = u16::from_le_bytes(bytes[6..8].try_into().unwrap());
-                Self::InterruptSourceOverride(InterruptSourceOverride {
-                    bus,
-                    source,
-                    global_system_interrupt,
-                    flags,
-                })
-            }
-            3 => {
-                let flags = u16::from_le_bytes(bytes[0..2].try_into().unwrap());
-                let global_system_interrupt = u32::from_le_bytes(bytes[2..6].try_into().unwrap());
-                Self::NonMaskableInterrupt(NonMaskableInterrupt {
-                    flags,
-                    global_system_interrupt,
-                })
-            }
-            4 => {
-                let acpi_processor_id = bytes[0];
-                let flags = u16::from_le_bytes(bytes[1..3].try_into().unwrap());
-                let local_apic_lint = bytes[3];
-                Self::LocalApicNmi(LocalApicNmi {
-                    acpi_processor_uid: acpi_processor_id,
-                    flags,
-                    local_apic_lint,
-                })
-            }
-            5 => {
-                let local_apic_address = u64::from_le_bytes(bytes.try_into().unwrap());
-                Self::LocalApicAddressOverride(LocalApicAddressOverride { local_apic_address })
-            }
-            _ => Self::Unknown {
-                struct_type,
-                bytes: HexArray(bytes.to_vec()),
-            },
-        }
-    }
 }
 
 #[repr(C, packed)]
@@ -494,15 +560,6 @@ pub struct Facp {
     hypervisor_vendor_id: u64,
 }
 
-impl Facp {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
-        let facp = unsafe { &*(facp_ptr as *const Facp) };
-        // SAFETY: I'm using this to copy from the same struct
-        unsafe { core::mem::transmute_copy(facp) }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 pub struct ApicGenericAddress {
@@ -523,26 +580,20 @@ pub struct Hpet {
     pub page_protection: u8,
 }
 
-impl Hpet {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let facp_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
-        let facp = unsafe { &*(facp_ptr as *const Hpet) };
-        // SAFETY: I'm using this to copy from the same struct
-        unsafe { core::mem::transmute_copy(facp) }
-    }
-}
-
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub struct Dsdt {
+/// This is inside DSDT and SSDT
+pub struct Xsdt {
     aml_code: AmlCode,
 }
 
-impl Dsdt {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let dsdt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
-        let data_len = header.length as usize - size_of::<DescriptionHeader>();
-        let data = unsafe { slice::from_raw_parts(dsdt_ptr, data_len) };
+impl Xsdt {
+    /// # Safety
+    /// the pointer must be valid and point to a valid table
+    unsafe fn from_header(header: *const DescriptionHeader) -> Self {
+        let dsdt_ptr = header.add(1) as *const u8;
+        let data_len = (*header).length as usize - size_of::<DescriptionHeader>();
+        let data = slice::from_raw_parts(dsdt_ptr, data_len);
         let aml_code = parse_aml(data).unwrap();
         Self { aml_code }
     }
@@ -559,29 +610,146 @@ pub struct Bgrt {
     pub image_offset_y: u32,
 }
 
-impl Bgrt {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let bgrt_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u8 };
-        let bgrt = unsafe { &*(bgrt_ptr as *const Bgrt) };
-        // SAFETY: I'm using this to copy from the same struct
-        unsafe { core::mem::transmute_copy(bgrt) }
-    }
-}
-
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct Waet {
     emulated_device_flags: u32,
 }
 
-impl Waet {
-    fn from_header(header: &DescriptionHeader) -> Self {
-        let waet_ptr = unsafe { (header as *const DescriptionHeader).add(1) as *const u32 };
-        let flags = unsafe { *waet_ptr };
-        Self {
-            emulated_device_flags: flags,
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct Srat {
+    reserved1: u32,
+    reserved2: u64,
+    static_resource_allocation: Vec<StaticResourceAffinity>,
+}
+
+impl Srat {
+    /// # Safety
+    /// the pointer must be valid and point to a valid table
+    unsafe fn from_header(header: *const DescriptionHeader) -> Self {
+        let mut srat = Self {
+            reserved1: 0,
+            reserved2: 0,
+            static_resource_allocation: Vec::new(),
+        };
+        let after_header = header.add(1) as *const u32;
+        srat.reserved1 = after_header.read_unaligned();
+        srat.reserved2 = (after_header.add(1) as *const u64).read_unaligned();
+
+        let mut ptr = after_header.add(3) as *const u8;
+        let mut remaining = (*header).length - size_of::<DescriptionHeader>() as u32 - 12;
+        while remaining > 0 {
+            let struct_type = *ptr;
+            let struct_len = *(ptr.add(1));
+            let struct_bytes = slice::from_raw_parts(ptr.add(2), struct_len as usize - 2);
+            srat.static_resource_allocation
+                .push(StaticResourceAffinity::from_type_and_bytes(
+                    struct_type,
+                    struct_bytes,
+                ));
+            ptr = ptr.add(struct_len as usize);
+            remaining -= struct_len as u32;
+        }
+        srat
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub enum StaticResourceAffinity {
+    ProcessorLocalAcpi(ProcessorLocalAcpiAffinity) = 0,
+    MemoryAffinity(MemoryAffinity) = 1,
+    ProcessorLocalX2Apic(ProcessorLocalX2ApicAffinity) = 2,
+    GiccAffinity(GiccAffinity) = 3,
+    GicInterruptTranslationService(GicInterruptTranslationServiceAffinity) = 4,
+    GenericInitiatorAffinity(GenericInitiatorAffinity) = 5,
+    Unknown {
+        struct_type: u8,
+        bytes: HexArray<Vec<u8>>,
+    } = 255,
+}
+
+impl StaticResourceAffinity {
+    fn from_type_and_bytes(struct_type: u8, bytes: &[u8]) -> Self {
+        match struct_type {
+            0 => Self::ProcessorLocalAcpi(get_struct_from_bytes(bytes)),
+            1 => Self::MemoryAffinity(get_struct_from_bytes(bytes)),
+            2 => Self::ProcessorLocalX2Apic(get_struct_from_bytes(bytes)),
+            3 => Self::GiccAffinity(get_struct_from_bytes(bytes)),
+            4 => Self::GicInterruptTranslationService(get_struct_from_bytes(bytes)),
+            5 => Self::GenericInitiatorAffinity(get_struct_from_bytes(bytes)),
+            _ => Self::Unknown {
+                struct_type,
+                bytes: HexArray(bytes.to_vec()),
+            },
         }
     }
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct ProcessorLocalAcpiAffinity {
+    proximity_domain_low: u8,
+    apic_id: u8,
+    flags: u32,
+    local_sapic_eid: u8,
+    proximity_domain_high: [u8; 3],
+    clock_domain: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct MemoryAffinity {
+    proximity_domain: u32,
+    reserved1: u16,
+    base_address_low: u32,
+    base_address_high: u32,
+    length_low: u32,
+    length_high: u32,
+    reserved2: u32,
+    flags: u32,
+    reserved3: u64,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct ProcessorLocalX2ApicAffinity {
+    reserved1: u16,
+    proximity_domain: u32,
+    x2apic_id: u32,
+    flags: u32,
+    clock_domain: u32,
+    reserved2: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct GiccAffinity {
+    proximity_domain: u32,
+    acpi_processor_uid: u32,
+    flags: u32,
+    clock_domain: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct GicInterruptTranslationServiceAffinity {
+    proximity_domain: u32,
+    reserved1: u16,
+    its_id: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct GenericInitiatorAffinity {
+    reserved1: u8,
+    device_handle_type: u8,
+    proximity_domain: u32,
+    device_handle: [u8; 16],
+    flags: u32,
+    reserved2: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -591,7 +759,10 @@ pub struct BiosTables {
 }
 
 impl BiosTables {
-    pub fn new(rsdp: Rsdp) -> Self {
+    /// # Safety
+    ///
+    /// This should only be called once and not overlapping with any operation done to the region containing ACPI tables
+    pub unsafe fn new(rsdp: Rsdp) -> Self {
         Self {
             rsdt: rsdp.rdst(),
             rsdp,
@@ -605,7 +776,8 @@ impl fmt::Display for BiosTables {
         writeln!(f, "RSDT: {:X?}", self.rsdt.header)?;
         for entry in &self.rsdt.entries {
             match entry.body {
-                DescriptorTableBody::Dsdt(_) => {
+                DescriptorTableBody::Dsdt(_) | DescriptorTableBody::Ssdt(_) => {
+                    writeln!(f, "{:X?}", entry.header)?;
                     // TODO: add cmdline arg to print DSDT (its very large, so don't by default)
                     // writeln!(f, "DSDT: ")?;
                     // entry.aml_code.display_with_depth(f, 1)?;

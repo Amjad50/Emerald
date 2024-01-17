@@ -52,7 +52,8 @@ fn read_reg(port_addr: UartPort, reg: UartReg) -> u8 {
     unsafe { cpu::io_in(port_addr as u16 + reg as u16) }
 }
 
-fn init_port(port_addr: UartPort) {
+/// Will return `true` if the test pass, otherwise, the serial port is disabled
+fn init_port(port_addr: UartPort) -> bool {
     // disable interrupts
     write_reg(port_addr, UartReg::InterruptEnable, 0);
     // disable FIFO
@@ -91,12 +92,8 @@ fn init_port(port_addr: UartPort) {
     while read_reg(port_addr, UartReg::LineStatus) & LINE_RX_READY == 0 {
         hint::spin_loop();
     }
-    // check if we got the same value
+    // check if we got the same value (used later in the return)
     let val = read_reg(port_addr, UartReg::Data);
-    if val != 0xAA {
-        // we haven't intialized here, but we can get the message in VGA at least
-        panic!("UART init test failed (got 0x{:02X}, expected 0xAA)", val);
-    }
 
     // disable loopback mode go back to normal
     write_reg(
@@ -104,24 +101,35 @@ fn init_port(port_addr: UartPort) {
         UartReg::ModemControl,
         MODEM_CTL_DTR | MODEM_CTL_RTS | MODEM_CTL_OUT1 | MODEM_CTL_OUT2,
     );
+
+    // return true if the test pass, otherwise, we don't have serial port enabled
+    val == 0xAA
 }
 
 #[derive(Clone)]
 pub struct Uart {
     port_addr: UartPort,
+    is_enabled: bool,
 }
 
 impl Uart {
     pub const fn new(port_addr: UartPort) -> Self {
-        Self { port_addr }
+        Self {
+            port_addr,
+            is_enabled: false,
+        }
     }
 
-    pub fn init(&self) {
-        init_port(self.port_addr);
+    pub fn init(&mut self) {
+        self.is_enabled = init_port(self.port_addr);
     }
 
     /// SAFETY: `init` must be called before calling this function
     pub unsafe fn write_byte(&self, byte: u8) {
+        if !self.is_enabled {
+            return;
+        }
+
         // wait until we can send
         while (read_reg(self.port_addr, UartReg::LineStatus) & LINE_TX_EMPTY) == 0 {
             hint::spin_loop();
@@ -133,6 +141,10 @@ impl Uart {
     /// SAFETY: `init` must be called before calling this function
     #[allow(dead_code)]
     pub unsafe fn try_read_byte(&self) -> Option<u8> {
+        if !self.is_enabled {
+            return None;
+        }
+
         // wait until we can read
         if (read_reg(self.port_addr, UartReg::LineStatus) & LINE_RX_READY) == 0 {
             return None;

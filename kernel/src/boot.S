@@ -1,33 +1,21 @@
 /* 
  * This is where the boot happens.
- * The multiboot loader will load the KERNEL at 0x100000 (extended memory)
+ * The multiboot2 loader will load the KERNEL at 0x100000 (extended memory)
  * 
  * Here, we are starting in 32-bit protected mode, with paging disabled.
  * We will setup long mode, and then jump to the kernel.
  *
- * We have 2 regions of the ram that are important to us:
- * - [0x00000000..0x0007FFFF] - the first 512KB of ram, which is usable memory.
- *   the memory mapping we got from the BIOS gives us [0x00000000..0x0009fbff] which is 127KB more
- *   but for starters, lets use the lower 512KB until we read the memory map from the BIOS in the kernel.
- * - [0x00100000..0x????????] - this is the extended memory, and it spans to cover the whole ram 
- *   (I think, I didn't try with more than 512MB of ram)
- *
- * We are going to setup the pages tables in the first 512KB of ram.
+ * We are setting up the virtual memory pages in the `.boot_page_tables` section.
+ * This is inside the `.data` section with `PAGE_TABLE_ALLOC_PAGES` pages in size.
  */
 
-MULTIBOOT_FLAG_ALIGN_4K = 1 << 0
-MULTIBOOT_FLAG_MEM_INFO = 1 << 1
-MULTIBOOT_FLAG_VIDEO_INFO = 1 << 2
-MULTIBOOT_FLAG_CUSTOM_LOAD_INFO = 1 << 16
-
-MULTIBOOT_VIDEO_MODE_GRAPHICS = 0
-MULTIBOOT_VIDEO_MODE_TEXT = 1
+MULTIBOOT2_CHECK_MAGIC = 0x36d76289
 
 PHY_PAGE_SIZE_4K = 0x1000
 PHY_PAGE_SIZE_2M = 0x200000
 PAGE_TABLE_ALLOC_PAGES = 4  # only need 4
 
-STACK_SIZE_PAGES = 128
+STACK_SIZE_PAGES = 512  # 2MB
 
 # Page tables flags
 PGE_PRESENT   = 1 << 0
@@ -36,19 +24,26 @@ PGE_USER      = 1 << 2
 PGE_PAGE_SIZE = 1 << 7
 
 # GDT flags
-GDT_PRESENT   = 1 << 7
-GDT_NOT_SYS   = 1 << 4
+GDT_WRITE     = 1 << 1
 GDT_CODE      = 1 << 3
+GDT_NOT_SYS   = 1 << 4
 GDT_LONG_MODE = 1 << 5
+GDT_PRESENT   = 1 << 7
 
 # cpu registers flags
+CR0_PE   = 1 << 0
 CR0_PG   = 1 << 31
 CR4_PAE  = 1 << 5
 EFER_LME = 1 << 8
 
-CPUID_FEAT_ID_CMD  = 0x80000001
-CPUID_FEAT_EDX_PAE = 1 << 6
-CPUID_FEAT_EDX_LM  = 1 << 29
+EFER_REG = 0xC0000080
+
+CPUID_FEAT_CMD        = 0x1
+CPUID_FEAT_EX_CMD     = 0x80000001
+# Physical Address Extension available
+CPUID_FEAT_EDX_PAE    = 1 << 6
+# Intel 64/Long Mode available
+CPUID_FEAT_EX_EDX_LM  = 1 << 29
 
 # some helper macros that converts a virtual address to a physical address
 # this should be used when loading any address while paging is disabled
@@ -113,17 +108,21 @@ mb2_header_end:
 .section .text
 .global entry
 entry:
-    cmp eax, 0x36d76289
+    cmp eax, MULTIBOOT2_CHECK_MAGIC
     jne not_multiboot2
     # check if we are running on a 64-bit CPU
     # save ebx, since its important containing the multiboot info
     # no stack yet, so lets use registers
     mov edi, ebx
-    mov eax, CPUID_FEAT_ID_CMD
+    # check for PEA
+    mov eax, CPUID_FEAT_CMD
     cpuid
     test edx, CPUID_FEAT_EDX_PAE
     jz not_64bit
-    test edx, CPUID_FEAT_EDX_LM
+    # check for long mode
+    mov eax, CPUID_FEAT_EX_CMD
+    cpuid
+    test edx, CPUID_FEAT_EX_EDX_LM
     jz not_64bit
 
     # restore ebx
@@ -187,48 +186,55 @@ fill_pdt_loop:
     add edi, 8
     loop fill_pdt_loop
 
-# Complete setting up the page tables
-    virtual_to_physical_mov eax, boot_page_tables
-    mov cr3, eax
+# Setup empty IDT
+    lidt [idtr - 0xFFFFFFFF80000000]
 
 # enable PAE
     mov eax, cr4
     or eax, CR4_PAE
     mov cr4, eax
+# Complete setting up the page tables
+    virtual_to_physical_mov eax, boot_page_tables
+    mov cr3, eax
 # enable long mode
-    mov ecx, 0xC0000080
+    mov ecx, EFER_REG
     rdmsr
     or eax, EFER_LME
     wrmsr
-# enable paging
+# enable paging, and protection (should be enabled already)
     mov eax, cr0
-    or eax, CR0_PG
+    or eax, CR0_PG | CR0_PE
     mov cr0, eax
 
 # setup gdt and jump
     lgdt [gdtr64 - 0xFFFFFFFF80000000]
-    ljmp 0x08, offset kernel_main_low - 0xFFFFFFFF80000000
+    jmp 0x08, offset kernel_main_low - 0xFFFFFFFF80000000
+
+.align 16
+idtr:
+    .word 0
+    .long 0
 
 .align 16
 gdtr64:
     .word gdtr64_end - gdt64 - 1
-    virtual_to_physical_put .quad, gdt64
+    virtual_to_physical_put .long, gdt64
 
 .align 16
 gdt64:
     .quad 0x0000000000000000    # null descriptor
     # Code segment (0x8)
-    .long 0x00000000                               # Limit & Base (low, bits 0-15)
-    .byte 0                                        # Base (mid, bits 16-23)
-    .byte GDT_CODE | GDT_NOT_SYS | GDT_PRESENT     # Access
-    .byte GDT_LONG_MODE                            # Flags & Limit (high, bits 16-19)
-    .byte 0x00                                     # Base (high, bits 24-31)
+    .long 0x00000000                                       # Limit & Base (low, bits 0-15)
+    .byte 0                                                # Base (mid, bits 16-23)
+    .byte GDT_CODE | GDT_NOT_SYS | GDT_PRESENT | GDT_WRITE # Access
+    .byte GDT_LONG_MODE                                    # Flags & Limit (high, bits 16-19)
+    .byte 0x00                                             # Base (high, bits 24-31)
     # Data segment (0x10)
-    .long 0x00000000                               # Limit & Base (low, bits 0-15)
-    .byte 0                                        # Base (mid, bits 16-23)
-    .byte GDT_NOT_SYS | GDT_PRESENT                # Access
-    .byte 0x00                                     # Flags & Limit (high, bits 16-19)
-    .byte 0x00                                     # Base (high, bits 24-31)
+    .long 0x00000000                                       # Limit & Base (low, bits 0-15)
+    .byte 0                                                # Base (mid, bits 16-23)
+    .byte GDT_NOT_SYS | GDT_PRESENT | GDT_WRITE            # Access
+    .byte 0x00                                             # Flags & Limit (high, bits 16-19)
+    .byte 0x00                                             # Base (high, bits 24-31)
 gdtr64_end:
 
 
@@ -269,8 +275,8 @@ message_not_64bit:
 kernel_main_low:
     # clear interrupts (just in case)
     cli
-    # reset the segments
-    xor rax, rax
+    # set the data segment
+    mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov fs, ax

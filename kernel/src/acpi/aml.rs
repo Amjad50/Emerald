@@ -14,6 +14,7 @@ pub enum AmlParseError {
     InvalidPkgLengthLead,
     RemainingBytes(usize),
     CannotMoveBackward,
+    InvalidTarget(u8),
 }
 
 pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
@@ -63,6 +64,7 @@ pub enum AmlTerm {
     ToBuffer(TermArg, Box<Target>),
     ToDecimalString(TermArg, Box<Target>),
     ToInteger(TermArg, Box<Target>),
+    Mid(TermArg, TermArg, TermArg, Box<Target>),
     Add(TermArg, TermArg, Box<Target>),
     Concat(TermArg, TermArg, Box<Target>),
     Subtract(TermArg, TermArg, Box<Target>),
@@ -106,6 +108,7 @@ pub enum AmlTerm {
     Mutex(String, u8),
     Event(String),
     CondRefOf(Box<Target>, Box<Target>),
+    CreateFieldOp(TermArg, TermArg, TermArg, String),
     Aquire(Box<Target>, u16),
     Signal(Box<Target>),
     Wait(Box<Target>, TermArg),
@@ -119,6 +122,7 @@ pub enum AmlTerm {
     CreateBitField(TermArg, TermArg, String),
     CreateQWordField(TermArg, TermArg, String),
     MethodCall(String, Vec<TermArg>),
+    ObjectType(Box<Target>),
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +240,7 @@ impl IndexFieldDef {
 pub enum FieldElement {
     ReservedField(usize),
     NamedField(String, usize),
+    AccessField(u8, u8),
 }
 
 #[derive(Debug, Clone)]
@@ -381,7 +386,8 @@ impl<'a> State<'a> {
 
     fn find_name(&self, name: &str) -> bool {
         eprintln!("finding name {name:?}, {:?}", self.names);
-        self.names.contains(name)
+        let short_name = &name[name.len() - 4..];
+        self.names.contains(name) || self.names.contains(short_name)
     }
 
     fn find_method(&self, name: &str) -> Option<usize> {
@@ -391,6 +397,17 @@ impl<'a> State<'a> {
         let method_name = &name[name.len() - 4..];
         eprintln!("methods: {:?}", self.methods);
         self.methods.get(method_name).copied()
+    }
+
+    fn add_method(&mut self, name: &str, arg_count: usize) {
+        eprintln!("adding method {name:?}");
+        let method_name = &name[name.len() - 4..];
+        self.methods.insert(String::from(method_name), arg_count);
+    }
+
+    fn add_name(&mut self, name: String) {
+        eprintln!("adding name {name:?}");
+        self.names.insert(name);
     }
 }
 
@@ -505,7 +522,7 @@ impl Parser<'_> {
         }
     }
 
-    fn predict_possible_args(&mut self) -> usize {
+    fn predict_possible_args(&mut self, expect_data_after: bool, name: &str) -> usize {
         // clone ourselves to search futrue nodes
         // TODO: reduce allocations
         let mut inner = self.clone_parser();
@@ -515,8 +532,14 @@ impl Parser<'_> {
         for _ in 0..7 {
             // filter out impossible cases to be a method argument (taken from ACPICA code),
             // but not exactly the same for simplicity, maybe will need to modify later.
-            match inner.parse_term_arg_for_method_arg() {
-                Ok(TermArg::Name(_)) => break,
+            match inner.parse_term_arg() {
+                Ok(TermArg::Name(var_name)) => {
+                    // this is an inner expression containing the same name, something like `NAME = NAME + 1`
+                    // in that case, this is not a function, and is just a name
+                    if name == var_name {
+                        return 0;
+                    }
+                }
                 Ok(TermArg::Expression(amlterm)) => match amlterm.as_ref() {
                     AmlTerm::Store(_, _)
                     | AmlTerm::Notify(_, _)
@@ -549,15 +572,6 @@ impl Parser<'_> {
                     | AmlTerm::ToBuffer(_, _)
                     | AmlTerm::ToDecimalString(_, _)
                     | AmlTerm::ToInteger(_, _)
-                    | AmlTerm::LAnd(_, _)
-                    | AmlTerm::LOr(_, _)
-                    | AmlTerm::LNot(_)
-                    | AmlTerm::LNotEqual(_, _)
-                    | AmlTerm::LLessEqual(_, _)
-                    | AmlTerm::LGreaterEqual(_, _)
-                    | AmlTerm::LEqual(_, _)
-                    | AmlTerm::LGreater(_, _)
-                    | AmlTerm::LLess(_, _)
                     | AmlTerm::Mutex(_, _)
                     | AmlTerm::Event(_)
                     | AmlTerm::CreateDWordField(_, _, _)
@@ -588,9 +602,22 @@ impl Parser<'_> {
                     }
                     _ => {}
                 },
-                Err(_) => break,
+                Err(e) => {
+                    match e {
+                        AmlParseError::UnexpectedEndOfCode => {
+                            // if we took what is not ours, return it
+                            if n_args > 0 && expect_data_after && inner.remaining_bytes() == 0 {
+                                n_args -= 1;
+                            }
+                            return n_args;
+                        }
+                        _ => {}
+                    }
+                    break;
+                }
                 _ => {}
             }
+
             n_args += 1;
         }
         n_args
@@ -603,13 +630,15 @@ impl Parser<'_> {
             0x06 => {
                 let original_name = self.parse_name()?;
                 let aliased_name = self.parse_name()?;
-                self.state.names.insert(aliased_name.clone());
+                self.state.add_name(aliased_name.clone());
+                self.state.add_name(original_name.clone());
 
                 AmlTerm::Alias(original_name, aliased_name)
             }
             0x08 => {
                 let name = self.parse_name()?;
-                self.state.names.insert(name.clone());
+                self.state.add_name(name.clone());
+
                 AmlTerm::NameObj(name, self.parse_term_arg()?)
             }
             0x0d => {
@@ -657,9 +686,7 @@ impl Parser<'_> {
             }
             0x14 => {
                 let method = MethodObj::parse(self)?;
-                self.state
-                    .methods
-                    .insert(method.name.clone(), method.arg_count());
+                self.state.add_method(&method.name, method.arg_count());
                 AmlTerm::Method(method)
             }
             0x5b => {
@@ -670,6 +697,12 @@ impl Parser<'_> {
                     0x01 => AmlTerm::Mutex(self.parse_name()?, self.get_next_byte()?),
                     0x02 => AmlTerm::Event(self.parse_name()?),
                     0x12 => AmlTerm::CondRefOf(self.parse_target()?, self.parse_target()?),
+                    0x13 => AmlTerm::CreateFieldOp(
+                        self.parse_term_arg()?,
+                        self.parse_term_arg()?,
+                        self.parse_term_arg()?,
+                        self.parse_name()?,
+                    ),
                     0x21 => AmlTerm::Stall(self.parse_term_arg()?),
                     0x22 => AmlTerm::Sleep(self.parse_term_arg()?),
                     0x23 => AmlTerm::Aquire(
@@ -720,17 +753,17 @@ impl Parser<'_> {
                 self.parse_target()?,
             ),
             0x79 => AmlTerm::ShiftLeft(
-                self.parse_term_arg()?,
+                self.parse_term_arg_non_method_arg()?,
                 self.parse_term_arg()?,
                 self.parse_target()?,
             ),
             0x7A => AmlTerm::ShiftRight(
-                self.parse_term_arg()?,
+                self.parse_term_arg_non_method_arg()?,
                 self.parse_term_arg()?,
                 self.parse_target()?,
             ),
             0x7B => AmlTerm::And(
-                self.parse_term_arg()?,
+                self.parse_term_arg_non_method_arg()?,
                 self.parse_term_arg()?,
                 self.parse_target()?,
             ),
@@ -775,31 +808,22 @@ impl Parser<'_> {
                 self.parse_term_arg()?,
                 self.parse_target()?,
             ),
-            0x8A => AmlTerm::CreateDWordField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
-            0x8B => AmlTerm::CreateWordField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
-            0x8C => AmlTerm::CreateByteField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
-            0x8D => AmlTerm::CreateBitField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
-            0x8F => AmlTerm::CreateQWordField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
+            0x8A..=0x8D | 0x8F => {
+                let term1 = self.parse_term_arg()?;
+                let term2 = self.parse_term_arg()?;
+                let name = self.parse_name()?;
+                self.state.add_name(name.clone());
+
+                match opcode {
+                    0x8A => AmlTerm::CreateDWordField(term1, term2, name),
+                    0x8B => AmlTerm::CreateWordField(term1, term2, name),
+                    0x8C => AmlTerm::CreateByteField(term1, term2, name),
+                    0x8D => AmlTerm::CreateBitField(term1, term2, name),
+                    0x8F => AmlTerm::CreateQWordField(term1, term2, name),
+                    _ => unreachable!(),
+                }
+            }
+            0x8E => AmlTerm::ObjectType(self.parse_target()?),
             0x90 => AmlTerm::LAnd(self.parse_term_arg()?, self.parse_term_arg()?),
             0x91 => AmlTerm::LOr(self.parse_term_arg()?, self.parse_term_arg()?),
             0x92 => {
@@ -827,6 +851,12 @@ impl Parser<'_> {
             0x97 => AmlTerm::ToDecimalString(self.parse_term_arg()?, self.parse_target()?),
             0x98 => AmlTerm::ToHexString(self.parse_term_arg()?, self.parse_target()?),
             0x99 => AmlTerm::ToInteger(self.parse_term_arg()?, self.parse_target()?),
+            0x9E => AmlTerm::Mid(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
             0xA0 => AmlTerm::If(PredicateBlock::parse(self)?),
             0xA1 => {
                 let mut inner = self.get_inner_parser()?;
@@ -838,7 +868,7 @@ impl Parser<'_> {
             0xA2 => AmlTerm::While(PredicateBlock::parse(self)?),
             0xA3 => AmlTerm::Noop,
             // parse it as if its a method arg, this fixes issues of us mis-representing the term as a name
-            0xA4 => AmlTerm::Return(self.parse_term_arg_for_method_arg()?),
+            0xA4 => AmlTerm::Return(self.parse_term_arg_last()?),
             0xA5 => AmlTerm::Break,
             _ => {
                 eprintln!("try parse name");
@@ -851,11 +881,11 @@ impl Parser<'_> {
                 let n_args = self
                     .state
                     .find_method(&name)
-                    .unwrap_or_else(|| self.predict_possible_args());
+                    .unwrap_or_else(|| self.predict_possible_args(false, &name));
 
                 let mut args = Vec::new();
                 for _ in 0..n_args {
-                    args.push(self.parse_term_arg_for_method_arg()?);
+                    args.push(self.parse_term_arg()?);
                 }
 
                 AmlTerm::MethodCall(name, args)
@@ -866,15 +896,30 @@ impl Parser<'_> {
         Ok(Some(term))
     }
 
+    /// similar to [`Self::parse_term_arg`], but cannot call methods, as in some places method calls are not allowed
+    ///
+    /// TODO: This should be removed, as in general a method call is a valid term arg, its just
+    ///       we break some parts due to us not knowing if a name is a method or not, and prediction predicts wrong and messes up
+    ///       This happens for `+` and `>>` and `<<`, cases I have seen and know of bugs in the parsing
+    fn parse_term_arg_non_method_arg(&mut self) -> Result<TermArg, AmlParseError> {
+        // second arg doesn't matter, not used
+        self.parse_term_arg_general(false, true)
+    }
+
+    /// similar to [`Self::parse_term_arg`], but doesn't expect to have data after it, i.e. last in statements or something similar
+    fn parse_term_arg_last(&mut self) -> Result<TermArg, AmlParseError> {
+        self.parse_term_arg_general(true, false)
+    }
+
     fn parse_term_arg(&mut self) -> Result<TermArg, AmlParseError> {
-        self.parse_term_arg_general(false)
+        self.parse_term_arg_general(true, true)
     }
 
-    fn parse_term_arg_for_method_arg(&mut self) -> Result<TermArg, AmlParseError> {
-        self.parse_term_arg_general(true)
-    }
-
-    fn parse_term_arg_general(&mut self, for_method_call: bool) -> Result<TermArg, AmlParseError> {
+    fn parse_term_arg_general(
+        &mut self,
+        can_call_method: bool,
+        expect_data_after: bool,
+    ) -> Result<TermArg, AmlParseError> {
         let lead_byte = self.get_next_byte()?;
 
         let x = match lead_byte {
@@ -923,22 +968,28 @@ impl Parser<'_> {
                         let option_nargs = self.state.find_method(&name).or_else(|| {
                             if self.state.find_name(&name) {
                                 None
-                            } else if for_method_call {
-                                let possible_args = self.predict_possible_args();
+                            } else if can_call_method {
+                                eprintln!("predicting possible args for {name}");
+                                let possible_args =
+                                    self.predict_possible_args(expect_data_after, &name);
+                                eprintln!("got possible args: {possible_args} {name}");
                                 // if its 0 and we are inside a method call, probably this is just a named variable
                                 if possible_args == 0 {
+                                    self.state.add_name(name.clone());
                                     None
                                 } else {
                                     Some(possible_args)
                                 }
                             } else {
+                                // we didn't find, the name, and we can't use methods, so assume its a name
+                                self.state.add_name(name.clone());
                                 None
                             }
                         });
                         if let Some(n_args) = option_nargs {
                             let mut args = Vec::new();
                             for _ in 0..n_args {
-                                args.push(self.parse_term_arg_for_method_arg()?);
+                                args.push(self.parse_term_arg()?);
                             }
 
                             Ok(TermArg::Expression(Box::new(AmlTerm::MethodCall(
@@ -1101,7 +1152,6 @@ impl Parser<'_> {
                     self.forward(1)?;
                     Ok(Target::Arg(arg))
                 } else if let Some(name) = self.try_parse_name()? {
-                    self.state.names.insert(name.clone());
                     Ok(Target::Name(name))
                 } else {
                     self.forward(1)?;
@@ -1118,7 +1168,7 @@ impl Parser<'_> {
                         eprintln!("mmmm: {:x?}", term);
                         Ok(term)
                     } else {
-                        todo!("target lead byte: {:x}", lead_byte)
+                        Err(AmlParseError::InvalidTarget(lead_byte))
                     }
                 }
             }
@@ -1155,13 +1205,19 @@ impl Parser<'_> {
                     // add 1 since we are not using it as normal pkg length
                     FieldElement::ReservedField(pkg_length + 1)
                 }
-                1 => todo!("access field"),
+                1 => {
+                    self.forward(1)?;
+                    let access_type = self.get_next_byte()?;
+                    let access_attrib = self.get_next_byte()?;
+
+                    FieldElement::AccessField(access_type, access_attrib)
+                }
                 2 => todo!("connection field"),
                 3 => todo!("extended access field"),
                 _ => {
                     let len_now = self.pos;
                     let name = self.parse_name()?;
-                    self.state.names.insert(name.clone());
+                    self.state.add_name(name.clone());
                     assert!(self.pos - len_now == 4); // must be a name segment
                     eprintln!("field element name: {}", name);
                     let pkg_length = self.get_pkg_length()?;
@@ -1349,6 +1405,11 @@ fn display_fields(
         match field {
             FieldElement::ReservedField(len) => write!(f, "_Reserved (0x{:02X})", len)?,
             FieldElement::NamedField(name, len) => write!(f, "{},     (0x{:02X})", name, len)?,
+            FieldElement::AccessField(access_type, access_attrib) => write!(
+                f,
+                "AccessAs  (0x{:02X}, 0x{:02X})",
+                access_type, access_attrib
+            )?,
         }
         if i != len - 1 {
             write!(f, ", ")?;
@@ -1467,6 +1528,15 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::ToInteger(term, target) => {
             display_call_term_target("ToInteger", &[term], &[target], f, depth)?;
+        }
+        AmlTerm::Mid(source_term, index_term, length_term, target) => {
+            display_call_term_target(
+                "Mid",
+                &[source_term, index_term, length_term],
+                &[target],
+                f,
+                depth,
+            )?;
         }
         AmlTerm::ToBuffer(term, target) => {
             display_call_term_target("ToBuffer", &[term], &[target], f, depth)?;
@@ -1609,6 +1679,15 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         AmlTerm::CondRefOf(target1, target2) => {
             display_call_term_target("CondRefOf", &[], &[target1, target2], f, depth)?;
         }
+        AmlTerm::CreateFieldOp(source, index, numbits, target_name) => {
+            display_call_term_target(
+                "CreateField",
+                &[source, index, numbits],
+                &[&Target::Name(target_name.clone())],
+                f,
+                depth,
+            )?;
+        }
         AmlTerm::Stall(term) => {
             display_call_term_target("Stall", &[term], &[], f, depth)?;
         }
@@ -1712,6 +1791,11 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::ConcatRes(term1, term2, target) => {
             display_call_term_target("ConcatRes", &[term1, term2], &[target], f, depth)?;
+        }
+        AmlTerm::ObjectType(obj) => {
+            write!(f, "ObjectType (")?;
+            display_target(obj, f, depth)?;
+            write!(f, ")")?;
         }
         AmlTerm::Noop => {
             write!(f, "Noop")?;

@@ -8,7 +8,7 @@ use crate::{
     memory_management::{
         memory_layout::{
             align_range, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
-            virtual2physical, MemSize, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_LINK,
+            virtual2physical, MemSize, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_END, KERNEL_LINK,
             KERNEL_MAPPED_SIZE, PAGE_2M, PAGE_4K,
         },
         physical_page_allocator,
@@ -101,11 +101,15 @@ struct PageDirectoryTable {
 }
 
 #[repr(transparent)]
-struct PageDirectoryTablePtr(pub u64);
+struct PageDirectoryTablePtr {
+    physical_addr: u64,
+}
 
 impl PageDirectoryTablePtr {
-    fn from_entry(entry: u64) -> Self {
-        Self(physical2virtual((entry & ADDR_MASK) as _) as _)
+    const fn from_entry(entry: u64) -> Self {
+        Self {
+            physical_addr: entry & ADDR_MASK,
+        }
     }
 
     /// An ugly hack used in `do_for_every_user_entry` to get a mutable reference to the page directory table
@@ -114,17 +118,26 @@ impl PageDirectoryTablePtr {
         unsafe { &mut *table }
     }
 
-    fn to_physical(&self) -> u64 {
-        virtual2physical(self.0 as _) as _
+    fn as_physical(&self) -> u64 {
+        self.physical_addr
+    }
+
+    fn as_virtual(&self) -> u64 {
+        // for now, it must be within the lower kernel memory, easier to support
+        assert!(self.physical_addr < KERNEL_END as u64);
+        physical2virtual(self.physical_addr as _) as _
     }
 
     fn alloc_new() -> Self {
         // SAFETY: it will panic if it couldn't allocate, so if it returns, it is safe
-        Self(unsafe { physical_page_allocator::alloc_zeroed() } as _)
+        Self {
+            physical_addr: unsafe { virtual2physical(physical_page_allocator::alloc_zeroed() as _) }
+                as _,
+        }
     }
 
     fn as_ptr(&self) -> *mut PageDirectoryTable {
-        self.0 as *mut PageDirectoryTable
+        self.as_virtual() as *mut PageDirectoryTable
     }
 
     fn as_mut(&mut self) -> &mut PageDirectoryTable {
@@ -136,7 +149,7 @@ impl PageDirectoryTablePtr {
     }
 
     unsafe fn free(self) {
-        unsafe { physical_page_allocator::free(self.0 as _) };
+        unsafe { physical_page_allocator::free(self.as_virtual() as _) };
     }
 }
 
@@ -205,7 +218,8 @@ impl VirtualMemoryMapper {
         Self {
             // use the same address we used in the assembly code
             // we will change this anyway in `new_kernel_vm`, but at least lets have a valid address
-            page_map_l4: PageDirectoryTablePtr(physical2virtual(0x1000) as _),
+            // FIXME: this is not good at all, replace this with better init, like `OnceLock` or something
+            page_map_l4: PageDirectoryTablePtr::from_entry(0),
             is_user: false,
         }
     }
@@ -232,7 +246,7 @@ impl VirtualMemoryMapper {
         }
 
         new_vm.page_map_l4.as_mut().entries[KERNEL_L4_INDEX] =
-            new_kernel_l4.to_physical() | flags::PTE_PRESENT | flags::PTE_WRITABLE;
+            new_kernel_l4.as_physical() | flags::PTE_PRESENT | flags::PTE_WRITABLE;
 
         new_vm
     }
@@ -266,17 +280,20 @@ impl VirtualMemoryMapper {
     fn load_vm(base: &PageDirectoryTablePtr) {
         eprintln!(
             "Switching to new page map: {:p}",
-            virtual2physical(base.0 as _) as *const u8
+            base.as_physical() as *const u8
         );
-        unsafe { cpu::set_cr3(base.to_physical()) }
+        unsafe { cpu::set_cr3(base.as_physical()) }
     }
 
     fn get_current_vm() -> Self {
-        let kernel_vm_addr = KERNEL_VIRTUAL_MEMORY_MANAGER.lock().page_map_l4.0;
-        let cr3 = physical2virtual(unsafe { cpu::get_cr3() } as _) as _;
+        let kernel_vm_addr = KERNEL_VIRTUAL_MEMORY_MANAGER
+            .lock()
+            .page_map_l4
+            .as_physical();
+        let cr3 = unsafe { cpu::get_cr3() } as _; // cr3 is physical address
         let is_user = cr3 != kernel_vm_addr;
         Self {
-            page_map_l4: PageDirectoryTablePtr(cr3),
+            page_map_l4: PageDirectoryTablePtr::from_entry(cr3),
             is_user,
         }
     }
@@ -348,7 +365,7 @@ impl VirtualMemoryMapper {
         } = entry;
 
         assert!(!self.page_map_l4.as_ptr().is_null());
-        assert!(is_aligned(self.page_map_l4.0 as _, PAGE_4K));
+        assert!(is_aligned(self.page_map_l4.as_virtual() as _, PAGE_4K));
 
         let (aligned_start, size, _) =
             align_range(virtual_address as _, *requested_size as _, PAGE_4K);
@@ -404,7 +421,7 @@ impl VirtualMemoryMapper {
             if *page_map_l4_entry & flags::PTE_PRESENT == 0 {
                 let page_directory_pointer_table = PageDirectoryTablePtr::alloc_new();
                 *page_map_l4_entry =
-                    (page_directory_pointer_table.to_physical() & ADDR_MASK) | flags::PTE_PRESENT;
+                    (page_directory_pointer_table.as_physical() & ADDR_MASK) | flags::PTE_PRESENT;
             }
             // add new flags if any
             *page_map_l4_entry |= flags;
@@ -423,7 +440,7 @@ impl VirtualMemoryMapper {
             if *page_directory_pointer_entry & flags::PTE_PRESENT == 0 {
                 let page_directory_table = PageDirectoryTablePtr::alloc_new();
                 *page_directory_pointer_entry =
-                    (page_directory_table.to_physical() & ADDR_MASK) | flags::PTE_PRESENT;
+                    (page_directory_table.as_physical() & ADDR_MASK) | flags::PTE_PRESENT;
             }
 
             // add new flags
@@ -491,7 +508,7 @@ impl VirtualMemoryMapper {
                 if *page_directory_entry & flags::PTE_PRESENT == 0 {
                     let page_table = PageDirectoryTablePtr::alloc_new();
                     *page_directory_entry =
-                        (page_table.to_physical() & ADDR_MASK) | flags::PTE_PRESENT;
+                        (page_table.as_physical() & ADDR_MASK) | flags::PTE_PRESENT;
                 }
                 // add new flags
                 *page_directory_entry |= flags;
