@@ -14,6 +14,7 @@ pub enum AmlParseError {
     InvalidPkgLengthLead,
     RemainingBytes(usize),
     CannotMoveBackward,
+    InvalidTarget(u8),
 }
 
 pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
@@ -521,7 +522,7 @@ impl Parser<'_> {
         }
     }
 
-    fn predict_possible_args(&mut self) -> usize {
+    fn predict_possible_args(&mut self, expect_data_after: bool, name: &str) -> usize {
         // clone ourselves to search futrue nodes
         // TODO: reduce allocations
         let mut inner = self.clone_parser();
@@ -531,8 +532,14 @@ impl Parser<'_> {
         for _ in 0..7 {
             // filter out impossible cases to be a method argument (taken from ACPICA code),
             // but not exactly the same for simplicity, maybe will need to modify later.
-            match inner.parse_term_arg_for_method_arg() {
-                Ok(TermArg::Name(_)) => break,
+            match inner.parse_term_arg() {
+                Ok(TermArg::Name(var_name)) => {
+                    // this is an inner expression containing the same name, something like `NAME = NAME + 1`
+                    // in that case, this is not a function, and is just a name
+                    if name == var_name {
+                        return 0;
+                    }
+                }
                 Ok(TermArg::Expression(amlterm)) => match amlterm.as_ref() {
                     AmlTerm::Store(_, _)
                     | AmlTerm::Notify(_, _)
@@ -565,15 +572,6 @@ impl Parser<'_> {
                     | AmlTerm::ToBuffer(_, _)
                     | AmlTerm::ToDecimalString(_, _)
                     | AmlTerm::ToInteger(_, _)
-                    | AmlTerm::LAnd(_, _)
-                    | AmlTerm::LOr(_, _)
-                    | AmlTerm::LNot(_)
-                    | AmlTerm::LNotEqual(_, _)
-                    | AmlTerm::LLessEqual(_, _)
-                    | AmlTerm::LGreaterEqual(_, _)
-                    | AmlTerm::LEqual(_, _)
-                    | AmlTerm::LGreater(_, _)
-                    | AmlTerm::LLess(_, _)
                     | AmlTerm::Mutex(_, _)
                     | AmlTerm::Event(_)
                     | AmlTerm::CreateDWordField(_, _, _)
@@ -604,9 +602,22 @@ impl Parser<'_> {
                     }
                     _ => {}
                 },
-                Err(_) => break,
+                Err(e) => {
+                    match e {
+                        AmlParseError::UnexpectedEndOfCode => {
+                            // if we took what is not ours, return it
+                            if n_args > 0 && expect_data_after && inner.remaining_bytes() == 0 {
+                                n_args -= 1;
+                            }
+                            return n_args;
+                        }
+                        _ => {}
+                    }
+                    break;
+                }
                 _ => {}
             }
+
             n_args += 1;
         }
         n_args
@@ -742,17 +753,17 @@ impl Parser<'_> {
                 self.parse_target()?,
             ),
             0x79 => AmlTerm::ShiftLeft(
-                self.parse_term_arg()?,
+                self.parse_term_arg_non_method_arg()?,
                 self.parse_term_arg()?,
                 self.parse_target()?,
             ),
             0x7A => AmlTerm::ShiftRight(
-                self.parse_term_arg()?,
+                self.parse_term_arg_non_method_arg()?,
                 self.parse_term_arg()?,
                 self.parse_target()?,
             ),
             0x7B => AmlTerm::And(
-                self.parse_term_arg()?,
+                self.parse_term_arg_non_method_arg()?,
                 self.parse_term_arg()?,
                 self.parse_target()?,
             ),
@@ -857,7 +868,7 @@ impl Parser<'_> {
             0xA2 => AmlTerm::While(PredicateBlock::parse(self)?),
             0xA3 => AmlTerm::Noop,
             // parse it as if its a method arg, this fixes issues of us mis-representing the term as a name
-            0xA4 => AmlTerm::Return(self.parse_term_arg_for_method_arg()?),
+            0xA4 => AmlTerm::Return(self.parse_term_arg_last()?),
             0xA5 => AmlTerm::Break,
             _ => {
                 eprintln!("try parse name");
@@ -870,11 +881,11 @@ impl Parser<'_> {
                 let n_args = self
                     .state
                     .find_method(&name)
-                    .unwrap_or_else(|| self.predict_possible_args());
+                    .unwrap_or_else(|| self.predict_possible_args(false, &name));
 
                 let mut args = Vec::new();
                 for _ in 0..n_args {
-                    args.push(self.parse_term_arg_for_method_arg()?);
+                    args.push(self.parse_term_arg()?);
                 }
 
                 AmlTerm::MethodCall(name, args)
@@ -885,15 +896,30 @@ impl Parser<'_> {
         Ok(Some(term))
     }
 
+    /// similar to [`Self::parse_term_arg`], but cannot call methods, as in some places method calls are not allowed
+    ///
+    /// TODO: This should be removed, as in general a method call is a valid term arg, its just
+    ///       we break some parts due to us not knowing if a name is a method or not, and prediction predicts wrong and messes up
+    ///       This happens for `+` and `>>` and `<<`, cases I have seen and know of bugs in the parsing
+    fn parse_term_arg_non_method_arg(&mut self) -> Result<TermArg, AmlParseError> {
+        // second arg doesn't matter, not used
+        self.parse_term_arg_general(false, true)
+    }
+
+    /// similar to [`Self::parse_term_arg`], but doesn't expect to have data after it, i.e. last in statements or something similar
+    fn parse_term_arg_last(&mut self) -> Result<TermArg, AmlParseError> {
+        self.parse_term_arg_general(true, false)
+    }
+
     fn parse_term_arg(&mut self) -> Result<TermArg, AmlParseError> {
-        self.parse_term_arg_general(false)
+        self.parse_term_arg_general(true, true)
     }
 
-    fn parse_term_arg_for_method_arg(&mut self) -> Result<TermArg, AmlParseError> {
-        self.parse_term_arg_general(true)
-    }
-
-    fn parse_term_arg_general(&mut self, for_method_call: bool) -> Result<TermArg, AmlParseError> {
+    fn parse_term_arg_general(
+        &mut self,
+        can_call_method: bool,
+        expect_data_after: bool,
+    ) -> Result<TermArg, AmlParseError> {
         let lead_byte = self.get_next_byte()?;
 
         let x = match lead_byte {
@@ -942,8 +968,11 @@ impl Parser<'_> {
                         let option_nargs = self.state.find_method(&name).or_else(|| {
                             if self.state.find_name(&name) {
                                 None
-                            } else if for_method_call {
-                                let possible_args = self.predict_possible_args();
+                            } else if can_call_method {
+                                eprintln!("predicting possible args for {name}");
+                                let possible_args =
+                                    self.predict_possible_args(expect_data_after, &name);
+                                eprintln!("got possible args: {possible_args} {name}");
                                 // if its 0 and we are inside a method call, probably this is just a named variable
                                 if possible_args == 0 {
                                     self.state.add_name(name.clone());
@@ -960,7 +989,7 @@ impl Parser<'_> {
                         if let Some(n_args) = option_nargs {
                             let mut args = Vec::new();
                             for _ in 0..n_args {
-                                args.push(self.parse_term_arg_for_method_arg()?);
+                                args.push(self.parse_term_arg()?);
                             }
 
                             Ok(TermArg::Expression(Box::new(AmlTerm::MethodCall(
@@ -1139,7 +1168,7 @@ impl Parser<'_> {
                         eprintln!("mmmm: {:x?}", term);
                         Ok(term)
                     } else {
-                        todo!("target lead byte: {:x}", lead_byte)
+                        Err(AmlParseError::InvalidTarget(lead_byte))
                     }
                 }
             }
