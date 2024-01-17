@@ -385,7 +385,8 @@ impl<'a> State<'a> {
 
     fn find_name(&self, name: &str) -> bool {
         eprintln!("finding name {name:?}, {:?}", self.names);
-        self.names.contains(name)
+        let short_name = &name[name.len() - 4..];
+        self.names.contains(name) || self.names.contains(short_name)
     }
 
     fn find_method(&self, name: &str) -> Option<usize> {
@@ -395,6 +396,17 @@ impl<'a> State<'a> {
         let method_name = &name[name.len() - 4..];
         eprintln!("methods: {:?}", self.methods);
         self.methods.get(method_name).copied()
+    }
+
+    fn add_method(&mut self, name: &str, arg_count: usize) {
+        eprintln!("adding method {name:?}");
+        let method_name = &name[name.len() - 4..];
+        self.methods.insert(String::from(method_name), arg_count);
+    }
+
+    fn add_name(&mut self, name: String) {
+        eprintln!("adding name {name:?}");
+        self.names.insert(name);
     }
 }
 
@@ -607,13 +619,15 @@ impl Parser<'_> {
             0x06 => {
                 let original_name = self.parse_name()?;
                 let aliased_name = self.parse_name()?;
-                self.state.names.insert(aliased_name.clone());
+                self.state.add_name(aliased_name.clone());
+                self.state.add_name(original_name.clone());
 
                 AmlTerm::Alias(original_name, aliased_name)
             }
             0x08 => {
                 let name = self.parse_name()?;
-                self.state.names.insert(name.clone());
+                self.state.add_name(name.clone());
+
                 AmlTerm::NameObj(name, self.parse_term_arg()?)
             }
             0x0d => {
@@ -661,9 +675,7 @@ impl Parser<'_> {
             }
             0x14 => {
                 let method = MethodObj::parse(self)?;
-                self.state
-                    .methods
-                    .insert(method.name.clone(), method.arg_count());
+                self.state.add_method(&method.name, method.arg_count());
                 AmlTerm::Method(method)
             }
             0x5b => {
@@ -785,32 +797,22 @@ impl Parser<'_> {
                 self.parse_term_arg()?,
                 self.parse_target()?,
             ),
-            0x8A => AmlTerm::CreateDWordField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
-            0x8B => AmlTerm::CreateWordField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
-            0x8C => AmlTerm::CreateByteField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
-            0x8D => AmlTerm::CreateBitField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
+            0x8A..=0x8D | 0x8F => {
+                let term1 = self.parse_term_arg()?;
+                let term2 = self.parse_term_arg()?;
+                let name = self.parse_name()?;
+                self.state.add_name(name.clone());
+
+                match opcode {
+                    0x8A => AmlTerm::CreateDWordField(term1, term2, name),
+                    0x8B => AmlTerm::CreateWordField(term1, term2, name),
+                    0x8C => AmlTerm::CreateByteField(term1, term2, name),
+                    0x8D => AmlTerm::CreateBitField(term1, term2, name),
+                    0x8F => AmlTerm::CreateQWordField(term1, term2, name),
+                    _ => unreachable!(),
+                }
+            }
             0x8E => AmlTerm::ObjectType(self.parse_target()?),
-            0x8F => AmlTerm::CreateQWordField(
-                self.parse_term_arg()?,
-                self.parse_term_arg()?,
-                self.parse_name()?,
-            ),
             0x90 => AmlTerm::LAnd(self.parse_term_arg()?, self.parse_term_arg()?),
             0x91 => AmlTerm::LOr(self.parse_term_arg()?, self.parse_term_arg()?),
             0x92 => {
@@ -944,11 +946,14 @@ impl Parser<'_> {
                                 let possible_args = self.predict_possible_args();
                                 // if its 0 and we are inside a method call, probably this is just a named variable
                                 if possible_args == 0 {
+                                    self.state.add_name(name.clone());
                                     None
                                 } else {
                                     Some(possible_args)
                                 }
                             } else {
+                                // we didn't find, the name, and we can't use methods, so assume its a name
+                                self.state.add_name(name.clone());
                                 None
                             }
                         });
@@ -1118,7 +1123,6 @@ impl Parser<'_> {
                     self.forward(1)?;
                     Ok(Target::Arg(arg))
                 } else if let Some(name) = self.try_parse_name()? {
-                    self.state.names.insert(name.clone());
                     Ok(Target::Name(name))
                 } else {
                     self.forward(1)?;
@@ -1184,7 +1188,7 @@ impl Parser<'_> {
                 _ => {
                     let len_now = self.pos;
                     let name = self.parse_name()?;
-                    self.state.names.insert(name.clone());
+                    self.state.add_name(name.clone());
                     assert!(self.pos - len_now == 4); // must be a name segment
                     eprintln!("field element name: {}", name);
                     let pkg_length = self.get_pkg_length()?;
