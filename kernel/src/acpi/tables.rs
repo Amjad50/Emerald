@@ -300,6 +300,7 @@ impl Rsdt {
                 DescriptorTableBody::Facp(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Hpet(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Dsdt(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Ssdt(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Bgrt(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Waet(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Srat(a) => Some(a.as_ref() as &dyn Any),
@@ -346,7 +347,8 @@ impl DescriptorTable {
             b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header_ptr))),
             b"FACP" => DescriptorTableBody::Facp(Box::new(get_table_from_header(header_ptr))),
             b"HPET" => DescriptorTableBody::Hpet(Box::new(get_table_from_header(header_ptr))),
-            b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Dsdt::from_header(header_ptr))),
+            b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Xsdt::from_header(header_ptr))),
+            b"SSDT" => DescriptorTableBody::Ssdt(Box::new(Xsdt::from_header(header_ptr))),
             b"BGRT" => DescriptorTableBody::Bgrt(Box::new(get_table_from_header(header_ptr))),
             b"WAET" => DescriptorTableBody::Waet(Box::new(get_table_from_header(header_ptr))),
             b"SRAT" => DescriptorTableBody::Srat(Box::new(Srat::from_header(header_ptr))),
@@ -371,7 +373,8 @@ pub enum DescriptorTableBody {
     Apic(Box<Apic>),
     Facp(Box<Facp>),
     Hpet(Box<Hpet>),
-    Dsdt(Box<Dsdt>),
+    Dsdt(Box<Xsdt>),
+    Ssdt(Box<Xsdt>),
     Bgrt(Box<Bgrt>),
     Waet(Box<Waet>),
     Srat(Box<Srat>),
@@ -579,11 +582,12 @@ pub struct Hpet {
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub struct Dsdt {
+/// This is inside DSDT and SSDT
+pub struct Xsdt {
     aml_code: AmlCode,
 }
 
-impl Dsdt {
+impl Xsdt {
     /// # Safety
     /// the pointer must be valid and point to a valid table
     unsafe fn from_header(header: *const DescriptionHeader) -> Self {
@@ -772,7 +776,8 @@ impl fmt::Display for BiosTables {
         writeln!(f, "RSDT: {:X?}", self.rsdt.header)?;
         for entry in &self.rsdt.entries {
             match entry.body {
-                DescriptorTableBody::Dsdt(_) => {
+                DescriptorTableBody::Dsdt(_) | DescriptorTableBody::Ssdt(_) => {
+                    writeln!(f, "{:X?}", entry.header)?;
                     // TODO: add cmdline arg to print DSDT (its very large, so don't by default)
                     // writeln!(f, "DSDT: ")?;
                     // entry.aml_code.display_with_depth(f, 1)?;
