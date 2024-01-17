@@ -63,6 +63,7 @@ pub enum AmlTerm {
     ToBuffer(TermArg, Box<Target>),
     ToDecimalString(TermArg, Box<Target>),
     ToInteger(TermArg, Box<Target>),
+    Mid(TermArg, TermArg, TermArg, Box<Target>),
     Add(TermArg, TermArg, Box<Target>),
     Concat(TermArg, TermArg, Box<Target>),
     Subtract(TermArg, TermArg, Box<Target>),
@@ -106,6 +107,7 @@ pub enum AmlTerm {
     Mutex(String, u8),
     Event(String),
     CondRefOf(Box<Target>, Box<Target>),
+    CreateFieldOp(TermArg, TermArg, TermArg, String),
     Aquire(Box<Target>, u16),
     Signal(Box<Target>),
     Wait(Box<Target>, TermArg),
@@ -119,6 +121,7 @@ pub enum AmlTerm {
     CreateBitField(TermArg, TermArg, String),
     CreateQWordField(TermArg, TermArg, String),
     MethodCall(String, Vec<TermArg>),
+    ObjectType(Box<Target>),
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +239,7 @@ impl IndexFieldDef {
 pub enum FieldElement {
     ReservedField(usize),
     NamedField(String, usize),
+    AccessField(u8, u8),
 }
 
 #[derive(Debug, Clone)]
@@ -670,6 +674,12 @@ impl Parser<'_> {
                     0x01 => AmlTerm::Mutex(self.parse_name()?, self.get_next_byte()?),
                     0x02 => AmlTerm::Event(self.parse_name()?),
                     0x12 => AmlTerm::CondRefOf(self.parse_target()?, self.parse_target()?),
+                    0x13 => AmlTerm::CreateFieldOp(
+                        self.parse_term_arg()?,
+                        self.parse_term_arg()?,
+                        self.parse_term_arg()?,
+                        self.parse_name()?,
+                    ),
                     0x21 => AmlTerm::Stall(self.parse_term_arg()?),
                     0x22 => AmlTerm::Sleep(self.parse_term_arg()?),
                     0x23 => AmlTerm::Aquire(
@@ -795,6 +805,7 @@ impl Parser<'_> {
                 self.parse_term_arg()?,
                 self.parse_name()?,
             ),
+            0x8E => AmlTerm::ObjectType(self.parse_target()?),
             0x8F => AmlTerm::CreateQWordField(
                 self.parse_term_arg()?,
                 self.parse_term_arg()?,
@@ -827,6 +838,12 @@ impl Parser<'_> {
             0x97 => AmlTerm::ToDecimalString(self.parse_term_arg()?, self.parse_target()?),
             0x98 => AmlTerm::ToHexString(self.parse_term_arg()?, self.parse_target()?),
             0x99 => AmlTerm::ToInteger(self.parse_term_arg()?, self.parse_target()?),
+            0x9E => AmlTerm::Mid(
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_term_arg()?,
+                self.parse_target()?,
+            ),
             0xA0 => AmlTerm::If(PredicateBlock::parse(self)?),
             0xA1 => {
                 let mut inner = self.get_inner_parser()?;
@@ -1155,7 +1172,13 @@ impl Parser<'_> {
                     // add 1 since we are not using it as normal pkg length
                     FieldElement::ReservedField(pkg_length + 1)
                 }
-                1 => todo!("access field"),
+                1 => {
+                    self.forward(1)?;
+                    let access_type = self.get_next_byte()?;
+                    let access_attrib = self.get_next_byte()?;
+
+                    FieldElement::AccessField(access_type, access_attrib)
+                }
                 2 => todo!("connection field"),
                 3 => todo!("extended access field"),
                 _ => {
@@ -1349,6 +1372,11 @@ fn display_fields(
         match field {
             FieldElement::ReservedField(len) => write!(f, "_Reserved (0x{:02X})", len)?,
             FieldElement::NamedField(name, len) => write!(f, "{},     (0x{:02X})", name, len)?,
+            FieldElement::AccessField(access_type, access_attrib) => write!(
+                f,
+                "AccessAs  (0x{:02X}, 0x{:02X})",
+                access_type, access_attrib
+            )?,
         }
         if i != len - 1 {
             write!(f, ", ")?;
@@ -1467,6 +1495,15 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::ToInteger(term, target) => {
             display_call_term_target("ToInteger", &[term], &[target], f, depth)?;
+        }
+        AmlTerm::Mid(source_term, index_term, length_term, target) => {
+            display_call_term_target(
+                "Mid",
+                &[source_term, index_term, length_term],
+                &[target],
+                f,
+                depth,
+            )?;
         }
         AmlTerm::ToBuffer(term, target) => {
             display_call_term_target("ToBuffer", &[term], &[target], f, depth)?;
@@ -1609,6 +1646,15 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         AmlTerm::CondRefOf(target1, target2) => {
             display_call_term_target("CondRefOf", &[], &[target1, target2], f, depth)?;
         }
+        AmlTerm::CreateFieldOp(source, index, numbits, target_name) => {
+            display_call_term_target(
+                "CreateField",
+                &[source, index, numbits],
+                &[&Target::Name(target_name.clone())],
+                f,
+                depth,
+            )?;
+        }
         AmlTerm::Stall(term) => {
             display_call_term_target("Stall", &[term], &[], f, depth)?;
         }
@@ -1712,6 +1758,11 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::ConcatRes(term1, term2, target) => {
             display_call_term_target("ConcatRes", &[term1, term2], &[target], f, depth)?;
+        }
+        AmlTerm::ObjectType(obj) => {
+            write!(f, "ObjectType (")?;
+            display_target(obj, f, depth)?;
+            write!(f, ")")?;
         }
         AmlTerm::Noop => {
             write!(f, "Noop")?;
