@@ -60,6 +60,19 @@ fn get_table_from_header<T>(header: &DescriptionHeader) -> T {
     unsafe { our_data_value.assume_init() }
 }
 
+/// Will fill the table from the header data, and zero out remaining bytes if any are left
+fn get_struct_from_bytes<T>(data: &[u8]) -> T {
+    assert_eq!(data.len(), mem::size_of::<T>());
+
+    let mut our_data_value = MaybeUninit::zeroed();
+    let out_data_slice = unsafe {
+        slice::from_raw_parts_mut(our_data_value.as_mut_ptr() as *mut u8, mem::size_of::<T>())
+    };
+    out_data_slice.copy_from_slice(data);
+
+    unsafe { our_data_value.assume_init() }
+}
+
 // Note: this requires allocation, so it should be called after the heap is initialized
 pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<BiosTables, ()> {
     let rdsp = multiboot_info
@@ -215,6 +228,7 @@ impl Rsdt {
                 DescriptorTableBody::Dsdt(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Bgrt(a) => Some(a.as_ref() as &dyn Any),
                 DescriptorTableBody::Waet(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Srat(a) => Some(a.as_ref() as &dyn Any),
             })
             .find_map(|obj| obj.downcast_ref::<T>())
     }
@@ -256,6 +270,7 @@ impl DescriptorTable {
             b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Dsdt::from_header(header))),
             b"BGRT" => DescriptorTableBody::Bgrt(Box::new(get_table_from_header(header))),
             b"WAET" => DescriptorTableBody::Waet(Box::new(get_table_from_header(header))),
+            b"SRAT" => DescriptorTableBody::Srat(Box::new(Srat::from_header(header))),
             _ => DescriptorTableBody::Unknown(HexArray(
                 unsafe {
                     slice::from_raw_parts(
@@ -281,6 +296,7 @@ pub enum DescriptorTableBody {
     Dsdt(Box<Dsdt>),
     Bgrt(Box<Bgrt>),
     Waet(Box<Waet>),
+    Srat(Box<Srat>),
     Unknown(HexArray<Vec<u8>>),
 }
 
@@ -336,6 +352,23 @@ pub enum InterruptControllerStruct {
     } = 255,
 }
 
+impl InterruptControllerStruct {
+    fn from_type_and_bytes(struct_type: u8, bytes: &[u8]) -> Self {
+        match struct_type {
+            0 => Self::ProcessorLocalApic(get_struct_from_bytes(bytes)),
+            1 => Self::IoApic(get_struct_from_bytes(bytes)),
+            2 => Self::InterruptSourceOverride(get_struct_from_bytes(bytes)),
+            3 => Self::NonMaskableInterrupt(get_struct_from_bytes(bytes)),
+            4 => Self::LocalApicNmi(get_struct_from_bytes(bytes)),
+            5 => Self::LocalApicAddressOverride(get_struct_from_bytes(bytes)),
+            _ => Self::Unknown {
+                struct_type,
+                bytes: HexArray(bytes.to_vec()),
+            },
+        }
+    }
+}
+
 // extract enum into outside structs
 #[repr(C, packed)]
 #[derive(Debug, Clone)]
@@ -349,6 +382,7 @@ pub struct ProcessorLocalApic {
 #[derive(Debug, Clone)]
 pub struct IoApic {
     pub io_apic_id: u8,
+    pub reserved: u8,
     pub io_apic_address: u32,
     pub global_system_interrupt_base: u32,
 }
@@ -380,73 +414,8 @@ pub struct LocalApicNmi {
 #[repr(C, packed)]
 #[derive(Debug, Clone)]
 pub struct LocalApicAddressOverride {
+    pub reserved: u16,
     pub local_apic_address: u64,
-}
-
-impl InterruptControllerStruct {
-    fn from_type_and_bytes(struct_type: u8, bytes: &[u8]) -> Self {
-        match struct_type {
-            0 => {
-                let acpi_processor_id = bytes[0];
-                let apic_id = bytes[1];
-                let flags = u32::from_le_bytes(bytes[2..6].try_into().unwrap());
-                Self::ProcessorLocalApic(ProcessorLocalApic {
-                    acpi_processor_id,
-                    apic_id,
-                    flags,
-                })
-            }
-            1 => {
-                let io_apic_id = bytes[0];
-                let io_apic_address = u32::from_le_bytes(bytes[2..6].try_into().unwrap());
-                let global_system_interrupt_base =
-                    u32::from_le_bytes(bytes[6..10].try_into().unwrap());
-                Self::IoApic(IoApic {
-                    io_apic_id,
-                    io_apic_address,
-                    global_system_interrupt_base,
-                })
-            }
-            2 => {
-                let bus = bytes[0];
-                let source = bytes[1];
-                let global_system_interrupt = u32::from_le_bytes(bytes[2..6].try_into().unwrap());
-                let flags = u16::from_le_bytes(bytes[6..8].try_into().unwrap());
-                Self::InterruptSourceOverride(InterruptSourceOverride {
-                    bus,
-                    source,
-                    global_system_interrupt,
-                    flags,
-                })
-            }
-            3 => {
-                let flags = u16::from_le_bytes(bytes[0..2].try_into().unwrap());
-                let global_system_interrupt = u32::from_le_bytes(bytes[2..6].try_into().unwrap());
-                Self::NonMaskableInterrupt(NonMaskableInterrupt {
-                    flags,
-                    global_system_interrupt,
-                })
-            }
-            4 => {
-                let acpi_processor_id = bytes[0];
-                let flags = u16::from_le_bytes(bytes[1..3].try_into().unwrap());
-                let local_apic_lint = bytes[3];
-                Self::LocalApicNmi(LocalApicNmi {
-                    acpi_processor_uid: acpi_processor_id,
-                    flags,
-                    local_apic_lint,
-                })
-            }
-            5 => {
-                let local_apic_address = u64::from_le_bytes(bytes.try_into().unwrap());
-                Self::LocalApicAddressOverride(LocalApicAddressOverride { local_apic_address })
-            }
-            _ => Self::Unknown {
-                struct_type,
-                bytes: HexArray(bytes.to_vec()),
-            },
-        }
-    }
 }
 
 #[repr(C, packed)]
@@ -560,6 +529,141 @@ pub struct Bgrt {
 #[allow(dead_code)]
 pub struct Waet {
     emulated_device_flags: u32,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct Srat {
+    reserved1: u32,
+    reserved2: u64,
+    static_resource_allocation: Vec<StaticResourceAffinity>,
+}
+
+impl Srat {
+    fn from_header(header: &DescriptionHeader) -> Self {
+        let mut srat = Self {
+            reserved1: 0,
+            reserved2: 0,
+            static_resource_allocation: Vec::new(),
+        };
+        let after_header = unsafe { (header as *const DescriptionHeader).add(1) as *const u32 };
+        srat.reserved1 = unsafe { after_header.read_unaligned() };
+        srat.reserved2 = unsafe { (after_header.add(1) as *const u64).read_unaligned() };
+
+        let mut ptr = unsafe { after_header.add(3) as *const u8 };
+        let mut remaining = header.length - size_of::<DescriptionHeader>() as u32 - 12;
+        while remaining > 0 {
+            let struct_type = unsafe { *ptr };
+            let struct_len = unsafe { *(ptr.add(1)) };
+            let struct_bytes =
+                unsafe { slice::from_raw_parts(ptr.add(2), struct_len as usize - 2) };
+            srat.static_resource_allocation
+                .push(StaticResourceAffinity::from_type_and_bytes(
+                    struct_type,
+                    struct_bytes,
+                ));
+            ptr = unsafe { ptr.add(struct_len as usize) };
+            remaining -= struct_len as u32;
+        }
+        srat
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub enum StaticResourceAffinity {
+    ProcessorLocalAcpi(ProcessorLocalAcpiAffinity) = 0,
+    MemoryAffinity(MemoryAffinity) = 1,
+    ProcessorLocalX2Apic(ProcessorLocalX2ApicAffinity) = 2,
+    GiccAffinity(GiccAffinity) = 3,
+    GicInterruptTranslationService(GicInterruptTranslationServiceAffinity) = 4,
+    GenericInitiatorAffinity(GenericInitiatorAffinity) = 5,
+    Unknown {
+        struct_type: u8,
+        bytes: HexArray<Vec<u8>>,
+    } = 255,
+}
+
+impl StaticResourceAffinity {
+    fn from_type_and_bytes(struct_type: u8, bytes: &[u8]) -> Self {
+        match struct_type {
+            0 => Self::ProcessorLocalAcpi(get_struct_from_bytes(bytes)),
+            1 => Self::MemoryAffinity(get_struct_from_bytes(bytes)),
+            2 => Self::ProcessorLocalX2Apic(get_struct_from_bytes(bytes)),
+            3 => Self::GiccAffinity(get_struct_from_bytes(bytes)),
+            4 => Self::GicInterruptTranslationService(get_struct_from_bytes(bytes)),
+            5 => Self::GenericInitiatorAffinity(get_struct_from_bytes(bytes)),
+            _ => Self::Unknown {
+                struct_type,
+                bytes: HexArray(bytes.to_vec()),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct ProcessorLocalAcpiAffinity {
+    proximity_domain_low: u8,
+    apic_id: u8,
+    flags: u32,
+    local_sapic_eid: u8,
+    proximity_domain_high: [u8; 3],
+    clock_domain: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct MemoryAffinity {
+    proximity_domain: u32,
+    reserved1: u16,
+    base_address_low: u32,
+    base_address_high: u32,
+    length_low: u32,
+    length_high: u32,
+    reserved2: u32,
+    flags: u32,
+    reserved3: u64,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct ProcessorLocalX2ApicAffinity {
+    reserved1: u16,
+    proximity_domain: u32,
+    x2apic_id: u32,
+    flags: u32,
+    clock_domain: u32,
+    reserved2: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct GiccAffinity {
+    proximity_domain: u32,
+    acpi_processor_uid: u32,
+    flags: u32,
+    clock_domain: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct GicInterruptTranslationServiceAffinity {
+    proximity_domain: u32,
+    reserved1: u16,
+    its_id: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+pub struct GenericInitiatorAffinity {
+    reserved1: u8,
+    device_handle_type: u8,
+    proximity_domain: u32,
+    device_handle: [u8; 16],
+    flags: u32,
+    reserved2: u32,
 }
 
 #[derive(Debug, Clone)]
