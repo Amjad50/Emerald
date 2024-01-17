@@ -565,9 +565,12 @@ struct CommandIdentifyDataRaw {
 
 impl CommandIdentifyDataRaw {
     fn is_valid(&self) -> bool {
+        // check the `general_config` is valid
         // check that the serial number is not empty
         // and not all is 0xFF
-        self.serial_number.iter().any(|x| *x != 0) && self.serial_number.iter().any(|x| *x != 0xFF)
+        ((self.general_config >> 8) != 0xFF && (self.general_config >> 8) != 0x7F)
+            && self.serial_number.iter().any(|x| *x != 0)
+            && self.serial_number.iter().any(|x| *x != 0xFF)
     }
 
     fn is_dma_supported(&self) -> bool {
