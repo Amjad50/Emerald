@@ -29,7 +29,7 @@ workspace = false
 dependencies = ["build_member"]
 condition= {files_modified = {input=["${OUT_DIR}/${CARGO_MAKE_PROJECT_NAME}"], output=["${FILESYSTEM_PATH}/${CARGO_MAKE_PROJECT_NAME}"]}}
 command = "cp"
-args = ["-r", "${OUT_DIR}/echo", "${OUT_DIR}/cat", "${OUT_DIR}/ls", "${FILESYSTEM_PATH}/"]
+args = ["-r", "${OUT_DIR}/echo", "${OUT_DIR}/cat", "${OUT_DIR}/ls", "${OUT_DIR}/xxd", "${FILESYSTEM_PATH}/"]
 
 [tasks.filesystem]
 workspace = false

@@ -27,8 +27,17 @@ fn main() -> ExitCode {
         match file.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
-                let s = std::str::from_utf8(&buf[..n]).unwrap();
-                print!("{}", s);
+                let s = std::str::from_utf8(&buf[..n]);
+                match s {
+                    Ok(s) => print!("{}", s),
+                    Err(e) => {
+                        println!(
+                            "\n\n[!] UTF8 Error: {}\nTry to run xxd instead on the file",
+                            e
+                        );
+                        return ExitCode::FAILURE;
+                    }
+                }
             }
             Err(e) => {
                 println!("[!] error: {}", e);

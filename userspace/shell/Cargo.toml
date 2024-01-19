@@ -6,20 +6,24 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "shell"
-path = "src/shell.rs"
+name = "cat"
+path = "src/cat.rs"
 
 [[bin]]
 name = "echo"
 path = "src/echo.rs"
 
 [[bin]]
-name = "cat"
-path = "src/cat.rs"
-
-[[bin]]
 name = "ls"
 path = "src/ls.rs"
+
+[[bin]]
+name = "shell"
+path = "src/shell.rs"
+
+[[bin]]
+name = "xxd"
+path = "src/xxd.rs"
 
 [dependencies]
 std = { path = "../../extern/rust/library/std", default-features = false }
