@@ -1,15 +1,14 @@
 use core::mem::MaybeUninit;
 
 /// A fixed size ring buffer
-#[allow(dead_code)]
-pub struct RingBuffer<T> {
-    buffer: [MaybeUninit<T>; 1024],
+pub struct RingBuffer<T, const N: usize> {
+    buffer: [MaybeUninit<T>; N],
     read_index: usize,
     write_index: usize,
 }
 
 #[allow(dead_code)]
-impl<T> RingBuffer<T> {
+impl<T, const N: usize> RingBuffer<T, N> {
     pub fn try_push(&mut self, value: T) -> bool {
         let next_index = (self.write_index + 1) % self.buffer.len();
         if next_index == self.read_index {
@@ -65,10 +64,10 @@ impl<T> RingBuffer<T> {
     }
 }
 
-impl<T: Copy> RingBuffer<T> {
+impl<T: Copy, const N: usize> RingBuffer<T, N> {
     pub const fn empty() -> Self {
         Self {
-            buffer: [MaybeUninit::<T>::uninit(); 1024],
+            buffer: [MaybeUninit::<T>::uninit(); N],
             read_index: 0,
             write_index: 0,
         }

@@ -320,7 +320,9 @@ pub struct Key {
 pub struct Keyboard {
     active_modifiers: u8,
     active_toggles: u8,
-    input_ring: RingBuffer<Key>,
+    // use a small buffer, there is no need to have long buffer,
+    // its bad, since user input may be saved for later
+    input_ring: RingBuffer<Key, 8>,
 }
 
 impl fmt::Debug for Keyboard {
@@ -420,11 +422,6 @@ impl Keyboard {
 
     pub fn get_next_char(&mut self) -> Option<Key> {
         self.input_ring.pop().or_else(|| self.try_read_char())
-    }
-
-    #[allow(dead_code)]
-    pub fn clear_buffer(&mut self) {
-        self.input_ring.clear();
     }
 }
 
