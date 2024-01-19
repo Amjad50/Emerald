@@ -198,7 +198,7 @@ pub enum KeyType {
 }
 
 impl KeyType {
-    fn virtual_key(&self, shifted: bool) -> Option<u8> {
+    pub fn virtual_key(&self, shifted: bool) -> Option<u8> {
         let index = *self as usize;
         let mappings = if shifted {
             &US_KEYTYPE_KEYMAP_SHIFTED
