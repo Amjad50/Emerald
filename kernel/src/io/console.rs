@@ -225,12 +225,25 @@ impl LateConsole {
     pub unsafe fn read(&mut self, dst: &mut [u8]) -> usize {
         let mut i = 0;
         let mut keyboard = self.keyboard.lock();
+
+        // for some reason, uart returns \r instead of \n when pressing <enter>
+        // so we have to convert it to \n
+        let read_uart = || {
+            self.uart
+                .try_read_byte()
+                .map(|c| if c == b'\r' { b'\n' } else { c })
+        };
+
         while i < dst.len() {
-            if let Some(c) = keyboard.get_next_char() {
-                if let Some(c) = c.virtual_char {
-                    dst[i] = c;
-                    i += 1;
-                }
+            // try to read from keyboard
+            // if we can't read from keyboard, try to read from uart
+            if let Some(c) = keyboard
+                .get_next_char()
+                .and_then(|c| c.virtual_char)
+                .or_else(read_uart)
+            {
+                dst[i] = c;
+                i += 1;
                 // ignore if its not a valid char
             } else {
                 break;

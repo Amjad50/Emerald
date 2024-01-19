@@ -139,7 +139,6 @@ impl Uart {
     }
 
     /// SAFETY: `init` must be called before calling this function
-    #[allow(dead_code)]
     pub unsafe fn try_read_byte(&self) -> Option<u8> {
         if !self.is_enabled {
             return None;
