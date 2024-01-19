@@ -40,24 +40,25 @@ const KEYBOARD_INT_NUM: u8 = 1;
 const KEYBOARD_STATUS_PORT: u16 = 0x64;
 const KEYBOARD_DATA_PORT: u16 = 0x60;
 
-const US_KEYMAP: [u8; 128] = [
+/// The index is `KeyType`
+const US_KEYTYPE_KEYMAP: [u8; 127] = [
     0, 27, b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'-', b'=', b'\x08', b'\t',
     b'q', b'w', b'e', b'r', b't', b'y', b'u', b'i', b'o', b'p', b'[', b']', b'\n', 0, b'a', b's',
     b'd', b'f', b'g', b'h', b'j', b'k', b'l', b';', b'\'', b'`', 0, b'\\', b'z', b'x', b'c', b'v',
-    b'b', b'n', b'm', b',', b'.', b'/', 0, b'*', 0, b' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'-', 0, 0,
-    0, b'+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'\n', 0, b'/', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'\n', 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, b'7', b'8', b'9', b'-', b'4', b'5', b'6', b'+', b'1', b'2', b'3',
-    b'0', b'.', 0, 0, 0, 0, 0, 0, 0, 0,
+    b'b', b'n', b'm', b',', b'.', b'/', 0, b'*', 0, b' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    b'7', b'8', b'9', b'-', b'4', b'5', b'6', b'+', b'1', b'2', b'3', b'0', b'.', 0, 0, 0, 0, 0, 0,
+    0, b'\n', 0, 0, 0, 0, 0, 0, 0, 0, b'/', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
-const US_KEYMAP_SHIFTED: [u8; 128] = [
+/// The index is `KeyType`
+const US_KEYTYPE_KEYMAP_SHIFTED: [u8; 127] = [
     0, 27, b'!', b'@', b'#', b'$', b'%', b'^', b'&', b'*', b'(', b')', b'_', b'+', b'\x08', b'\t',
     b'Q', b'W', b'E', b'R', b'T', b'Y', b'U', b'I', b'O', b'P', b'{', b'}', b'\n', 0, b'A', b'S',
     b'D', b'F', b'G', b'H', b'J', b'K', b'L', b':', b'"', b'~', 0, b'|', b'Z', b'X', b'C', b'V',
-    b'B', b'N', b'M', b'<', b'>', b'?', 0, b'*', 0, b' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'-', 0, 0,
-    0, b'+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'\n', 0, b'/', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, b'\n', 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, b'7', b'8', b'9', b'-', b'4', b'5', b'6', b'+', b'1', b'2', b'3',
-    b'0', b'.', 0, 0, 0, 0, 0, 0, 0, 0,
+    b'B', b'N', b'M', b'<', b'>', b'?', 0, b'*', 0, b' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, b'-', 0, b'5', 0, b'+', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 #[allow(dead_code)]
@@ -196,20 +197,47 @@ pub enum KeyType {
     MultimediaSelect,
 }
 
+impl KeyType {
+    fn virtual_key(&self, shifted: bool) -> Option<u8> {
+        let index = *self as usize;
+        let mappings = if shifted {
+            &US_KEYTYPE_KEYMAP_SHIFTED
+        } else {
+            &US_KEYTYPE_KEYMAP
+        };
+
+        assert!(index < mappings.len());
+        let value = mappings[index];
+
+        if value == 0 {
+            None
+        } else {
+            Some(value)
+        }
+    }
+}
+
 impl TryFrom<u8> for KeyType {
     type Error = ();
 
     // 0x80 means extended key
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value & 0x80 == 0 {
-            // not extended.
-            // we know that we are mapping the not extended keys directly
-            // so we can just cast it
-            let k = unsafe { core::mem::transmute(value) };
-            if k == Self::_None1 || k == Self::_None2 || k == Self::_None3 || k == Self::_None4 {
-                return Err(());
+            if value <= Self::F12 as u8 {
+                // not extended.
+                // we know that we are mapping the not extended keys directly
+                // so we can just cast it
+                let k = unsafe { core::mem::transmute(value) };
+                if k == Self::_None1 || k == Self::_None2 || k == Self::_None3 || k == Self::_None4
+                {
+                    return Err(());
+                }
+
+                Ok(k)
+            } else {
+                // not a valid key
+                Err(())
             }
-            Ok(k)
         } else {
             // first, strip the extension
             let key = value & !0x80;
@@ -398,22 +426,12 @@ impl Keyboard {
         } else {
             // this is a normal key
             if pressed {
-                let mut key = US_KEYMAP[data as usize];
-                if self.modifiers() & modifier::SHIFT != 0 {
-                    key = US_KEYMAP_SHIFTED[data as usize];
-                }
-
-                let virtual_char = if key == 0 {
-                    // this is an unmapped key
-                    None
-                } else {
-                    // this is a normal key
-                    Some(key)
-                };
+                let key_type: KeyType = data.try_into().ok()?;
+                let virtual_char = key_type.virtual_key(self.modifiers() & modifier::SHIFT != 0);
 
                 return Some(Key {
                     virtual_char,
-                    key_type: data.try_into().ok()?,
+                    key_type,
                 });
             }
         }
