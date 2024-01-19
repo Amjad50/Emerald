@@ -487,6 +487,7 @@ pub struct Directory {
 
 /// A node in the filesystem, can be a file or a directory
 #[allow(dead_code)]
+#[repr(u8)]
 pub enum FilesystemNode {
     File(File),
     Directory(Directory),
