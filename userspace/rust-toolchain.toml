@@ -1,0 +1,5 @@
+[toolchain]
+# a testing toolchain, if you want to get the toolchain installed
+# use `cargo make toolchain`, which will install it in `extern/toolchain`, you can
+# then use `rustup toolchain link <name> ./extern/toolchain` to link it to rustup
+path = "../extern/rust/build/host/stage2"

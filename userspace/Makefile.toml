@@ -6,12 +6,16 @@ USER_OUTDIR = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/x86_64-unknown-amjad_os/${PR
 CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = ["init", "shell"]
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 CARGO_MAKE_WORKSPACE_EMULATION = true
+# BUG in cargo-make, it uses `cargo` to get metadata about `rustc`, and it uses the system toolchain
+# not our custom one, and in that toolchain, we don't have our target, so it fails.
+# we put a target here, but we replace it in the `--target` argument of the build command
+CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu"
 
 # copy found in the root makefile
 [tasks.toolchain]
 workspace = false
 command = "makers"
-args = ["--makefile", "Makefile.toolchain.toml", "install_user_toolchain"]
+args = ["--makefile", "Makefile.toolchain.toml", "build_user_toolchain"]
 
 [tasks.build_member]
 workspace = true
