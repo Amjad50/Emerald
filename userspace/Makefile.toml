@@ -14,8 +14,8 @@ CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu"
 # copy found in the root makefile
 [tasks.toolchain]
 workspace = false
-command = "makers"
-args = ["--makefile", "Makefile.toolchain.toml", "build_user_toolchain"]
+command = "cargo-make"
+args = ["make", "--makefile", "Makefile.toolchain.toml", "build_user_toolchain"]
 
 [tasks.build_member]
 workspace = true

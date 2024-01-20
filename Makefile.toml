@@ -10,14 +10,14 @@ QEMU_UEFI_ARGS = { value = "-bios ${UEFI_IMAGE}", condition = { env_true = ["UEF
 [tasks.toolchain]
 workspace = false
 cwd = "userspace"
-command = "makers"
-args = ["--makefile", "Makefile.toolchain.toml", "install_user_toolchain"]
+command = "cargo-make"
+args = ["make", "--makefile", "Makefile.toolchain.toml", "install_user_toolchain"]
 
 [tasks.filesystem]
 workspace = false
 cwd = "userspace"
-command = "makers"
-args = ["--makefile", "Makefile.toml", "filesystem"]
+command = "cargo-make"
+args = ["make", "--makefile", "Makefile.toml", "filesystem"]
 
 # kernel tasks
 [tasks.kernel_iso]
