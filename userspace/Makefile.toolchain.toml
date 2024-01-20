@@ -9,7 +9,7 @@ args = ["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolcha
 
 [tasks.build_user_toolchain]
 workspace = false
-condition= {files_modified = {input=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/library/std/**"], output=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage1/bin/rustc"]}}
+condition= {files_modified = {input=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/library/std/**/*"], output=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage1-std/x86_64-unknown-amjad_os/release/.libstd.stamp"]}}
 dependencies = ["copy_config_toml"]
 cwd = "../extern/rust"
 command = "python"
@@ -17,7 +17,7 @@ args = ["x.py", "build", "-i", "--stage", "1"]
 
 [tasks.install_user_toolchain]
 workspace = false
-condition= {files_modified = {input=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage1/bin/rustc"], output=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/bin/**"]}}
+condition= {files_modified = {input=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage1-std/x86_64-unknown-amjad_os/release/.libstd.stamp"], output=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/bin/*"]}}
 dependencies = ["build_user_toolchain"]
 cwd = "../extern/rust"
 command = "python"

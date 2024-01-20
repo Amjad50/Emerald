@@ -7,6 +7,12 @@ CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = ["init", "shell"]
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 CARGO_MAKE_WORKSPACE_EMULATION = true
 
+# copy found in the root makefile
+[tasks.toolchain]
+workspace = false
+command = "makers"
+args = ["--makefile", "Makefile.toolchain.toml", "install_user_toolchain"]
+
 [tasks.build_member]
 workspace = true
 command = "cargo"
@@ -22,6 +28,7 @@ args = ["-r", "${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}", "${FILESYSTEM_PATH}/$
 
 [tasks.filesystem]
 workspace = false
+dependencies = ["toolchain"]
 env = {CARGO_MAKE_WORKSPACE_INCLUDE_MEMBERS = []}
 run_task = {name=["copy_to_fs", "extra_copy_to_fs"], fork=true}
 
