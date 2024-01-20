@@ -20,4 +20,4 @@ workspace = false
 dependencies = ["build_user_toolchain"]
 cwd = "../extern/rust"
 command = "python"
-args = ["x.py", "install", "rustfmt"]
+args = ["x.py", "install", "rustfmt", "rustc", "library/std"]

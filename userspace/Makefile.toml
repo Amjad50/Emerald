@@ -1,6 +1,6 @@
 [env]
-RUSTC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/bin/rustc"
-RUSTDOC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/bin/rustdoc"
+RUSTC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/bin/rustc"
+RUSTDOC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/rustdoc"
 USER_OUTDIR = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/x86_64-unknown-amjad_os/${PROFILE}"
 
 CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = ["init", "shell"]
