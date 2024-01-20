@@ -1,0 +1,24 @@
+
+[tasks.copy_config_toml]
+workspace = false
+condition= {files_modified = {input=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/config.toml"], output=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/config.toml"]}}
+cwd = "../extern/rust"
+command = "cp"
+args = ["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/config.toml",
+        "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/config.toml"]
+
+[tasks.build_user_toolchain]
+workspace = false
+condition= {files_modified = {input=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/library/std/**"], output=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage1/bin/rustc"]}}
+dependencies = ["copy_config_toml"]
+cwd = "../extern/rust"
+command = "python"
+args = ["x.py", "build", "-i", "--stage", "1"]
+
+[tasks.install_user_toolchain]
+workspace = false
+condition= {files_modified = {input=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage1/bin/rustc"], output=["${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/bin/**"]}}
+dependencies = ["build_user_toolchain"]
+cwd = "../extern/rust"
+command = "python"
+args = ["x.py", "install", "-i", "--stage", "1"]

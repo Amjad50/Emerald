@@ -1,7 +1,13 @@
+[env]
+CARGO_BUILD_TARGET = "${CARGO_MAKE_WORKING_DIRECTORY}/x86-64-os.json"
+KERNEL_PATH = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/x86-64-os/${PROFILE}/kernel"
+GRUB_CFG_PATH = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/kernel/grub.cfg"
+GRUB_PATH = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/${PROFILE}/grub"
+
 [tasks.build]
 command = "cargo"
-condition= {files_modified = {input=["${CARGO_MAKE_WORKING_DIRECTORY}/src/**/*", "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml"], output=["${OUT_DIR}/${CARGO_MAKE_PROJECT_NAME}"]}}
-args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}"]
+condition= {files_modified = {input=["${CARGO_MAKE_WORKING_DIRECTORY}/src/**/*", "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml"], output=["${KERNEL_PATH}"]}}
+args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}", "-Z", "build-std=core,alloc,compiler_builtins", "-Z", "build-std-features=compiler-builtins-mem"]
 
 [tasks.iso_create_grub]
 private = true
