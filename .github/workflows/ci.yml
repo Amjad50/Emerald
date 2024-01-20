@@ -20,8 +20,23 @@ jobs:
       - uses: davidB/rust-cargo-make@v1
       - uses: actions/checkout@v2
         with:
-          submodules: 'recursive'
+          submodules: 'false'
+      - name: submodule fetch
+        run: git submodule update --init --recursive
       - name: Build kernel
         run: cargo make kernel_iso
+      - name: Restore cached rust build
+        id: cache-os-rust-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: extern/rust/build
+          key: ${{ runner.os }}-rust-build-toolchain
       - name: Build filesystem programs
         run: cargo make filesystem
+      - name: Save cache rust build
+        id: cache-os-rust-save
+        uses: actions/cache/save@v4
+        with:
+          path: extern/rust/build
+          key: ${{ steps.cache-os-rust-restore.outputs.cache-primary-key }}
+
