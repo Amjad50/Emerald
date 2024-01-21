@@ -6,3 +6,5 @@ members = [
     "kernel",
     "userspace/init", "userspace/shell", "libraries/increasing_heap_allocator", "libraries/user_std",
 ]
+
+exclude = ["extern"]

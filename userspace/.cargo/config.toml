@@ -1,0 +1,3 @@
+[build]
+rustc-wrapper = ""  # sccache is giving weird bugs when recompiling std
+target = "x86_64-unknown-amjad_os"

@@ -3,12 +3,6 @@
 version = 3
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
-
-[[package]]
 name = "amjad_os_kernel_user_link"
 version = "0.1.5"
 dependencies = [
@@ -28,50 +22,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "cc"
-version = "1.0.83"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
-dependencies = [
- "libc",
-]
-
-[[package]]
-name = "cfg-if"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
-
-[[package]]
 name = "compiler_builtins"
 version = "0.1.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3686cc48897ce1950aa70fd595bd2dc9f767a3c4cca4cd17b2cb52a2d37e6eb4"
-
-[[package]]
-name = "cupid"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bad352a84b567cc38a5854e3aa8ee903cb8519a25d0b799b739bafffd1f91a1"
-dependencies = [
- "gcc",
- "rustc_version",
-]
-
-[[package]]
-name = "gcc"
-version = "0.3.55"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
-
-[[package]]
-name = "hashbrown"
-version = "0.14.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
-dependencies = [
- "allocator-api2",
-]
 
 [[package]]
 name = "increasing_heap_allocator"
@@ -85,10 +39,6 @@ dependencies = [
 [[package]]
 name = "init"
 version = "0.1.0"
-dependencies = [
- "panic_abort",
- "std",
-]
 
 [[package]]
 name = "kernel"
@@ -97,32 +47,6 @@ dependencies = [
  "amjad_os_kernel_user_link",
  "increasing_heap_allocator",
 ]
-
-[[package]]
-name = "libc"
-version = "0.2.151"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "302d7ab3130588088d277783b1e2d2e10c9e9e4a16dd9050e6ec93fb3e7048f4"
-
-[[package]]
-name = "panic_abort"
-version = "0.0.0"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
-name = "profiler_builtins"
-version = "0.0.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "rustc-demangle"
-version = "0.1.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
 
 [[package]]
 name = "rustc-std-workspace-alloc"
@@ -137,58 +61,5 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1956f5517128a2b6f23ab2dadf1a976f4f5b27962e7724c2bf3d45e539ec098c"
 
 [[package]]
-name = "rustc_version"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
-dependencies = [
- "semver",
-]
-
-[[package]]
-name = "semver"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
-dependencies = [
- "semver-parser",
-]
-
-[[package]]
-name = "semver-parser"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
-
-[[package]]
 name = "shell"
 version = "0.1.0"
-dependencies = [
- "panic_abort",
- "std",
-]
-
-[[package]]
-name = "std"
-version = "0.0.0"
-dependencies = [
- "amjad_os_user_std",
- "cfg-if",
- "hashbrown",
- "panic_abort",
- "profiler_builtins",
- "rustc-demangle",
- "std_detect",
-]
-
-[[package]]
-name = "std_detect"
-version = "0.1.5"
-dependencies = [
- "cfg-if",
- "compiler_builtins",
- "cupid",
- "libc",
- "rustc-std-workspace-alloc",
- "rustc-std-workspace-core",
-]
