@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "amjad_os_kernel_user_link"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-core",
@@ -12,7 +12,7 @@ dependencies = [
 
 [[package]]
 name = "amjad_os_user_std"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "amjad_os_kernel_user_link",
  "compiler_builtins",

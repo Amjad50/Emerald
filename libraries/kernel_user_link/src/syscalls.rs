@@ -6,13 +6,14 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 15;
+pub const NUM_SYSCALLS: usize = 17;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
     pub const SYS_WRITE: u64 = 1;
     pub const SYS_READ: u64 = 2;
     pub const SYS_CLOSE: u64 = 3;
+    #[deprecated(note = "Use SYS_SET_FILE_META instead")]
     pub const SYS_BLOCKING_MODE: u64 = 4;
     pub const SYS_EXIT: u64 = 5;
     pub const SYS_SPAWN: u64 = 6;
@@ -24,6 +25,8 @@ mod numbers {
     pub const SYS_READ_DIR: u64 = 12;
     pub const SYS_GET_CWD: u64 = 13;
     pub const SYS_CHDIR: u64 = 14;
+    pub const SYS_SET_FILE_META: u64 = 15;
+    pub const SYS_GET_FILE_META: u64 = 16;
 }
 pub use numbers::*;
 
