@@ -1,6 +1,5 @@
-# Kernel
-
-This is a kernel written in rust from scratch.
+# OS
+This is an OS written in rust from scratch.
 
 The plan is to learn everything about the kernel and low level details, so I'm not using any libraries, even though
 there are a lot of good libraries that do everything I'm doing (ex. handling GDT/IDT/etc...).
@@ -20,9 +19,19 @@ For building the ISO image, you can use `make` but you need to have other depend
 ```
 xorriso mtools grub-pc-bin qemu-system-x86
 ```
-Build:
+Build kernel iso:
 ```sh
 cargo make kernel_iso
+```
+Build userspace programs into [`filesystem`](filesystem) directory (used by qemu):
+> Note: this will build the `rust` toolchain if it hasn't been built before (might take some time)
+```sh
+cargo make filesystem
+```
+(optional) Install the toolchain into [`extern/toolchain`](extern/toolchain) directory:
+> You can then use `rustup toolchain link ...` to link to this folder
+```sh
+cargo make toolchain
 ```
 For running:
 ```sh
@@ -40,7 +49,7 @@ And to boot QEMU in debug mode you can use (it will wait for debugger on port `:
 cargo make run_iso_gdb
 ```
 
-## Information about the kernel
+## Kernel
 ### Booting
 Currently, this project compiles a multiboot2 ELF64 kernel that can be booted by several bootloaders,
 I'm using GRUB using a bootloader like GRUB.
@@ -56,9 +65,18 @@ After setting up long-mode, we jump to rust code, and start executing the `kerne
 when we jump to the `kernel_main`, we have mapped some basic parts of the kernel to virtual memory, a basic GDT with no IDT, and we have interrupts still disabled.
 So we setup all of those and the rest of the OS then.
 
+## Userland
+
+Currently, the main focus for running userspace applications is by having `std` in rust, as all userspace applications
+are build in rust, this is the primary support. Thus, we don't have `libc` for now. We have [`user_std`](user_std)
+which is the main dependancy for that `std` uses.
+
+We have our own target `x86_64-unknown-amjad_os` which is a custom target for our OS, added to custom fork
+of `rustc` in here: [`rust`].
+
 ## Demo to userspace programs
 
-Currently we have a basic shell, and I'm using a clone of [`rust`] with my target. Anyway, here is a demo of a program I can run on my OS, [see the repo here](https://github.com/Amjad50/lprs)
+Here is a demo of a program I can run on my OS, [see the repo here](https://github.com/Amjad50/lprs)
 ![gif demo](https://github.com/Amjad50/lprs/blob/master/demo.gif)
 
 ## License

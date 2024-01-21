@@ -1,6 +1,11 @@
+[env]
+KERNEL_PATH = "${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}/${PROFILE}/kernel"
+GRUB_CFG_PATH = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/kernel/grub.cfg"
+GRUB_PATH = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/${PROFILE}/grub"
+
 [tasks.build]
 command = "cargo"
-condition= {files_modified = {input=["${CARGO_MAKE_WORKING_DIRECTORY}/src/**/*", "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml"], output=["${OUT_DIR}/${CARGO_MAKE_PROJECT_NAME}"]}}
+condition= {files_modified = {input=["${CARGO_MAKE_WORKING_DIRECTORY}/src/**/*", "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml"], output=["${KERNEL_PATH}"]}}
 args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}"]
 
 [tasks.iso_create_grub]

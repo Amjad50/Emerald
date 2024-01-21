@@ -1,0 +1,44 @@
+[env]
+RUSTC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/bin/rustc"
+RUSTDOC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/rustdoc"
+USER_OUTDIR = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/x86_64-unknown-amjad_os/${PROFILE}"
+
+CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = ["init", "shell"]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+CARGO_MAKE_WORKSPACE_EMULATION = true
+# BUG in cargo-make, it uses `cargo` to get metadata about `rustc`, and it uses the system toolchain
+# not our custom one, and in that toolchain, we don't have our target, so it fails.
+# we put a target here, but we replace it in the `--target` argument of the build command
+CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu"
+
+# copy found in the root makefile
+[tasks.toolchain]
+workspace = false
+command = "cargo-make"
+args = ["make", "--makefile", "Makefile.toolchain.toml", "build_user_toolchain"]
+
+[tasks.build_member]
+workspace = true
+command = "cargo"
+condition= {files_modified = {input=["${CARGO_MAKE_WORKING_DIRECTORY}/src/**/*", "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml"], output=["${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}"]}}
+args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}", "--target", "x86_64-unknown-amjad_os"]
+
+[tasks.copy_to_fs]
+workspace = true
+condition= {files_modified = {input=["${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}"], output=["${FILESYSTEM_PATH}/${CARGO_MAKE_PROJECT_NAME}"]}}
+dependencies = ["build_member"]
+command = "cp"
+args = ["-r", "${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}", "${FILESYSTEM_PATH}/${CARGO_MAKE_PROJECT_NAME}"]
+
+[tasks.filesystem]
+workspace = false
+dependencies = ["toolchain"]
+env = {CARGO_MAKE_WORKSPACE_INCLUDE_MEMBERS = []}
+run_task = {name=["copy_to_fs", "extra_copy_to_fs"], fork=true}
+
+[tasks.extra_copy_to_fs]
+workspace = false
+dependencies = ["build_member"]
+condition= {files_modified = {input=["${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}"], output=["${FILESYSTEM_PATH}/${CARGO_MAKE_PROJECT_NAME}"]}}
+command = "cp"
+args = ["-r", "${USER_OUTDIR}/echo", "${USER_OUTDIR}/cat", "${USER_OUTDIR}/ls", "${USER_OUTDIR}/xxd", "${FILESYSTEM_PATH}/"]

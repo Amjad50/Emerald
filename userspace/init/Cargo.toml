@@ -6,5 +6,3 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-std = { path = "../../extern/rust/library/std", default-features = false }
-panic_abort = { path = "../../extern/rust/library/panic_abort" }
