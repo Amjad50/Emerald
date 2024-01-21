@@ -243,8 +243,6 @@ impl LateConsole {
             mappings[color as usize]
         };
 
-        // this coloring is not supported for uart, we just ignore it and only
-        // write the normal characters
         if let Some(buf) = &mut self.console_cmd_buffer {
             // is this the end of the command
             match byte {
@@ -272,6 +270,14 @@ impl LateConsole {
                                 }
                             }
                         });
+
+                        // output all saved into the uart as well
+                        self.uart.write_byte(0x1b);
+                        self.uart.write_byte(b'[');
+                        for &c in inner_cmd.as_bytes() {
+                            self.uart.write_byte(c);
+                        }
+                        self.uart.write_byte(b'm');
                     } else {
                         // not a valid command
                         // abort and write the char
