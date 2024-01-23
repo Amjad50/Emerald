@@ -6,6 +6,8 @@ use std::{
     string::String,
 };
 
+use colored::Colorize;
+
 /// Return `true` if we are the one handling this command, otherwise return `false`
 /// so that the command is executed as a normal process.
 fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
@@ -41,9 +43,14 @@ fn main() {
 
     loop {
         if let Some(result) = old_result.take() {
-            print!("{result} ");
+            let result_str = format!("({})", result);
+            if result == 0 {
+                print!("{} ", result_str.green());
+            } else {
+                print!("{} ", result_str.red());
+            }
         }
-        print!("$ ");
+        print!("{}", "$ ".bright_blue());
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
