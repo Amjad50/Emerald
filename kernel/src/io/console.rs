@@ -261,10 +261,20 @@ impl LateConsole {
                                         self.current_vga_attrib &= 0b1111_0000;
                                         self.current_vga_attrib |= terminal_to_vga_color(cmd - 30);
                                     }
+                                    90..=97 => {
+                                        self.current_vga_attrib &= 0b1111_0000;
+                                        self.current_vga_attrib |=
+                                            terminal_to_vga_color((cmd - 90) + 8);
+                                    }
                                     40..=47 => {
                                         self.current_vga_attrib &= 0b1000_1111;
                                         self.current_vga_attrib |=
                                             (terminal_to_vga_color(cmd - 40) & 7) << 4;
+                                    }
+                                    100..=107 => {
+                                        self.current_vga_attrib &= 0b1000_1111;
+                                        self.current_vga_attrib |=
+                                            (terminal_to_vga_color((cmd - 100) + 8) & 7) << 4;
                                     }
                                     _ => {}
                                 }
@@ -278,6 +288,7 @@ impl LateConsole {
                             self.uart.write_byte(c);
                         }
                         self.uart.write_byte(b'm');
+                        self.console_cmd_buffer = None;
                     } else {
                         // not a valid command
                         // abort and write the char
