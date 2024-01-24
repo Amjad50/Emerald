@@ -1,4 +1,4 @@
 # Summary
 
-- [Kernel](./kernel.md)
+- [Kernel](./kernel/kernel.md)
 - [Userspace](./userspace.md)

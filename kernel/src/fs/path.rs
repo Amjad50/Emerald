@@ -174,7 +174,7 @@ impl AsRef<Path> for Component<'_> {
 
 /// An iterator over the [`Component`]s of a [`Path`].
 ///
-/// This `struct` is created by the [`components`] method on [`Path`].
+/// This `struct` is created by the [`components`](Path::components) method on [`Path`].
 /// See its documentation for more.
 ///
 /// # Examples
