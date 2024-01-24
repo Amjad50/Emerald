@@ -470,6 +470,7 @@ pub struct File {
     path: Box<Path>,
     inode: INode,
     position: u64,
+    is_terminal: bool,
     blocking_mode: BlockingMode,
 }
 
@@ -487,6 +488,7 @@ pub struct Directory {
 
 /// A node in the filesystem, can be a file or a directory
 #[allow(dead_code)]
+#[repr(u8)]
 pub enum FilesystemNode {
     File(File),
     Directory(Directory),
@@ -522,6 +524,7 @@ impl File {
             path: path.as_ref().into(),
             inode,
             position,
+            is_terminal: false,
             blocking_mode,
         })
     }
@@ -648,8 +651,20 @@ impl File {
         self.blocking_mode != BlockingMode::None
     }
 
+    pub fn blocking_mode(&self) -> BlockingMode {
+        self.blocking_mode
+    }
+
     pub fn set_blocking(&mut self, blocking_mode: BlockingMode) {
         self.blocking_mode = blocking_mode;
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        self.is_terminal
+    }
+
+    pub fn set_terminal(&mut self, is_terminal: bool) {
+        self.is_terminal = is_terminal;
     }
 
     /// This is a move verbose method than `Clone::clone`, as I want it to be
@@ -660,6 +675,7 @@ impl File {
             path: self.path.clone(),
             inode: self.inode.clone(),
             position: 0,
+            is_terminal: self.is_terminal,
             blocking_mode: self.blocking_mode,
         };
 

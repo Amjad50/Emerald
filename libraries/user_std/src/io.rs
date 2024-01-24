@@ -3,6 +3,7 @@ use core::ffi::CStr;
 pub use kernel_user_link::file::BlockingMode;
 pub use kernel_user_link::file::DirEntry;
 pub use kernel_user_link::file::DirFilename;
+pub use kernel_user_link::file::FileMeta;
 pub use kernel_user_link::file::FileStat;
 pub use kernel_user_link::file::FileType;
 pub use kernel_user_link::file::MAX_FILENAME_LEN;
@@ -12,15 +13,16 @@ pub use kernel_user_link::FD_STDOUT;
 
 use kernel_user_link::call_syscall;
 use kernel_user_link::syscalls::SyscallError;
-use kernel_user_link::syscalls::SYS_BLOCKING_MODE;
 use kernel_user_link::syscalls::SYS_CHDIR;
 use kernel_user_link::syscalls::SYS_CLOSE;
 use kernel_user_link::syscalls::SYS_CREATE_PIPE;
 use kernel_user_link::syscalls::SYS_GET_CWD;
+use kernel_user_link::syscalls::SYS_GET_FILE_META;
 use kernel_user_link::syscalls::SYS_OPEN;
 use kernel_user_link::syscalls::SYS_OPEN_DIR;
 use kernel_user_link::syscalls::SYS_READ;
 use kernel_user_link::syscalls::SYS_READ_DIR;
+use kernel_user_link::syscalls::SYS_SET_FILE_META;
 use kernel_user_link::syscalls::SYS_STAT;
 use kernel_user_link::syscalls::SYS_WRITE;
 
@@ -102,19 +104,12 @@ pub unsafe fn syscall_create_pipe() -> Result<(usize, usize), SyscallError> {
 
 /// # Safety
 /// This function assumes that `fd` is a valid file descriptor.
+#[deprecated(note = "Use `syscall_set_file_meta` instead")]
 pub unsafe fn syscall_blocking_mode(
     fd: usize,
     blocking_mode: BlockingMode,
 ) -> Result<(), SyscallError> {
-    let mode = blocking_mode.to_u64();
-    unsafe {
-        call_syscall!(
-            SYS_BLOCKING_MODE,
-            fd,   // fd
-            mode  // mode
-        )
-        .map(|e| assert!(e == 0))
-    }
+    syscall_set_file_meta(fd, FileMeta::BlockingMode(blocking_mode))
 }
 
 /// # Safety
@@ -184,4 +179,43 @@ pub unsafe fn syscall_get_cwd(path: &mut [u8]) -> Result<usize, SyscallError> {
         )
         .map(|written| written as usize)
     }
+}
+
+/// # Safety
+/// This function assumes that `fd` is a valid file descriptor.
+pub unsafe fn syscall_set_file_meta(fd: usize, meta: FileMeta) -> Result<(), SyscallError> {
+    let meta_id = meta.to_u64_meta_id();
+    let meta_data = meta.inner_u64();
+    unsafe {
+        call_syscall!(
+            SYS_SET_FILE_META,
+            fd,        // fd
+            meta_id,   // meta_id
+            meta_data  // meta_data
+        )
+        .map(|e| assert!(e == 0))
+    }
+}
+
+/// # Safety
+/// This function assumes that `fd` is a valid file descriptor.
+///
+/// The data in `meta` will be ignored, only the `type` is important here
+pub unsafe fn syscall_get_file_meta(fd: usize, meta: &mut FileMeta) -> Result<(), SyscallError> {
+    let meta_id = meta.to_u64_meta_id();
+    let mut meta_data = 0;
+    unsafe {
+        call_syscall!(
+            SYS_GET_FILE_META,
+            fd,                                // fd
+            meta_id,                           // meta_id
+            &mut meta_data as *mut u64 as u64  // meta_data
+        )
+        .map(|e| assert!(e == 0))
+    }?;
+    // this should never fail, as the syscall would return an error if anything is wrong, `meta_data`
+    // should be valid and correct at this stage
+    *meta = FileMeta::try_from((meta_id, meta_data)).unwrap();
+
+    Ok(())
 }

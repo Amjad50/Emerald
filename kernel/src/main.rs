@@ -99,8 +99,10 @@ fn load_init_process() {
 
     // add the console to `init` manually, after that processes will either inherit it or open a pipe or something
     // to act as STDIN/STDOUT/STDERR
-    let console = fs::File::open_blocking("/devices/console", BlockingMode::Line)
+    let mut console = fs::File::open_blocking("/devices/console", BlockingMode::Line)
         .expect("Could not find `/devices/console`");
+    // mark it as `terminal`
+    console.set_terminal(true);
     process.attach_fs_node_to_fd(FD_STDIN, console.clone_inherit());
     process.attach_fs_node_to_fd(FD_STDOUT, console.clone_inherit());
     process.attach_fs_node_to_fd(FD_STDERR, console);

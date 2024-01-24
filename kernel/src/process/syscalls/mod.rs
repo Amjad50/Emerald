@@ -2,7 +2,7 @@ use core::{ffi::CStr, mem};
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use kernel_user_link::{
-    file::DirEntry,
+    file::{BlockingMode, DirEntry, FileMeta},
     process::SpawnFileMapping,
     sys_arg,
     syscalls::{
@@ -41,6 +41,8 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_read_dir,      // kernel_user_link::syscalls::SYS_READ_DIR
     sys_get_cwd,       // kernel_user_link::syscalls::SYS_GET_CWD
     sys_chdir,         // kernel_user_link::syscalls::SYS_CHDIR
+    sys_set_file_meta, // kernel_user_link::syscalls::SYS_SET_FILE_META
+    sys_get_file_meta, // kernel_user_link::syscalls::SYS_GET_FILE_META
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -281,8 +283,8 @@ fn sys_blocking_mode(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(1, all_state.rest => u64),
     };
 
-    let blocking_mode = kernel_user_link::file::parse_blocking_mode(blocking_mode)
-        .ok_or(to_arg_err!(1, SyscallArgError::GeneralInvalid))?;
+    let blocking_mode = BlockingMode::try_from(blocking_mode)
+        .map_err(|_| to_arg_err!(1, SyscallArgError::GeneralInvalid))?;
 
     with_current_process(|process| {
         let file = process
@@ -521,6 +523,76 @@ fn sys_chdir(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let absolute_path = path_to_proc_absolute_path(path);
     let dir = fs::Directory::open(absolute_path)?;
     with_current_process(|process| process.set_current_dir(dir));
+
+    SyscallResult::Ok(0)
+}
+
+fn sys_set_file_meta(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (file_index, meta_id, meta_data, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => usize),
+        sys_arg!(1, all_state.rest => u64),
+        sys_arg!(2, all_state.rest => u64),
+    };
+
+    let meta_op = FileMeta::try_from((meta_id, meta_data))
+        .ok()
+        .ok_or(to_arg_err!(1, SyscallArgError::GeneralInvalid))?;
+
+    let op_on_file = |op: &dyn Fn(&mut fs::File)| {
+        with_current_process(|process| {
+            let file = process
+                .get_fs_node(file_index)
+                .ok_or(SyscallError::InvalidFileIndex)?;
+            op(file.as_file_mut()?);
+            Ok::<_, SyscallError>(())
+        })
+    };
+
+    match meta_op {
+        FileMeta::BlockingMode(blocking_mode) => {
+            op_on_file(&|file| file.set_blocking(blocking_mode))?;
+        }
+        FileMeta::IsTerminal(is_terminal) => {
+            op_on_file(&|file| file.set_terminal(is_terminal))?;
+        }
+        _ => {
+            return Err(to_arg_err!(1, SyscallArgError::GeneralInvalid));
+        }
+    }
+
+    SyscallResult::Ok(0)
+}
+
+fn sys_get_file_meta(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (file_index, meta_id, meta_data_ptr, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => usize),
+        sys_arg!(1, all_state.rest => u64),
+        sys_arg!(2, all_state.rest => *mut u64),
+    };
+    check_ptr(meta_data_ptr as *const u8, 8).map_err(|err| to_arg_err!(2, err))?;
+
+    let meta_op = FileMeta::try_from((meta_id, 0))
+        .ok()
+        .ok_or(to_arg_err!(1, SyscallArgError::GeneralInvalid))?;
+
+    let data = with_current_process(|process| {
+        let file = process
+            .get_fs_node(file_index)
+            .ok_or(SyscallError::InvalidFileIndex)?;
+
+        let meta_data = match meta_op {
+            FileMeta::BlockingMode(..) => file.as_file()?.blocking_mode().to_u64(),
+            FileMeta::IsTerminal(..) => file.as_file()?.is_terminal() as u64,
+            _ => {
+                return Err(to_arg_err!(1, SyscallArgError::GeneralInvalid));
+            }
+        };
+
+        Ok::<_, SyscallError>(meta_data)
+    })?;
+
+    // Safety: we checked that the pointer is valid
+    unsafe { *meta_data_ptr = data }
 
     SyscallResult::Ok(0)
 }

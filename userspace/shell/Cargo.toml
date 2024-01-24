@@ -26,3 +26,4 @@ name = "xxd"
 path = "src/xxd.rs"
 
 [dependencies]
+colored = "2.1.0"

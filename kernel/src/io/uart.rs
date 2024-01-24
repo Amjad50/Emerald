@@ -60,14 +60,14 @@ fn init_port(port_addr: UartPort) -> bool {
     write_reg(port_addr, UartReg::InterruptAndFifoControl, 0);
 
     // set baud rate
-    //   we want baud rate to be 38400
-    //   38400 = 115200 / 3
-    //   so we can use `divisor = 3`
+    //   we want baud rate to be 115200
+    //   115200 = 115200 / 1
+    //   so we can use `divisor = 1`
     // enable DLAB (change how Data and InterruptEnable)
     write_reg(port_addr, UartReg::LineControl, LINE_BAUD_LATCH);
-    // set divisor to 0x0003
+    // set divisor to 0x0001
     // low byte
-    write_reg(port_addr, UartReg::Data, 0x03);
+    write_reg(port_addr, UartReg::Data, 0x01);
     // high byte
     write_reg(port_addr, UartReg::InterruptEnable, 0x00);
     // disable DLAB
@@ -139,7 +139,6 @@ impl Uart {
     }
 
     /// SAFETY: `init` must be called before calling this function
-    #[allow(dead_code)]
     pub unsafe fn try_read_byte(&self) -> Option<u8> {
         if !self.is_enabled {
             return None;

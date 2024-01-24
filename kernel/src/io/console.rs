@@ -3,7 +3,7 @@ use core::{
     fmt::{self, Write},
 };
 
-use alloc::sync::Arc;
+use alloc::{string::String, sync::Arc};
 
 use crate::{
     devices::{self, Device},
@@ -190,6 +190,8 @@ pub(super) struct LateConsole {
     uart: Uart,
     video_buffer: VgaBuffer,
     keyboard: Arc<Mutex<Keyboard>>,
+    console_cmd_buffer: Option<String>,
+    current_vga_attrib: u8,
 }
 
 impl LateConsole {
@@ -199,6 +201,8 @@ impl LateConsole {
             uart: early.uart.clone(),
             video_buffer: early.video_buffer.clone(),
             keyboard: keyboard::get_keyboard(),
+            console_cmd_buffer: None,
+            current_vga_attrib: DEFAULT_ATTRIB,
         };
 
         // split inputs
@@ -209,8 +213,110 @@ impl LateConsole {
     /// SAFETY: the caller must assure that this is called from once place at a time
     ///         and should handle synchronization
     unsafe fn write_byte(&mut self, byte: u8) {
-        self.video_buffer.write_byte(byte, DEFAULT_ATTRIB);
-        self.uart.write_byte(byte);
+        let mut write_byte_inner = |byte: u8| {
+            // backspace, ignore
+            if byte != 8 {
+                self.video_buffer.write_byte(byte, self.current_vga_attrib);
+                self.uart.write_byte(byte);
+            }
+        };
+
+        let terminal_to_vga_color = |color: u8| {
+            let mappings = &[
+                0,  // black
+                4,  // red
+                2,  // green
+                6,  // brown
+                1,  // blue
+                5,  // magenta
+                3,  // cyan
+                7,  // light gray
+                8,  // dark gray
+                12, // light red
+                10, // light green
+                14, // yellow
+                9,  // light blue
+                13, // light magenta
+                11, // light cyan
+                15, // white
+            ];
+            mappings[color as usize]
+        };
+
+        if let Some(buf) = &mut self.console_cmd_buffer {
+            // is this the end of the command
+            match byte {
+                b'0'..=b'9' | b';' | b'[' => {
+                    // part of the command
+                    buf.push(byte as char);
+                }
+                b'm' => {
+                    // end of the color command
+                    if let Some(inner_cmd) = buf.strip_prefix("[") {
+                        inner_cmd.split(';').for_each(|cmd| {
+                            if let Ok(cmd) = cmd.parse::<u8>() {
+                                match cmd {
+                                    0 => self.current_vga_attrib = DEFAULT_ATTRIB,
+                                    30..=37 => {
+                                        self.current_vga_attrib &= 0b1111_0000;
+                                        self.current_vga_attrib |= terminal_to_vga_color(cmd - 30);
+                                    }
+                                    90..=97 => {
+                                        self.current_vga_attrib &= 0b1111_0000;
+                                        self.current_vga_attrib |=
+                                            terminal_to_vga_color((cmd - 90) + 8);
+                                    }
+                                    40..=47 => {
+                                        self.current_vga_attrib &= 0b1000_1111;
+                                        self.current_vga_attrib |=
+                                            (terminal_to_vga_color(cmd - 40) & 7) << 4;
+                                    }
+                                    100..=107 => {
+                                        self.current_vga_attrib &= 0b1000_1111;
+                                        self.current_vga_attrib |=
+                                            (terminal_to_vga_color((cmd - 100) + 8) & 7) << 4;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        });
+
+                        // output all saved into the uart as well
+                        self.uart.write_byte(0x1b);
+                        self.uart.write_byte(b'[');
+                        for &c in inner_cmd.as_bytes() {
+                            self.uart.write_byte(c);
+                        }
+                        self.uart.write_byte(b'm');
+                        self.console_cmd_buffer = None;
+                    } else {
+                        // not a valid command
+                        // abort and write the char
+                        self.console_cmd_buffer = None;
+                        write_byte_inner(byte);
+                    }
+                }
+                _ => {
+                    // unsupported command or character of a command
+                    // abort and write char, probably we lost some characters
+                    // if this was not intended to be a command
+                    self.console_cmd_buffer = None;
+                    write_byte_inner(byte);
+                }
+            }
+        } else {
+            // start of a new command
+            match byte {
+                // ESC
+                0x1b => {
+                    self.console_cmd_buffer = Some(String::new());
+                    return;
+                }
+                _ => {}
+            }
+            // otherwise, just write to the screen
+            write_byte_inner(byte);
+        }
     }
 
     /// SAFETY: the caller must assure that this is called from once place at a time
@@ -225,12 +331,25 @@ impl LateConsole {
     pub unsafe fn read(&mut self, dst: &mut [u8]) -> usize {
         let mut i = 0;
         let mut keyboard = self.keyboard.lock();
+
+        // for some reason, uart returns \r instead of \n when pressing <enter>
+        // so we have to convert it to \n
+        let read_uart = || {
+            self.uart
+                .try_read_byte()
+                .map(|c| if c == b'\r' { b'\n' } else { c })
+        };
+
         while i < dst.len() {
-            if let Some(c) = keyboard.get_next_char() {
-                if let Some(c) = c.virtual_char {
-                    dst[i] = c;
-                    i += 1;
-                }
+            // try to read from keyboard
+            // if we can't read from keyboard, try to read from uart
+            if let Some(c) = keyboard
+                .get_next_char()
+                .and_then(|c| c.virtual_char)
+                .or_else(read_uart)
+            {
+                dst[i] = c;
+                i += 1;
                 // ignore if its not a valid char
             } else {
                 break;

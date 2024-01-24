@@ -6,13 +6,14 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 15;
+pub const NUM_SYSCALLS: usize = 17;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
     pub const SYS_WRITE: u64 = 1;
     pub const SYS_READ: u64 = 2;
     pub const SYS_CLOSE: u64 = 3;
+    #[deprecated(note = "Use SYS_SET_FILE_META instead")]
     pub const SYS_BLOCKING_MODE: u64 = 4;
     pub const SYS_EXIT: u64 = 5;
     pub const SYS_SPAWN: u64 = 6;
@@ -24,6 +25,8 @@ mod numbers {
     pub const SYS_READ_DIR: u64 = 12;
     pub const SYS_GET_CWD: u64 = 13;
     pub const SYS_CHDIR: u64 = 14;
+    pub const SYS_SET_FILE_META: u64 = 15;
+    pub const SYS_GET_FILE_META: u64 = 16;
 }
 pub use numbers::*;
 
@@ -220,7 +223,7 @@ impl SyscallArgError {
 #[non_exhaustive]
 pub enum SyscallError {
     SyscallNotFound = 0,
-    InvalidErrorCode(u64) = 1,
+    InvalidError = 1,
     CouldNotOpenFile = 2,
     InvalidFileIndex = 3,
     CouldNotWriteToFile = 4,
@@ -306,7 +309,6 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
         SyscallResult::Err(error) => {
             let err_upper = match error {
                 SyscallError::SyscallNotFound => -1i64 as u64,
-                SyscallError::InvalidErrorCode(code) => code,
                 SyscallError::InvalidArgument(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                     create_syscall_error(arg1, arg2, arg3, arg4, arg5, arg6, arg7)
                 }
@@ -324,6 +326,7 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::IsNotDirectory => 13 << 56,
                 SyscallError::IsDirectory => 14 << 56,
                 SyscallError::BufferTooSmall => 15 << 56,
+                SyscallError::InvalidError => panic!("Should never be used"),
             };
 
             err_upper | (1 << 63)
@@ -340,7 +343,7 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
         // last byte
         let err_byte = (value >> 56) as u8;
 
-        let invalid_error_code = |_| -> SyscallError { SyscallError::InvalidErrorCode(value) };
+        let invalid_error_code = |_| SyscallError::InvalidError;
 
         let err = match err_byte {
             0 => {
@@ -361,7 +364,7 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
 
                 SyscallError::InvalidArgument(arg1, arg2, arg3, arg4, arg5, arg6, arg7)
             }
-            1 => SyscallError::InvalidErrorCode(value),
+            1 => SyscallError::InvalidError,
             2 => SyscallError::CouldNotOpenFile,
             3 => SyscallError::InvalidFileIndex,
             4 => SyscallError::CouldNotWriteToFile,
@@ -376,7 +379,7 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             13 => SyscallError::IsNotDirectory,
             14 => SyscallError::IsDirectory,
             15 => SyscallError::BufferTooSmall,
-            _ => invalid_error_code(()),
+            _ => SyscallError::InvalidError,
         };
         SyscallResult::Err(err)
     }
