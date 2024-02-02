@@ -6,3 +6,9 @@
 [get_virtual_for_physical]: {ROOT_PATH}docs/kernel/memory_management/virtual_space/fn.get_virtual_for_physical
 [physical_page_allocator]: {ROOT_PATH}docs/kernel/memory_management/physical_page_allocator
 [virtual_memory_mapper]: {ROOT_PATH}docs/kernel/memory_management/virtual_memory_mapper
+[ide_device]: {ROOT_PATH}docs/kernel/devices/ide
+[ide_read_sync]: {ROOT_PATH}docs/kernel/devices/ide/struct.IdeDevice.html#method.read_sync
+[keyboard]: {ROOT_PATH}docs/kernel/io/keyboard
+[keyboard_get_next_char]: {ROOT_PATH}docs/kernel/io/keyboard/struct.Keyboard.html#method.get_next_char
+[uart]: {ROOT_PATH}docs/kernel/io/uart
+[console]: {ROOT_PATH}docs/kernel/io/console
