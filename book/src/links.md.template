@@ -1,1 +1,2 @@
 [Kernel rust documentation]: {ROOT_PATH}docs/kernel/
+[kernel_memory_layout]: {ROOT_PATH}docs/kernel/memory_management/memory_layout
