@@ -1,4 +1,4 @@
-{{ #include ../links.md }}
+{{ #include ../../links.md }}
 
 # Memory layout
 
@@ -29,6 +29,8 @@ FFFF_FFFF_8903_F000..FFFF_FFFF_FFFF_F000          Kernel extra (virtual space, f
 The kernel is loaded by the bootloader at physical address `0x10_0000`, and then it will
 perform virtual mapping for physical `0x0` into `0xFFFF_FFFF_8000_0000` for `128MB`
 i.e. until the end of the initial `physical page allocator`. See more details in the [boot] chapter.
+
+Look at [virtual space] for more info on it.
 
 
 #### Virtual space
@@ -69,5 +71,6 @@ A lot of symbols XD. But in general, the stack is at the top of the user space, 
 and the heap is in the middle starts after the elf file.
 
 
-[boot]: ./boot.md
+[boot]: ../boot.md
+[virtual space]: ./virtual_space.md
 [0dc04f8]: https://github.com/Amjad50/OS/commit/0dc04f8
