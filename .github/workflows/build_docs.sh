@@ -3,7 +3,7 @@
 set -eux pipefail
 
 BASE_DIR="$(git rev-parse --show-toplevel)"
-URL_ROOT_PATH="/os/"
+URL_ROOT_PATH="/OS/"
 cd $BASE_DIR
 cargo doc
 (cd book
