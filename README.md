@@ -49,6 +49,15 @@ And to boot QEMU in debug mode you can use (it will wait for debugger on port `:
 cargo make run_iso_gdb
 ```
 
+## Documentation
+
+The main documentation is in the [`book`](book) directory, you can build it using `mdbook`:
+```sh
+mdbook build book
+```
+
+Its also served in https://amjad.alsharafi.dev/OS/
+
 ## Kernel
 ### Booting
 Currently, this project compiles a multiboot2 ELF64 kernel that can be booted by several bootloaders,
