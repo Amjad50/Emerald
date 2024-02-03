@@ -30,3 +30,5 @@
 [rtc]: {ROOT_PATH}docs/kernel/devices/clock/rtc
 [kernel_gdt]: {ROOT_PATH}docs/kernel/cpu/gdt
 [kernel_idt]: {ROOT_PATH}docs/kernel/cpu/idt
+[kernel_acpi]: {ROOT_PATH}docs/kernel/acpi
+[kernel_aml]: {ROOT_PATH}docs/kernel/acpi/aml
