@@ -15,7 +15,7 @@ of the [IDT], which is from `32` to `255`.
 The last `16` entries of the `user interrupts` are used specially by the kernel as such:
 
 - `SPECIAL_SCHEDULER_INTERRUPT=0xFF`: Used by scheduler to switch between contexts.
-- `SPECIAL_SYSCALL_INTERRUPT=0xFE`: Used by the syscall instruction to switch to kernel mode.
+- `SPECIAL_SYSCALL_INTERRUPT=0xFE`: Used by the syscall instruction to switch to kernel mode, this is defined in [kernel user link](../../extra/kernel_user_link.md).
 
 Generally we use functions like [`allocate_user_interrupt`][kernel_cpu_interrupts_allocate_int], which will allocate
 an interrupt entry, and puts our function there (see [Interrupts Handlers](#interrupts-handlers) later for types of interrupts), then it will give us where it was allocated, so we can use it later, for example with [APIC](./apic.md).

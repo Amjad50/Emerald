@@ -21,7 +21,7 @@ The process structure [`Process`][process_structure] contain all the information
 - `stack_ptr_end`: The end of the stack, the stack grows down, so this is the highest address of the stack, and where the stack starts when the process is created.
 - `stack_size`: The current size of the stack, currently, its constant, until we get growing stack support.
 - `heap_start`: The start address of the heap, this will be padded by around `1MB` from the end of the `ELF` file loadded into memory.
-- `heap_size`: The current size of the heap. The user process can request more heap space with the `inc_dec_heap` system call.
+- `heap_size`: The current size of the heap. The user process can request more heap space with the [`inc_dec_heap`](./syscalls.md#syscalls-list) system call.
 - `heap_max`: The maximum possible size of the heap, this is not changed, currently set to `1GB`.
 - `status`: The status of the process, see [scheduler](./scheduler.md) for more information.
 - `exit_code`: The exit code of the process, if the process is exited, this will be set to the exit code.

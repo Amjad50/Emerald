@@ -25,7 +25,7 @@ When we schedule a `process` with `ProcessState::Scheduled`, this is what's done
 When a `process` is running, it can yield to the scheduler through 2 ways now:
 - **Timer**: The `APIC` timer, see [APIC](../processor/apic.md#interrupts), will interrupt the CPU every once in a while,
 and this gives us preemptive multitasking.
-- **System Call**: When a `syscall` is executed, after the `syscall`, we perform `yield` as well.
+- **System Call**: When a `syscall` is executed, after the `syscall`, we perform `yield` as well, see [syscalls](./syscalls.md).
 
 When yielding, we perform the following:
 - Save the `all_state` of the CPU to the `context` of the `process`, and this `all_state` comes from the interrupt, i.e. we can only yield when an interrupt occurs from that process, since we have to save the exact `cpu` before the interrupt.

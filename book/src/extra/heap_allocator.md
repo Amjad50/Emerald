@@ -71,7 +71,7 @@ fn main() {
 The only thing users of this crate need to implement is the `PageAllocatorProvider` trait, which is a simple trait that requires
 a method to allocate pages.
 
-`syscall::inc_dec_heap` is very similar to `sbrk` in Unix, it will increase or decrease the heap size by the given size.
+[`syscall::inc_dec_heap`](../kernel/processes/syscalls.md#syscalls-list) is very similar to `sbrk` in Unix, it will increase or decrease the heap size by the given size.
 An argument of `0` will return the current heap address without changing it, which we use in the beginning to get the initial heap address.
 
 ## Allocator implementation

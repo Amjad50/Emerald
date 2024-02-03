@@ -37,3 +37,6 @@
 [process]: {ROOT_PATH}docs/kernel/process
 [process_structure]: {ROOT_PATH}docs/kernel/process/struct.Process.html
 [scheduler]: {ROOT_PATH}docs/kernel/process/scheduler
+[executable]: {ROOT_PATH}docs/kernel/executable
+[elf]: {ROOT_PATH}docs/kernel/executable/elf
+[syscalls]: {ROOT_PATH}docs/kernel/process/syscalls
