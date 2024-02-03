@@ -1,6 +1,6 @@
 # Summary
 
-- [Kernel](./kernel/kernel.md)
+- [Kernel](./kernel/index.md)
     - [Boot](./kernel/boot.md)
     - [Memory](./kernel/memory/index.md)
         - [Memory Layout](./kernel/memory/memory_layout.md)
@@ -11,6 +11,8 @@
         - [IDE](./kernel/drivers/ide.md)
         - [Keyboard](./kernel/drivers/keyboard.md)
         - [UART](./kernel/drivers/uart.md)
+        - [HPET](./kernel/drivers/hpet.md)
+        - [RTC](./kernel/drivers/rtc.md)
     - [Virtual Devices](./kernel/virtual_devices/index.md)
         - [Console](./kernel/virtual_devices/console.md)
     - [Filesystem](./kernel/filesystem/index.md)
