@@ -178,7 +178,7 @@
                     <main>
                         <h1 id="processor"><a class="header" href="#processor">Processor</a></h1>
 <blockquote>
-<p>This is implemented in <a href="/os/docs/kernel/cpu"><code>cpu</code></a>.</p>
+<p>This is implemented in <a href="/OS/docs/kernel/cpu"><code>cpu</code></a>.</p>
 </blockquote>
 <p>Here we talk about processor related structures and functions.
 Including:</p>
@@ -189,11 +189,11 @@ Including:</p>
 </ul>
 <p>Let's first talk about other processor stuff that are not the above.</p>
 <h2 id="saved-cpu-state"><a class="header" href="#saved-cpu-state">Saved CPU state</a></h2>
-<p>Each CPU (currently only 1) has a <a href="/os/docs/kernel/cpu/struct.Cpu.html">structure that contain the state related to the CPU</a>.</p>
+<p>Each CPU (currently only 1) has a <a href="/OS/docs/kernel/cpu/struct.Cpu.html">structure that contain the state related to the CPU</a>.</p>
 <p>Where it contains among others:</p>
 <ul>
 <li>the <code>id</code> and <code>apic_id</code> of the cpu, for identification.</li>
-<li>the <code>n_cli</code> and <code>old_interrupt_enable</code> which is used by the implementation of <a href="/os/docs/kernel/sync/spin/lock/struct.Lock.html">locks</a>.</li>
+<li>the <code>n_cli</code> and <code>old_interrupt_enable</code> which is used by the implementation of <a href="/OS/docs/kernel/sync/spin/lock/struct.Lock.html">locks</a>.</li>
 <li>the <code>context</code> which is a process context, used when switching between processes, also <code>process_id</code> for current process, and other scheduling related fields.</li>
 </ul>
 <h2 id="cpu-initialization"><a class="header" href="#cpu-initialization">CPU initialization</a></h2>

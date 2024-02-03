@@ -178,13 +178,13 @@
                     <main>
                         <h1 id="pipe"><a class="header" href="#pipe">Pipe</a></h1>
 <blockquote>
-<p>This is implemented in <a href="/os/docs/kernel/devices/pipe"><code>pipe</code></a></p>
+<p>This is implemented in <a href="/OS/docs/kernel/devices/pipe"><code>pipe</code></a></p>
 </blockquote>
 <p>A pipe is a virtual device that allows two processes to communicate with each other.
 It is a unidirectional communication channel. It is used to pass data from one process to another. 
 t is similar to a file, but it is not stored on the disk. It is stored in the memory. It is a first-in-first-out (FIFO) data structure.</p>
 <p>It acts as a special file, i.e. the process just write to it as a normal file.</p>
-<p>It is created with <a href="/os/docs/kernel/devices/pipe/fn.create_pipe_pair.html"><code>create_pipe_pair</code></a>, which will return 2 <code>File</code> objects,
+<p>It is created with <a href="/OS/docs/kernel/devices/pipe/fn.create_pipe_pair.html"><code>create_pipe_pair</code></a>, which will return 2 <code>File</code> objects,
 one for reading and one for writing. The kernel then assign those to the process and such.</p>
 <p>Internally, the <code>Pipe</code> is a <code>dyn Device</code>, so its stored in the <code>INode</code> as a device. See <a href="../filesystem/index.html#inode">filesystem</a> for more details on <code>INode</code>.</p>
 

@@ -178,7 +178,7 @@
                     <main>
                         <h1 id="keyboard"><a class="header" href="#keyboard">Keyboard</a></h1>
 <blockquote>
-<p>This is implemented in <a href="/os/docs/kernel/io/keyboard"><code>keyboard</code></a></p>
+<p>This is implemented in <a href="/OS/docs/kernel/io/keyboard"><code>keyboard</code></a></p>
 </blockquote>
 <p>The keyboard driver is simple, and uses the legacy PS/2 interface at <code>0x60</code> and <code>0x64</code> ports.</p>
 <p>Currently we support the <code>US</code> layout only, but we have the return type from the device as </p>
@@ -191,7 +191,7 @@
 <span class="boring">}</span></code></pre></pre>
 <p>Where <code>KeyType</code> is an enum containing all keys, even not mapping to a character, like arrows, function keys, etc.
 Which we can use later to move mapping and other complex structures into the userspace.</p>
-<p>The keyboard provide <a href="/os/docs/kernel/io/keyboard/struct.Keyboard.html#method.get_next_char"><code>get_next_char</code></a> which will keep up to last <code>8</code> characters in buffer.
+<p>The keyboard provide <a href="/OS/docs/kernel/io/keyboard/struct.Keyboard.html#method.get_next_char"><code>get_next_char</code></a> which will keep up to last <code>8</code> characters in buffer.
 This is low level function, and will probably be read a lot from usermode, and <code>8</code> will probably be a lot of characters to keep in buffer, but lets see when the time comes.</p>
 <p>This is currently used by the <a href="../virtual_devices/console.html">console</a> to read characters.</p>
 

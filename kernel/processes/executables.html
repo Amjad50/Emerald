@@ -178,13 +178,13 @@
                     <main>
                         <h1 id="executables"><a class="header" href="#executables">Executables</a></h1>
 <blockquote>
-<p>This is implemented in <a href="/os/docs/kernel/executable"><code>executable</code></a></p>
+<p>This is implemented in <a href="/OS/docs/kernel/executable"><code>executable</code></a></p>
 </blockquote>
-<p>Currently, we only have support for <a href="/os/docs/kernel/executable/elf">ELF</a> and will probably stay like this for a while, I don't plan to support other formats soon.</p>
+<p>Currently, we only have support for <a href="/OS/docs/kernel/executable/elf">ELF</a> and will probably stay like this for a while, I don't plan to support other formats soon.</p>
 <h2 id="elf"><a class="header" href="#elf">ELF</a></h2>
-<p>The <a href="/os/docs/kernel/executable/elf">ELF</a> file is the executable format used by most of the Unix-like systems, and it is the format we will be using for our executables.</p>
+<p>The <a href="/OS/docs/kernel/executable/elf">ELF</a> file is the executable format used by most of the Unix-like systems, and it is the format we will be using for our executables.</p>
 <blockquote>
-<p>This is implemented in <a href="/os/docs/kernel/executable/elf"><code>elf</code></a></p>
+<p>This is implemented in <a href="/OS/docs/kernel/executable/elf"><code>elf</code></a></p>
 </blockquote>
 <p>We load elf on process creation, see <a href="../processes/index.html#process-creation">process creation</a> for more information.</p>
 <p>For now we support very basic loading, no dynamic linking, shared libraries, or relocation.
