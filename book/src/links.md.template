@@ -32,3 +32,5 @@
 [kernel_idt]: {ROOT_PATH}docs/kernel/cpu/idt
 [kernel_acpi]: {ROOT_PATH}docs/kernel/acpi
 [kernel_aml]: {ROOT_PATH}docs/kernel/acpi/aml
+[pipe]: {ROOT_PATH}docs/kernel/devices/pipe
+[create_pipe_pair]: {ROOT_PATH}docs/kernel/devices/pipe/fn.create_pipe_pair.html
