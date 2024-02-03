@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["KEYBOARD_DATA_PORT","KEYBOARD_INT_NUM","KEYBOARD_STATUS_PORT","KEY_PRESSED","US_KEYTYPE_KEYMAP","US_KEYTYPE_KEYMAP_SHIFTED"],"enum":["KeyType"],"fn":["get_keyboard","get_modifier","get_toggle","init_keyboard","is_modifier","keyboard_interrupt_handler"],"mod":["modifier","status"],"static":["KEYBOARD"],"struct":["Key","Keyboard"]};

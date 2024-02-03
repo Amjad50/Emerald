@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"kernel":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html\" title=\"trait core::borrow::Borrow\">Borrow</a>&lt;<a class=\"struct\" href=\"kernel/fs/path/struct.Path.html\" title=\"struct kernel::fs::path::Path\">Path</a>&gt; for <a class=\"struct\" href=\"kernel/fs/path/struct.PathBuf.html\" title=\"struct kernel::fs::path::PathBuf\">PathBuf</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

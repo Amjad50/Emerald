@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GATE_TYPE","KEEP_INTERRUPTS","PRESENT"],"fn":["dpl"]};

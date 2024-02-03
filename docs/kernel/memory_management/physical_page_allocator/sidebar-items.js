@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["alloc","alloc_zeroed","free","init","stats"],"static":["ALLOCATOR"],"struct":["FreePage","PhysicalPageAllocator"]};

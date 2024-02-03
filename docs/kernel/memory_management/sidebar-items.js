@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["kernel_heap_allocator","memory_layout","physical_page_allocator","virtual_memory_mapper","virtual_space"]};

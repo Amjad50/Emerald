@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FileSystemError","FilesystemNode"],"fn":["create_disk_mapping","empty_filesystem","get_mapping","mount","open_inode"],"mod":["fat","mbr","path"],"static":["EMPTY_FILESYSTEM","FILESYSTEM_MAPPING"],"struct":["Directory","EmptyFileSystem","File","FileAttributes","FileSystemMapping","INode"],"trait":["FileSystem"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["_eprint","_print","hexdump","set_err_enable"],"macro":["impl_copy_clone_deref_wrapper"],"mod":["console","keyboard","uart","video_memory"],"static":["PRINT_ERR"],"struct":["ByteStr","HexArray","NoDebug"],"trait":["ArrayTrait"]};

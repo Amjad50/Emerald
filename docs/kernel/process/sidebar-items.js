@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEAFULT_MAX_HEAP_SIZE","HEAP_OFFSET_FROM_ELF_END","INITIAL_STACK_SIZE_PAGES"],"enum":["ProcessError","ProcessState"],"mod":["scheduler","syscalls"],"static":["PROCESS_ID_ALLOCATOR"],"struct":["FxSave","GoingUpAllocator","Process","ProcessContext"]};

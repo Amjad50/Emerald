@@ -1,0 +1,303 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Processes - OS</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../../highlight.css">
+        <link rel="stylesheet" href="../../tomorrow-night.css">
+        <link rel="stylesheet" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../../kernel/index.html"><strong aria-hidden="true">1.</strong> Kernel</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/boot.html"><strong aria-hidden="true">1.1.</strong> Boot</a></li><li class="chapter-item expanded "><a href="../../kernel/memory/index.html"><strong aria-hidden="true">1.2.</strong> Memory</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/memory/memory_layout.html"><strong aria-hidden="true">1.2.1.</strong> Memory Layout</a></li><li class="chapter-item expanded "><a href="../../kernel/memory/physical_allocator.html"><strong aria-hidden="true">1.2.2.</strong> Physical Allocator</a></li><li class="chapter-item expanded "><a href="../../kernel/memory/virtual_mapper.html"><strong aria-hidden="true">1.2.3.</strong> Virtual Mapper</a></li><li class="chapter-item expanded "><a href="../../kernel/memory/virtual_space.html"><strong aria-hidden="true">1.2.4.</strong> Virtual Space</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/drivers/index.html"><strong aria-hidden="true">1.3.</strong> Drivers/Devices</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/drivers/ide.html"><strong aria-hidden="true">1.3.1.</strong> IDE</a></li><li class="chapter-item expanded "><a href="../../kernel/drivers/keyboard.html"><strong aria-hidden="true">1.3.2.</strong> Keyboard</a></li><li class="chapter-item expanded "><a href="../../kernel/drivers/uart.html"><strong aria-hidden="true">1.3.3.</strong> UART</a></li><li class="chapter-item expanded "><a href="../../kernel/drivers/hpet.html"><strong aria-hidden="true">1.3.4.</strong> HPET</a></li><li class="chapter-item expanded "><a href="../../kernel/drivers/rtc.html"><strong aria-hidden="true">1.3.5.</strong> RTC</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/virtual_devices/index.html"><strong aria-hidden="true">1.4.</strong> Virtual Devices</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/virtual_devices/console.html"><strong aria-hidden="true">1.4.1.</strong> Console</a></li><li class="chapter-item expanded "><a href="../../kernel/virtual_devices/pipe.html"><strong aria-hidden="true">1.4.2.</strong> Pipe</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/filesystem/index.html"><strong aria-hidden="true">1.5.</strong> Filesystem</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/filesystem/fat.html"><strong aria-hidden="true">1.5.1.</strong> FAT</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/processor/index.html"><strong aria-hidden="true">1.6.</strong> Processor</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/processor/interrupts.html"><strong aria-hidden="true">1.6.1.</strong> Interrupts and Exceptions</a></li><li class="chapter-item expanded "><a href="../../kernel/processor/gdt.html"><strong aria-hidden="true">1.6.2.</strong> GDT and others</a></li><li class="chapter-item expanded "><a href="../../kernel/processor/apic.html"><strong aria-hidden="true">1.6.3.</strong> APIC</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/acpi/index.html"><strong aria-hidden="true">1.7.</strong> ACPI</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/acpi/aml.html"><strong aria-hidden="true">1.7.1.</strong> AML</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/processes/index.html" class="active"><strong aria-hidden="true">1.8.</strong> Processes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/processes/scheduler.html"><strong aria-hidden="true">1.8.1.</strong> Scheduler</a></li><li class="chapter-item expanded "><a href="../../kernel/processes/syscalls.html"><strong aria-hidden="true">1.8.2.</strong> Syscalls</a></li><li class="chapter-item expanded "><a href="../../kernel/processes/executables.html"><strong aria-hidden="true">1.8.3.</strong> Executables</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="../../userspace/index.html"><strong aria-hidden="true">2.</strong> Userspace</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../userspace/programs.html"><strong aria-hidden="true">2.1.</strong> Programs</a></li><li class="chapter-item expanded "><a href="../../userspace/libraries.html"><strong aria-hidden="true">2.2.</strong> Libraries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../userspace/rust_std.html"><strong aria-hidden="true">2.2.1.</strong> Rust Standard Library</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="../../extra/index.html"><strong aria-hidden="true">3.</strong> Extra</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../extra/heap_allocator.html"><strong aria-hidden="true">3.1.</strong> Heap Allocator</a></li><li class="chapter-item expanded "><a href="../../extra/kernel_user_link.html"><strong aria-hidden="true">3.2.</strong> Kernel User Link</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">OS</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="processes"><a class="header" href="#processes">Processes</a></h1>
+<blockquote>
+<p>This is implemented in <a href="/os/docs/kernel/process"><code>process</code></a></p>
+</blockquote>
+<p>This module, implements the process mangement of the kernel, including creating, destroying, and scheduling processes.
+As well as managing the process's memory, and the process's resources.</p>
+<p>Currently, when we say <code>process</code>, we also mean <code>thread</code>, as we don't have multi-threading support yet.</p>
+<h2 id="process-data"><a class="header" href="#process-data">Process Data</a></h2>
+<p>The process structure <a href="/os/docs/kernel/process/struct.Process.html"><code>Process</code></a> contain all the information relating to the process, some of the important ones:</p>
+<ul>
+<li><code>id</code>: The process id.</li>
+<li><code>parent_id</code>: The id of the parent process.</li>
+<li><code>vm</code>: The process's virtual memory, an instant of <code>VirtualMemoryMapper</code>, see <a href="../memory/virtual_mapper.html">virtual mapper</a>.</li>
+<li><code>context</code>: A saved state of the CPU before the process is being scheduled. i.e. while the <code>process</code> is running, this
+is considered invalid and doesn't represent the current state of the process.</li>
+<li><code>open_filesystem_nodes</code>: A map of open file nodes, see <a href="../filesystem/index.html">filesystem</a> a node can be a file or a directory, the mapping here is from <code>usize</code>, we use map instead of a list since we can remove a file from the middle of the list, and we don't want to have to shift all the elements after it.</li>
+<li><code>argv</code>: A string list of the arguments passed to the process.</li>
+<li><code>stack_ptr_end</code>: The end of the stack, the stack grows down, so this is the highest address of the stack, and where the stack starts when the process is created.</li>
+<li><code>stack_size</code>: The current size of the stack, currently, its constant, until we get growing stack support.</li>
+<li><code>heap_start</code>: The start address of the heap, this will be padded by around <code>1MB</code> from the end of the <code>ELF</code> file loadded into memory.</li>
+<li><code>heap_size</code>: The current size of the heap. The user process can request more heap space with the <a href="./syscalls.html#syscalls-list"><code>inc_dec_heap</code></a> system call.</li>
+<li><code>heap_max</code>: The maximum possible size of the heap, this is not changed, currently set to <code>1GB</code>.</li>
+<li><code>status</code>: The status of the process, see <a href="./scheduler.html">scheduler</a> for more information.</li>
+<li><code>exit_code</code>: The exit code of the process, if the process is exited, this will be set to the exit code.</li>
+<li><code>children_exits</code>: A list of the children processes that have exited, with their exit code (see #process-exit later for more information).</li>
+</ul>
+<h2 id="process-creation"><a class="header" href="#process-creation">Process Creation</a></h2>
+<p>Process creation (structure creation) is as follows:</p>
+<ul>
+<li>Load the <code>ELF</code> file, this doesn't load the whole thing, just the header to make sure its valid.</li>
+<li>Maps the stack region.</li>
+<li>Loads argv into the stack (check <a href="#argv-structure">argv structure</a> for more information).</li>
+<li>Load <code>ELF</code> regions into memory.</li>
+<li>Add process-specific kernel memory regions, like the kernel stack (<strong>this must be done after loading the ELF, and last modification to the VM manually, because we can't switch to this VM after this point unless its by the scheduler, see the comments <code>process/mod.rs::allocate_process</code> for more details</strong>)</li>
+<li>Add data about the heap, with size <code>0</code> and max size <code>1GB</code>, i.e. no memory allocated yet.</li>
+<li>Default <code>context</code> is created, everything is <code>0</code>, except for:
+<ul>
+<li><code>rip</code>: The entry point of the <code>ELF</code> file.</li>
+<li><code>rsp</code>: The end of the stack.</li>
+<li><code>rflags</code>: enable the interrupts.</li>
+<li><code>cs</code>: The code segment for the <code>USER_RING</code> (see <a href="../processor/gdt.html">GDT</a>).</li>
+<li><code>ss/ds</code>: The data segment for the <code>USER_RING</code> (see <a href="../processor/gdt.html">GDT</a>).</li>
+<li><code>rdi</code>: The value of <code>argc</code>, since we use <code>SYSV</code> calling convention from the userspace.</li>
+<li><code>rsi</code>: The address of the <code>argv</code> array, since we use <code>SYSV</code> calling convention from the userspace.</li>
+</ul>
+</li>
+</ul>
+<h3 id="argv-structure"><a class="header" href="#argv-structure">Argv Structure</a></h3>
+<p>The <code>argv</code> structure in the stack is as follows:</p>
+<pre><code class="language-txt">+-------------------+   &lt;- stack_ptr_end
+| arg0              |
++-------------------+
+| arg1              |
++-------------------+
+| ....              |
++-------------------+
+| null              |
++-------------------+
+| argv              |   &lt;- pointer to `arg0`
++-------------------+
+| argc              |   &lt;- number of arguments
++-------------------+
+| ....              |   &lt;- this is where `rsp` will be set to, when the process is created
++-------------------+
+</code></pre>
+<h2 id="process-exit"><a class="header" href="#process-exit">Process Exit</a></h2>
+<p>When the syscall <code>exit</code> is called, the process is marked as <code>Exited</code>, and the exit code is set.</p>
+<p>The <code>Exited</code> process will be removed from the <code>scheduler</code>'s list, at the next <code>schedule</code> call, see <a href="./scheduler.html">scheduler</a> for more information.</p>
+<p>When the process exits, it does the following as well:</p>
+<ul>
+<li>It will notify all processes that are in the state <code>WaitingForPid</code> with the process's id, it will give it the <code>exit_code</code>, and continue those processes.</li>
+<li>It will add itself to the parent's <code>children_exits</code> list, with the <code>exit_code</code>, so that parents can know when their children have exited without blocking on <code>WaitingForPid</code> (i.e. they can call <code>waitpid</code> without blocking, only because they are parents).</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../kernel/acpi/aml.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../kernel/processes/scheduler.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../kernel/acpi/aml.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../kernel/processes/scheduler.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

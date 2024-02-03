@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"static":["ALLOCATOR"],"struct":["LockedKernelHeapAllocator","PageAllocator"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["KERNEL_RING","USER_RING"],"fn":["get_user_code_seg_index","get_user_data_seg_index","init_kernel_gdt"],"mod":["flags"],"static":["GDT","TSS"],"struct":["GlobalDescriptorManager","GlobalDescriptorTable","GlobalDescriptorTablePointer","SegmentSelector","SystemDescriptorEntry","TaskStateSegment","UserDescriptorEntry"]};

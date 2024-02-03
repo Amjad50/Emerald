@@ -1,0 +1,288 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Interrupts and Exceptions - OS</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../../highlight.css">
+        <link rel="stylesheet" href="../../tomorrow-night.css">
+        <link rel="stylesheet" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../../kernel/index.html"><strong aria-hidden="true">1.</strong> Kernel</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/boot.html"><strong aria-hidden="true">1.1.</strong> Boot</a></li><li class="chapter-item expanded "><a href="../../kernel/memory/index.html"><strong aria-hidden="true">1.2.</strong> Memory</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/memory/memory_layout.html"><strong aria-hidden="true">1.2.1.</strong> Memory Layout</a></li><li class="chapter-item expanded "><a href="../../kernel/memory/physical_allocator.html"><strong aria-hidden="true">1.2.2.</strong> Physical Allocator</a></li><li class="chapter-item expanded "><a href="../../kernel/memory/virtual_mapper.html"><strong aria-hidden="true">1.2.3.</strong> Virtual Mapper</a></li><li class="chapter-item expanded "><a href="../../kernel/memory/virtual_space.html"><strong aria-hidden="true">1.2.4.</strong> Virtual Space</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/drivers/index.html"><strong aria-hidden="true">1.3.</strong> Drivers/Devices</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/drivers/ide.html"><strong aria-hidden="true">1.3.1.</strong> IDE</a></li><li class="chapter-item expanded "><a href="../../kernel/drivers/keyboard.html"><strong aria-hidden="true">1.3.2.</strong> Keyboard</a></li><li class="chapter-item expanded "><a href="../../kernel/drivers/uart.html"><strong aria-hidden="true">1.3.3.</strong> UART</a></li><li class="chapter-item expanded "><a href="../../kernel/drivers/hpet.html"><strong aria-hidden="true">1.3.4.</strong> HPET</a></li><li class="chapter-item expanded "><a href="../../kernel/drivers/rtc.html"><strong aria-hidden="true">1.3.5.</strong> RTC</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/virtual_devices/index.html"><strong aria-hidden="true">1.4.</strong> Virtual Devices</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/virtual_devices/console.html"><strong aria-hidden="true">1.4.1.</strong> Console</a></li><li class="chapter-item expanded "><a href="../../kernel/virtual_devices/pipe.html"><strong aria-hidden="true">1.4.2.</strong> Pipe</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/filesystem/index.html"><strong aria-hidden="true">1.5.</strong> Filesystem</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/filesystem/fat.html"><strong aria-hidden="true">1.5.1.</strong> FAT</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/processor/index.html"><strong aria-hidden="true">1.6.</strong> Processor</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/processor/interrupts.html" class="active"><strong aria-hidden="true">1.6.1.</strong> Interrupts and Exceptions</a></li><li class="chapter-item expanded "><a href="../../kernel/processor/gdt.html"><strong aria-hidden="true">1.6.2.</strong> GDT and others</a></li><li class="chapter-item expanded "><a href="../../kernel/processor/apic.html"><strong aria-hidden="true">1.6.3.</strong> APIC</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/acpi/index.html"><strong aria-hidden="true">1.7.</strong> ACPI</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/acpi/aml.html"><strong aria-hidden="true">1.7.1.</strong> AML</a></li></ol></li><li class="chapter-item expanded "><a href="../../kernel/processes/index.html"><strong aria-hidden="true">1.8.</strong> Processes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kernel/processes/scheduler.html"><strong aria-hidden="true">1.8.1.</strong> Scheduler</a></li><li class="chapter-item expanded "><a href="../../kernel/processes/syscalls.html"><strong aria-hidden="true">1.8.2.</strong> Syscalls</a></li><li class="chapter-item expanded "><a href="../../kernel/processes/executables.html"><strong aria-hidden="true">1.8.3.</strong> Executables</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="../../userspace/index.html"><strong aria-hidden="true">2.</strong> Userspace</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../userspace/programs.html"><strong aria-hidden="true">2.1.</strong> Programs</a></li><li class="chapter-item expanded "><a href="../../userspace/libraries.html"><strong aria-hidden="true">2.2.</strong> Libraries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../userspace/rust_std.html"><strong aria-hidden="true">2.2.1.</strong> Rust Standard Library</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="../../extra/index.html"><strong aria-hidden="true">3.</strong> Extra</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../extra/heap_allocator.html"><strong aria-hidden="true">3.1.</strong> Heap Allocator</a></li><li class="chapter-item expanded "><a href="../../extra/kernel_user_link.html"><strong aria-hidden="true">3.2.</strong> Kernel User Link</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">OS</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="interrupts-and-exceptions"><a class="header" href="#interrupts-and-exceptions">Interrupts and exceptions</a></h1>
+<blockquote>
+<p>This is implemented in <a href="/os/docs/kernel/cpu/interrupts"><code>interrupts</code></a>.</p>
+</blockquote>
+<p>This is where interrupts are managed. We have 2 types of interrupts.</p>
+<ul>
+<li><strong>Exceptions</strong>: These are errors that occur in the CPU, like division by zero, invalid opcode, etc, and these are
+defined in specific places in the <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a>.</li>
+<li><strong>Interrupts</strong>: These are events that are triggered by devices, like the keyboard, timer, etc,
+these do not have specific placement in the <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a>, and are instead handled mostly in the <code>user_interrupts</code> range
+of the <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a>, which is from <code>32</code> to <code>255</code>.</li>
+</ul>
+<p>The last <code>16</code> entries of the <code>user interrupts</code> are used specially by the kernel as such:</p>
+<ul>
+<li><code>SPECIAL_SCHEDULER_INTERRUPT=0xFF</code>: Used by scheduler to switch between contexts.</li>
+<li><code>SPECIAL_SYSCALL_INTERRUPT=0xFE</code>: Used by the syscall instruction to switch to kernel mode, this is defined in <a href="../../extra/kernel_user_link.html">kernel user link</a>.</li>
+</ul>
+<p>Generally we use functions like <a href="/os/docs/kernel/cpu/interrupts/fn.allocate_user_interrupt.html"><code>allocate_user_interrupt</code></a>, which will allocate
+an interrupt entry, and puts our function there (see <a href="#interrupts-handlers">Interrupts Handlers</a> later for types of interrupts), then it will give us where it was allocated, so we can use it later, for example with <a href="./apic.html">APIC</a>.</p>
+<p>The <a href="/os/docs/kernel/cpu/idt/struct.InterruptDescriptorTableEntry.html"><code>InterruptDescriptorTableEntry</code></a> gives us some extra functionalities that
+are not provided by default. Such as:</p>
+<ul>
+<li><code>set_stack_index</code> which sets the stack index to use when handling the interrupt.</li>
+<li><code>set_privilege_level</code> which sets the privilege level of the interrupt.</li>
+<li><code>set_disable_interrupts</code> which sets if the interrupts flag should disabled when handling this interrupt.</li>
+<li><code>override_code_segment</code> which sets the code segment to use when handling the interrupt.</li>
+</ul>
+<h2 id="interrupts-handlers"><a class="header" href="#interrupts-handlers">Interrupts handlers</a></h2>
+<p>There are 2 types of interrupts handlers based on what arguments they take:</p>
+<ul>
+<li>The minimal, which takes <code>InterruptStackFrame64</code>, i.e. the data provided by the CPU automatically.
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct InterruptStackFrame64 {
+    pub rip: u64,
+    pub cs: u8,
+    pub rflags: u64,
+    pub rsp: u64,
+    pub ss: u8,
+}
+<span class="boring">}</span></code></pre></pre>
+</li>
+<li>The full, which takes all registers (except <code>fxsave</code>), this is used when we expect to switch between processes or need
+those extra registers.
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct InterruptAllSavedState {
+    pub rest: RestSavedRegisters,   // contain all the rest of the registers
+    pub number: u64,
+    pub error: u64,
+    pub frame: InterruptStackFrame64,
+}
+<span class="boring">}</span></code></pre></pre>
+</li>
+</ul>
+<p>Generally, <a href="./apic.html">APIC</a> is the only user of <a href="/os/docs/kernel/cpu/interrupts/fn.allocate_user_interrupt.html"><code>allocate_user_interrupt</code></a>, as it
+uses it to allocate interrupts for hardware devices. Look at the <a href="./apic.html">APIC</a> for more details on what interrupts
+we have now.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../kernel/processor/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../kernel/processor/gdt.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../kernel/processor/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../kernel/processor/gdt.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

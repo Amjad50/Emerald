@@ -1,0 +1,1400 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>OS</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="kernel/index.html"><strong aria-hidden="true">1.</strong> Kernel</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kernel/boot.html"><strong aria-hidden="true">1.1.</strong> Boot</a></li><li class="chapter-item expanded "><a href="kernel/memory/index.html"><strong aria-hidden="true">1.2.</strong> Memory</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kernel/memory/memory_layout.html"><strong aria-hidden="true">1.2.1.</strong> Memory Layout</a></li><li class="chapter-item expanded "><a href="kernel/memory/physical_allocator.html"><strong aria-hidden="true">1.2.2.</strong> Physical Allocator</a></li><li class="chapter-item expanded "><a href="kernel/memory/virtual_mapper.html"><strong aria-hidden="true">1.2.3.</strong> Virtual Mapper</a></li><li class="chapter-item expanded "><a href="kernel/memory/virtual_space.html"><strong aria-hidden="true">1.2.4.</strong> Virtual Space</a></li></ol></li><li class="chapter-item expanded "><a href="kernel/drivers/index.html"><strong aria-hidden="true">1.3.</strong> Drivers/Devices</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kernel/drivers/ide.html"><strong aria-hidden="true">1.3.1.</strong> IDE</a></li><li class="chapter-item expanded "><a href="kernel/drivers/keyboard.html"><strong aria-hidden="true">1.3.2.</strong> Keyboard</a></li><li class="chapter-item expanded "><a href="kernel/drivers/uart.html"><strong aria-hidden="true">1.3.3.</strong> UART</a></li><li class="chapter-item expanded "><a href="kernel/drivers/hpet.html"><strong aria-hidden="true">1.3.4.</strong> HPET</a></li><li class="chapter-item expanded "><a href="kernel/drivers/rtc.html"><strong aria-hidden="true">1.3.5.</strong> RTC</a></li></ol></li><li class="chapter-item expanded "><a href="kernel/virtual_devices/index.html"><strong aria-hidden="true">1.4.</strong> Virtual Devices</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kernel/virtual_devices/console.html"><strong aria-hidden="true">1.4.1.</strong> Console</a></li><li class="chapter-item expanded "><a href="kernel/virtual_devices/pipe.html"><strong aria-hidden="true">1.4.2.</strong> Pipe</a></li></ol></li><li class="chapter-item expanded "><a href="kernel/filesystem/index.html"><strong aria-hidden="true">1.5.</strong> Filesystem</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kernel/filesystem/fat.html"><strong aria-hidden="true">1.5.1.</strong> FAT</a></li></ol></li><li class="chapter-item expanded "><a href="kernel/processor/index.html"><strong aria-hidden="true">1.6.</strong> Processor</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kernel/processor/interrupts.html"><strong aria-hidden="true">1.6.1.</strong> Interrupts and Exceptions</a></li><li class="chapter-item expanded "><a href="kernel/processor/gdt.html"><strong aria-hidden="true">1.6.2.</strong> GDT and others</a></li><li class="chapter-item expanded "><a href="kernel/processor/apic.html"><strong aria-hidden="true">1.6.3.</strong> APIC</a></li></ol></li><li class="chapter-item expanded "><a href="kernel/acpi/index.html"><strong aria-hidden="true">1.7.</strong> ACPI</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kernel/acpi/aml.html"><strong aria-hidden="true">1.7.1.</strong> AML</a></li></ol></li><li class="chapter-item expanded "><a href="kernel/processes/index.html"><strong aria-hidden="true">1.8.</strong> Processes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kernel/processes/scheduler.html"><strong aria-hidden="true">1.8.1.</strong> Scheduler</a></li><li class="chapter-item expanded "><a href="kernel/processes/syscalls.html"><strong aria-hidden="true">1.8.2.</strong> Syscalls</a></li><li class="chapter-item expanded "><a href="kernel/processes/executables.html"><strong aria-hidden="true">1.8.3.</strong> Executables</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="userspace/index.html"><strong aria-hidden="true">2.</strong> Userspace</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="userspace/programs.html"><strong aria-hidden="true">2.1.</strong> Programs</a></li><li class="chapter-item expanded "><a href="userspace/libraries.html"><strong aria-hidden="true">2.2.</strong> Libraries</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="userspace/rust_std.html"><strong aria-hidden="true">2.2.1.</strong> Rust Standard Library</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="extra/index.html"><strong aria-hidden="true">3.</strong> Extra</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="extra/heap_allocator.html"><strong aria-hidden="true">3.1.</strong> Heap Allocator</a></li><li class="chapter-item expanded "><a href="extra/kernel_user_link.html"><strong aria-hidden="true">3.2.</strong> Kernel User Link</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">OS</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="kernel"><a class="header" href="#kernel">Kernel</a></h1>
+<blockquote>
+<p>Link to the <a href="kernel//os/docs/kernel/">Kernel rust documentation</a></p>
+</blockquote>
+<p>Here we explain the kernel and its components in details.</p>
+<p>From <a href="kernel/./boot.html">Boot</a>, to <a href="kernel/./drivers/index.html">drivers</a>, <a href="kernel/./filesystem/index.html">filesystem</a>, processes, <a href="kernel/./memory/index.html">memory management</a>, and more...</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="boot"><a class="header" href="#boot">Boot</a></h1>
+<p>What happens during boot?</p>
+<p>This OS doesn't include a <a href="https://en.wikipedia.org/wiki/Bootloader">bootloader</a>, the kernel is being loaded by default using <a href="https://en.wikipedia.org/wiki/GNU_GRUB"><code>grub</code></a> using <a href="https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html"><code>multiboot2</code></a>.</p>
+<p>The <a href="https://github.com/Amjad50/OS/tree/master/kernel"><code>kernel</code></a> crate will be compiled as an <code>ELF</code> file implementing the <a href="https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html"><code>multiboot2</code></a> specification which can
+be loaded by any bootloader that supports it.</p>
+<p>For example, in grub we use the <code>multiboot2</code> command to load the kernel.</p>
+<pre><code class="language-txt">menuentry &quot;Kernel&quot; {
+    insmod all_video
+    multiboot2 /boot/kernel # the kernel ELF file
+    boot
+}
+</code></pre>
+<p>The kernel <code>ELF</code> file is in <code>elf64-x86-64</code> format, but we start in <code>x86</code> protected mode (32-bit) and then switch to <code>long mode</code> (64-bit) using assembly code in <a href="https://github.com/Amjad50/OS/blob/master/kernel/src/boot.S"><code>boot.S</code></a>.</p>
+<h2 id="initial-boot-protected-mode"><a class="header" href="#initial-boot-protected-mode">Initial boot, protected mode.</a></h2>
+<p>We start in assembly, since we are using rust, and we target <code>x64</code> for compilation, we have to add <code>32-bit</code> code manually using assembly.</p>
+<p>The <code>boot.S</code> file is included in <code>main.rs</code> using <code>global_asm!</code> macro, and we use <code>.code32</code> directive to generate
+<code>32-bit</code> code.</p>
+<p>The initial boot here in the assembly performs the following:</p>
+<ul>
+<li>Setup initial page tables (required for <code>64-bit</code> mode).</li>
+<li>Setup basic GDT (Global Descriptor Table) (required for <code>64-bit</code> mode).</li>
+<li>Switch to <code>64-bit</code> long mode.</li>
+<li>Jump to <code>kernel_main</code> entry point in <code>main.rs</code>.</li>
+</ul>
+<p>The kernel ELF file is loaded at <code>0x100000</code> physically, and <code>0xFFFFFFFF80100000</code> virtually.
+The virtual address <code>0xFFFFFFFF80000000</code> will map to the physical address <code>0x0</code> initially.</p>
+<blockquote>
+<p>Note: you may notice in the code that we use <code>- 0xFFFFFFFF80000000</code> a lot,
+such as <code>lgdt [gdtr64 - 0xFFFFFFFF80000000]</code>. And this is because we don't have virtual memory yet,
+so we are operating with physical memory currently, and the linker will use <code>0xFFFFFFFF80000000</code> as
+the base address. But since we know it maps to <code>0x0</code> physically, we can subtract to convert to physical addresses.</p>
+</blockquote>
+<h3 id="multiboot2-header"><a class="header" href="#multiboot2-header">Multiboot2 header</a></h3>
+<p>We specify some information to the bootloader that we want in the <code>multiboot2</code> header:</p>
+<ul>
+<li><strong>Address</strong>: Here we specify load address information, which include:
+<ul>
+<li><code>start</code> and <code>end</code> of the kernel image.</li>
+<li><code>bss_end</code> which is the end of the <code>.bss</code> section.</li>
+</ul>
+</li>
+<li><strong>Entry point</strong>: The entry point of the kernel, which is <code>entry</code> function in <a href="https://github.com/Amjad50/OS/blob/master/kernel/src/boot.S"><code>boot.S</code></a>,<br />
+i.e. where execution will start. This is executed in <code>32-bit</code> mode.</li>
+<li><strong>Module alignment</strong>: Modules will be page aligned. (maybe not needed, as I thought it affected the kernel alignment, but looks like its for modules).</li>
+</ul>
+<p>After that, execution will start at <code>entry</code>, where we check that the value in <code>EAX</code>
+is equal to the special <code>multiboot2</code> magic value just to make sure we are correct.</p>
+<h3 id="switching-to-long-mode"><a class="header" href="#switching-to-long-mode">Switching to long mode</a></h3>
+<p>Then, we check that long mode is supported in the machine by making sure that <code>PAE</code> feature is supported in <code>CPUID:0000_0001</code> and <code>LM</code> feature is supported in <code>CPUID:8000_0001</code>.</p>
+<p>If its not supported, we display an error and infinite loop.</p>
+<pre><code class="language-asm"># check for PEA
+mov eax, 0x00000001
+cpuid
+test edx, CPUID_FEAT_EDX_PAE # (1 &lt;&lt; 6)
+jz not_64bit
+# check for long mode
+mov eax, 0x80000001
+cpuid
+test edx, CPUID_FEAT_EX_EDX_LM # (1 &lt;&lt; 29)
+jz not_64bit
+</code></pre>
+<p>If all is good, we setup some basic page tables as follows</p>
+<h4 id="initial-page-tables"><a class="header" href="#initial-page-tables">Initial page tables</a></h4>
+<p>We map the first <code>128MB</code> of physical memory into two ranges.</p>
+<ul>
+<li><code>[0x0000000000000000..0x0000000007FFFFFF]</code>, 1:1 mapping which give us easy access and required when we switch to <code>64-bit</code> mode.</li>
+<li><code>[0xFFFFFFFF80000000..0xFFFFFFFF87FFFFFF]</code>, This is where the rust kernel is loaded in the ELF file, and all references addresses in this range.</li>
+</ul>
+<p>The structure of the page table is as follows:</p>
+<pre><code class="language-txt">- [0x0000000000000000..0x0000000007FFFFFF] - 1:1 mapping with the physical pages
+    - This will be:
+        - PML4[0]
+        - PDPT[0]
+        - PDT[0..63] # 2MB each
+- [0xFFFFFFFF80000000..0xFFFFFFFF87FFFFFF] - the kernel ELF file virtual address space
+    - This will be:
+        - PML4[511]
+        - PDPT[510]
+        - PDT[0..63] # 2MB each (shared with the above)
+</code></pre>
+<p>The location of where we store the initial page tables is at <code>boot_page_tables</code> which is a region of memory
+in the <code>.boot_page_tables</code> section in the <code>.data</code> section that fits the size of <code>4</code> page tables,
+each <code>4KB</code> in size.</p>
+<p>The usage of <code>boot_page_tables</code> is as follows:</p>
+<ul>
+<li><code>PML4                  (boot_page_tables[0])</code></li>
+<li><code>PML4[0]     -&gt; PDPT-A (boot_page_tables[1])</code></li>
+<li><code>PML4[511]   -&gt; PDPT-B (boot_page_tables[2])</code></li>
+<li><code>PDPT-A[0]   -&gt; PDT    (boot_page_tables[3])</code></li>
+<li><code>PDPT-B[510] -&gt; PDT    (boot_page_tables[3]) // same PDT as above</code></li>
+</ul>
+<p>And then <code>PDT[0..63]</code> is shared between the two and maps the first <code>128MB</code> of physical memory.</p>
+<p>Then, <code>CR3</code> is set to the address of <code>PML4</code> and <code>CR4</code> is set to enable <code>PAE</code>.</p>
+<h4 id="gdt-global-descritor-table"><a class="header" href="#gdt-global-descritor-table">GDT (Global Descritor Table)</a></h4>
+<p>We setup a very basic GDT that contain kernel <code>code</code> and <code>data</code> segments (even though, data probably is not needed).</p>
+<pre><code class="language-asm">.align 16
+gdt64:
+    .quad 0x0000000000000000    # null descriptor
+    # Code segment (0x8)
+    .long 0x00000000                                       # Limit &amp; Base (low, bits 0-15)
+    .byte 0                                                # Base (mid, bits 16-23)
+    .byte GDT_CODE | GDT_NOT_SYS | GDT_PRESENT | GDT_WRITE # Access
+    .byte GDT_LONG_MODE                                    # Flags &amp; Limit (high, bits 16-19)
+    .byte 0x00                                             # Base (high, bits 24-31)
+    # Data segment (0x10)
+    .long 0x00000000                                       # Limit &amp; Base (low, bits 0-15)
+    .byte 0                                                # Base (mid, bits 16-23)
+    .byte GDT_NOT_SYS | GDT_PRESENT | GDT_WRITE            # Access
+    .byte 0x00                                             # Flags &amp; Limit (high, bits 16-19)
+    .byte 0x00                                             # Base (high, bits 24-31)
+</code></pre>
+<p>I prefer it this way, but other just use a <code>quad</code> static value. This won't change at all so either is fine.</p>
+<p>Then, we load the <code>GDT</code> using <code>lgdt</code> instruction.</p>
+<pre><code class="language-asm">lgdt [gdtr64 - 0xFFFFFFFF80000000]
+</code></pre>
+<h4 id="switch-to-long-mode"><a class="header" href="#switch-to-long-mode">Switch to long mode</a></h4>
+<p>We need to do the following:</p>
+<ul>
+<li>Setup page tables.</li>
+<li>Enable <code>PAE</code> in <code>CR4</code>.</li>
+<li>Enable <code>PG</code> (Paging) and <code>PE</code> (Protection Enable) in <code>CR0</code>.</li>
+<li>Enable <code>long mode</code> in <code>EFER</code> MSR.
+<pre><code class="language-asm">mov ecx, EFER_REG # (0xC0000080)
+rdmsr
+or  eax, EFER_LME # (1 &lt;&lt; 8)
+wrmsr
+</code></pre>
+</li>
+<li>Setup <code>GDT</code>.</li>
+<li>Jump to <code>kernel_main</code> in <code>main.rs</code>.</li>
+</ul>
+<p>But before we go to <code>kernel_main</code> directly, we jump to a location in <code>boot.S</code> (<code>kernel_main_low</code>).
+Where we setup the data segment, the stack, also forward the multiboot2 information to <code>kernel_main</code>.</p>
+<p>The stack used is <code>512</code> pages, i.e. <code>2MB</code> in size, and is located in the <code>.stack</code> section
+which is inside the <code>.data</code> section.</p>
+<p>The stack is a bit large, but we don't require that much stack most of the time,
+its needed like this due to our recursive AML (ACPI) parser, which we should improve.</p>
+<p>We also setup a <strong>guard page</strong> for the stack that is unmapped later using the more advanced virtual memory setup.</p>
+<p>Then, we jump to <code>kernel_main</code> in <code>main.rs</code>, and its all rust from here.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="memory"><a class="header" href="#memory">Memory</a></h1>
+<p>Explaining the memory management in the kernel.</p>
+<p>We have several tools to manage memory in the kernel, each with its own purpose and goal.</p>
+<p>First, let's look at the <a href="kernel/memory/memory_layout.html">memory layout</a> of the kernel, to know where everything is located.</p>
+<p>Then, we can look at the <a href="kernel/memory/physical_allocator.html">physical allocator</a> which provide us with the raw memory from the hardware,
+which we can use later with the <a href="kernel/memory/virtual_mapper.html">virtual mapper</a> to map it into virtual memory in order to access it.</p>
+<p>The heap in the kernel is implemented with <a href="kernel/memory/../../extra/heap_allocator.html">heap allocator</a>, and the <code>PageAllocator</code> will allocate pages using the <a href="kernel/memory/virtual_mapper.html">virtual mapper</a>.</p>
+<p>Lastly we have the <a href="kernel/memory/virtual_space.html">virtual space</a> which is a very useful tool to get a virtual address for components that are not
+part of the kernel directly but we know where they are located in physical space. This includes, <code>Memory mapped IO</code>, <code>ACPI</code> structures, <code>Multiboot</code> structures, etc.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="memory-layout"><a class="header" href="#memory-layout">Memory layout</a></h1>
+<blockquote>
+<p>The memory layout constants and code is defined in <a href="kernel/memory//os/docs/kernel/memory_management/memory_layout"><code>memory_layout</code></a></p>
+</blockquote>
+<p>This is the structure of the memory for any process running in the system.</p>
+<h2 id="layout"><a class="header" href="#layout">Layout</a></h2>
+<pre><code class="language-txt">0000_0000_0000_0000 .. FFFF_FF7F_FFFF_FFFF - User   (15.99~ EB)
+FFFF_FF80_0000_0000 .. FFFF_FFFF_7FFF_FFFF - Process specific kernel (510 GB)
+FFFF_FFFF_8000_0000 .. FFFF_FFFF_FFFF_FFFF - Kernel (2 GB)
+</code></pre>
+<h3 id="kernel-layout"><a class="header" href="#kernel-layout">Kernel layout</a></h3>
+<pre><code class="language-txt">FFFF_FFFF_8000_0000..FFFF_FFFF_8010_0000          nothing
+FFFF_FFFF_8010_0000..FFFF_FFFF_8XXX_XXXX          kernel elf (text, rodata, data, bss)
+FFFF_FFFF_8XXX_XXXX..FFFF_FFFF_8800_0000          (kernel end) physical allocator low (until 128MB mark pre-mapped in `boot`)
+FFFF_FFFF_8800_0000..FFFF_FFFF_8900_0000          kernel heap (16MB)
+FFFF_FFFF_8900_0000..FFFF_FFFF_8903_F000          interrupt stacks
+    FFFF_FFFF_8900_0000..FFFF_FFFF_8900_1000      interrupt stack 0 guard page (4KB) *not mapped by purpose*
+    FFFF_FFFF_8900_1000..FFFF_FFFF_8900_9000      interrupt stack 0 (8 * 4KB = 32KB)
+    ... *repeat for 6 more stacks*
+FFFF_FFFF_8903_F000..FFFF_FFFF_FFFF_F000          Kernel extra (virtual space, free virtual space to use)
+</code></pre>
+<p>The kernel is loaded by the bootloader at physical address <code>0x10_0000</code>, and then it will
+perform virtual mapping for physical <code>0x0</code> into <code>0xFFFF_FFFF_8000_0000</code> for <code>128MB</code>
+i.e. until the end of the initial <code>physical page allocator</code>. See more details in the <a href="kernel/memory/../boot.html">boot</a> chapter.</p>
+<p>Look at <a href="kernel/memory/./virtual_space.html">virtual space</a> for more info on it.</p>
+<h4 id="virtual-space"><a class="header" href="#virtual-space">Virtual space</a></h4>
+<p>Virtual space is a I'm using (not sure what other OSes call), that solves the issue of &quot;I have a physical address of an object, but I don't have virtual space to map it to&quot;.
+This is useful for reading structures that are in specific location in physical memory, such as <code>ACPI</code> tables, <code>PCI</code> configuration space, <code>memory mapped IO</code>, etc.</p>
+<p>Its very simple, it will take memory from the <code>kernel extra</code> space, and map it to the physical address.</p>
+<h3 id="process-specific-kernel-layout"><a class="header" href="#process-specific-kernel-layout">Process specific kernel layout</a></h3>
+<pre><code class="language-txt">FFFF_FF80_0000_0000..FFFF_FF80_0000_1000          process kernel stack guard page (4KB) *not mapped by purpose*
+FFFF_FF80_0000_1000..FFFF_FF80_0000_9000          process kernel stack (8 * 4KB = 32KB)
+</code></pre>
+<p>This is a space specific to each process, but reside in kernel space.</p>
+<p>The idea is to have structures that are specific to processes here, that others won't have access and thus reduce the need to setup a lock around them.</p>
+<p>We use it currently for <code>kernel stack</code>, which is where the kernel will store the stack when an interrupt happens while we are in user space.</p>
+<p>It solves the issue where having a single kernel stack for all processes can't work, as if two processes gets interrupted while the first one is still in the kernel, the second one will overwrite the first one's stack.</p>
+<blockquote>
+<p>As you might have expect, the previous paragraph was a source of a crazy bug that introduced this <code>kernel stack</code>. Fixed in <a href="https://github.com/Amjad50/OS/commit/0dc04f8">0dc04f8</a></p>
+</blockquote>
+<h3 id="user-layout"><a class="header" href="#user-layout">User layout</a></h3>
+<p>Not much to talk about here, as this will depend on the process itself and where to load the ELF file, currently we load at the address specified in the ELF file.
+This is of course not safe, as we don't do extra checks for that value.</p>
+<p>But anyway, the other parts of the userspace are as follows:</p>
+<pre><code class="language-txt">FFFF_FF7F_FFFF_E000 .. XXXX_XXXX_XXXX_XXXX - Stack. From the top and grows down
+XXXX_XXXX_XXXX_XXXX .. YYYY_YYYY_YYYY_YYYY - Heap. From the end of the ELF and grows up
+YYYY_YYYY_YYYY_YYYY .. ZZZZ_ZZZZ_ZZZZ_ZZZZ - ELF file
+</code></pre>
+<p>A lot of symbols XD. But in general, the stack is at the top of the user space, and the elf file is at the bottom,
+and the heap is in the middle starts after the elf file.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="physical-allocator"><a class="header" href="#physical-allocator">Physical Allocator</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/memory//os/docs/kernel/memory_management/physical_page_allocator"><code>physical_page_allocator</code></a></p>
+</blockquote>
+<p>This provides physical memory allocation and deallocation.</p>
+<p>Currently it is very basic, and can allocate in 4KB pages. And only allocates 1 page at a time.
+This is due to our design.</p>
+<h2 id="current-design"><a class="header" href="#current-design">Current design</a></h2>
+<p>The design now is built using a linked list, each page point to the next free page. The reason we can't
+get more pages is that when we create the list, we create it by <strong>freeing</strong> all the pages,
+and <strong>free</strong> means that we add it to the list.</p>
+<p>The issue is that we are adding them one by one, start to finish, and when we allocate, we take the last
+one from the list, so its disconnected from the rest of the pages, it doesn't know if the next page is immediately
+after it in memory or not.</p>
+<p>This could be solved by having a more complex allocator, like what we have in the <a href="kernel/memory/../../extra/heap_allocator.html">heap allocator</a>, but I want to
+use another design that is fast, since that one is slow.</p>
+<p>Another issue is that we only have <code>128MB</code> of memory to allocate from, and we can't allocate more than that.</p>
+<p>This is not a design issue, but the <code>physical page allocator</code> initially relies on the memory we have during <code>boot</code>
+where we map the first <code>128MB</code> of memory directly into the kernel space, see <a href="kernel/memory/../boot.html">boot</a> and <a href="kernel/memory/./memory_layout.html">memory layout</a> for more details.</p>
+<h2 id="design-issues-to-fix"><a class="header" href="#design-issues-to-fix">Design issues to fix</a></h2>
+<ul>
+<li>Can only allocate 1 page at a time</li>
+<li>Only has <code>128MB</code> of memory to allocate from</li>
+</ul>
+<h2 id="ideas"><a class="header" href="#ideas">Ideas</a></h2>
+<p>Linux uses a tree like structure, where each node in the tree is a page, and the children are the sub-pages, this allows easy allocation of powers of <code>4KB</code> pages, and also allows easy coalescing of pages.</p>
+<p>I'm thinking of doing something like that.</p>
+<p>For the <code>128MB</code> limit, I'm thinking of having another allocator, that won't have direct access to the memory, i.e. is not mapped, and we will store metadata about those pages in the heap, which we already have access to. i.e. it will be a &quot;late&quot; physical page allocator.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="virtual-mapper"><a class="header" href="#virtual-mapper">Virtual Mapper</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/memory//os/docs/kernel/memory_management/virtual_memory_mapper"><code>virtual_memory_mapper</code></a></p>
+</blockquote>
+<p>This is where we map physical memory to virtual memory, and where virtual memory pages are managed after [boot].</p>
+<p>The main features is to map and unmap physical memory to virtual memory, and to allocate and free virtual memory pages.</p>
+<p>The <code>map</code> function takes 1 argument <code>VirtualMemoryMapEntry</code> which is a struct contains information about the mapping:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct VirtualMemoryMapEntry {
+    pub virtual_address: u64,
+    pub physical_address: Option&lt;u64&gt;,
+    pub size: u64,
+    pub flags: u64,
+}
+<span class="boring">}</span></code></pre></pre>
+<ul>
+<li><code>virtual_address</code> is the virtual address to map to, and must be known of course</li>
+<li><code>physical_address</code> is the physical address to map to, if its <code>None</code>, then we will allocate new memory from the [physical allocator]</li>
+<li><code>size</code> is the size of the mapping, must be <code>4K</code> aligned</li>
+<li><code>flags</code> is the flags of the mapping, such as <code>Writable</code>, <code>UserAccessible</code>. For now, these are just constants mapping directly to
+<code>x86</code> page table flags.</li>
+</ul>
+<p>The <code>unmap</code> function takes the same struct, but <code>physical_address</code> must be <code>None</code>, and <code>virtual_address</code> must be known, it also takes
+<code>is_allocated</code> which is a boolean to indicate if the memory was allocated by the virtual memory mapper, if it was, it will be freed.</p>
+<p>This API can be improved, but currently we don't keep track of the mappings, so we rely on the caller to do that for us :D.</p>
+<p>Beside that, we got other functionalities used by processes. Like:</p>
+<ul>
+<li><code>switch_to_this</code>: to switch to the <code>self</code> <code>VirtualMemoryMapper</code>, which each process has its own <code>VirtualMemoryMapper</code>.</li>
+<li><code>get_current_vm</code>: to get the current <code>VirtualMemoryMapper</code> of the current process.</li>
+<li><code>clone_current_vm_as_user</code>: Clones the kernel mappings of the current vm, and mark it as <code>user</code> vm,
+so it doesn't allow <code>kernel</code> mappings anymore.</li>
+</ul>
+<p><a href="kernel/memory/../boot.html">boot</a>
+<a href="kernel/memory/./physical_allocator.html">physical allocator</a></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="virtual-space-1"><a class="header" href="#virtual-space-1">Virtual space</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/memory//os/docs/kernel/memory_management/virtual_space"><code>virtual_space</code></a></p>
+</blockquote>
+<p>Virtual space is a I'm using (not sure what other OSes call), that solves the issue of &quot;I have a physical address of an object, but I don't have virtual space to map it to&quot;.
+This is useful for reading structures that are in specific location in physical memory, such as <code>ACPI</code> tables, <code>PCI</code> configuration space, <code>memory mapped IO</code>, etc.</p>
+<p>Its very simple, it will take memory from the <code>kernel extra</code> space, and map it to the physical address.</p>
+<p>It can be used by <a href="kernel/memory//os/docs/kernel/memory_management/virtual_space/fn.allocate_and_map_virtual_space"><code>allocate_and_map_virtual_space</code></a> and <a href="kernel/memory//os/docs/kernel/memory_management/virtual_space/fn.deallocate_virtual_space"><code>deallocate_virtual_space</code></a>, which allow mapping and unmapping of virtual space.</p>
+<p>Currently its very basic and will return a number pointer, which should be <code>unsafe</code> XD, but I'm planning
+to make it a safer API.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="drivers"><a class="header" href="#drivers">Drivers</a></h1>
+<p>This will cover all drivers that interact with hardware.</p>
+<p>We may call it <code>drivers</code> or <code>devices</code>. For now at least, we treat them as the same thing.</p>
+<p>Some of these devices and <a href="kernel/drivers/../virtual_devices/index.html">virtual devices</a> may be available as <code>devices</code> in the <a href="kernel/drivers/../filesystem/index.html#devices">filesystem</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="ide"><a class="header" href="#ide">IDE</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/drivers//os/docs/kernel/devices/ide"><code>ide_device</code></a></p>
+</blockquote>
+<p>IDE devices are the type of PCI device we support now. The PCI device type is <code>MassStorageController(0x01, ..)</code>.</p>
+<p>We support both <code>ATA</code> and <code>ATAPI</code> devices. <code>ATA</code> devices are hard drives and <code>ATAPI</code> devices are CD/DVD drives.</p>
+<p>Its basic support without DMA or <code>async</code>.</p>
+<p>We perform read with <a href="kernel/drivers//os/docs/kernel/devices/ide/struct.IdeDevice.html#method.read_sync"><code>read_sync</code></a></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="keyboard"><a class="header" href="#keyboard">Keyboard</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/drivers//os/docs/kernel/io/keyboard"><code>keyboard</code></a></p>
+</blockquote>
+<p>The keyboard driver is simple, and uses the legacy PS/2 interface at <code>0x60</code> and <code>0x64</code> ports.</p>
+<p>Currently we support the <code>US</code> layout only, but we have the return type from the device as </p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Key {
+    pub virtual_char: Option&lt;u8&gt;,
+    pub key_type: KeyType,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Where <code>KeyType</code> is an enum containing all keys, even not mapping to a character, like arrows, function keys, etc.
+Which we can use later to move mapping and other complex structures into the userspace.</p>
+<p>The keyboard provide <a href="kernel/drivers//os/docs/kernel/io/keyboard/struct.Keyboard.html#method.get_next_char"><code>get_next_char</code></a> which will keep up to last <code>8</code> characters in buffer.
+This is low level function, and will probably be read a lot from usermode, and <code>8</code> will probably be a lot of characters to keep in buffer, but lets see when the time comes.</p>
+<p>This is currently used by the <a href="kernel/drivers/../virtual_devices/console.html">console</a> to read characters.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="uart"><a class="header" href="#uart">UART</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/drivers//os/docs/kernel/io/uart"><code>uart</code></a></p>
+</blockquote>
+<p>A very basic UART driver, connects to <code>0x3F8</code> port (COM1). And can be read and written to.</p>
+<p>It is used by the <a href="kernel/drivers/../virtual_devices/console.html">console</a> to print and read characters.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="high-precision-event-timer-hpet"><a class="header" href="#high-precision-event-timer-hpet">High Precision Event Timer (HPET)</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/drivers//os/docs/kernel/devices/clock/hpet"><code>hpet</code></a>.</p>
+</blockquote>
+<p>The HPET is a hardware timer that is used to provide a high-precision time base for the system.</p>
+<p>Currently, we do configure the <code>HPET</code> but its not being used yet to manage the clock of the system.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="rtc"><a class="header" href="#rtc">RTC</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/drivers//os/docs/kernel/devices/clock/rtc"><code>rtc</code></a>.</p>
+</blockquote>
+<p>The RTC (Real Time Clock) is a hardware clock that is used to provide the current time and date for the system.</p>
+<p>We fetch the <code>RTC</code> time on startup in <code>kernel_main</code>, but currently, its not being used beside printing the time on the screen.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="virtual-devices"><a class="header" href="#virtual-devices">Virtual devices</a></h1>
+<p>These are &quot;devices&quot; that we interact with from other parts of the kernel, but may not be actually available in hardware.
+They provide a sort of abstraction layer above other drivers/devices and maybe other components.</p>
+<p>One of the examples, is the <a href="kernel/virtual_devices/./console.html">console</a>, which is a virtual device that we use to print and read characters from the screen, it will use the [keyboard] and [uart] drivers to do so.</p>
+<p>Some of these devices may be available as <code>devices</code> in the <a href="kernel/virtual_devices/../filesystem/index.html#devices">filesystem</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="console"><a class="header" href="#console">Console</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/virtual_devices//os/docs/kernel/io/console"><code>console</code></a></p>
+</blockquote>
+<p>The console is a virtual device that we use to print and read characters from the screen, it will use the <a href="kernel/virtual_devices//os/docs/kernel/io/keyboard">keyboard</a> and <a href="kernel/virtual_devices//os/docs/kernel/io/uart">uart</a> drivers to do so.</p>
+<p>This is called by <code>print!</code> and <code>println!</code> macros.</p>
+<p>We have 2 consoles, for now, I don't like the design now, and would like to change it in the future.</p>
+<h2 id="earlyconsole"><a class="header" href="#earlyconsole"><code>EarlyConsole</code></a></h2>
+<p>This is a console object that is statically initialized, can only write, and doesn't have access to the keyboard.</p>
+<h2 id="lateconsole"><a class="header" href="#lateconsole"><code>LateConsole</code></a></h2>
+<p>This is the main console that is initialized later, and can read and write and has access to keyboard.</p>
+<p>The main purpose of this is to add this to the <code>/devices</code> directory, and act as a kernel device, so we can use it from the userspace.</p>
+<p>The design can be improved, the issue is that <code>LateConsole</code> is inside an <code>Arc&lt;Mutex&lt;&gt;&gt;</code>
+(so it can be used as a device), <code>EarlyConsole</code> is <code>static</code>,
+there is several differences, so there is a lot of code duplication, and I would like to improve it somehow.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="pipe"><a class="header" href="#pipe">Pipe</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/virtual_devices//os/docs/kernel/devices/pipe"><code>pipe</code></a></p>
+</blockquote>
+<p>A pipe is a virtual device that allows two processes to communicate with each other.
+It is a unidirectional communication channel. It is used to pass data from one process to another. 
+t is similar to a file, but it is not stored on the disk. It is stored in the memory. It is a first-in-first-out (FIFO) data structure.</p>
+<p>It acts as a special file, i.e. the process just write to it as a normal file.</p>
+<p>It is created with <a href="kernel/virtual_devices//os/docs/kernel/devices/pipe/fn.create_pipe_pair.html"><code>create_pipe_pair</code></a>, which will return 2 <code>File</code> objects,
+one for reading and one for writing. The kernel then assign those to the process and such.</p>
+<p>Internally, the <code>Pipe</code> is a <code>dyn Device</code>, so its stored in the <code>INode</code> as a device. See <a href="kernel/virtual_devices/../filesystem/index.html#inode">filesystem</a> for more details on <code>INode</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="filesystem"><a class="header" href="#filesystem">Filesystem</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/filesystem//os/docs/kernel/fs"><code>filesystem</code></a></p>
+</blockquote>
+<p>In this kernel, the filesystem is implemented by several layers, and components.</p>
+<p>When you try to open a file path, the <code>filesystem</code> will look for the best entity that contains this path.
+And this is achieved by the <strong>mapping</strong> system.</p>
+<p>Check <a href="kernel/filesystem/./fat.html">FAT</a> for more information about the FAT filesystem.</p>
+<h2 id="mapping"><a class="header" href="#mapping">Mapping</a></h2>
+<p>The mapping, is a dictionary that maps a path prefix to a <code>Filesystem</code> manager.
+For example, currently we have the following mappings:</p>
+<pre><code>'/' -&gt; FAT (filesystem backed by disk)
+'/devices' -&gt; Devices (a virtual filesystem)
+</code></pre>
+<p>When you open a path, it will find the best mapping, i.e. the longest prefix that matches the path.
+Then will use the resulting <code>Filesystem</code> manager to open the file.</p>
+<p>For example, if you open the path <code>/devices/console</code>, it will use the <code>Devices</code> manager to open the file <code>/console</code>.</p>
+<h2 id="inode"><a class="header" href="#inode">INode</a></h2>
+<blockquote>
+<p>See <a href="kernel/filesystem//os/docs/kernel/fs/struct.INode.html">INode</a></p>
+</blockquote>
+<p>The <code>Filesystem</code> will give us an <code>INode</code> when we open a directory or a file, and this <code>INode</code> gives information
+about the file, as well as the <code>device</code> that it may contain.</p>
+<blockquote>
+<p>I'm calling <code>INode</code> even though <a href="kernel/filesystem/./fat.html">FAT</a> doesn't have this concept, but I'm using it to represent the file information.</p>
+</blockquote>
+<h2 id="partition-tables"><a class="header" href="#partition-tables">Partition tables</a></h2>
+<p>Currently we only support the <a href="kernel/filesystem//os/docs/kernel/fs/mbr">MBR</a> partition table, and we can only read the first partition, we don't check the partition type, and just forward it to the <a href="kernel/filesystem/./fat.html">FAT</a> filesystem.</p>
+<h2 id="devices"><a class="header" href="#devices">Devices</a></h2>
+<blockquote>
+<p>See <a href="kernel/filesystem//os/docs/kernel/devices/struct.Devices.html">Devices</a></p>
+</blockquote>
+<p>This is a basic dictionary that maps a device name, to a <code>Arc&lt;dyn Device&gt;</code>. Then, when its opened, the device clone is
+returned in a special <code>INode</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="fat-file-allocation-table-filesystem"><a class="header" href="#fat-file-allocation-table-filesystem">FAT (File Allocation Table) filesystem</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/filesystem//os/docs/kernel/fs/fat"><code>fat</code></a></p>
+</blockquote>
+<p>The FAT filesystem is a simple filesystem that is widely used in many devices, such as USB drives, SD cards, and floppy disks.</p>
+<p>In this kernel, we have FAT12, FAT16, and FAT32 support. Along with long file names (LFN) support.</p>
+<p>We don't have write support yet, but we can read files and directories.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="processor"><a class="header" href="#processor">Processor</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/processor//os/docs/kernel/cpu"><code>cpu</code></a>.</p>
+</blockquote>
+<p>Here we talk about processor related structures and functions.
+Including:</p>
+<ul>
+<li>Interrupts and exceptions</li>
+<li>Global Descriptor Table (GDT)</li>
+<li>Advanced Programmable Interrupt Controller (APIC) and IO APIC.</li>
+</ul>
+<p>Let's first talk about other processor stuff that are not the above.</p>
+<h2 id="saved-cpu-state"><a class="header" href="#saved-cpu-state">Saved CPU state</a></h2>
+<p>Each CPU (currently only 1) has a <a href="kernel/processor//os/docs/kernel/cpu/struct.Cpu.html">structure that contain the state related to the CPU</a>.</p>
+<p>Where it contains among others:</p>
+<ul>
+<li>the <code>id</code> and <code>apic_id</code> of the cpu, for identification.</li>
+<li>the <code>n_cli</code> and <code>old_interrupt_enable</code> which is used by the implementation of <a href="kernel/processor//os/docs/kernel/sync/spin/lock/struct.Lock.html">locks</a>.</li>
+<li>the <code>context</code> which is a process context, used when switching between processes, also <code>process_id</code> for current process, and other scheduling related fields.</li>
+</ul>
+<h2 id="cpu-initialization"><a class="header" href="#cpu-initialization">CPU initialization</a></h2>
+<p>Currently, we don't perform any additional initialization after <a href="kernel/processor/../boot.html">boot</a>, and its causing some issues.
+As UEFI results in a different CPU state than BIOS, and we need to handle that, <a href="https://github.com/Amjad50/OS/issues/34">there is an issue for that #34</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="interrupts-and-exceptions"><a class="header" href="#interrupts-and-exceptions">Interrupts and exceptions</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/processor//os/docs/kernel/cpu/interrupts"><code>interrupts</code></a>.</p>
+</blockquote>
+<p>This is where interrupts are managed. We have 2 types of interrupts.</p>
+<ul>
+<li><strong>Exceptions</strong>: These are errors that occur in the CPU, like division by zero, invalid opcode, etc, and these are
+defined in specific places in the <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a>.</li>
+<li><strong>Interrupts</strong>: These are events that are triggered by devices, like the keyboard, timer, etc,
+these do not have specific placement in the <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a>, and are instead handled mostly in the <code>user_interrupts</code> range
+of the <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a>, which is from <code>32</code> to <code>255</code>.</li>
+</ul>
+<p>The last <code>16</code> entries of the <code>user interrupts</code> are used specially by the kernel as such:</p>
+<ul>
+<li><code>SPECIAL_SCHEDULER_INTERRUPT=0xFF</code>: Used by scheduler to switch between contexts.</li>
+<li><code>SPECIAL_SYSCALL_INTERRUPT=0xFE</code>: Used by the syscall instruction to switch to kernel mode, this is defined in <a href="kernel/processor/../../extra/kernel_user_link.html">kernel user link</a>.</li>
+</ul>
+<p>Generally we use functions like <a href="kernel/processor//os/docs/kernel/cpu/interrupts/fn.allocate_user_interrupt.html"><code>allocate_user_interrupt</code></a>, which will allocate
+an interrupt entry, and puts our function there (see <a href="kernel/processor/interrupts.html#interrupts-handlers">Interrupts Handlers</a> later for types of interrupts), then it will give us where it was allocated, so we can use it later, for example with <a href="kernel/processor/./apic.html">APIC</a>.</p>
+<p>The <a href="kernel/processor//os/docs/kernel/cpu/idt/struct.InterruptDescriptorTableEntry.html"><code>InterruptDescriptorTableEntry</code></a> gives us some extra functionalities that
+are not provided by default. Such as:</p>
+<ul>
+<li><code>set_stack_index</code> which sets the stack index to use when handling the interrupt.</li>
+<li><code>set_privilege_level</code> which sets the privilege level of the interrupt.</li>
+<li><code>set_disable_interrupts</code> which sets if the interrupts flag should disabled when handling this interrupt.</li>
+<li><code>override_code_segment</code> which sets the code segment to use when handling the interrupt.</li>
+</ul>
+<h2 id="interrupts-handlers"><a class="header" href="#interrupts-handlers">Interrupts handlers</a></h2>
+<p>There are 2 types of interrupts handlers based on what arguments they take:</p>
+<ul>
+<li>The minimal, which takes <code>InterruptStackFrame64</code>, i.e. the data provided by the CPU automatically.
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct InterruptStackFrame64 {
+    pub rip: u64,
+    pub cs: u8,
+    pub rflags: u64,
+    pub rsp: u64,
+    pub ss: u8,
+}
+<span class="boring">}</span></code></pre></pre>
+</li>
+<li>The full, which takes all registers (except <code>fxsave</code>), this is used when we expect to switch between processes or need
+those extra registers.
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct InterruptAllSavedState {
+    pub rest: RestSavedRegisters,   // contain all the rest of the registers
+    pub number: u64,
+    pub error: u64,
+    pub frame: InterruptStackFrame64,
+}
+<span class="boring">}</span></code></pre></pre>
+</li>
+</ul>
+<p>Generally, <a href="kernel/processor/./apic.html">APIC</a> is the only user of <a href="kernel/processor//os/docs/kernel/cpu/interrupts/fn.allocate_user_interrupt.html"><code>allocate_user_interrupt</code></a>, as it
+uses it to allocate interrupts for hardware devices. Look at the <a href="kernel/processor/./apic.html">APIC</a> for more details on what interrupts
+we have now.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="global-descriptor-table-gdt-and-others"><a class="header" href="#global-descriptor-table-gdt-and-others">Global Descriptor Table (GDT) and others</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/processor//os/docs/kernel/cpu/gdt"><code>gdt</code></a> and <a href="kernel/processor//os/docs/kernel/cpu/idt"><code>idt</code></a>.</p>
+</blockquote>
+<p>The Global Descriptor Table (<a href="https://wiki.osdev.org/Global_Descriptor_Table">GDT</a>) is a data structure used by the x86 architecture to define the characteristics of the various memory
+and privileges of the segments used by the CPU.</p>
+<p>The Interrupt Descriptor Table (<a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a>) is a data structure used by the x86 architecture to define the characteristics of the various interrupts and exceptions.</p>
+<h2 id="interrupt-descriptor-table-idt"><a class="header" href="#interrupt-descriptor-table-idt">Interrupt Descriptor Table (IDT)</a></h2>
+<p>I'll start with this just to get it out of the way.</p>
+<p>The setup for <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a> is very simple, we just have a static memory of &quot;default&quot; empty handlers,
+and we use the <code>lidt</code> instruction to load the IDT.</p>
+<p>Later, when we add an interrupt, we just modify the <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a> entry with the new handler, and it will be used from now on.</p>
+<p>For more information about specific usage of interrupts, see <a href="kernel/processor/./interrupts.html">Interrupts and exceptions</a> and <a href="kernel/processor/./apic.html">APIC</a>.</p>
+<h2 id="global-descriptor-table-gdt"><a class="header" href="#global-descriptor-table-gdt">Global Descriptor Table (GDT)</a></h2>
+<p>This kernel is <code>x86_64</code>, and segments are not used as much as they were in the past, so we have a very basic implementation of the GDT.</p>
+<p>Currently, we have 4 segments excluding the <code>NULL</code> segment:</p>
+<ul>
+<li><code>KERNEL_CODE</code>: This is the code segment for the kernel.
+<ul>
+<li>flags: <code>flags::PRESENT | flags::CODE | flags::USER | flags::dpl(KERNEL_RING)</code></li>
+</ul>
+</li>
+<li><code>USER_CODE</code>: This is the code segment for the userspace.
+<ul>
+<li>flags: <code>flags::PRESENT | flags::CODE | flags::USER | flags::dpl(USER_RING)</code></li>
+</ul>
+</li>
+<li><code>KERNEL_DATA</code>: This is the data segment for the kernel.
+<ul>
+<li>flags: <code>flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(KERNEL_RING)</code></li>
+</ul>
+</li>
+<li><code>USER_DATA</code>: This is the data segment for the userspace.
+<ul>
+<li>flags: <code>flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(USER_RING)</code></li>
+</ul>
+</li>
+</ul>
+<p>The code segments will have the <code>LONG</code> flag set. Technically, we don't also need the <code>KERNEL_DATA</code> segment, but its included to be
+more consistent.</p>
+<blockquote>
+<p>I won't go into details of the flags, you can check the documentation of <a href="https://wiki.osdev.org/Global_Descriptor_Table">GDT</a> or the CPU manual.</p>
+</blockquote>
+<blockquote>
+<p>Also an interesting node, <code>flags::WRITE</code> seem to be required, at least with <code>qemu</code> it would crash when switching to data segment where
+its not available, even though, the AMD64 manual says that the CPU ignores those bits in 64-bit mode.</p>
+</blockquote>
+<p>From above:</p>
+<ul>
+<li><code>KERNEL_RING</code> is <code>0</code></li>
+<li><code>USER_RING</code> is <code>3</code></li>
+</ul>
+<p>As part of the <code>GDT</code> setup, we also setup the <code>TSS</code> (Task State Segment), which is used by the CPU to switch between tasks generally.
+But since we don't use hardware tasks, we at least need to set it up to configure interrupts stacks.</p>
+<h2 id="task-state-segment-tss"><a class="header" href="#task-state-segment-tss">Task State Segment (TSS)</a></h2>
+<p>The <a href="https://wiki.osdev.org/Task_State_Segment">TSS</a> is a structure that is used by the CPU to switch between tasks, and it also contains the <code>IST</code> (Interrupt Stack Table) which is used to provide a separate stack for interrupts, also provide the stack for when to go from user to kernel modes.</p>
+<p>For us, we setup <code>7</code> stacks, usable by any interrupt. Look at <a href="kernel/processor/../memory/memory_layout.html">memory layout</a> for where those are located.
+The interrupts manager can then choose the
+stack to use for each interrupt with <code>set_stack_index</code> (see <a href="kernel/processor/./interrupts.html#interrupts-and-exceptions">Interrupts and exceptions</a>).
+A value of <code>None</code> means to use the default stack.</p>
+<p>The default stack will be the current stack if the privilege level is the same as the current privilege level, 
+otherwise it will change to the stack specified in the <a href="https://wiki.osdev.org/Task_State_Segment">TSS</a> based on the target privilege level.</p>
+<p>Currently, we only have 1 stack for <code>KERNEL_RING</code>, which is at <code>Process kernel stack</code> in the <a href="kernel/processor/../memory/memory_layout.html">memory layout</a>.
+I.e. this is a stack specific to each process, as this will only be used when transitioning from user to kernel mode, and inside user mode, we will always be inside a process.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-programmable-interrupt-controller-apic-and-io-apic"><a class="header" href="#advanced-programmable-interrupt-controller-apic-and-io-apic">Advanced Programmable Interrupt Controller (APIC) and IO APIC</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/processor//os/docs/kernel/cpu/interrupts/apic"><code>apic</code></a>.</p>
+</blockquote>
+<p>The APIC is a part of the CPU, and it is used to manage interrupts and exceptions. It is used to manage the interrupts and exceptions that are triggered by hardware devices, and it is also used to manage the interrupts and exceptions that are triggered by the CPU itself.</p>
+<h2 id="initialization"><a class="header" href="#initialization">Initialization</a></h2>
+<p>The initialization of the <code>APIC</code> is done using <a href="kernel/processor/../acpi/index.html">ACPI</a> tables,
+which contains data about the ACPI, such as:</p>
+<ul>
+<li>Number of CPUs.</li>
+<li>The APIC ID of each CPU.</li>
+<li>The address of the <code>IO APIC</code>.</li>
+</ul>
+<p>The <code>APIC</code> is a memory-mapped address provided by the CPU, we can fetch it by reading the <code>MSR</code> register <code>0x1B</code> (which is the <code>APIC_BASE</code> register).</p>
+<p>Then we can map the <code>APIC</code> and <code>IOAPIC</code> (also memory-mapped) addresses to the virtual address space using <a href="kernel/processor/../memory/virtual_space.html">virtual space</a>.</p>
+<h2 id="interrupts"><a class="header" href="#interrupts">Interrupts</a></h2>
+<p>The <code>APIC</code> can be used to allocate and assign interrupts to hardware devices. We can use the functions:</p>
+<ul>
+<li><a href="kernel/processor//os/docs/kernel/cpu/interrupts/apic/fn.assign_io_irq.html"><code>assign_io_irq</code></a> to assign an interrupt to a hardware device.</li>
+<li><a href="kernel/processor//os/docs/kernel/cpu/interrupts/apic/fn.assign_io_irq_custom.html"><code>assign_io_irq_custom</code></a> which is similar to the above but provide extra changes to the interrupt, such as:
+<ul>
+<li><code>with_interrupt_polarity_low</code>: Set the interrupt polarity to low/high (boolean).</li>
+<li><code>with_trigger_mode_level</code>: Set the trigger mode to level/edge (boolean).</li>
+<li><code>with_mask</code>: Set the interrupt to be masked or not (boolean).</li>
+</ul>
+</li>
+</ul>
+<p>It will setup the interrupts with the correct <code>IO APIC</code> based on the argument <code>irq_num</code> provided.</p>
+<p>Currently, we have these interrupts configured:</p>
+<ul>
+<li><code>1</code>: Used by the <a href="kernel/processor/../drivers/keyboard.html">keyboard</a> driver.</li>
+<li><code>14 &amp; 15</code>: Used by the <a href="kernel/processor/../drivers/ide.html">IDE</a> driver.</li>
+<li><a href="kernel/processor/../drivers/hpet.html">HPET</a> timer, with interrupt number specified dynamically based on its configuration,
+but looks to be <code>2</code> on the VM.</li>
+</ul>
+<p>We also have interrupts from the <code>APIC</code> itself, such as:</p>
+<ul>
+<li><strong>Timer interrupt</strong>: this is used by the scheduler to switch between processes.</li>
+<li><strong>Error interrupt</strong>: This is mapped, but haven't seen it triggered yet.</li>
+<li><strong>Spurious interrupt</strong>: This is mapped, but haven't seen it triggered yet.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-configuration-and-power-interface-acpi"><a class="header" href="#advanced-configuration-and-power-interface-acpi">Advanced Configuration and Power Interface (ACPI)</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/acpi//os/docs/kernel/acpi"><code>acpi</code></a>.</p>
+</blockquote>
+<p>ACPI is a standard for operating systems to discover and configure computer hardware components, to perform power management, and to configure the system's power management features. It is a successor to Advanced Power Management (APM), and it is a part of the <a href="https://en.wikipedia.org/wiki/UEFI">UEFI</a> specification.</p>
+<p>We have some support to some of the components of the ACPI standard.</p>
+<p>ACPI comes in tables, and these tables include information about the system's hardware.</p>
+<h2 id="acpi-tables-support"><a class="header" href="#acpi-tables-support">ACPI Tables Support</a></h2>
+<p>We have parsing support for these tables now, having support does mean we use all the features inside them.
+It just means that we can read the table, and that's it, some of them are used, but not all.</p>
+<ul>
+<li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#root-system-description-pointer-rsdp-structure">RSDP</a>: This is either provided by <code>multiboot2</code> during <a href="kernel/acpi/../boot.html">boot</a>,
+or we search for it in memory, and this just points to the <code>RSDT</code> or <code>XSDT</code>.</li>
+<li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#root-system-description-table-rsdt">RSDT</a>: This is the Root System Description Table, and it contains pointers to other tables.</li>
+<li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#multiple-apic-description-table-madt">MADT/APIC</a>: This is the Multiple APIC Description Table, and it contains information about the APIC,see <a href="kernel/acpi/./apic.html">APIC</a> for more details.</li>
+<li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#fixed-acpi-description-table-fadt">FACP</a>: This is the Fixed ACPI Description Table, and it contains information about the power management features of the system, also contain some info about the <a href="kernel/acpi/../drivers/rtc.html">RTC</a>.</li>
+<li><a href="kernel/acpi//os/docs/kernel/devices/clock/hpet">HPET</a>: This is the High Precision Event Timer, and it contains information about the HPET, see <a href="kernel/acpi/../drivers/hpet.html">HPET</a> for more details.</li>
+<li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#differentiated-system-description-table-dsdt">DSDT</a> (not used*): This is the Differentiated System Description Table, and it contains <a href="kernel/acpi/./aml.html">AML</a> code, which is used to configure the system.</li>
+<li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#secondary-system-description-table-ssdt">SSDT</a> (not used*): This is the Secondary System Description Table, and it also contains <a href="kernel/acpi/./aml.html">AML</a> code, which is used to configure the system.</li>
+<li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#boot-graphics-resource-table-bgrt">BGRT</a> (not used): This is the Boot Graphics Resource Table, and it contains information about the boot logo, and it is used by the <a href="https://en.wikipedia.org/wiki/UEFI">UEFI</a> firmware.</li>
+<li><a href="https://uefi.org/acpi">WAET</a> (not used): This is the Windows ACPI Emulated Devices Table, and it contains information about the emulated devices, and it is used by the <a href="https://en.wikipedia.org/wiki/UEFI">UEFI</a> firmware.</li>
+<li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#system-resource-affinity-table-srat">SRAT</a> (not used): This is the System Resource Affinity Table, and it contains information about the system's memory and processors locality.</li>
+</ul>
+<blockquote>
+<p>*: We don't use <code>DSDT</code> and <code>SSDT</code> data for now, but we do parse it as <code>AML</code> code, see <a href="kernel/acpi/./aml.html">AML</a> for more details.</p>
+</blockquote>
+<p>We use <a href="kernel/acpi/../memory/virtual_space.html">virtual space</a> to map <code>APIC</code> tables, and then we copy
+them to the heap, this will make it easier to use, and we can reclaim <code>ACPI</code> memory later.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="acpi-machine-language-aml"><a class="header" href="#acpi-machine-language-aml">ACPI Machine Language (AML)</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/acpi//os/docs/kernel/acpi/aml"><code>aml</code></a>.</p>
+</blockquote>
+<p><code>AML</code> is a language used to describe the hardware of the system, and it is used by the <a href="kernel/acpi/./index.html">ACPI</a> to configure the system, check spec <a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/20_AML_Specification/AML_Specification.html">here</a> (this is what's used to implement this parser).</p>
+<p>This is an <code>AML</code> parser that is able to parse the code inside the <code>DSDT</code> and <code>SSDT</code> tables.</p>
+<p>Currently, we do not use the parsed code, as we need to build an interpreter for it, so that we can emulate executing it
+and get the data we need.</p>
+<h2 id="why-this-is-needed"><a class="header" href="#why-this-is-needed">Why this is needed?</a></h2>
+<p>There are some details of the hardware that is hidden in <code>AML</code>, such as:</p>
+<ul>
+<li>Finding out the sleep commands for the system, i.e. which registers to write to, and what values to write.</li>
+<li>Finding out interrupts configuration, for devices that share the same interrupt line.</li>
+</ul>
+<p>Generally, most OSes will use <a href="https://acpica.org/"><code>acpica</code></a> which is a tool that can parse and execute <code>AML</code> code.</p>
+<h2 id="some-annoying-parts"><a class="header" href="#some-annoying-parts">Some annoying parts</a></h2>
+<p>Just to share here, since this is a documentation and all.</p>
+<p>Generally, parsing <code>AML</code> is not that hard, its a binary format, we can read the <code>opcode</code> and know what term type we need.</p>
+<p>The issue is one thing, <code>method calls</code>.</p>
+<p>Method calls are encoded as such, <code>NameString</code> followed by <code>N</code> arguments as <code>TermArg</code> (which is a term type).
+The issue is:</p>
+<ul>
+<li>The expression itself doesn't provide the number of arguments.</li>
+<li>The method call can happen before the method is defined (method definition provide number of arguments).</li>
+<li>The method can be external (I think).</li>
+</ul>
+<p>So, we have one choice (<a href="https://acpica.org/"><code>acpica</code></a> also does it) and that is to &quot;<strong>guess</strong>&quot; the number of arguments.
+And this is very error prone, as a <code>Term</code> can be also considered an expression, like <code>NameString</code> can be considered as
+a variable if it is not a method call. <em>very messy :'(</em></p>
+<p>The current implementation I have I think is quite good, and I got to fix all the bugs I found, but of course there could be more.</p>
+<blockquote>
+<p>This seems kinda &quot;<strong>complaining</strong>&quot; XD, but I just wanted to share the experience.</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="processes"><a class="header" href="#processes">Processes</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/processes//os/docs/kernel/process"><code>process</code></a></p>
+</blockquote>
+<p>This module, implements the process mangement of the kernel, including creating, destroying, and scheduling processes.
+As well as managing the process's memory, and the process's resources.</p>
+<p>Currently, when we say <code>process</code>, we also mean <code>thread</code>, as we don't have multi-threading support yet.</p>
+<h2 id="process-data"><a class="header" href="#process-data">Process Data</a></h2>
+<p>The process structure <a href="kernel/processes//os/docs/kernel/process/struct.Process.html"><code>Process</code></a> contain all the information relating to the process, some of the important ones:</p>
+<ul>
+<li><code>id</code>: The process id.</li>
+<li><code>parent_id</code>: The id of the parent process.</li>
+<li><code>vm</code>: The process's virtual memory, an instant of <code>VirtualMemoryMapper</code>, see <a href="kernel/processes/../memory/virtual_mapper.html">virtual mapper</a>.</li>
+<li><code>context</code>: A saved state of the CPU before the process is being scheduled. i.e. while the <code>process</code> is running, this
+is considered invalid and doesn't represent the current state of the process.</li>
+<li><code>open_filesystem_nodes</code>: A map of open file nodes, see <a href="kernel/processes/../filesystem/index.html">filesystem</a> a node can be a file or a directory, the mapping here is from <code>usize</code>, we use map instead of a list since we can remove a file from the middle of the list, and we don't want to have to shift all the elements after it.</li>
+<li><code>argv</code>: A string list of the arguments passed to the process.</li>
+<li><code>stack_ptr_end</code>: The end of the stack, the stack grows down, so this is the highest address of the stack, and where the stack starts when the process is created.</li>
+<li><code>stack_size</code>: The current size of the stack, currently, its constant, until we get growing stack support.</li>
+<li><code>heap_start</code>: The start address of the heap, this will be padded by around <code>1MB</code> from the end of the <code>ELF</code> file loadded into memory.</li>
+<li><code>heap_size</code>: The current size of the heap. The user process can request more heap space with the <a href="kernel/processes/./syscalls.html#syscalls-list"><code>inc_dec_heap</code></a> system call.</li>
+<li><code>heap_max</code>: The maximum possible size of the heap, this is not changed, currently set to <code>1GB</code>.</li>
+<li><code>status</code>: The status of the process, see <a href="kernel/processes/./scheduler.html">scheduler</a> for more information.</li>
+<li><code>exit_code</code>: The exit code of the process, if the process is exited, this will be set to the exit code.</li>
+<li><code>children_exits</code>: A list of the children processes that have exited, with their exit code (see #process-exit later for more information).</li>
+</ul>
+<h2 id="process-creation"><a class="header" href="#process-creation">Process Creation</a></h2>
+<p>Process creation (structure creation) is as follows:</p>
+<ul>
+<li>Load the <code>ELF</code> file, this doesn't load the whole thing, just the header to make sure its valid.</li>
+<li>Maps the stack region.</li>
+<li>Loads argv into the stack (check <a href="kernel/processes/index.html#argv-structure">argv structure</a> for more information).</li>
+<li>Load <code>ELF</code> regions into memory.</li>
+<li>Add process-specific kernel memory regions, like the kernel stack (<strong>this must be done after loading the ELF, and last modification to the VM manually, because we can't switch to this VM after this point unless its by the scheduler, see the comments <code>process/mod.rs::allocate_process</code> for more details</strong>)</li>
+<li>Add data about the heap, with size <code>0</code> and max size <code>1GB</code>, i.e. no memory allocated yet.</li>
+<li>Default <code>context</code> is created, everything is <code>0</code>, except for:
+<ul>
+<li><code>rip</code>: The entry point of the <code>ELF</code> file.</li>
+<li><code>rsp</code>: The end of the stack.</li>
+<li><code>rflags</code>: enable the interrupts.</li>
+<li><code>cs</code>: The code segment for the <code>USER_RING</code> (see <a href="kernel/processes/../processor/gdt.html">GDT</a>).</li>
+<li><code>ss/ds</code>: The data segment for the <code>USER_RING</code> (see <a href="kernel/processes/../processor/gdt.html">GDT</a>).</li>
+<li><code>rdi</code>: The value of <code>argc</code>, since we use <code>SYSV</code> calling convention from the userspace.</li>
+<li><code>rsi</code>: The address of the <code>argv</code> array, since we use <code>SYSV</code> calling convention from the userspace.</li>
+</ul>
+</li>
+</ul>
+<h3 id="argv-structure"><a class="header" href="#argv-structure">Argv Structure</a></h3>
+<p>The <code>argv</code> structure in the stack is as follows:</p>
+<pre><code class="language-txt">+-------------------+   &lt;- stack_ptr_end
+| arg0              |
++-------------------+
+| arg1              |
++-------------------+
+| ....              |
++-------------------+
+| null              |
++-------------------+
+| argv              |   &lt;- pointer to `arg0`
++-------------------+
+| argc              |   &lt;- number of arguments
++-------------------+
+| ....              |   &lt;- this is where `rsp` will be set to, when the process is created
++-------------------+
+</code></pre>
+<h2 id="process-exit"><a class="header" href="#process-exit">Process Exit</a></h2>
+<p>When the syscall <code>exit</code> is called, the process is marked as <code>Exited</code>, and the exit code is set.</p>
+<p>The <code>Exited</code> process will be removed from the <code>scheduler</code>'s list, at the next <code>schedule</code> call, see <a href="kernel/processes/./scheduler.html">scheduler</a> for more information.</p>
+<p>When the process exits, it does the following as well:</p>
+<ul>
+<li>It will notify all processes that are in the state <code>WaitingForPid</code> with the process's id, it will give it the <code>exit_code</code>, and continue those processes.</li>
+<li>It will add itself to the parent's <code>children_exits</code> list, with the <code>exit_code</code>, so that parents can know when their children have exited without blocking on <code>WaitingForPid</code> (i.e. they can call <code>waitpid</code> without blocking, only because they are parents).</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="scheduler"><a class="header" href="#scheduler">Scheduler</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/processes//os/docs/kernel/process/scheduler"><code>scheduler</code></a></p>
+</blockquote>
+<p>The <code>scheduler</code> is responsible for scheduling the processes, and managing the CPU time between them.</p>
+<h2 id="scheduling-algorithm"><a class="header" href="#scheduling-algorithm">Scheduling Algorithm</a></h2>
+<p>Currently, the algorithm is very stupid and very bad. Not even round-robin.</p>
+<p>Its like so:</p>
+<ul>
+<li>Go through all <code>processes</code>, if the <code>process</code> is <code>ProcessState::Scheduled</code>, we will run it next.</li>
+<li>If the process is <code>ProcessState::Yielded</code>, we will skip it, and mark it as <code>ProcessState::Scheduled</code>, for next time, and this what prevents us from running the same process forever and give us fake round-robin.</li>
+<li>If the process is <code>ProcessState::Exited</code>, we will remove it from the list of processes.</li>
+</ul>
+<p>When we schedule a <code>process</code> with <code>ProcessState::Scheduled</code>, this is what's done:</p>
+<ul>
+<li>copy the <code>context</code> of the <code>process</code> to the saved <code>context</code> of the <code>CPU</code>, see <a href="kernel/processes/../processor/index.html#saved-cpu-state">processor saved state</a>, which will be used by the <a href="kernel/processes/scheduler.html#scheduler-interrupt">scheduler interrupt</a> to jump to it.</li>
+<li>Set the <code>pid</code> of the <code>process</code> to the <code>process_id</code> of the <code>CPU</code>.</li>
+<li>Mark the <code>process</code> as <code>ProcessState::Running</code>.</li>
+</ul>
+<h2 id="yielding"><a class="header" href="#yielding">Yielding</a></h2>
+<p>When a <code>process</code> is running, it can yield to the scheduler through 2 ways now:</p>
+<ul>
+<li><strong>Timer</strong>: The <code>APIC</code> timer, see <a href="kernel/processes/../processor/apic.html#interrupts">APIC</a>, will interrupt the CPU every once in a while,
+and this gives us preemptive multitasking.</li>
+<li><strong>System Call</strong>: When a <code>syscall</code> is executed, after the <code>syscall</code>, we perform <code>yield</code> as well, see <a href="kernel/processes/./syscalls.html">syscalls</a>.</li>
+</ul>
+<p>When yielding, we perform the following:</p>
+<ul>
+<li>Save the <code>all_state</code> of the CPU to the <code>context</code> of the <code>process</code>, and this <code>all_state</code> comes from the interrupt, i.e. we can only yield when an interrupt occurs from that process, since we have to save the exact <code>cpu</code> before the interrupt.</li>
+<li>Mark the <code>process</code> as <code>ProcessState::Yielded</code>.</li>
+</ul>
+<h2 id="scheduler-interrupt"><a class="header" href="#scheduler-interrupt">Scheduler Interrupt</a></h2>
+<p>This is interrupt <code>0xFF</code>, See <a href="kernel/processes/../processor/interrupts.html#interrupts-and-exceptions">interrupts</a> for more information.</p>
+<p>This interrupt is used to easily change the execution context of the current <code>cpu</code>.</p>
+<p>When the interrupt is triggered, we do the following:</p>
+<ul>
+<li>The <code>cpu</code> must contain a <code>context</code>, which we will move to.</li>
+<li>We must be in the kernel of course, this is a private interrupt for the kernel, and the scheduler alone.</li>
+<li>Switch the <code>all_state</code> coming from the interrupt (which will be a point in the <code>schedule</code> function in the kernel, where we called this interrupt), and the <code>context</code> from the <code>cpu</code>, which will be the state of the <code>process</code> currently.</li>
+</ul>
+<p>And with the last step, we achieve the context switch between two execution states, the <code>kernel</code> and the <code>process</code>.</p>
+<h3 id="why"><a class="header" href="#why">Why?</a></h3>
+<p>I found this solution that worked quite well for switch between contexts, is it the best? I don't know, but it works quite well now and is very stable.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="syscalls"><a class="header" href="#syscalls">Syscalls</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/processes//os/docs/kernel/process/syscalls"><code>syscalls</code></a></p>
+</blockquote>
+<p>The numbers of the syscalls and some metadata like <code>SyscallResult</code> and <code>SyscallError</code> are defined in <a href="kernel/processes/../../extra/kernel_user_link.html">kernel user link</a> crate.</p>
+<p>Syscalls specs is as follows:</p>
+<ul>
+<li>Syscalls can have up to <code>7</code> arguments, and are passed in <code>RCX</code>, <code>RDX</code>, <code>RSI</code>, <code>RDI</code>, <code>R8</code>, <code>R9</code>, <code>R10</code> in order.</li>
+<li>The syscall number is passed in <code>RAX</code>.</li>
+<li>The syscall return value is passed in <code>RAX</code>, the syscall may write to pointers passed in the other registers, but the result code will still be in <code>RAX</code>.</li>
+<li>The returned <code>RAX</code> value is an encoded value of <code>SyscallResult</code>. So, its <strong>never</strong> intended to be read as <code>u64</code> directly.</li>
+<li>The arguments are not modified by the syscall, but the syscall may read from them, or write to memory pointed by them.</li>
+<li>All pointers passed to the syscall are have to be valid, and point to user space memory only, the kernel will check that the memory is mapped
+and write to it, but it doesn't guarantee the validity of the memory if it was modified by the kernel (i.e. if the memory was pointed to random part in the heap it could corrupt the heap for example).</li>
+<li>The syscall may block execution depend on the syscall itself, like <code>wait_pid</code> or a <code>read</code> to a blocking file with no data.</li>
+</ul>
+<h2 id="syscalls-list"><a class="header" href="#syscalls-list">Syscalls list</a></h2>
+<p>This shows the list of syscalls and their arguments and return values. Some notes on this:</p>
+<ul>
+<li><code>a: *const/*mut T, b: usize</code> will be used in the kernel as a slice, for example <code>write(file_index: usize, buf: &amp;[u8])</code>. But I didn't want to remove an argument
+and confuse the reader, so I split them into two as being sent from userspace.</li>
+<li>types like <code>&amp;Path</code>, <code>BlockingMode</code>, <code>SpawnFileMapping</code>, etc... are passed as <code>u64</code> as is everything, but the kernel checks validity and cast/parse
+these pointers/values to the correct types.</li>
+<li>All the return types are <code>SyscallResult</code> and will report any error during execution, for simplicity, I didn't just repeat that in the table.</li>
+<li>When the return type is <code>()</code>, it means the kernel will return <code>SyscallResult::Ok(0)</code>, the userspace will check that its <code>0</code>.</li>
+</ul>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Arguments</th><th>Return value</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>open</code></td><td><code>path: &amp;Path, access_mode: u64, mode: u64</code></td><td><code>file_index: usize</code></td><td>Opens a file</td></tr>
+<tr><td><code>write</code></td><td><code>file_index: usize, buf: *const u8, size: usize</code></td><td><code>bytes_written: usize</code></td><td>Writes to a file</td></tr>
+<tr><td><code>read</code></td><td><code>file_index: usize, buf: *mut u8, size: usize</code></td><td><code>bytes_read: usize</code></td><td>Reads from a file</td></tr>
+<tr><td><code>close</code></td><td><code>file_index: usize</code></td><td><code>()</code></td><td>Closes a file</td></tr>
+<tr><td><code>blocking_mode</code></td><td><code>file_index: usize, blocking_mode: BlockingMode</code></td><td><code>()</code></td><td>Sets the blocking mode of a file. This is <strong>DEPRECATED</strong>, and should be replaced with <code>set_file_meta</code> with <a href="https://docs.rs/amjad_os_kernel_user_link/0.2.1/amjad_os_kernel_user_link/file/enum.FileMeta.html"><code>FileMeta::BlockingMode</code></a></td></tr>
+<tr><td><code>exit</code></td><td><code>exit_code: i32</code></td><td><code>!</code></td><td>Exits the current process</td></tr>
+<tr><td><code>spawn</code></td><td><code>path: &amp;Path, argv: *const *const u8, file_mappings: *const SpawnFileMapping, file_mappings_size: usize</code></td><td><code>pid: u64</code></td><td>Spawns a new process</td></tr>
+<tr><td><code>inc_heap</code></td><td><code>increment: i64</code></td><td><code>old_heap_end: usize</code></td><td>Increase/decrease the heap of the current process (similar <code>sbrk</code>)</td></tr>
+<tr><td><code>create_pipe</code></td><td><code>read_fd: *mut usize, write_fd: *mut usize</code></td><td><code>()</code></td><td>Creates a pipe</td></tr>
+<tr><td><code>wait_pid</code></td><td><code>pid: u64, block: bool</code></td><td><code>exit_code: i32</code></td><td>Waits for a process to exit</td></tr>
+<tr><td><code>stat</code></td><td><code>path: &amp;Path, stat: *mut FileStat</code></td><td><code>()</code></td><td>Gets the file stat of a file</td></tr>
+<tr><td><code>open_dir</code></td><td><code>path: &amp;Path</code></td><td><code>dir_index: usize</code></td><td>Opens a directory</td></tr>
+<tr><td><code>read_dir</code></td><td><code>dir_index: usize, buf: *mut DirEntry, len: usize</code></td><td><code>entries_read: usize</code></td><td>Reads from a directory</td></tr>
+<tr><td><code>get_cwd</code></td><td><code>buf: *mut u8, len: usize</code></td><td><code>needed_bytes: usize</code></td><td>Gets the current working directory, returns fferTooSmall` if the buffer is too small</td></tr>
+<tr><td><code>chdir</code></td><td><code>path: &amp;Path</code></td><td><code>()</code></td><td>Changes the current working directory</td></tr>
+<tr><td><code>set_file_meta</code></td><td><code>file_index: usize, meta_id: u64, meta_data: u64</code></td><td><code>()</code></td><td>Sets the file meta</td></tr>
+<tr><td><code>get_file_meta</code></td><td><code>file_index: usize, meta_id: u64, meta_data: *mut u64</code></td><td><code>()</code></td><td>Gets the file meta</td></tr>
+</tbody></table>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="executables"><a class="header" href="#executables">Executables</a></h1>
+<blockquote>
+<p>This is implemented in <a href="kernel/processes//os/docs/kernel/executable"><code>executable</code></a></p>
+</blockquote>
+<p>Currently, we only have support for <a href="kernel/processes//os/docs/kernel/executable/elf">ELF</a> and will probably stay like this for a while, I don't plan to support other formats soon.</p>
+<h2 id="elf"><a class="header" href="#elf">ELF</a></h2>
+<p>The <a href="kernel/processes//os/docs/kernel/executable/elf">ELF</a> file is the executable format used by most of the Unix-like systems, and it is the format we will be using for our executables.</p>
+<blockquote>
+<p>This is implemented in <a href="kernel/processes//os/docs/kernel/executable/elf"><code>elf</code></a></p>
+</blockquote>
+<p>We load elf on process creation, see <a href="kernel/processes/../processes/index.html#process-creation">process creation</a> for more information.</p>
+<p>For now we support very basic loading, no dynamic linking, shared libraries, or relocation.
+Just loading segments.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="userspace"><a class="header" href="#userspace">Userspace</a></h1>
+<p>This section will cover the userspace part of the operating system. It will cover the programs, libraries and other userspace related topics.</p>
+<h2 id="building-custom-userspace-programs"><a class="header" href="#building-custom-userspace-programs">Building custom userspace programs</a></h2>
+<p>Since we are using <a href="userspace/./rust_std.html"><code>Rust STD</code></a>, you can build (hopefully)
+a lot of rust projects that don't have any dependencies on <code>libc</code>, <code>linux</code> or <code>windows</code> specific libraries.</p>
+<p>This can be done by:</p>
+<ul>
+<li>You can build our toolchain with the command: <code>cargo make toolchain</code> in <a href="https://github.com/Amjad50/OS">the root of the project</a>.
+Which will install a toolchain in <code>./extern/toolchain</code>, which you can then link to your <code>rustup</code> toolchain with <code>rustup toolchain link amjad_os ./extern/toolchain</code>.</li>
+<li>Build the project with the toolchain
+<pre><code class="language-txt">cargo +amjad_os build --target x86_64-unknown-amjad_os
+</code></pre>
+</li>
+</ul>
+<blockquote>
+<p><a href="https://github.com/Amjad50/OS/issues">Please open an issue</a> if you have any problems building your project,
+or if you want to add a new feature to the toolchain. </p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="programs"><a class="header" href="#programs">Programs</a></h1>
+<blockquote>
+<p>These can be found in <a href="https://github.com/Amjad50/OS/tree/master/userspace">userspace</a></p>
+</blockquote>
+<p>Here are the list of programs that are found in the userspace of the operating system by default.</p>
+<h2 id="init"><a class="header" href="#init"><code>init</code></a></h2>
+<p>The first program that is run when the operating system boots, for now the operating system requires this program and expects it to be found at <code>/init</code>. </p>
+<p>Currently, <code>init</code> performs the following:</p>
+<ul>
+<li>Sets the <code>stdin</code> as blocking (will see why in a bit).</li>
+<li>Creates a new <code>/shell</code> process, using <code>stdin: Piped</code> and pass <code>stdout</code> and <code>stderr</code> normally inherited.</li>
+<li>Stays in the following loop:
+<ul>
+<li>Check if <code>/shell</code> has exited (not blocking).</li>
+<li>Reads from <code>stdin</code> and buffers it until a newline is found, then it sends it to the pipe of <code>/shell</code>'s <code>stdin</code>, effectively, giving
+us behavior similar to a normal terminal in linux.</li>
+</ul>
+</li>
+<li>If the process exits, it will spawn a new <code>/shell</code> process and goes back to the loop.</li>
+</ul>
+<p>This is a temporary behavior (maybe?), but we still need to improve file operations as <code>init</code> is looping a lot.</p>
+<h2 id="shell"><a class="header" href="#shell"><code>shell</code></a></h2>
+<p>This is a basic shell, that can change directories, and execute programs.</p>
+<h3 id="list-of-commandsprograms"><a class="header" href="#list-of-commandsprograms">List of commands/programs</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>cd</code> (internal)</td><td>Change directory</td></tr>
+<tr><td><code>pwd</code> (internal)</td><td>Print working directory</td></tr>
+<tr><td><code>exit</code> (internal)</td><td>Exit the shell, which will just cause another to come back up</td></tr>
+<tr><td><code>ls</code></td><td>List directory contents</td></tr>
+<tr><td><code>echo</code></td><td>Write arguments to the standard output</td></tr>
+<tr><td><code>cat</code></td><td>Print 1 file on the standard output (no concat yet XD)</td></tr>
+<tr><td><code>xxd</code></td><td>Hexdump utility</td></tr>
+</tbody></table>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="libraries"><a class="header" href="#libraries">Libraries</a></h1>
+<p>In this chapter we will talk about the libraries that we will use in our userspace programs.</p>
+<p>Libraries are code shared between multiple programs, and can be &quot;all&quot; programs, such as the case for the <a href="userspace/./rust_std.html">Rust Standard Library</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="rust-standard-library"><a class="header" href="#rust-standard-library">Rust Standard Library</a></h1>
+<p>Currently, everything is built by <a href="https://www.rust-lang.org/"><code>Rust</code></a>, we don't have <code>libc</code> yet. And instead we have a custom <strong>rust target</strong> 
+that we use to build our userspace programs.</p>
+<p>This is implemented in my <a href="https://github.com/Amjad50/rust/tree/amjad50_os_new_target">fork</a> of <code>rust-lang/rust</code>.</p>
+<p>We have the target <code>x86_64-unknown-amjad_os</code>. The changes needed are in <a href="https://github.com/Amjad50/rust/tree/amjad50_os_new_target/library/std/src/sys/amjad_os"><code>rust/library/std/src/sys/amjad_os</code></a> and <a href="https://github.com/Amjad50/rust/tree/amjad50_os_new_target/library/std/src/os/amjad_os"><code>rust/library/std/src/os/amjad_os</code></a>.</p>
+<p>These changes are provided by another crate <a href="https://crates.io/crates/amjad_os_user_std">amjad_os_user_std</a>, where we have all the basic implementation of userspace functionalities including:</p>
+<ul>
+<li><code>allocator</code>: See <a href="userspace/../extra/heap_allocator.html">Heap Allocator</a> for more details.</li>
+<li><code>files</code> and <code>io</code>: For file operations and input/output.</li>
+<li><code>process</code>: For process management.</li>
+</ul>
+<p>This crate, is very basic and only performs <code>syscalls</code> basically, nothing much else, then in <code>rust</code> we perform the
+rest of the bindings.</p>
+<p>Using <code>rust</code> like this gives us a lot of benefits, since we just need to implement basic <code>unsafe</code> functionalities,
+and it will handle synchronization, memory management, etc., of course we need to make sure our implementation
+is correct.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="extra"><a class="header" href="#extra">Extra</a></h1>
+<p>Here are extra components that are shared between the kernel and userspace.</p>
+<p>You might find references to these components in both the kernel and userspace chapters.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="heap-allocator"><a class="header" href="#heap-allocator">Heap allocator</a></h1>
+<p>In the kernel, and also in userspace we need a heap. </p>
+<p>Heap simply is a memory region that we can allocate and deallocate memory from when
+we need dynamically.</p>
+<p>Anyway, we need heap implementation for the kernel and userspace.</p>
+<p>This is achieved in <a href="https://crates.io/crates/increasing_heap_allocator"><code>increasing_heap_allocator</code></a>. This is a crate implementing heap allocator based on &quot;increasing&quot; memory block.</p>
+<p>What does that mean?</p>
+<p>It means that this crate require a <code>Page</code> provider, i.e. an entity that can provide pages of memory that reside after each other,
+and the rest of handling heap memory is done by the crate.</p>
+<p>This example will make it clear, this is how its implemented in <code>userspace</code>:</p>
+<pre><pre class="playground"><code class="language-rust no_run">use increasing_heap_allocator::{PageAllocatorProvider, HeapAllocator};
+
+const PAGE_4K: usize = 4096;
+
+struct PageAllocator {
+    heap_start: usize,
+    mapped_pages: usize,
+}
+
+impl PageAllocator {
+    fn new() -&gt; Self {
+        Self {
+            heap_start: unsafe { syscall::inc_dec_heap(0).unwrap() as usize },
+            mapped_pages: 0,
+        }
+    }
+}
+
+impl PageAllocatorProvider&lt;PAGE_4K&gt; for PageAllocator {
+    fn allocate_pages(&amp;mut self, pages: usize) -&gt; Option&lt;*mut u8&gt; {
+        assert!(pages &gt; 0);
+
+        // calculate the last heap base, using the `heap_start` and `mapped_pages`
+        // the next heap base will be `last_heap_base + (pages * PAGE_4K)`
+        let last_heap_base = self.heap_start + self.mapped_pages * PAGE_4K;
+        let new_addr = unsafe { syscall::inc_dec_heap((pages * PAGE_4K) as isize) };
+
+        let Ok(new_addr) = new_addr else {
+            return None;
+        };
+        // `inc_dec_heap` will return the top of the new block, so it must match where we think the heap ends
+        assert!(new_addr as usize == last_heap_base);
+
+        // update the mapped pages
+        self.mapped_pages += pages;
+
+        Some(new_addr)
+    }
+}
+
+// just a simple usage
+fn main() {
+    let allocator = HeapAllocator::new(PageAllocator::new());
+
+    let layout = !; // example of layout
+    // allocate and deallocate
+    let ptr = allocator.alloc(layout);
+    allocator.dealloc(ptr, layout);
+}</code></pre></pre>
+<p>The only thing users of this crate need to implement is the <code>PageAllocatorProvider</code> trait, which is a simple trait that requires
+a method to allocate pages.</p>
+<p><a href="extra/../kernel/processes/syscalls.html#syscalls-list"><code>syscall::inc_dec_heap</code></a> is very similar to <code>sbrk</code> in Unix, it will increase or decrease the heap size by the given size.
+An argument of <code>0</code> will return the current heap address without changing it, which we use in the beginning to get the initial heap address.</p>
+<h2 id="allocator-implementation"><a class="header" href="#allocator-implementation">Allocator implementation</a></h2>
+<p>The internal implementation of the allocator is as follows:</p>
+<ul>
+<li>
+<p>The <code>HeapAllocator</code> keep of a free linked-list, these are free heap blocks. We exploit that the blocks are free and
+store some metadata in the block itself.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct HeapFreeBlock {
+    prev: *mut HeapFreeBlock,
+    next: *mut HeapFreeBlock,
+    // including this header
+    size: usize,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>We have pointers to the previous and next free block, and the size of the block.
+As you might have guessed, <code>HeapAllocator</code> is a <code>!Sync</code> type, because we use raw pointers.</p>
+</li>
+<li>
+<p>Whenever we need to allocate a block, we check the free list, pick the smallest block that fits the requested size, and split it if necessary.
+If we can't find a block, we allocate new pages from <code>PageAllocatorProvider</code> and add the new block to the free list.</p>
+</li>
+<li>
+<p>Whenever we add a free block to the list, i.e. by <code>dealloc</code> or when getting new pages, we will try to merge with free blocks around it
+to avoid fragmentation. The implementation of this is at <a href="https://docs.rs/increasing_heap_allocator/0.1.3/src/increasing_heap_allocator/allocator.rs.html#178"><code>free_block</code></a> And explained later at <a href="extra/heap_allocator.html#dealloc-algorithm"><code>dealloc</code> algorithm</a>.</p>
+</li>
+<li>
+<p>The allocated block will contain metadata residing before it in memory, this is used to know the size of the block and
+any padding it has, which the <code>dealloc</code> function can use later to correctly deallocate it without leaving any memory behind.
+The structure is:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct AllocatedHeapBlockInfo {
+    magic: u32,
+    size: usize,
+    pre_padding: usize,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>magic</code> is a constant value <code>0xF0B0CAFE</code> that we use to check if some bug happened, it could probably be removed
+when we have a stable implementation. But it has helped me a lot in debugging.
+<code>size</code> is the size of the block, and <code>pre_padding</code> is the padding before the block, which is used to align the block to the correct
+alignment, see <a href="extra/heap_allocator.html#alloc-algorithm"><code>alloc</code> algorithm</a> for more details.</p>
+</li>
+</ul>
+<h3 id="alloc-algorithm"><a class="header" href="#alloc-algorithm"><code>alloc</code> algorithm</a></h3>
+<p>First, we need to know how much memory we need for this allocation, we get the argument <code>Layout</code> which contain <code>size</code>, but we need to
+make sure of:</p>
+<ul>
+<li>Including the <code>AllocatedHeapBlockInfo</code> metadata.</li>
+<li>Making sure the block is aligned to the correct alignment, <a href="https://doc.rust-lang.org/std/alloc/struct.Layout.html#method.align"><code>Layout::align</code></a>.</li>
+</ul>
+<p>First, we get a rough estimation of the size by doing:</p>
+<pre><pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let block_info_layout = Layout::new::&lt;AllocatedHeapBlockInfo&gt;();
+// whole_layout here is the layout of the the info header + requested block
+// `whole_block_offset` is the offset of the block after the info header
+let (whole_layout, block_offset_from_header) = block_info_layout
+    .extend(layout.align_to(block_info_layout.align()).unwrap())
+    .unwrap();
+
+let allocation_size = whole_layout.pad_to_align().size();
+<span class="boring">}</span></code></pre></pre>
+<p>This will give us the raw size of the block along with any padding we may need to align it.</p>
+<p>The alignment of this <code>whole_layout</code> is equal to the alignment of the largest of the two.
+Example:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span><span class="boring">use std::alloc::Layout;
+</span>#[repr(align(32))]
+struct A(i32);
+
+#[repr(align(128))]
+struct C(i32);
+
+let layout_a = Layout::new::&lt;A&gt;();
+let layout_c = Layout::new::&lt;C&gt;();
+
+let (whole_layout, _) = layout_a.extend(layout_c).unwrap(); // whole_layout.align() == 128
+let (whole_layout, _) = layout_c.extend(layout_a).unwrap(); // whole_layout.align() == 128
+<span class="boring">}</span></code></pre></pre>
+<p>Which means we can totally just use <code>allocation_size</code>, and be done with it.
+But the issue is that we don't know the address of the <code>free_block</code> we will get, i.e. in order
+for this to work, we must make sure the address of the block we will return be aligned by <code>whole_layout.align()</code>.</p>
+<blockquote>
+<p>And the whole allignment of the returned free_block caused a bug before, which was fixed in <a href="https://github.com/Amjad50/OS/commit/471eff0">471eff0</a>.</p>
+</blockquote>
+<p>We know that <code>free_block</code> will always be aligned to <code>AllocatedHeapBlockInfo</code>, since all allocations are aligned to it.</p>
+<p>But if the <code>block</code> we require, needs higher alignment we will probably need to increase the size of <code>allocation_size</code> to account
+for the extra padding.</p>
+<p>The algorithm is as follows:</p>
+<ul>
+<li>
+<p>Get a free block from the free list that fits the <code>allocation_size</code>.</p>
+</li>
+<li>
+<p>Get the <code>allocated_block_offset</code> which is an offset from the <code>free_block</code> pointer to the start of the block.</p>
+<ul>
+<li>The new pointer from this <code>offset</code> is aligned to the <code>block</code>, that the user will get.</li>
+<li>This is computed as such:
+<pre><pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// `layout` is the input `block` layout
+// `align_up` is a function that aligns the `base` to the `align`
+let possible_next_offset = align_up(base, layout.align()) - base;
+let allocated_block_offset = if possible_next_offset &lt; mem::size_of::&lt;AllocatedHeapBlockInfo&gt;() {
+    // if we can't fit the info header, we need to add to the offset
+    possible_next_offset + mem::size_of::&lt;AllocatedHeapBlockInfo&gt;().max(layout.align())
+} else {
+    possible_next_offset
+};
+<span class="boring">}</span></code></pre></pre>
+</li>
+</ul>
+</li>
+<li>
+<p>Then, the <code>ptr</code> result will be <code>free_block + allocated_block_offset</code>.
+And the metadata will be stored in <code>ptr - mem::size_of::&lt;AllocatedHeapBlockInfo&gt;()</code>. i.e. directly before the <code>ptr</code>.</p>
+<p>It may seem that this is <code>unsafe</code> since <code>ptr</code> may not be aligned to <code>AllocatedHeapBlockInfo</code>, and thus
+we shouldn't just <code>ptr - mem::size_of::&lt;AllocatedHeapBlockInfo&gt;()</code>. But if <code>layout</code> has lower alignment than <code>AllocatedHeapBlockInfo</code>,
+the previous <code>if</code> statement will be <code>true</code> and we will get <code>possible_next_offset + mem::size_of::&lt;AllocatedHeapBlockInfo&gt;().max(layout.align())</code>.git log</p>
+<p>Maybe this is not the best way, or at least it should be documented better.</p>
+</li>
+<li>
+<p>We need to check that <code>allocated_block_offset</code> doesn't exceed <code>block_offset_from_header</code>, if it does, then <code>allocation_size</code> is not enough anymore. As it relies on the previous <code>block_offset_from_header</code>, and we are using <code>allocated_block_offset</code>, which is higher.</p>
+<p>To fix this, we just increase <code>allocation_size</code>.
+Currently we don't check that <code>free_block</code> is enough for the new <code>allocation_size</code>, but we should. (Check <a href="extra/heap_allocator.html#TODO">TODO</a>)</p>
+</li>
+<li>
+<p>As a last step, we need to shrink/split the <code>free_block</code>. The idea is to see if the free block is larger than the <code>allocation_size</code>, then we split it into two blocks, one for the allocation and the other for the remaining free block.
+The remaining free block will be kept in the free list.</p>
+<p>But here we must be careful, we need to make sure that the remaining free block is large enough to hold the <code>HeapFreeBlock</code> metadata, i.e. <code>mem::size_of::&lt;HeapFreeBlock&gt;()</code>. Otherwise, when we update the metadata of the new split, we will overwrite the next block metadata.</p>
+<blockquote>
+<p>This was a bug before, and was fixed in <a href="https://github.com/Amjad50/OS/commit/cf53cf9">cf53cf9</a>.</p>
+</blockquote>
+<p>The split is done as such:</p>
+<pre><pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let required_safe_size = allocation_size + mem::size_of::&lt;HeapFreeBlock&gt;();
+// do we have empty space left?
+if free_block_size &gt; required_safe_size {
+    // split
+    let new_free_block = free_block + allocation_size;
+    // linked-list logic....
+} else {
+    // no space left, just remove the block from the free list
+    // we need to note the size we took
+    allocation_size = free_block_size;
+    // linked-list logic....
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>add_free_block</code> will add the new free block to the free list, and try to merge it with the free blocks around it.</p>
+</li>
+<li>
+<p>The <code>pre_padding</code> is the <code>allocated_block_offset</code> value, the <code>size</code> is the <code>allocation_size</code> at the end after all the considerations.</p>
+</li>
+</ul>
+<h3 id="dealloc-algorithm"><a class="header" href="#dealloc-algorithm"><code>dealloc</code> algorithm</a></h3>
+<p>This is a lot simpler than <code>alloc</code>, as the data is already provided by <code>AllocatedHeapBlockInfo</code> metadata.</p>
+<p>The algorithm is as follows:</p>
+<ul>
+<li>We get the pointer to the <code>AllocatedHeapBlockInfo</code> metadata, and we make sure the <code>magic</code> is correct.</li>
+<li>We get the <code>size</code> and <code>pre_padding</code> from the metadata, the freeing block address will be <code>ptr - pre_padding</code>, and the size will be <code>size</code>.</li>
+<li>We call <code>free_block</code> here, which is the same function used when getting new pages.</li>
+</ul>
+<h4 id="free_block-algorithm"><a class="header" href="#free_block-algorithm"><code>free_block</code> algorithm</a></h4>
+<p>This is a function that will take a pointer to a block and its size, and add it to the free list.</p>
+<p>In the beginning we look at all the free blocks (maybe slow?) and get the following information:</p>
+<ul>
+<li>previous block if present (this is the block that ends at <code>ptr - 1</code>)</li>
+<li>next block if present (this is the block that starts at <code>ptr + size</code>)</li>
+<li>&quot;<strong>closest previous block</strong>&quot;, this is an optimization, where we find the closest block that ends before <code>ptr</code>, the new block (this) will be put after this in the linked list if its not merged with anything before it.
+As we need to keep the list sorted. 
+<blockquote>
+<p>And as you might expect this was discovered after a bug in <a href="https://github.com/Amjad50/OS/commit/da23ee9">da23ee9</a> :'(.</p>
+</blockquote>
+</li>
+</ul>
+<p>The merge logic is very simple as follows:</p>
+<ul>
+<li>If we have previous <strong>AND</strong> next block, we merge with both. The <code>next</code> block will be removed from the list as well.</li>
+<li>If we have previous block, we merge with it, very easy <code>prev.size += size</code>.</li>
+<li>If we have next block, we merge with it, the <code>next</code> block will be removed and this will replace it in the list.</li>
+<li>If we have none, we just add the block to the list, after the <strong>closest previous block</strong>.
+<ul>
+<li>If we don't have a <strong>closest previous block</strong>, then we are the first block in the list, and we set it as the <code>head</code> of the list.</li>
+</ul>
+</li>
+</ul>
+<h2 id="todo"><a class="header" href="#todo">TODO</a></h2>
+<ul>
+<li><input disabled="" type="checkbox"/>
+Add special implementation for <code>realloc</code>, which would be smarter without the need to <code>alloc</code> and <code>dealloc</code>.</li>
+<li><input disabled="" type="checkbox"/>
+I think there is a better way to implement <code>alloc</code>, currently, we waste a lot of space. Imagine this
+<code>layout</code> is <code>align=512</code> and <code>AllocatedHeapBlockInfo</code> is <code>align=8,size=32</code>. The <code>whole_layout</code> will be <code>align=512</code> and the allocated size will be <code>1024</code> even though we clearly don't need that.
+Also we can improve how we handle unaligned <code>free_block</code>.</li>
+<li><input disabled="" type="checkbox"/>
+Handle cases where we can't increase <code>allocation_size</code> as the <code>free_block</code> isn't enough</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="kernel-user-link"><a class="header" href="#kernel-user-link">Kernel user link</a></h1>
+<p>This is a crate that contains common definitions for the kernel and the user space. And it is implemented in <a href="https://crates.io/crates/amjad_os_kernel_user_link"><code>amjad_os_kernel_user_link</code></a> crate.</p>
+<p>It contains common definitions such as:</p>
+<ul>
+<li><code>syscall</code> numbers.</li>
+<li><code>SyscallResult</code>, and <code>SyscallError</code> types.</li>
+<li>some <code>process</code> related arguments:
+<ul>
+<li><code>SpawnFileMapping</code>: For mapping files from current process to new process.</li>
+</ul>
+</li>
+<li><code>file</code> related structures and arguments:
+<ul>
+<li><code>DirEntry</code>: For directory entries.</li>
+<li><code>FileStat</code>: For file stats, such as size, type, etc.</li>
+<li><code>BlockingMode</code>: For blocking modes of the operations on files.</li>
+<li><code>FileType</code>: For file types.</li>
+<li><code>FileMeta</code>: For assigning and getting metadata of files.</li>
+</ul>
+</li>
+<li><code>STDIN</code>, <code>STDOUT</code>, <code>STDERR</code> file descriptors numbers.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+    </div>
+    </body>
+</html>

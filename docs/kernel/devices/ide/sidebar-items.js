@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AtapiDmaDirection","IdeDeviceType","IdeError"],"fn":["get_ide_device","ide_interrupt_primary","ide_interrupt_secondary","try_register_ide_device"],"mod":["ata","pci_cfg"],"static":["IDE_DEVICES","INTERRUPTS_SETUP"],"struct":["AtaCommand","AtapiPacketCommand","CommandIdentifyDataRaw","IdeDevice","IdeDeviceImpl","IdeDeviceIndex","IdeIo"]};
