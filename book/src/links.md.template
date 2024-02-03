@@ -34,3 +34,6 @@
 [kernel_aml]: {ROOT_PATH}docs/kernel/acpi/aml
 [pipe]: {ROOT_PATH}docs/kernel/devices/pipe
 [create_pipe_pair]: {ROOT_PATH}docs/kernel/devices/pipe/fn.create_pipe_pair.html
+[process]: {ROOT_PATH}docs/kernel/process
+[process_structure]: {ROOT_PATH}docs/kernel/process/struct.Process.html
+[scheduler]: {ROOT_PATH}docs/kernel/process/scheduler

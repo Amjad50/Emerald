@@ -24,6 +24,8 @@
         - [APIC](./kernel/processor/apic.md)
     - [ACPI](./kernel/acpi/index.md)
         - [AML](./kernel/acpi/aml.md)
+    - [Processes](./kernel/processes/index.md)
+        - [Scheduler](./kernel/processes/scheduler.md)
 - [Userspace](./userspace.md)
 - [Extra](./extra/index.md)
     - [Heap Allocator](./extra/heap_allocator.md)
