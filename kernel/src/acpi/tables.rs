@@ -82,7 +82,7 @@ unsafe fn deallocate_acpi_mapping(addr: usize, size: usize) {
 ///
 /// # Safety
 /// the pointer must be valid and point to a valid table
-/// Also, <T> must be valid when some parts of it is zero
+/// Also, `<T>` must be valid when some parts of it is zero
 unsafe fn get_table_from_header<T>(header: *const DescriptionHeader) -> T {
     let data_ptr = header.add(1) as *const u8;
     let data_len = (*header).length as usize - size_of::<DescriptionHeader>();
@@ -100,7 +100,7 @@ unsafe fn get_table_from_header<T>(header: *const DescriptionHeader) -> T {
 ///
 /// # Safety
 ///
-/// type <T> must be valid when some parts of it is zero
+/// type `<T>` must be valid when some parts of it is zero
 ///
 /// TODO: should this be unsafe?
 fn get_struct_from_bytes<T>(data: &[u8]) -> T {
