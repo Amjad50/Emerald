@@ -12,3 +12,8 @@
 [keyboard_get_next_char]: {ROOT_PATH}docs/kernel/io/keyboard/struct.Keyboard.html#method.get_next_char
 [uart]: {ROOT_PATH}docs/kernel/io/uart
 [console]: {ROOT_PATH}docs/kernel/io/console
+[kernel_filesystem]: {ROOT_PATH}docs/kernel/fs
+[kernel_inode]: {ROOT_PATH}docs/kernel/fs/struct.INode.html
+[kernel_mbr]: {ROOT_PATH}docs/kernel/fs/mbr
+[kernel_devices_map]: {ROOT_PATH}docs/kernel/devices/struct.Devices.html
+[kernel_fat]: {ROOT_PATH}docs/kernel/fs/fat

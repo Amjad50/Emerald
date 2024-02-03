@@ -5,4 +5,6 @@ They provide a sort of abstraction layer above other drivers/devices and maybe o
 
 One of the examples, is the [console], which is a virtual device that we use to print and read characters from the screen, it will use the [keyboard] and [uart] drivers to do so.
 
+Some of these devices may be available as `devices` in the [filesystem](../filesystem/index.md#devices).
+
 [console]: ./console.md

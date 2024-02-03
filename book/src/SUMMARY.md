@@ -13,6 +13,8 @@
         - [UART](./kernel/drivers/uart.md)
     - [Virtual Devices](./kernel/virtual_devices/index.md)
         - [Console](./kernel/virtual_devices/console.md)
+    - [Filesystem](./kernel/filesystem/index.md)
+        - [FAT](./kernel/filesystem/fat.md)
 - [Userspace](./userspace.md)
 - [Extra](./extra/index.md)
     - [Heap Allocator](./extra/heap_allocator.md)
