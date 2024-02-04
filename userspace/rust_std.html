@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Rust Standard Library - OS</title>
+        <title>Rust Standard Library - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -179,9 +179,9 @@
                         <h1 id="rust-standard-library"><a class="header" href="#rust-standard-library">Rust Standard Library</a></h1>
 <p>Currently, everything is built by <a href="https://www.rust-lang.org/"><code>Rust</code></a>, we don't have <code>libc</code> yet. And instead we have a custom <strong>rust target</strong> 
 that we use to build our userspace programs.</p>
-<p>This is implemented in my <a href="https://github.com/Amjad50/rust/tree/amjad50_os_new_target">fork</a> of <code>rust-lang/rust</code>.</p>
-<p>We have the target <code>x86_64-unknown-amjad_os</code>. The changes needed are in <a href="https://github.com/Amjad50/rust/tree/amjad50_os_new_target/library/std/src/sys/amjad_os"><code>rust/library/std/src/sys/amjad_os</code></a> and <a href="https://github.com/Amjad50/rust/tree/amjad50_os_new_target/library/std/src/os/amjad_os"><code>rust/library/std/src/os/amjad_os</code></a>.</p>
-<p>These changes are provided by another crate <a href="https://crates.io/crates/amjad_os_user_std">amjad_os_user_std</a>, where we have all the basic implementation of userspace functionalities including:</p>
+<p>This is implemented in my <a href="https://github.com/Amjad50/rust/tree/emerald_os">fork</a> of <code>rust-lang/rust</code>.</p>
+<p>We have the target <code>x86_64-unknown-emerald</code>. The changes needed are in <a href="https://github.com/Amjad50/rust/tree/emerald_os/library/std/src/sys/emerald"><code>rust/library/std/src/sys/emerald</code></a> and <a href="https://github.com/Amjad50/rust/tree/emerald_os/library/std/src/os/emerald"><code>rust/library/std/src/os/emerald</code></a>.</p>
+<p>These changes are provided by another crate <a href="https://crates.io/crates/emerald_std">emerald_std</a>, where we have all the basic implementation of userspace functionalities including:</p>
 <ul>
 <li><code>allocator</code>: See <a href="../extra/heap_allocator.html">Heap Allocator</a> for more details.</li>
 <li><code>files</code> and <code>io</code>: For file operations and input/output.</li>

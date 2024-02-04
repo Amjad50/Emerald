@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Heap Allocator - OS</title>
+        <title>Heap Allocator - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -324,7 +324,7 @@ let (whole_layout, _) = layout_c.extend(layout_a).unwrap(); // whole_layout.alig
 But the issue is that we don't know the address of the <code>free_block</code> we will get, i.e. in order
 for this to work, we must make sure the address of the block we will return be aligned by <code>whole_layout.align()</code>.</p>
 <blockquote>
-<p>And the whole allignment of the returned free_block caused a bug before, which was fixed in <a href="https://github.com/Amjad50/OS/commit/471eff0">471eff0</a>.</p>
+<p>And the whole allignment of the returned free_block caused a bug before, which was fixed in <a href="https://github.com/Amjad50/Emerald/commit/471eff0">471eff0</a>.</p>
 </blockquote>
 <p>We know that <code>free_block</code> will always be aligned to <code>AllocatedHeapBlockInfo</code>, since all allocations are aligned to it.</p>
 <p>But if the <code>block</code> we require, needs higher alignment we will probably need to increase the size of <code>allocation_size</code> to account
@@ -372,7 +372,7 @@ Currently we don't check that <code>free_block</code> is enough for the new <cod
 The remaining free block will be kept in the free list.</p>
 <p>But here we must be careful, we need to make sure that the remaining free block is large enough to hold the <code>HeapFreeBlock</code> metadata, i.e. <code>mem::size_of::&lt;HeapFreeBlock&gt;()</code>. Otherwise, when we update the metadata of the new split, we will overwrite the next block metadata.</p>
 <blockquote>
-<p>This was a bug before, and was fixed in <a href="https://github.com/Amjad50/OS/commit/cf53cf9">cf53cf9</a>.</p>
+<p>This was a bug before, and was fixed in <a href="https://github.com/Amjad50/Emerald/commit/cf53cf9">cf53cf9</a>.</p>
 </blockquote>
 <p>The split is done as such:</p>
 <pre><pre class="playground"><code class="language-rust no_run"><span class="boring">#![allow(unused)]
@@ -413,7 +413,7 @@ if free_block_size &gt; required_safe_size {
 <li>&quot;<strong>closest previous block</strong>&quot;, this is an optimization, where we find the closest block that ends before <code>ptr</code>, the new block (this) will be put after this in the linked list if its not merged with anything before it.
 As we need to keep the list sorted. 
 <blockquote>
-<p>And as you might expect this was discovered after a bug in <a href="https://github.com/Amjad50/OS/commit/da23ee9">da23ee9</a> :'(.</p>
+<p>And as you might expect this was discovered after a bug in <a href="https://github.com/Amjad50/Emerald/commit/da23ee9">da23ee9</a> :'(.</p>
 </blockquote>
 </li>
 </ul>

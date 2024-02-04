@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Memory Layout - OS</title>
+        <title>Memory Layout - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -178,7 +178,7 @@
                     <main>
                         <h1 id="memory-layout"><a class="header" href="#memory-layout">Memory layout</a></h1>
 <blockquote>
-<p>The memory layout constants and code is defined in <a href="/OS/docs/kernel/memory_management/memory_layout"><code>memory_layout</code></a></p>
+<p>The memory layout constants and code is defined in <a href="/Emerald/docs/kernel/memory_management/memory_layout"><code>memory_layout</code></a></p>
 </blockquote>
 <p>This is the structure of the memory for any process running in the system.</p>
 <h2 id="layout"><a class="header" href="#layout">Layout</a></h2>
@@ -214,7 +214,7 @@ FFFF_FF80_0000_1000..FFFF_FF80_0000_9000          process kernel stack (8 * 4KB 
 <p>We use it currently for <code>kernel stack</code>, which is where the kernel will store the stack when an interrupt happens while we are in user space.</p>
 <p>It solves the issue where having a single kernel stack for all processes can't work, as if two processes gets interrupted while the first one is still in the kernel, the second one will overwrite the first one's stack.</p>
 <blockquote>
-<p>As you might have expect, the previous paragraph was a source of a crazy bug that introduced this <code>kernel stack</code>. Fixed in <a href="https://github.com/Amjad50/OS/commit/0dc04f8">0dc04f8</a></p>
+<p>As you might have expect, the previous paragraph was a source of a crazy bug that introduced this <code>kernel stack</code>. Fixed in <a href="https://github.com/Amjad50/Emerald/commit/0dc04f8">0dc04f8</a></p>
 </blockquote>
 <h3 id="user-layout"><a class="header" href="#user-layout">User layout</a></h3>
 <p>Not much to talk about here, as this will depend on the process itself and where to load the ELF file, currently we load at the address specified in the ELF file.

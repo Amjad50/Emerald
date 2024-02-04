@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Processor - OS</title>
+        <title>Processor - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -178,7 +178,7 @@
                     <main>
                         <h1 id="processor"><a class="header" href="#processor">Processor</a></h1>
 <blockquote>
-<p>This is implemented in <a href="/OS/docs/kernel/cpu"><code>cpu</code></a>.</p>
+<p>This is implemented in <a href="/Emerald/docs/kernel/cpu"><code>cpu</code></a>.</p>
 </blockquote>
 <p>Here we talk about processor related structures and functions.
 Including:</p>
@@ -189,16 +189,16 @@ Including:</p>
 </ul>
 <p>Let's first talk about other processor stuff that are not the above.</p>
 <h2 id="saved-cpu-state"><a class="header" href="#saved-cpu-state">Saved CPU state</a></h2>
-<p>Each CPU (currently only 1) has a <a href="/OS/docs/kernel/cpu/struct.Cpu.html">structure that contain the state related to the CPU</a>.</p>
+<p>Each CPU (currently only 1) has a <a href="/Emerald/docs/kernel/cpu/struct.Cpu.html">structure that contain the state related to the CPU</a>.</p>
 <p>Where it contains among others:</p>
 <ul>
 <li>the <code>id</code> and <code>apic_id</code> of the cpu, for identification.</li>
-<li>the <code>n_cli</code> and <code>old_interrupt_enable</code> which is used by the implementation of <a href="/OS/docs/kernel/sync/spin/lock/struct.Lock.html">locks</a>.</li>
+<li>the <code>n_cli</code> and <code>old_interrupt_enable</code> which is used by the implementation of <a href="/Emerald/docs/kernel/sync/spin/lock/struct.Lock.html">locks</a>.</li>
 <li>the <code>context</code> which is a process context, used when switching between processes, also <code>process_id</code> for current process, and other scheduling related fields.</li>
 </ul>
 <h2 id="cpu-initialization"><a class="header" href="#cpu-initialization">CPU initialization</a></h2>
 <p>Currently, we don't perform any additional initialization after <a href="../boot.html">boot</a>, and its causing some issues.
-As UEFI results in a different CPU state than BIOS, and we need to handle that, <a href="https://github.com/Amjad50/OS/issues/34">there is an issue for that #34</a>.</p>
+As UEFI results in a different CPU state than BIOS, and we need to handle that, <a href="https://github.com/Amjad50/Emerald/issues/34">there is an issue for that #34</a>.</p>
 
                     </main>
 

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>APIC - OS</title>
+        <title>APIC - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -178,7 +178,7 @@
                     <main>
                         <h1 id="advanced-programmable-interrupt-controller-apic-and-io-apic"><a class="header" href="#advanced-programmable-interrupt-controller-apic-and-io-apic">Advanced Programmable Interrupt Controller (APIC) and IO APIC</a></h1>
 <blockquote>
-<p>This is implemented in <a href="/OS/docs/kernel/cpu/interrupts/apic"><code>apic</code></a>.</p>
+<p>This is implemented in <a href="/Emerald/docs/kernel/cpu/interrupts/apic"><code>apic</code></a>.</p>
 </blockquote>
 <p>The APIC is a part of the CPU, and it is used to manage interrupts and exceptions. It is used to manage the interrupts and exceptions that are triggered by hardware devices, and it is also used to manage the interrupts and exceptions that are triggered by the CPU itself.</p>
 <h2 id="initialization"><a class="header" href="#initialization">Initialization</a></h2>
@@ -194,8 +194,8 @@ which contains data about the ACPI, such as:</p>
 <h2 id="interrupts"><a class="header" href="#interrupts">Interrupts</a></h2>
 <p>The <code>APIC</code> can be used to allocate and assign interrupts to hardware devices. We can use the functions:</p>
 <ul>
-<li><a href="/OS/docs/kernel/cpu/interrupts/apic/fn.assign_io_irq.html"><code>assign_io_irq</code></a> to assign an interrupt to a hardware device.</li>
-<li><a href="/OS/docs/kernel/cpu/interrupts/apic/fn.assign_io_irq_custom.html"><code>assign_io_irq_custom</code></a> which is similar to the above but provide extra changes to the interrupt, such as:
+<li><a href="/Emerald/docs/kernel/cpu/interrupts/apic/fn.assign_io_irq.html"><code>assign_io_irq</code></a> to assign an interrupt to a hardware device.</li>
+<li><a href="/Emerald/docs/kernel/cpu/interrupts/apic/fn.assign_io_irq_custom.html"><code>assign_io_irq_custom</code></a> which is similar to the above but provide extra changes to the interrupt, such as:
 <ul>
 <li><code>with_interrupt_polarity_low</code>: Set the interrupt polarity to low/high (boolean).</li>
 <li><code>with_trigger_mode_level</code>: Set the trigger mode to level/edge (boolean).</li>

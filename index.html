@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - OS</title>
+        <title>Introduction - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -176,7 +176,11 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="operating-system-name-to-be-changed-d"><a class="header" href="#operating-system-name-to-be-changed-d">Operating System (name to be changed :D)</a></h1>
+                        <p align="center">
+  <a href="https://github.com/Amjad50/Emerald"><img alt="emerald OS logo" src="./assets/logo.svg" width="50%"></a>
+  <p align="center">Emerald <em>OS</em></p>
+</p>
+<h1 id="emerald"><a class="header" href="#emerald">Emerald</a></h1>
 <p>This is an operating system that I'm building for fun and learning in <a href="https://www.rust-lang.org/">Rust</a>.</p>
 <p>Please check it out, and if you have any questions, feel free to ask, open an issue, fix a bug, etc...</p>
 <h2 id="building-and-running"><a class="header" href="#building-and-running">Building and running</a></h2>
@@ -191,13 +195,13 @@
 <p>Build kernel iso:</p>
 <pre><code class="language-sh">cargo make kernel_iso
 </code></pre>
-<p>Build userspace programs into <a href="https://github.com/Amjad50/OS/tree/master/filesystem"><code>filesystem</code></a> directory (used by <code>qemu</code>):</p>
+<p>Build userspace programs into <a href="https://github.com/Amjad50/Emerald/tree/master/filesystem"><code>filesystem</code></a> directory (used by <code>qemu</code>):</p>
 <blockquote>
 <p>Note: this will build the <code>rust</code> toolchain if it hasn't been built before (might take some time)</p>
 </blockquote>
 <pre><code class="language-sh">cargo make filesystem
 </code></pre>
-<p>(optional) Install the toolchain into <a href="https://github.com/Amjad50/OS/tree/master/extern/toolchain"><code>extern/toolchain</code></a> directory:</p>
+<p>(optional) Install the toolchain into <a href="https://github.com/Amjad50/Emerald/tree/master/extern/toolchain"><code>extern/toolchain</code></a> directory:</p>
 <blockquote>
 <p>You can then use <code>rustup toolchain link ...</code> to link to this folder (See more in <a href="./userspace/index.html">userspace</a>)</p>
 </blockquote>

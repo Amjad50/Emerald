@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Interrupts and Exceptions - OS</title>
+        <title>Interrupts and Exceptions - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -178,7 +178,7 @@
                     <main>
                         <h1 id="interrupts-and-exceptions"><a class="header" href="#interrupts-and-exceptions">Interrupts and exceptions</a></h1>
 <blockquote>
-<p>This is implemented in <a href="/OS/docs/kernel/cpu/interrupts"><code>interrupts</code></a>.</p>
+<p>This is implemented in <a href="/Emerald/docs/kernel/cpu/interrupts"><code>interrupts</code></a>.</p>
 </blockquote>
 <p>This is where interrupts are managed. We have 2 types of interrupts.</p>
 <ul>
@@ -193,9 +193,9 @@ of the <a href="https://wiki.osdev.org/Interrupt_Descriptor_Table">IDT</a>, whic
 <li><code>SPECIAL_SCHEDULER_INTERRUPT=0xFF</code>: Used by scheduler to switch between contexts.</li>
 <li><code>SPECIAL_SYSCALL_INTERRUPT=0xFE</code>: Used by the syscall instruction to switch to kernel mode, this is defined in <a href="../../extra/kernel_user_link.html">kernel user link</a>.</li>
 </ul>
-<p>Generally we use functions like <a href="/OS/docs/kernel/cpu/interrupts/fn.allocate_user_interrupt.html"><code>allocate_user_interrupt</code></a>, which will allocate
+<p>Generally we use functions like <a href="/Emerald/docs/kernel/cpu/interrupts/fn.allocate_user_interrupt.html"><code>allocate_user_interrupt</code></a>, which will allocate
 an interrupt entry, and puts our function there (see <a href="#interrupts-handlers">Interrupts Handlers</a> later for types of interrupts), then it will give us where it was allocated, so we can use it later, for example with <a href="./apic.html">APIC</a>.</p>
-<p>The <a href="/OS/docs/kernel/cpu/idt/struct.InterruptDescriptorTableEntry.html"><code>InterruptDescriptorTableEntry</code></a> gives us some extra functionalities that
+<p>The <a href="/Emerald/docs/kernel/cpu/idt/struct.InterruptDescriptorTableEntry.html"><code>InterruptDescriptorTableEntry</code></a> gives us some extra functionalities that
 are not provided by default. Such as:</p>
 <ul>
 <li><code>set_stack_index</code> which sets the stack index to use when handling the interrupt.</li>
@@ -231,7 +231,7 @@ those extra registers.
 <span class="boring">}</span></code></pre></pre>
 </li>
 </ul>
-<p>Generally, <a href="./apic.html">APIC</a> is the only user of <a href="/OS/docs/kernel/cpu/interrupts/fn.allocate_user_interrupt.html"><code>allocate_user_interrupt</code></a>, as it
+<p>Generally, <a href="./apic.html">APIC</a> is the only user of <a href="/Emerald/docs/kernel/cpu/interrupts/fn.allocate_user_interrupt.html"><code>allocate_user_interrupt</code></a>, as it
 uses it to allocate interrupts for hardware devices. Look at the <a href="./apic.html">APIC</a> for more details on what interrupts
 we have now.</p>
 

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Boot - OS</title>
+        <title>Boot - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -179,7 +179,7 @@
                         <h1 id="boot"><a class="header" href="#boot">Boot</a></h1>
 <p>What happens during boot?</p>
 <p>This OS doesn't include a <a href="https://en.wikipedia.org/wiki/Bootloader">bootloader</a>, the kernel is being loaded by default using <a href="https://en.wikipedia.org/wiki/GNU_GRUB"><code>grub</code></a> using <a href="https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html"><code>multiboot2</code></a>.</p>
-<p>The <a href="https://github.com/Amjad50/OS/tree/master/kernel"><code>kernel</code></a> crate will be compiled as an <code>ELF</code> file implementing the <a href="https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html"><code>multiboot2</code></a> specification which can
+<p>The <a href="https://github.com/Amjad50/Emerald/tree/master/kernel"><code>kernel</code></a> crate will be compiled as an <code>ELF</code> file implementing the <a href="https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html"><code>multiboot2</code></a> specification which can
 be loaded by any bootloader that supports it.</p>
 <p>For example, in grub we use the <code>multiboot2</code> command to load the kernel.</p>
 <pre><code class="language-txt">menuentry &quot;Kernel&quot; {
@@ -188,7 +188,7 @@ be loaded by any bootloader that supports it.</p>
     boot
 }
 </code></pre>
-<p>The kernel <code>ELF</code> file is in <code>elf64-x86-64</code> format, but we start in <code>x86</code> protected mode (32-bit) and then switch to <code>long mode</code> (64-bit) using assembly code in <a href="https://github.com/Amjad50/OS/blob/master/kernel/src/boot.S"><code>boot.S</code></a>.</p>
+<p>The kernel <code>ELF</code> file is in <code>elf64-x86-64</code> format, but we start in <code>x86</code> protected mode (32-bit) and then switch to <code>long mode</code> (64-bit) using assembly code in <a href="https://github.com/Amjad50/Emerald/blob/master/kernel/src/boot.S"><code>boot.S</code></a>.</p>
 <h2 id="initial-boot-protected-mode"><a class="header" href="#initial-boot-protected-mode">Initial boot, protected mode.</a></h2>
 <p>We start in assembly, since we are using rust, and we target <code>x64</code> for compilation, we have to add <code>32-bit</code> code manually using assembly.</p>
 <p>The <code>boot.S</code> file is included in <code>main.rs</code> using <code>global_asm!</code> macro, and we use <code>.code32</code> directive to generate
@@ -217,7 +217,7 @@ the base address. But since we know it maps to <code>0x0</code> physically, we c
 <li><code>bss_end</code> which is the end of the <code>.bss</code> section.</li>
 </ul>
 </li>
-<li><strong>Entry point</strong>: The entry point of the kernel, which is <code>entry</code> function in <a href="https://github.com/Amjad50/OS/blob/master/kernel/src/boot.S"><code>boot.S</code></a>,<br />
+<li><strong>Entry point</strong>: The entry point of the kernel, which is <code>entry</code> function in <a href="https://github.com/Amjad50/Emerald/blob/master/kernel/src/boot.S"><code>boot.S</code></a>,<br />
 i.e. where execution will start. This is executed in <code>32-bit</code> mode.</li>
 <li><strong>Module alignment</strong>: Modules will be page aligned. (maybe not needed, as I thought it affected the kernel alignment, but looks like its for modules).</li>
 </ul>

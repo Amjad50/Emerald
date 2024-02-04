@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Userspace - OS</title>
+        <title>Userspace - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -183,15 +183,15 @@
 a lot of rust projects that don't have any dependencies on <code>libc</code>, <code>linux</code> or <code>windows</code> specific libraries.</p>
 <p>This can be done by:</p>
 <ul>
-<li>You can build our toolchain with the command: <code>cargo make toolchain</code> in <a href="https://github.com/Amjad50/OS">the root of the project</a>.
-Which will install a toolchain in <code>./extern/toolchain</code>, which you can then link to your <code>rustup</code> toolchain with <code>rustup toolchain link amjad_os ./extern/toolchain</code>.</li>
+<li>You can build our toolchain with the command: <code>cargo make toolchain</code> in <a href="https://github.com/Amjad50/Emerald">the root of the project</a>.
+Which will install a toolchain in <code>./extern/toolchain</code>, which you can then link to your <code>rustup</code> toolchain with <code>rustup toolchain link emerald ./extern/toolchain</code>.</li>
 <li>Build the project with the toolchain
-<pre><code class="language-txt">cargo +amjad_os build --target x86_64-unknown-amjad_os
+<pre><code class="language-txt">cargo +emerald build --target x86_64-unknown-emerald
 </code></pre>
 </li>
 </ul>
 <blockquote>
-<p><a href="https://github.com/Amjad50/OS/issues">Please open an issue</a> if you have any problems building your project,
+<p><a href="https://github.com/Amjad50/Emerald/issues">Please open an issue</a> if you have any problems building your project,
 or if you want to add a new feature to the toolchain. </p>
 </blockquote>
 

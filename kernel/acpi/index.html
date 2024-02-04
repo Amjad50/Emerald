@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>ACPI - OS</title>
+        <title>ACPI - Emerald</title>
 
 
         <!-- Custom HTML head -->
@@ -141,13 +141,13 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">OS</h1>
+                    <h1 class="menu-title">Emerald</h1>
 
                     <div class="right-buttons">
                         <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/Amjad50/OS" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/Amjad50/Emerald" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
 
@@ -178,7 +178,7 @@
                     <main>
                         <h1 id="advanced-configuration-and-power-interface-acpi"><a class="header" href="#advanced-configuration-and-power-interface-acpi">Advanced Configuration and Power Interface (ACPI)</a></h1>
 <blockquote>
-<p>This is implemented in <a href="/OS/docs/kernel/acpi"><code>acpi</code></a>.</p>
+<p>This is implemented in <a href="/Emerald/docs/kernel/acpi"><code>acpi</code></a>.</p>
 </blockquote>
 <p>ACPI is a standard for operating systems to discover and configure computer hardware components, to perform power management, and to configure the system's power management features. It is a successor to Advanced Power Management (APM), and it is a part of the <a href="https://en.wikipedia.org/wiki/UEFI">UEFI</a> specification.</p>
 <p>We have some support to some of the components of the ACPI standard.</p>
@@ -192,7 +192,7 @@ or we search for it in memory, and this just points to the <code>RSDT</code> or 
 <li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#root-system-description-table-rsdt">RSDT</a>: This is the Root System Description Table, and it contains pointers to other tables.</li>
 <li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#multiple-apic-description-table-madt">MADT/APIC</a>: This is the Multiple APIC Description Table, and it contains information about the APIC,see <a href="./apic.html">APIC</a> for more details.</li>
 <li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#fixed-acpi-description-table-fadt">FACP</a>: This is the Fixed ACPI Description Table, and it contains information about the power management features of the system, also contain some info about the <a href="../drivers/rtc.html">RTC</a>.</li>
-<li><a href="/OS/docs/kernel/devices/clock/hpet">HPET</a>: This is the High Precision Event Timer, and it contains information about the HPET, see <a href="../drivers/hpet.html">HPET</a> for more details.</li>
+<li><a href="/Emerald/docs/kernel/devices/clock/hpet">HPET</a>: This is the High Precision Event Timer, and it contains information about the HPET, see <a href="../drivers/hpet.html">HPET</a> for more details.</li>
 <li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#differentiated-system-description-table-dsdt">DSDT</a> (not used*): This is the Differentiated System Description Table, and it contains <a href="./aml.html">AML</a> code, which is used to configure the system.</li>
 <li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#secondary-system-description-table-ssdt">SSDT</a> (not used*): This is the Secondary System Description Table, and it also contains <a href="./aml.html">AML</a> code, which is used to configure the system.</li>
 <li><a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#boot-graphics-resource-table-bgrt">BGRT</a> (not used): This is the Boot Graphics Resource Table, and it contains information about the boot logo, and it is used by the <a href="https://en.wikipedia.org/wiki/UEFI">UEFI</a> firmware.</li>
