@@ -8,6 +8,21 @@ use std::{
 
 use colored::Colorize;
 
+/// This was generated with `jp2a logo.png --width=50 --color-depth=4`, and modified later with `moebius`.
+const ANSI_LOGO: &str = include_str!("../logo.ans");
+const MAX_WIDTH: usize = 50;
+/// Banner to show under the logo
+const BANNER: &str = "Emerald OS";
+const PADDING: usize = (MAX_WIDTH - BANNER.len()) / 2;
+
+/// Print the shell logo
+fn print_logo_with_name() {
+    println!("{}", ANSI_LOGO);
+    // would love to get this at compile time, so we don't allocate, but its not called a lot, so should be fine.
+    let padding = " ".repeat(PADDING);
+    println!("{}{}\n", padding, BANNER.bright_green());
+}
+
 /// Return `true` if we are the one handling this command, otherwise return `false`
 /// so that the command is executed as a normal process.
 fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
@@ -17,7 +32,7 @@ fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
             std::process::exit(0);
         }
         "cd" => {
-            if args.len() == 0 {
+            if args.is_empty() {
                 println!("cd: missing argument");
             } else {
                 let path = args[0];
@@ -41,6 +56,8 @@ fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
 fn main() {
     let mut old_result = None;
 
+    print_logo_with_name();
+
     loop {
         if let Some(result) = old_result.take() {
             let result_str = format!("({})", result);
@@ -59,7 +76,7 @@ fn main() {
         let input = input.trim();
         let args = input.split_whitespace().collect::<Vec<_>>();
 
-        if args.len() == 0 {
+        if args.is_empty() {
             continue;
         }
 
