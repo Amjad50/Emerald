@@ -1,5 +1,9 @@
-# Operating System (name to be changed :D)
+<p align="center">
+  <a href="https://github.com/Amjad50/Emerald"><img alt="emerald OS logo" src="./assets/logo.svg" width="50%"></a>
+  <p align="center">Emerald <em>OS</em></p>
+</p>
 
+# Emerald
 This is an operating system that I'm building for fun and learning in [Rust].
 
 Please check it out, and if you have any questions, feel free to ask, open an issue, fix a bug, etc...
@@ -21,12 +25,12 @@ Build kernel iso:
 ```sh
 cargo make kernel_iso
 ```
-Build userspace programs into [`filesystem`](https://github.com/Amjad50/OS/tree/master/filesystem) directory (used by `qemu`):
+Build userspace programs into [`filesystem`](https://github.com/Amjad50/Emerald/tree/master/filesystem) directory (used by `qemu`):
 > Note: this will build the `rust` toolchain if it hasn't been built before (might take some time)
 ```sh
 cargo make filesystem
 ```
-(optional) Install the toolchain into [`extern/toolchain`](https://github.com/Amjad50/OS/tree/master/extern/toolchain) directory:
+(optional) Install the toolchain into [`extern/toolchain`](https://github.com/Amjad50/Emerald/tree/master/extern/toolchain) directory:
 > You can then use `rustup toolchain link ...` to link to this folder (See more in [userspace](./userspace/index.md))
 ```sh
 cargo make toolchain

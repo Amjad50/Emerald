@@ -25,4 +25,4 @@ Where it contains among others:
 ## CPU initialization
 
 Currently, we don't perform any additional initialization after [boot](../boot.md), and its causing some issues.
-As UEFI results in a different CPU state than BIOS, and we need to handle that, [there is an issue for that #34](https://github.com/Amjad50/OS/issues/34).
+As UEFI results in a different CPU state than BIOS, and we need to handle that, [there is an issue for that #34](https://github.com/Amjad50/Emerald/issues/34).

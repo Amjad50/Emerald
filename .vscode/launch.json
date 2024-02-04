@@ -6,7 +6,7 @@
             "type": "lldb",
             "request": "custom",
             "targetCreateCommands": [
-                "target create ${workspaceFolder}/target/x86-64-amjad_os/debug/kernel",
+                "target create ${workspaceFolder}/target/x86-64-os/debug/kernel",
                 // ignore first interrupt on startup because its annoying, just jump directly into the kernel
                 "process handle -p true -s false SIGTRAP",
             ],

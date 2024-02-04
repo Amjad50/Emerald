@@ -71,7 +71,7 @@ fn main() -> ExitCode {
                     if offset % 16 == 15 {
                         print!(" "); // more space between the hex and ascii
                         for &c in last_16.iter() {
-                            if c >= 0x20 && c <= 0x7e {
+                            if (0x20..=0x7e).contains(&c) {
                                 print!("{}", c as char);
                             } else {
                                 print!(".");

@@ -1,6 +1,6 @@
 # Programs
 
-> These can be found in [userspace](https://github.com/Amjad50/OS/tree/master/userspace)
+> These can be found in [userspace](https://github.com/Amjad50/Emerald/tree/master/userspace)
 
 Here are the list of programs that are found in the userspace of the operating system by default.
 

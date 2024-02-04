@@ -3,25 +3,6 @@
 version = 3
 
 [[package]]
-name = "amjad_os_kernel_user_link"
-version = "0.2.1"
-dependencies = [
- "compiler_builtins",
- "rustc-std-workspace-core",
-]
-
-[[package]]
-name = "amjad_os_user_std"
-version = "0.2.2"
-dependencies = [
- "amjad_os_kernel_user_link",
- "compiler_builtins",
- "increasing_heap_allocator",
- "rustc-std-workspace-alloc",
- "rustc-std-workspace-core",
-]
-
-[[package]]
 name = "colored"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -36,6 +17,25 @@ name = "compiler_builtins"
 version = "0.1.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3686cc48897ce1950aa70fd595bd2dc9f767a3c4cca4cd17b2cb52a2d37e6eb4"
+
+[[package]]
+name = "emerald_kernel_user_link"
+version = "0.2.1"
+dependencies = [
+ "compiler_builtins",
+ "rustc-std-workspace-core",
+]
+
+[[package]]
+name = "emerald_std"
+version = "0.2.2"
+dependencies = [
+ "compiler_builtins",
+ "emerald_kernel_user_link",
+ "increasing_heap_allocator",
+ "rustc-std-workspace-alloc",
+ "rustc-std-workspace-core",
+]
 
 [[package]]
 name = "increasing_heap_allocator"
@@ -54,7 +54,7 @@ version = "0.1.0"
 name = "kernel"
 version = "0.1.0"
 dependencies = [
- "amjad_os_kernel_user_link",
+ "emerald_kernel_user_link",
  "increasing_heap_allocator",
 ]
 

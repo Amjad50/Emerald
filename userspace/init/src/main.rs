@@ -10,7 +10,7 @@
 use std::{
     fs::File,
     io::{Read, Write},
-    os::amjad_os::io::{FromRawFd, OwnedFd},
+    os::emerald::io::{FromRawFd, OwnedFd},
     process::{Command, Stdio},
 };
 

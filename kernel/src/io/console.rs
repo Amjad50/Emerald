@@ -192,6 +192,13 @@ pub(super) struct LateConsole {
     keyboard: Arc<Mutex<Keyboard>>,
     console_cmd_buffer: Option<String>,
     current_vga_attrib: u8,
+    /// 0..=7 is normal, 8..=15 is bright
+    /// this is saved state, so we can use it to update the `VGA` attribute when `bold` or `faint` is changed
+    current_foreground: u8,
+    /// if the current color is bold, i.e. brighter
+    is_bold: bool,
+    /// if the current color is faint, i.e. darker
+    is_faint: bool,
 }
 
 impl LateConsole {
@@ -203,6 +210,9 @@ impl LateConsole {
             keyboard: keyboard::get_keyboard(),
             console_cmd_buffer: None,
             current_vga_attrib: DEFAULT_ATTRIB,
+            current_foreground: 0xF, // white
+            is_bold: false,
+            is_faint: false,
         };
 
         // split inputs
@@ -256,15 +266,52 @@ impl LateConsole {
                         inner_cmd.split(';').for_each(|cmd| {
                             if let Ok(cmd) = cmd.parse::<u8>() {
                                 match cmd {
-                                    0 => self.current_vga_attrib = DEFAULT_ATTRIB,
+                                    0 => {
+                                        self.current_vga_attrib = DEFAULT_ATTRIB;
+                                        self.is_bold = false;
+                                        self.is_faint = false;
+                                    }
+                                    1 => {
+                                        self.is_bold = true;
+                                        self.is_faint = false;
+                                        // recalculate the color
+                                        let color = if self.current_foreground <= 7 {
+                                            self.current_foreground + 8
+                                        } else {
+                                            self.current_foreground
+                                        };
+                                        self.current_vga_attrib &= 0b1111_0000;
+                                        self.current_vga_attrib |= terminal_to_vga_color(color);
+                                    }
+                                    2 => {
+                                        self.is_bold = false;
+                                        self.is_faint = true;
+                                        // recalculate the color
+                                        let color = if self.current_foreground > 7 {
+                                            self.current_foreground - 8
+                                        } else {
+                                            self.current_foreground
+                                        };
+                                        self.current_vga_attrib &= 0b1111_0000;
+                                        self.current_vga_attrib |= terminal_to_vga_color(color);
+                                    }
                                     30..=37 => {
                                         self.current_vga_attrib &= 0b1111_0000;
-                                        self.current_vga_attrib |= terminal_to_vga_color(cmd - 30);
+                                        let mut color = cmd - 30;
+                                        self.current_foreground = color;
+                                        if self.is_bold {
+                                            color = color + 8
+                                        }
+                                        self.current_vga_attrib |= terminal_to_vga_color(color);
                                     }
                                     90..=97 => {
                                         self.current_vga_attrib &= 0b1111_0000;
-                                        self.current_vga_attrib |=
-                                            terminal_to_vga_color((cmd - 90) + 8);
+                                        let mut color = (cmd - 90) + 8;
+                                        self.current_foreground = color;
+                                        if self.is_faint {
+                                            color = color - 8
+                                        }
+                                        self.current_vga_attrib |= terminal_to_vga_color(color);
                                     }
                                     40..=47 => {
                                         self.current_vga_attrib &= 0b1000_1111;

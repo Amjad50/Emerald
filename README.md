@@ -1,5 +1,9 @@
-# OS
-This is an OS written in rust from scratch.
+<p align="center">
+  <a href="https://github.com/Amjad50/Emerald"><img alt="emerald OS logo" src="book/src/assets/logo.svg" width="40%"></a>
+  <p align="center">Emerald <em>OS</em></p>
+</p>
+
+**Emerald** is an OS written in [Rust] from scratch.
 
 The plan is to learn everything about the kernel and low level details, so I'm not using any libraries, even though
 there are a lot of good libraries that do everything I'm doing (ex. handling GDT/IDT/etc...).
@@ -56,7 +60,7 @@ The main documentation is in the [`book`](book) directory, you can build it usin
 mdbook build book
 ```
 
-Its also served in https://amjad.alsharafi.dev/OS/
+Its also served in https://amjad.alsharafi.dev/Emerald/
 
 ## Kernel
 ### Booting
@@ -77,10 +81,10 @@ So we setup all of those and the rest of the OS then.
 ## Userland
 
 Currently, the main focus for running userspace applications is by having `std` in rust, as all userspace applications
-are build in rust, this is the primary support. Thus, we don't have `libc` for now. We have [`user_std`](user_std)
+are build in rust, this is the primary support. Thus, we don't have `libc` for now. We have [`emerald_std`](libraries/emerald_std/)
 which is the main dependancy for that `std` uses.
 
-We have our own target `x86_64-unknown-amjad_os` which is a custom target for our OS, added to custom fork
+We have our own target `x86_64-unknown-emerald` which is a custom target for our OS, added to custom fork
 of `rustc` in here: [`rust`].
 
 ## Demo to userspace programs
@@ -91,6 +95,7 @@ Here is a demo of a program I can run on my OS, [see the repo here](https://gith
 ## License
 This project is licensed under the MIT license, see [LICENSE](LICENSE) for more information.
 
-[#2]: https://github.com/Amjad50/OS/pull/2
+[Rust]: https://www.rust-lang.org/
+[#2]: https://github.com/Amjad50/Emerald/pull/2
 [`kernel/src/boot.S`]: kernel/src/boot.S
-[`rust`]: https://github.com/Amjad50/rust/tree/amjad50_os_new_target
+[`rust`]: https://github.com/Amjad50/rust/tree/emerald_os
