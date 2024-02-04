@@ -1,5 +1,9 @@
-# OS
-This is an OS written in rust from scratch.
+<p align="center">
+  <a href="https://github.com/Amjad50/OS"><img alt="emerald OS logo" src="book/src/assets/logo.svg" width="40%"></a>
+  <p align="center">Emerald <em>OS</em></p>
+</p>
+
+**Emerald** is an OS written in [Rust] from scratch.
 
 The plan is to learn everything about the kernel and low level details, so I'm not using any libraries, even though
 there are a lot of good libraries that do everything I'm doing (ex. handling GDT/IDT/etc...).
@@ -91,6 +95,7 @@ Here is a demo of a program I can run on my OS, [see the repo here](https://gith
 ## License
 This project is licensed under the MIT license, see [LICENSE](LICENSE) for more information.
 
+[Rust]: https://www.rust-lang.org/
 [#2]: https://github.com/Amjad50/OS/pull/2
 [`kernel/src/boot.S`]: kernel/src/boot.S
 [`rust`]: https://github.com/Amjad50/rust/tree/amjad50_os_new_target

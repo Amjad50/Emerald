@@ -1,5 +1,9 @@
-# Operating System (name to be changed :D)
+<p align="center">
+  <a href="https://github.com/Amjad50/OS"><img alt="emerald OS logo" src="./assets/logo.svg" width="50%"></a>
+  <p align="center">Emerald <em>OS</em></p>
+</p>
 
+# Emerald
 This is an operating system that I'm building for fun and learning in [Rust].
 
 Please check it out, and if you have any questions, feel free to ask, open an issue, fix a bug, etc...
