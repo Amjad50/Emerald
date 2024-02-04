@@ -73,4 +73,4 @@ and the heap is in the middle starts after the elf file.
 
 [boot]: ../boot.md
 [virtual space]: ./virtual_space.md
-[0dc04f8]: https://github.com/Amjad50/OS/commit/0dc04f8
+[0dc04f8]: https://github.com/Amjad50/Emerald/commit/0dc04f8

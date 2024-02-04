@@ -253,7 +253,7 @@ The merge logic is very simple as follows:
 
 [`increasing_heap_allocator`]: https://crates.io/crates/increasing_heap_allocator
 [`Layout::align`]: https://doc.rust-lang.org/std/alloc/struct.Layout.html#method.align
-[471eff0]: https://github.com/Amjad50/OS/commit/471eff0
-[cf53cf9]: https://github.com/Amjad50/OS/commit/cf53cf9
-[da23ee9]: https://github.com/Amjad50/OS/commit/da23ee9
+[471eff0]: https://github.com/Amjad50/Emerald/commit/471eff0
+[cf53cf9]: https://github.com/Amjad50/Emerald/commit/cf53cf9
+[da23ee9]: https://github.com/Amjad50/Emerald/commit/da23ee9
 [TODO]: #TODO

@@ -1,6 +1,6 @@
 # Kernel user link
 
-This is a crate that contains common definitions for the kernel and the user space. And it is implemented in [`amjad_os_kernel_user_link`] crate.
+This is a crate that contains common definitions for the kernel and the user space. And it is implemented in [`emerald_kernel_user_link`] crate.
 
 It contains common definitions such as:
 - `syscall` numbers.
@@ -15,4 +15,4 @@ It contains common definitions such as:
     - `FileMeta`: For assigning and getting metadata of files.
 - `STDIN`, `STDOUT`, `STDERR` file descriptors numbers.
 
-[`amjad_os_kernel_user_link`]: https://crates.io/crates/amjad_os_kernel_user_link
+[`emerald_kernel_user_link`]: https://crates.io/crates/emerald_kernel_user_link

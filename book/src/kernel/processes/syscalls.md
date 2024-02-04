@@ -32,7 +32,7 @@ these pointers/values to the correct types.
 | `write` | `file_index: usize, buf: *const u8, size: usize` | `bytes_written: usize` | Writes to a file |
 | `read` | `file_index: usize, buf: *mut u8, size: usize` | `bytes_read: usize` | Reads from a file |
 | `close` | `file_index: usize` | `()` | Closes a file |
-| `blocking_mode` | `file_index: usize, blocking_mode: BlockingMode` | `()` | Sets the blocking mode of a file. This is **DEPRECATED**, and should be replaced with `set_file_meta` with [`FileMeta::BlockingMode`](https://docs.rs/amjad_os_kernel_user_link/0.2.1/amjad_os_kernel_user_link/file/enum.FileMeta.html) |
+| `blocking_mode` | `file_index: usize, blocking_mode: BlockingMode` | `()` | Sets the blocking mode of a file. This is **DEPRECATED**, and should be replaced with `set_file_meta` with [`FileMeta::BlockingMode`](https://docs.rs/emerald_kernel_user_link/0.2.1/emerald_kernel_user_link/file/enum.FileMeta.html) |
 | `exit` | `exit_code: i32` | `!` | Exits the current process |
 | `spawn` | `path: &Path, argv: *const *const u8, file_mappings: *const SpawnFileMapping, file_mappings_size: usize` | `pid: u64` | Spawns a new process |
 | `inc_heap` | `increment: i64` | `old_heap_end: usize` | Increase/decrease the heap of the current process (similar `sbrk`) |

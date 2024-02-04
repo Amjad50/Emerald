@@ -4,7 +4,7 @@ language = "en"
 multilingual = false
 
 src = "src"
-title = "OS"
+title = "Emerald"
 
 [output.html]
-git-repository-url = "https://github.com/Amjad50/OS"
+git-repository-url = "https://github.com/Amjad50/Emerald"

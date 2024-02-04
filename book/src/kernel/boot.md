@@ -174,5 +174,5 @@ Then, we jump to `kernel_main` in `main.rs`, and its all rust from here.
 [bootloader]: https://en.wikipedia.org/wiki/Bootloader
 [`grub`]: https://en.wikipedia.org/wiki/GNU_GRUB
 [`multiboot2`]: https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html
-[`kernel`]: https://github.com/Amjad50/OS/tree/master/kernel
-[`boot.S`]: https://github.com/Amjad50/OS/blob/master/kernel/src/boot.S
+[`kernel`]: https://github.com/Amjad50/Emerald/tree/master/kernel
+[`boot.S`]: https://github.com/Amjad50/Emerald/blob/master/kernel/src/boot.S

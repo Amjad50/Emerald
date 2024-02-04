@@ -6,4 +6,4 @@ It only requires the ability to get more `pages` of memory, these pages must be 
 
 It can be implemented easily for example using `sbrk`, but also in a custom kernel.
 
-See: https://github.com/Amjad50/OS
+See: https://github.com/Amjad50/Emerald
