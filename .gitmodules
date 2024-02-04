@@ -1,4 +1,4 @@
 [submodule "extern/rust"]
 	path = extern/rust
 	url = https://github.com/Amjad50/rust.git
-	branch = amjad50_os_new_target
+	branch = emerald_os
