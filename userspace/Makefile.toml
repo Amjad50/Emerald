@@ -1,7 +1,7 @@
 [env]
 RUSTC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/bin/rustc"
 RUSTDOC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/rustdoc"
-USER_OUTDIR = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/x86_64-unknown-amjad_os/${PROFILE}"
+USER_OUTDIR = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/x86_64-unknown-emerald/${PROFILE}"
 
 CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = ["init", "shell"]
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
@@ -21,7 +21,7 @@ args = ["make", "--makefile", "Makefile.toolchain.toml", "build_user_toolchain"]
 workspace = true
 command = "cargo"
 condition= {files_modified = {input=["${CARGO_MAKE_WORKING_DIRECTORY}/src/**/*", "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml"], output=["${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}"]}}
-args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}", "--target", "x86_64-unknown-amjad_os"]
+args = ["build", "--profile", "${CARGO_MAKE_CARGO_PROFILE}", "--target", "x86_64-unknown-emerald"]
 
 [tasks.copy_to_fs]
 workspace = true
