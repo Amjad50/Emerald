@@ -4,7 +4,7 @@ default-members = ["kernel"]
 members = [
     "libraries/kernel_user_link",
     "kernel",
-    "userspace/init", "userspace/shell", "libraries/increasing_heap_allocator", "libraries/user_std",
+    "userspace/init", "userspace/shell", "libraries/increasing_heap_allocator", "libraries/emerald_std",
 ]
 
 exclude = ["extern"]
