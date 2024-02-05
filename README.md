@@ -12,8 +12,31 @@ The plan is to learn everything about the kernel and low level details, so I'm n
 there are a lot of good libraries that do everything I'm doing (ex. handling GDT/IDT/etc...).
 But maybe I'll add those just to make the code smaller and better to work with.
 
+## Running
 
-## Building and running
+If you don't want to build the project, you can download the latest artifacts from:
+- [kernel.zip](https://nightly.link/Amjad50/Emerald/workflows/ci/master/kernel.zip)
+- [filesystem_programs.zip](https://nightly.link/Amjad50/Emerald/workflows/ci/master/filesystem_programs.zip)
+
+You get `ISO` file containing the kernel and compressed `filesystem` directory containing the userspace programs.
+
+The current command is what we use normally to run the OS, but can be run by any VM with some setup.
+```sh
+qemu-system-x86_64 -cdrom <kernel.iso> -serial mon:stdio -m 512 -boot d -drive format=raw,file=fat:rw:<filesystem>
+```
+
+where `<kernel.iso>` is the path to the ISO file, and `<filesystem>` is the path to the filesystem directory decompressed.
+
+> Some extra info:
+> - `-serial mon:stdio` is used to redirect the serial output to the terminal.
+> - `-m 512` is the amount of memory to allocate for the VM, `512MB`.
+> - `-boot d` is to boot from the CD-ROM we just loaded.
+> - `-drive format=raw,file=fat:rw:<filesystem>` is to pass the filesystem directory to the kernel as a disk.
+>
+> Here we use a feature of QEMU, `virtual fat`, where it will treat the directory as a FAT filesystem, and being passed
+> to the kernel as a disk.
+
+## Building
 We are using [`cargo-make`](https://github.com/sagiegurari/cargo-make) utility to build a grub rescue iso, and run it with qemu.
 
 The ISO file can be used to run on other VMs/hardware(not tested)
