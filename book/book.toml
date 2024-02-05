@@ -2,7 +2,6 @@
 authors = ["Amjad Alsharafi"]
 language = "en"
 multilingual = false
-
 src = "src"
 title = "Emerald"
 

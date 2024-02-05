@@ -15,21 +15,32 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2024-01-04
-          components: rust-src
       - uses: actions/checkout@v2
         with:
           submodules: false
+      - name: Get changed files in `book` and `kernel` for docs
+        id: docs-changes
+        uses: tj-actions/changed-files@v42
+        with:
+          files: |
+            book/**
+            kernel/**
+      - uses: actions-rs/toolchain@v1
+        if: steps.docs-changes.outputs.any_changed == 'true'
+        with:
+          toolchain: nightly-2024-01-04
+          components: rust-src
+      
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v1
+        if: steps.docs-changes.outputs.any_changed == 'true'
         with:
           mdbook-version: '0.4.36'
       - name: Build the book
+        if: steps.docs-changes.outputs.any_changed == 'true'
         run: sh .github/workflows/build_docs.sh
       - name: Deploy the book
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' && steps.docs-changes.outputs.any_changed == 'true'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
