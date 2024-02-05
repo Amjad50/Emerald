@@ -115,8 +115,9 @@ of `rustc` in here: [`rust`].
 
 ## Demo to userspace programs
 
-Here is a demo of a program I can run on my OS, [see the repo here](https://github.com/Amjad50/lprs)
-![gif demo](https://github.com/Amjad50/lprs/blob/master/demo.gif)
+Here is a demo of the shell as is here. Another more complex application I can run is [lprs-fork](https://github.com/Amjad50/lprs) (not included in the demo below, but there is a demo in the README of that project).
+
+![demo](./assets/demo.gif)
 
 ## License
 This project is licensed under the MIT license, see [LICENSE](LICENSE) for more information.
