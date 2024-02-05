@@ -183,7 +183,29 @@
 <h1 id="emerald"><a class="header" href="#emerald">Emerald</a></h1>
 <p>This is an operating system that I'm building for fun and learning in <a href="https://www.rust-lang.org/">Rust</a>.</p>
 <p>Please check it out, and if you have any questions, feel free to ask, open an issue, fix a bug, etc...</p>
-<h2 id="building-and-running"><a class="header" href="#building-and-running">Building and running</a></h2>
+<h2 id="running"><a class="header" href="#running">Running</a></h2>
+<p>If you don't want to build the project, you can download the latest artifacts from:</p>
+<ul>
+<li><a href="https://nightly.link/Amjad50/Emerald/workflows/ci/master/kernel.zip">kernel.zip</a></li>
+<li><a href="https://nightly.link/Amjad50/Emerald/workflows/ci/master/filesystem_programs.zip">filesystem_programs.zip</a></li>
+</ul>
+<p>You get <code>ISO</code> file containing the kernel and compressed <code>filesystem</code> directory containing the userspace programs.</p>
+<p>The current command is what we use normally to run the OS, but can be run by any VM with some setup.</p>
+<pre><code class="language-sh">qemu-system-x86_64 -cdrom &lt;kernel.iso&gt; -serial mon:stdio -m 512 -boot d -drive format=raw,file=fat:rw:&lt;filesystem&gt;
+</code></pre>
+<p>where <code>&lt;kernel.iso&gt;</code> is the path to the ISO file, and <code>&lt;filesystem&gt;</code> is the path to the filesystem directory decompressed.</p>
+<blockquote>
+<p>Some extra info:</p>
+<ul>
+<li><code>-serial mon:stdio</code> is used to redirect the serial output to the terminal.</li>
+<li><code>-m 512</code> is the amount of memory to allocate for the VM, <code>512MB</code>.</li>
+<li><code>-boot d</code> is to boot from the CD-ROM we just loaded.</li>
+<li><code>-drive format=raw,file=fat:rw:&lt;filesystem&gt;</code> is to pass the filesystem directory to the kernel as a disk.</li>
+</ul>
+<p>Here we use a feature of QEMU, <code>virtual fat</code>, where it will treat the directory as a FAT filesystem, and being passed
+to the kernel as a disk.</p>
+</blockquote>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
 <p>We are using <a href="https://github.com/sagiegurari/cargo-make"><code>cargo-make</code></a> utility to build a grub rescue iso, and run it with qemu.</p>
 <p>The ISO file can be used to run on other VMs/hardware(not tested)</p>
 <p>For building just the kernel ELF file:</p>
