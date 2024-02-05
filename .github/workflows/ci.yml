@@ -60,4 +60,18 @@ jobs:
         with:
           path: extern/rust/build/host/stage2
           key: ${{ steps.cache-os-rust-restore.outputs.cache-primary-key }}
+      - name: Upload kernel artifact
+        if: github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel
+          path: target/debug/kernel.iso
+          overwrite: true
+      - name: Upload filesystem artifact
+        if: github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: filesystem_programs
+          path: filesystem
+          overwrite: true
 

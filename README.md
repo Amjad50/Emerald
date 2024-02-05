@@ -3,6 +3,9 @@
   <p align="center">Emerald <em>OS</em></p>
 </p>
 
+[![OS Build](https://github.com/Amjad50/Emerald/actions/workflows/ci.yml/badge.svg)](https://github.com/Amjad50/Emerald/actions/workflows/ci.yml)
+[![Documentation](https://github.com/Amjad50/Emerald/actions/workflows/docs.yml/badge.svg)](https://amjad.alsharafi.dev/Emerald)
+
 **Emerald** is an OS written in [Rust] from scratch.
 
 The plan is to learn everything about the kernel and low level details, so I'm not using any libraries, even though
