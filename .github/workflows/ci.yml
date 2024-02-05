@@ -14,6 +14,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
+      # Install dependencies
       - run: >
           sudo apt update -y &&
           sudo apt install -y xorriso mtools grub-pc-bin qemu-system-x86
@@ -21,26 +22,42 @@ jobs:
         with:
           toolchain: nightly-2024-01-04
           components: rust-src
+      # install cargo-make
       - uses: davidB/rust-cargo-make@v1
+      # Checkout the repository without submodules, we will do it manually
       - uses: actions/checkout@v2
         with:
           submodules: 'false'
-      - name: submodule fetch
-        run: git submodule update --init --recursive
+      # Fetch only top level submodules without recursive
+      # building the toolchain will automatically fetch the children of `rust`
+      # 100 so that we can get at least a single `upstream` commit, for llvm-ci cache to work
+      - name: submodule fetch bare
+        run: git submodule update --init --depth 100
+      # Check if `rust` submodule has changed, i.e. need to rebuild the toolchain
+      - name: Get changed files in `rust` submodule
+        id: rust-changes
+        uses: tj-actions/changed-files@v42
+        with:
+          files: 'extern/rust/**'
       - name: Build kernel
         run: cargo make kernel_iso
       - name: Restore cached rust build
         id: cache-os-rust-restore
         uses: actions/cache/restore@v4
         with:
-          path: extern/rust/build
+          path: extern/rust/build/host/stage2
           key: ${{ runner.os }}-rust-build-toolchain
+      # Build the toolchain if it has changed
       - name: Build filesystem programs
+        env:
+          # make sure we have cache entry and no changes in the rust submodule
+          NO_TOOLCHAIN_BUILD: ${{ steps.cache-os-rust-restore.outputs.cache-hit == 'true' && steps.rust-changes.outputs.any_changed != 'true' }}
         run: cargo make filesystem
       - name: Save cache rust build
         id: cache-os-rust-save
         uses: actions/cache/save@v4
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
         with:
-          path: extern/rust/build
+          path: extern/rust/build/host/stage2
           key: ${{ steps.cache-os-rust-restore.outputs.cache-primary-key }}
 
