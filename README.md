@@ -37,14 +37,13 @@ where `<kernel.iso>` is the path to the ISO file, and `<filesystem>` is the path
 > to the kernel as a disk.
 
 ## Building
-We are using [`cargo-make`](https://github.com/sagiegurari/cargo-make) utility to build a grub rescue iso, and run it with qemu.
+We are using [`cargo-make`](https://github.com/sagiegurari/cargo-make) utility to build everything and run it with qemu.
+```sh
+cargo install cargo-make
+```
 
 The ISO file can be used to run on other VMs/hardware(not tested)
 
-For building just the kernel ELF file:
-```sh
-cargo build
-```
 For building the ISO image, you can use `make` but you need to have other dependencies installed to build and run the ISO:
 ```
 xorriso mtools grub-pc-bin qemu-system-x86
