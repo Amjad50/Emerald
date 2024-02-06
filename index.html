@@ -206,11 +206,10 @@
 to the kernel as a disk.</p>
 </blockquote>
 <h2 id="building"><a class="header" href="#building">Building</a></h2>
-<p>We are using <a href="https://github.com/sagiegurari/cargo-make"><code>cargo-make</code></a> utility to build a grub rescue iso, and run it with qemu.</p>
-<p>The ISO file can be used to run on other VMs/hardware(not tested)</p>
-<p>For building just the kernel ELF file:</p>
-<pre><code class="language-sh">cargo build
+<p>We are using <a href="https://github.com/sagiegurari/cargo-make"><code>cargo-make</code></a> utility to build everything and run it with qemu.</p>
+<pre><code class="language-sh">cargo install cargo-make
 </code></pre>
+<p>The ISO file can be used to run on other VMs/hardware(not tested)</p>
 <p>For building the ISO image, you can use <code>make</code> but you need to have other dependencies installed to build and run the ISO:</p>
 <pre><code>xorriso mtools grub-pc-bin qemu-system-x86
 </code></pre>
