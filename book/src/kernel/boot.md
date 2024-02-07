@@ -170,6 +170,22 @@ We also setup a **guard page** for the stack that is unmapped later using the mo
 
 Then, we jump to `kernel_main` in `main.rs`, and its all rust from here.
 
+## CPU state in rust
+
+When we jump into rust, here is the state of the CPU (do note, that the kernel may change the state later on):
+- 64-bit mode
+- Basic `GDT` setup with only 2 segments (kernel code and data) (see above [GDT](#gdt-global-descritor-table))
+- Empty `IDT` setup (i.e. exceptions will trigger triple faults)
+- interrupts are disabled
+- `cr3` is set to the `.boot_page_tables` (which is a temporary page tables)
+- `cr0 = CR0_PG | CR0_PE`
+- `cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT`
+- `EFER = EFER_LME` | (EFER_LMA would be set by the CPU, indicating that long mode is active)
+- The stack is setup at the end of the `.stack` section
+- The multiboot info is passed in `rdi` (which is the same as `ebx` since we haven't touched it)
+- `rax` is set to the `kernel_main` and then jumped to
+- the rest of the registers are arbitrary, so make sure `kernel_main` only takes one argument (`rdi`).
+
 
 [bootloader]: https://en.wikipedia.org/wiki/Bootloader
 [`grub`]: https://en.wikipedia.org/wiki/GNU_GRUB

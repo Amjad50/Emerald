@@ -7,6 +7,25 @@
  *
  * We are setting up the virtual memory pages in the `.boot_page_tables` section.
  * This is inside the `.data` section with `PAGE_TABLE_ALLOC_PAGES` pages in size.
+ *
+ * Initial CPU state:
+ *  After this `boot`, and when we get to `rust`, this is the state the CPU will be in (it will change in the kernel later on).
+ *  
+ *  - 64-bit mode
+ *  - Basic GDT setup with only 2 segments (kernel code and data)
+ *  - Empty IDT setup (i.e. exceptions will trigger triple faults)
+ *  - interrupts are disabled
+ *  - cr3 is set to the `.boot_page_tables` (which is a temporary page tables)
+ *  - cr0 = CR0_PG | CR0_PE
+ *  - cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT
+ *  - EFER = EFER_LME | (EFER_LMA would be set by the CPU, indicating that long mode is active)
+ *  - The stack is setup at the end of the `.stack` section
+ *  - The multiboot info is passed in `rdi` (which is the same as `ebx` since we haven't touched it)
+ *  - `rax` is set to the `kernel_main` and then jumped to
+ *  - the rest of the registers are arbitrary
+ *
+ * Currently, we only set CR0/4, EFER registers to what we need and know how to use only. When we need a new feature
+ * from these, we will change the setup here.
  */
 
 MULTIBOOT2_CHECK_MAGIC = 0x36d76289
@@ -32,8 +51,12 @@ GDT_PRESENT   = 1 << 7
 
 # cpu registers flags
 CR0_PE   = 1 << 0
+CR0_WP   = 1 << 16
 CR0_PG   = 1 << 31
 CR4_PAE  = 1 << 5
+CR4_PGE  = 1 << 7
+CR4_OSFXSR = 1 << 9
+CR4_OSXMMEXCPT = 1 << 10
 EFER_LME = 1 << 8
 
 EFER_REG = 0xC0000080
@@ -186,12 +209,14 @@ fill_pdt_loop:
     add edi, 8
     loop fill_pdt_loop
 
+# -------------------
+# Perform CPU intialization
+# intialize the cpu to a known state, setup long mode, and jump to the kernel
 # Setup empty IDT
     lidt [idtr - 0xFFFFFFFF80000000]
 
 # enable PAE
-    mov eax, cr4
-    or eax, CR4_PAE
+    mov eax, CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT
     mov cr4, eax
 # Complete setting up the page tables
     virtual_to_physical_mov eax, boot_page_tables
@@ -199,11 +224,10 @@ fill_pdt_loop:
 # enable long mode
     mov ecx, EFER_REG
     rdmsr
-    or eax, EFER_LME
+    mov eax, EFER_LME
     wrmsr
 # enable paging, and protection (should be enabled already)
-    mov eax, cr0
-    or eax, CR0_PG | CR0_PE
+    mov eax, CR0_PG | CR0_PE
     mov cr0, eax
 
 # setup gdt and jump
