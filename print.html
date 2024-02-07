@@ -244,7 +244,7 @@ to the kernel as a disk.</p>
 <p>Link to the <a href="kernel//Emerald/docs/kernel/">Kernel rust documentation</a></p>
 </blockquote>
 <p>Here we explain the kernel and its components in details.</p>
-<p>From <a href="kernel/./boot.html">Boot</a>, to <a href="kernel/./drivers/index.html">drivers</a>, <a href="kernel/./filesystem/index.html">filesystem</a>, processes, <a href="kernel/./memory/index.html">memory management</a>, and more...</p>
+<p>From <a href="kernel/./boot.html">Boot</a>, to <a href="kernel/./drivers/index.html">drivers</a>, <a href="kernel/./filesystem/index.html">filesystem</a>, <a href="kernel/./processes/index.html">processes</a>, <a href="kernel/./memory/index.html">memory management</a>, and more...</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="boot"><a class="header" href="#boot">Boot</a></h1>
 <p>What happens during boot?</p>
 <p>This OS doesn't include a <a href="https://en.wikipedia.org/wiki/Bootloader">bootloader</a>, the kernel is being loaded by default using <a href="https://en.wikipedia.org/wiki/GNU_GRUB"><code>grub</code></a> using <a href="https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html"><code>multiboot2</code></a>.</p>
@@ -384,6 +384,22 @@ which is inside the <code>.data</code> section.</p>
 its needed like this due to our recursive AML (ACPI) parser, which we should improve.</p>
 <p>We also setup a <strong>guard page</strong> for the stack that is unmapped later using the more advanced virtual memory setup.</p>
 <p>Then, we jump to <code>kernel_main</code> in <code>main.rs</code>, and its all rust from here.</p>
+<h2 id="cpu-state-in-rust"><a class="header" href="#cpu-state-in-rust">CPU state in rust</a></h2>
+<p>When we jump into rust, here is the state of the CPU (do note, that the kernel may change the state later on):</p>
+<ul>
+<li>64-bit mode</li>
+<li>Basic <code>GDT</code> setup with only 2 segments (kernel code and data) (see above <a href="kernel/boot.html#gdt-global-descritor-table">GDT</a>)</li>
+<li>Empty <code>IDT</code> setup (i.e. exceptions will trigger triple faults)</li>
+<li>interrupts are disabled</li>
+<li><code>cr3</code> is set to the <code>.boot_page_tables</code> (which is a temporary page tables)</li>
+<li><code>cr0 = CR0_PG | CR0_PE</code></li>
+<li><code>cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT</code></li>
+<li><code>EFER = EFER_LME</code> | (EFER_LMA would be set by the CPU, indicating that long mode is active)</li>
+<li>The stack is setup at the end of the <code>.stack</code> section</li>
+<li>The multiboot info is passed in <code>rdi</code> (which is the same as <code>ebx</code> since we haven't touched it)</li>
+<li><code>rax</code> is set to the <code>kernel_main</code> and then jumped to</li>
+<li>the rest of the registers are arbitrary, so make sure <code>kernel_main</code> only takes one argument (<code>rdi</code>).</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="memory"><a class="header" href="#memory">Memory</a></h1>
 <p>Explaining the memory management in the kernel.</p>
 <p>We have several tools to manage memory in the kernel, each with its own purpose and goal.</p>
