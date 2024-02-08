@@ -2,22 +2,30 @@ use core::fmt;
 
 use crate::cpu;
 
-mod consts {
-    pub const CURRENT_CENTURY: u16 = 2000 / 100;
+use super::{ClockDevice, NANOS_PER_SEC};
 
-    pub const RTC_ADDRESS: u16 = 0x70;
-    pub const RTC_DATA: u16 = 0x71;
+pub const CURRENT_CENTURY: u16 = 2000 / 100;
 
-    pub const RTC_SECONDS: u8 = 0x00;
-    pub const RTC_MINUTES: u8 = 0x02;
-    pub const RTC_HOURS: u8 = 0x04;
-    pub const RTC_DAY_OF_MONTH: u8 = 0x07;
-    pub const RTC_MONTH: u8 = 0x08;
-    pub const RTC_YEAR: u8 = 0x09;
+pub const RTC_ADDRESS: u16 = 0x70;
+pub const RTC_DATA: u16 = 0x71;
 
-    pub const RTC_STATUS_A: u8 = 0x0A;
-    pub const RTC_STATUS_B: u8 = 0x0B;
-}
+pub const RTC_SECONDS: u8 = 0x00;
+pub const RTC_MINUTES: u8 = 0x02;
+pub const RTC_HOURS: u8 = 0x04;
+pub const RTC_DAY_OF_MONTH: u8 = 0x07;
+pub const RTC_MONTH: u8 = 0x08;
+pub const RTC_YEAR: u8 = 0x09;
+
+pub const RTC_STATUS_A: u8 = 0x0A;
+pub const RTC_STATUS_B: u8 = 0x0B;
+
+pub const SECONDS_PER_MINUTE: u64 = 60;
+pub const SECONDS_PER_HOUR: u64 = 60 * SECONDS_PER_MINUTE;
+pub const SECONDS_PER_DAY: u64 = 24 * SECONDS_PER_HOUR;
+/// This is very inaccurate, but we only use it for `ClockDevice` which
+/// doesn't care about the start of time, just a forward moving time
+pub const SECONDS_PER_MONTH: u64 = 30 * SECONDS_PER_DAY;
+pub const SECONDS_PER_YEAR: u64 = 365 * SECONDS_PER_DAY;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RtcTime {
@@ -64,17 +72,17 @@ impl Rtc {
 
     fn read_register(&self, reg: u8) -> u8 {
         unsafe {
-            cpu::io_out(consts::RTC_ADDRESS, reg);
-            cpu::io_in(consts::RTC_DATA)
+            cpu::io_out(RTC_ADDRESS, reg);
+            cpu::io_in(RTC_DATA)
         }
     }
 
     fn is_updating(&self) -> bool {
-        self.read_register(consts::RTC_STATUS_A) & 0x80 != 0
+        self.read_register(RTC_STATUS_A) & 0x80 != 0
     }
 
     fn is_bcd(&self) -> bool {
-        self.read_register(consts::RTC_STATUS_B) & 0x04 == 0
+        self.read_register(RTC_STATUS_B) & 0x04 == 0
     }
 
     fn get_time_sync(&self) -> (RtcTime, u8) {
@@ -86,12 +94,12 @@ impl Rtc {
             while self.is_updating() {}
             let mut century_new = century;
             let t_new = RtcTime {
-                seconds: self.read_register(consts::RTC_SECONDS),
-                minutes: self.read_register(consts::RTC_MINUTES),
-                hours: self.read_register(consts::RTC_HOURS),
-                day_of_month: self.read_register(consts::RTC_DAY_OF_MONTH),
-                month: self.read_register(consts::RTC_MONTH),
-                year: self.read_register(consts::RTC_YEAR) as u16,
+                seconds: self.read_register(RTC_SECONDS),
+                minutes: self.read_register(RTC_MINUTES),
+                hours: self.read_register(RTC_HOURS),
+                day_of_month: self.read_register(RTC_DAY_OF_MONTH),
+                month: self.read_register(RTC_MONTH),
+                year: self.read_register(RTC_YEAR) as u16,
             };
 
             if let Some(century_reg) = self.century_reg {
@@ -128,10 +136,34 @@ impl Rtc {
         let century = if self.century_reg.is_some() {
             century as u16
         } else {
-            consts::CURRENT_CENTURY
+            CURRENT_CENTURY
         };
         t.year += century * 100;
 
         t
+    }
+}
+
+impl ClockDevice for Rtc {
+    fn get_time(&self) -> super::ClockTime {
+        let rtc_time = self.get_time();
+        super::ClockTime {
+            nanoseconds: 0,
+            seconds: rtc_time.year as u64 * SECONDS_PER_YEAR
+                + rtc_time.month as u64 * SECONDS_PER_MONTH
+                + rtc_time.day_of_month as u64 * SECONDS_PER_DAY
+                + rtc_time.hours as u64 * SECONDS_PER_HOUR
+                + rtc_time.minutes as u64 * SECONDS_PER_MINUTE
+                + rtc_time.seconds as u64,
+        }
+    }
+
+    fn granularity(&self) -> u64 {
+        // 1 second
+        NANOS_PER_SEC
+    }
+
+    fn require_calibration(&self) -> bool {
+        false
     }
 }

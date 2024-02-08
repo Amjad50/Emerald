@@ -1,21 +1,50 @@
 use core::mem;
 
+use alloc::sync::Arc;
+
 use crate::{
-    acpi::{self},
+    acpi,
     cpu::{
         self,
         idt::{InterruptAllSavedState, InterruptHandlerWithAllState},
         interrupts::apic,
     },
     memory_management::virtual_space,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
-use super::HPET_CLOCK;
+use super::ClockDevice;
 
 const LEGACY_PIT_IO_PORT_CONTROL: u16 = 0x43;
 const LEGACY_PIT_IO_PORT_CHANNEL_0: u16 = 0x40;
 
 const ONE_SECOND_IN_FEMTOSECONDS: u64 = 1_000_000_000_000_000;
+const ONE_NANOSECOND_IN_FEMTOSECONDS: u64 = 1_000_000;
+
+static HPET_CLOCK: OnceLock<Arc<Mutex<Hpet>>> = OnceLock::new();
+
+pub fn init(hpet_table: &acpi::tables::Hpet) {
+    // just to make sure that we don't initialize it twice
+    if HPET_CLOCK.try_get().is_some() {
+        return;
+    }
+
+    HPET_CLOCK
+        .get_or_init(|| {
+            // only executed once
+            let hpet = Hpet::create_disabled(hpet_table);
+            Arc::new(Mutex::new(hpet))
+        })
+        .as_ref()
+        .lock()
+        // must enable after putting in the `OnceLock`
+        // as this will be used by the interrupt right away
+        .set_enabled(true);
+}
+
+pub fn get_device() -> Option<Arc<Mutex<Hpet>>> {
+    HPET_CLOCK.try_get().cloned()
+}
 
 fn disable_pit() {
     // disable PIT (timer)
@@ -203,9 +232,11 @@ pub struct Hpet {
 }
 
 impl Hpet {
-    pub fn initialize_from_bios_table(hpet: &acpi::tables::Hpet) -> Option<Self> {
-        disable_pit();
+    fn create_disabled(hpet: &acpi::tables::Hpet) -> Self {
+        // don't interrupt me
+        cpu::cpu().push_cli();
 
+        disable_pit();
         assert!(hpet.base_address.address_space_id == 0); // memory space
         let mmio_virtual_addr = virtual_space::allocate_and_map_virtual_space(
             hpet.base_address.address as _,
@@ -247,11 +278,14 @@ impl Hpet {
             |entry| entry.with_trigger_mode_level(true),
         );
 
-        s.set_enabled(true);
+        s.set_enabled(false);
         // use normal routing
         s.set_enable_legacy_replacement_route(false);
 
-        Some(s)
+        // enable interrupts
+        cpu::cpu().pop_cli();
+
+        s
     }
 
     fn read_general_configuration(&self) -> u64 {
@@ -287,7 +321,6 @@ impl Hpet {
         (self.mmio.general_capabilities_id >> 32) & 0xFFFFFFFF
     }
 
-    #[allow(dead_code)]
     fn current_counter(&self) -> u64 {
         // Safety: we know that the counter is 64-bit, aligned, valid pointer
         unsafe { (&self.mmio.main_counter_value as *const u64).read_volatile() }
@@ -302,8 +335,38 @@ impl Hpet {
     }
 }
 
+impl ClockDevice for Arc<Mutex<Hpet>> {
+    fn get_time(&self) -> super::ClockTime {
+        let clock = self.lock();
+        let counter = clock.current_counter();
+        let femtos_per_tick = clock.counter_clock_period();
+        let nanos_per_tick = femtos_per_tick / ONE_NANOSECOND_IN_FEMTOSECONDS;
+        let seconds_divider = ONE_SECOND_IN_FEMTOSECONDS / femtos_per_tick;
+        let seconds = counter / seconds_divider;
+        let nanoseconds = (counter % seconds_divider) * nanos_per_tick;
+
+        super::ClockTime {
+            seconds,
+            nanoseconds,
+        }
+    }
+
+    fn granularity(&self) -> u64 {
+        let granularity = self.lock().counter_clock_period() / ONE_NANOSECOND_IN_FEMTOSECONDS;
+        if granularity == 0 {
+            1
+        } else {
+            granularity
+        }
+    }
+
+    fn require_calibration(&self) -> bool {
+        false
+    }
+}
+
 extern "cdecl" fn timer0_handler(_all_state: &mut InterruptAllSavedState) {
-    let mut clock = HPET_CLOCK.get().as_ref().unwrap().lock();
+    let mut clock = HPET_CLOCK.get().as_ref().lock();
 
     let interrupt = clock.status_interrupts_iter().next().unwrap();
 
