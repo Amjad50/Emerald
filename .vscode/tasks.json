@@ -1,17 +1,13 @@
 {
     "version": "2.0.0",
+    "options": {
+        "env": {
+            // "UEFI_IMAGE": "/usr/share/edk2-ovmf/x64/OVMF_CODE.fd"
+        }
+    },
     "tasks": [
         {
-            "label": "build",
-            "type": "shell",
-            "command": "cargo make build",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
-        },
-        {
-            "label": "run-qemu",
+            "label": "build-run-qemu",
             "type": "shell",
             "command": "cargo make run_iso_gdb",
             "isBackground": true,
@@ -33,9 +29,6 @@
                     }
                 },
             ],
-            "dependsOn": [
-                "build"
-            ],
         },
         {
             "label": "build and run",
@@ -43,8 +36,7 @@
             // We split, because there is an error from `rust-analyzer` in the build stage,
             // which makes debugging annoying because we get an alert
             "dependsOn": [
-                "build",
-                "run-qemu"
+                "build-run-qemu"
             ]
         }
     ]
