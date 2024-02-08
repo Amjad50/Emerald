@@ -1,5 +1,6 @@
 mod hpet;
 mod rtc;
+mod tsc;
 
 use crate::acpi::tables::{self, BiosTables, Facp};
 
@@ -93,4 +94,10 @@ pub fn init(bios_tables: &BiosTables) {
     } else {
         println!("HPET is not available!");
     }
+
+    let hpet = hpet::get_device();
+    // for now use rtc is we don't have hpet, even though its very bad.
+    // TODO: if we don't have `HPET` go back to use `PIT`
+    let base_for_tsc: &dyn ClockDevice = if let Some(hpet) = &hpet { hpet } else { &rtc };
+    tsc::init(base_for_tsc);
 }
