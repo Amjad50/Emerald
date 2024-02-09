@@ -14,7 +14,7 @@ use crate::{
 
 use self::rtc::Rtc;
 
-const NANOS_PER_SEC: u64 = 1_000_000_000;
+pub const NANOS_PER_SEC: u64 = 1_000_000_000;
 
 static CLOCKS: OnceLock<Clock> = OnceLock::new();
 
@@ -280,12 +280,18 @@ impl Clock {
 
     #[allow(dead_code)]
     pub fn time_since_startup(&self) -> ClockTime {
-        self.system_time.lock().time_since_startup()
+        // TODO: find a better way to do this
+        let mut time = self.system_time.lock();
+        time.tick();
+        time.time_since_startup()
     }
 
     #[allow(dead_code)]
     pub fn time_since_unix_epoch(&self) -> ClockTime {
-        self.system_time.lock().time_since_unix_epoch()
+        // TODO: find a better way to do this
+        let mut time = self.system_time.lock();
+        time.tick();
+        time.time_since_unix_epoch()
     }
 }
 
