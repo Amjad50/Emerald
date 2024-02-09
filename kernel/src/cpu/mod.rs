@@ -34,7 +34,7 @@ pub mod msr {
 }
 
 #[allow(dead_code)]
-mod cpuid {
+pub mod cpuid {
     pub const FN_FEAT: u32 = 1;
 
     pub const FEAT_EDX_TSC: u32 = 1 << 4;

@@ -12,13 +12,17 @@ pub struct Tsc {
 }
 
 impl Tsc {
-    pub fn new(base: &dyn ClockDevice) -> Self {
+    pub fn new(base: &dyn ClockDevice) -> Option<Self> {
+        if unsafe { cpu::cpuid::cpuid!(cpu::cpuid::FN_FEAT).edx } & cpu::cpuid::FEAT_EDX_TSC == 0 {
+            return None;
+        }
+
         let tsc = Tsc {
             start: AtomicU64::new(0),
             frequency_ns: AtomicU64::new(0),
         };
         tsc.re_calibrate(base);
-        tsc
+        Some(tsc)
     }
 
     pub fn re_calibrate(&self, base: &dyn ClockDevice) {

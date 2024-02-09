@@ -168,11 +168,12 @@ pub fn init(bios_tables: &BiosTables) {
     }
 
     // init TSC
-    let tsc = tsc::Tsc::new(
+    if let Some(tsc) = tsc::Tsc::new(
         clocks()
             .get_best_for_calibration()
             .expect("Have a clock that can be used as a base for TSC calibration")
             .as_ref(),
-    );
-    clocks().add_device(Arc::new(tsc));
+    ) {
+        clocks().add_device(Arc::new(tsc));
+    }
 }
