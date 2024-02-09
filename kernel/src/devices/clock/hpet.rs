@@ -23,27 +23,23 @@ const ONE_NANOSECOND_IN_FEMTOSECONDS: u64 = 1_000_000;
 
 static HPET_CLOCK: OnceLock<Arc<Mutex<Hpet>>> = OnceLock::new();
 
-pub fn init(hpet_table: &acpi::tables::Hpet) {
+pub fn init(hpet_table: &acpi::tables::Hpet) -> Arc<Mutex<Hpet>> {
     // just to make sure that we don't initialize it twice
     if HPET_CLOCK.try_get().is_some() {
-        return;
+        panic!("HPET already initialized");
     }
 
-    HPET_CLOCK
-        .get_or_init(|| {
-            // only executed once
-            let hpet = Hpet::create_disabled(hpet_table);
-            Arc::new(Mutex::new(hpet))
-        })
-        .as_ref()
-        .lock()
-        // must enable after putting in the `OnceLock`
-        // as this will be used by the interrupt right away
-        .set_enabled(true);
-}
+    let clock = HPET_CLOCK.get_or_init(|| {
+        // only executed once
+        let hpet = Hpet::create_disabled(hpet_table);
+        Arc::new(Mutex::new(hpet))
+    });
 
-pub fn get_device() -> Option<Arc<Mutex<Hpet>>> {
-    HPET_CLOCK.try_get().cloned()
+    // must enable after putting in the `OnceLock`
+    // as this will be used by the interrupt right away
+    clock.lock().set_enabled(true);
+
+    clock.clone()
 }
 
 fn disable_pit() {
@@ -335,7 +331,11 @@ impl Hpet {
     }
 }
 
-impl ClockDevice for Arc<Mutex<Hpet>> {
+impl ClockDevice for Mutex<Hpet> {
+    fn name(&self) -> &'static str {
+        "HPET"
+    }
+
     fn get_time(&self) -> super::ClockTime {
         let clock = self.lock();
         let counter = clock.current_counter();
@@ -362,6 +362,10 @@ impl ClockDevice for Arc<Mutex<Hpet>> {
 
     fn require_calibration(&self) -> bool {
         false
+    }
+
+    fn rating(&self) -> u64 {
+        50
     }
 }
 

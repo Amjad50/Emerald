@@ -145,6 +145,10 @@ impl Rtc {
 }
 
 impl ClockDevice for Rtc {
+    fn name(&self) -> &'static str {
+        "RTC"
+    }
+
     fn get_time(&self) -> super::ClockTime {
         let rtc_time = self.get_time();
         super::ClockTime {

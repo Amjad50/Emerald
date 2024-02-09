@@ -6,25 +6,21 @@ use super::ClockDevice;
 
 const CALIBRATION_LOOPS: usize = 1000;
 
-static TSC_CLOCK: Tsc = Tsc {
-    start: AtomicU64::new(0),
-    frequency_ns: AtomicU64::new(0),
-};
-
-pub fn init(base: &dyn ClockDevice) {
-    if TSC_CLOCK.start.load(Ordering::Relaxed) == 0 {
-        TSC_CLOCK.re_calibrate(base);
-    } else {
-        println!("FIXME: TSC already calibrated");
-    }
-}
-
 pub struct Tsc {
     start: AtomicU64,
     frequency_ns: AtomicU64,
 }
 
 impl Tsc {
+    pub fn new(base: &dyn ClockDevice) -> Self {
+        let tsc = Tsc {
+            start: AtomicU64::new(0),
+            frequency_ns: AtomicU64::new(0),
+        };
+        tsc.re_calibrate(base);
+        tsc
+    }
+
     pub fn re_calibrate(&self, base: &dyn ClockDevice) {
         // self.start = unsafe { cpu::read_tsc() };
         // self.frequency = unsafe { tsc_frequency() };
@@ -73,6 +69,10 @@ impl Tsc {
 }
 
 impl ClockDevice for Tsc {
+    fn name(&self) -> &'static str {
+        "TSC"
+    }
+
     fn get_time(&self) -> super::ClockTime {
         let tsc = unsafe { cpu::read_tsc() };
         let tsc = tsc - self.start.load(Ordering::Relaxed);
@@ -94,5 +94,9 @@ impl ClockDevice for Tsc {
 
     fn require_calibration(&self) -> bool {
         true
+    }
+
+    fn rating(&self) -> u64 {
+        100
     }
 }
