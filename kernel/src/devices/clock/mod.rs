@@ -30,6 +30,13 @@ pub struct ClockTime {
     pub seconds: u64,
 }
 
+#[allow(dead_code)]
+impl ClockTime {
+    pub fn as_nanos(&self) -> u64 {
+        self.seconds * NANOS_PER_SEC + self.nanoseconds
+    }
+}
+
 impl Ord for ClockTime {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.seconds
