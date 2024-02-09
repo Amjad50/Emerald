@@ -129,9 +129,10 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     let bios_tables = acpi::get_acpi_tables(multiboot_info).expect("BIOS tables not found");
     println!("BIOS tables: {}", bios_tables);
     apic::init(&bios_tables);
-    unsafe { cpu::set_interrupts() };
-
     clock::init(&bios_tables);
+    // APIC timer interrupt rely on the clock, so it must be initialized after the clock
+    // and interrupts should be disabled until
+    unsafe { cpu::set_interrupts() };
     devices::init_legacy_devices();
     console::init_late_device();
     devices::prope_pci_devices();
