@@ -47,6 +47,19 @@ fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
         "pwd" => {
             println!("{}", std::env::current_dir().unwrap().display());
         }
+        "sleep" => {
+            if args.len() < 1 {
+                println!("sleep: missing operand");
+            } else {
+                let seconds = args[0].parse::<u64>();
+                match seconds {
+                    Ok(seconds) => std::thread::sleep(std::time::Duration::from_secs(seconds)),
+                    Err(e) => {
+                        println!("sleep: invalid time interval `{}`, e: {e}", args[0])
+                    }
+                }
+            }
+        }
         _ => return false,
     }
 
