@@ -8,6 +8,7 @@ use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
     acpi::tables::{self, BiosTables, Facp},
+    cpu::{self},
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
@@ -17,7 +18,7 @@ const NANOS_PER_SEC: u64 = 1_000_000_000;
 
 static CLOCKS: OnceLock<Clock> = OnceLock::new();
 
-fn clocks() -> &'static Clock {
+pub fn clocks() -> &'static Clock {
     CLOCKS.get()
 }
 
@@ -99,13 +100,128 @@ trait ClockDevice: Send + Sync {
     }
 }
 
+/// Accurate always increasing time source
+struct SystemTime {
+    /// The time when the system was started
+    start_unix: ClockTime,
+    /// The last time we ticked the system time
+    last_tick: ClockTime,
+    /// The system time since the start
+    startup_offset: ClockTime,
+    /// device used to get the time
+    device: Option<Arc<dyn ClockDevice>>,
+}
+
+impl SystemTime {
+    fn new(rtc: &Rtc) -> Self {
+        let time = rtc.get_time();
+        // let device_time = device.get_time();
+
+        let timestamp = time.seconds_since_unix_epoch().expect("Must be after 1970");
+        println!("Time now: {time} - UTC");
+        println!("System start timestamp: {}", timestamp);
+
+        let start_unix = ClockTime {
+            nanoseconds: 0,
+            seconds: timestamp,
+        };
+
+        Self {
+            start_unix,
+            last_tick: ClockTime {
+                nanoseconds: 0,
+                seconds: 0,
+            },
+            startup_offset: ClockTime {
+                nanoseconds: 0,
+                seconds: 0,
+            },
+            device: None,
+        }
+    }
+
+    fn tick(&mut self) {
+        if let Some(device) = &self.device {
+            let time = device.get_time();
+            let diff = time - self.last_tick;
+            self.startup_offset = self.startup_offset + diff;
+            self.last_tick = time;
+        }
+    }
+
+    /// Will update the device if this one is different
+    fn update_device(&mut self, device: Arc<dyn ClockDevice>, rtc: &Rtc) {
+        if let Some(current_device) = &self.device {
+            if Arc::ptr_eq(&device, current_device) {
+                return;
+            }
+
+            // switch the counters to use the new device
+            let time = current_device.get_time();
+            let new_time = device.get_time();
+            let diff = time - self.last_tick;
+            self.startup_offset = self.startup_offset + diff;
+
+            self.device = Some(device);
+            self.last_tick = new_time
+        } else {
+            // this is the first time, make sure we are aligned with rtc
+
+            cpu::cpu().push_cli();
+
+            let mut rtc_time = rtc.get_time();
+            // wait for the next second to start
+            loop {
+                let new_rtc_time = rtc.get_time();
+                if new_rtc_time.seconds != rtc_time.seconds {
+                    rtc_time = new_rtc_time;
+                    break;
+                }
+            }
+            let device_time = device.get_time();
+
+            let timestamp = rtc_time
+                .seconds_since_unix_epoch()
+                .expect("Must be after 1970");
+            println!("Adjusted Time now: {rtc_time} - UTC");
+            println!("Adjusted System start timestamp: {}", timestamp);
+
+            self.last_tick = device_time;
+            self.device = Some(device);
+            self.startup_offset = ClockTime {
+                nanoseconds: 0,
+                seconds: 0,
+            };
+            self.start_unix = ClockTime {
+                nanoseconds: 0,
+                seconds: rtc_time
+                    .seconds_since_unix_epoch()
+                    .expect("Must be after 1970"),
+            };
+
+            cpu::cpu().pop_cli();
+        }
+    }
+
+    fn time_since_startup(&self) -> ClockTime {
+        self.startup_offset
+    }
+
+    fn time_since_unix_epoch(&self) -> ClockTime {
+        self.start_unix + self.startup_offset
+    }
+}
+
 #[allow(dead_code)]
-struct Clock {
+pub struct Clock {
     /// devices sorted based on their rating
     // TODO: replace with read-write lock
     devices: Mutex<Vec<Arc<dyn ClockDevice>>>,
     /// Used to determine the outside world time and use it as a base
     rtc: Rtc,
+    /// System time
+    // TODO: replace with read-write lock
+    system_time: Mutex<SystemTime>,
 }
 
 impl fmt::Debug for Clock {
@@ -118,6 +234,7 @@ impl Clock {
     fn new(rtc: Rtc) -> Self {
         Self {
             devices: Mutex::new(Vec::new()),
+            system_time: Mutex::new(SystemTime::new(&rtc)),
             rtc,
         }
     }
@@ -131,6 +248,9 @@ impl Clock {
         let mut devs = self.devices.lock();
         devs.push(device);
         devs.sort_unstable_by_key(|device| device.rating() as i64 * -1);
+        self.system_time
+            .lock()
+            .update_device(devs[0].clone(), &self.rtc);
     }
 
     #[allow(dead_code)]
@@ -145,18 +265,30 @@ impl Clock {
             .find(|device| !device.require_calibration())
             .map(|device| Arc::clone(device))
     }
+
+    #[allow(dead_code)]
+    pub fn tick_system_time(&self) {
+        self.system_time.lock().tick();
+    }
+
+    #[allow(dead_code)]
+    pub fn time_since_startup(&self) -> ClockTime {
+        self.system_time.lock().time_since_startup()
+    }
+
+    #[allow(dead_code)]
+    pub fn time_since_unix_epoch(&self) -> ClockTime {
+        self.system_time.lock().time_since_unix_epoch()
+    }
 }
 
 pub fn init(bios_tables: &BiosTables) {
     let facp = bios_tables.rsdt.get_table::<Facp>();
     let century_reg = facp.map(|facp| facp.century);
-    let rtc = Rtc::new(century_reg);
-    let rtc_time = rtc.get_time();
-    println!("Time now: {rtc_time}: UTC");
 
     // create the clock
     CLOCKS
-        .set(Clock::new(rtc))
+        .set(Clock::new(Rtc::new(century_reg)))
         .expect("Clock is already initialized");
 
     // init HPET
