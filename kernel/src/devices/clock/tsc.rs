@@ -8,7 +8,8 @@ const CALIBRATION_LOOPS: usize = 1000;
 
 pub struct Tsc {
     start: AtomicU64,
-    frequency_ns: AtomicU64,
+    /// The frequency of the TSC in seconds, i.e. how many ticks per second
+    frequency: AtomicU64,
 }
 
 impl Tsc {
@@ -19,7 +20,7 @@ impl Tsc {
 
         let tsc = Tsc {
             start: AtomicU64::new(0),
-            frequency_ns: AtomicU64::new(0),
+            frequency: AtomicU64::new(0),
         };
         tsc.re_calibrate(base);
         Some(tsc)
@@ -33,7 +34,7 @@ impl Tsc {
         assert!(granularity > 0);
 
         // modify the loops based on the granularity, so we don't wait too long
-        let loops = CALIBRATION_LOOPS / granularity as usize;
+        let loops = CALIBRATION_LOOPS / (granularity as usize / 10).max(1);
         let loops = loops.max(2); // if its too large, we don't want to wait forever
 
         eprintln!("Calibrating TSC with {} loops", loops);
@@ -59,7 +60,7 @@ impl Tsc {
         let tsc = tsc_end - tsc_start;
 
         let total_time_ns = time.seconds * NANOS_PER_SEC + time.nanoseconds;
-        self.frequency_ns.store(
+        self.frequency.store(
             ((tsc as u128 * NANOS_PER_SEC as u128) / total_time_ns as u128) as u64,
             Ordering::Relaxed,
         );
@@ -67,7 +68,7 @@ impl Tsc {
 
         eprintln!(
             "TSC calibrated to {:.03} MHz",
-            self.frequency_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0
+            self.frequency.load(Ordering::Relaxed) as f64 / 1_000_000.0
         );
     }
 }
@@ -80,15 +81,18 @@ impl ClockDevice for Tsc {
     fn get_time(&self) -> super::ClockTime {
         let tsc = unsafe { cpu::read_tsc() };
         let tsc = tsc - self.start.load(Ordering::Relaxed);
-        let nanos = tsc / self.frequency_ns.load(Ordering::Relaxed);
+        let freq = self.frequency.load(Ordering::Relaxed);
+
+        let seconds = tsc / freq;
+        let nanoseconds = ((tsc % freq) * NANOS_PER_SEC) / freq;
         super::ClockTime {
-            nanoseconds: nanos % NANOS_PER_SEC,
-            seconds: nanos / NANOS_PER_SEC,
+            nanoseconds,
+            seconds,
         }
     }
 
     fn granularity(&self) -> u64 {
-        let granularity = NANOS_PER_SEC / self.frequency_ns.load(Ordering::Relaxed);
+        let granularity = NANOS_PER_SEC / self.frequency.load(Ordering::Relaxed);
         if granularity == 0 {
             1
         } else {
