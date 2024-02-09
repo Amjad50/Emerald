@@ -14,14 +14,14 @@ use kernel_user_link::{
 
 use crate::{
     cpu::idt::InterruptAllSavedState,
-    devices,
+    devices::{self, clock},
     executable::elf::Elf,
     fs::{self, path::Path, FileSystemError},
     memory_management::memory_layout::{is_aligned, PAGE_4K},
     process::{scheduler, Process},
 };
 
-use super::scheduler::{exit_current_process, with_current_process};
+use super::scheduler::{exit_current_process, sleep_current_process, with_current_process};
 
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
@@ -43,6 +43,7 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_chdir,         // kernel_user_link::syscalls::SYS_CHDIR
     sys_set_file_meta, // kernel_user_link::syscalls::SYS_SET_FILE_META
     sys_get_file_meta, // kernel_user_link::syscalls::SYS_GET_FILE_META
+    sys_sleep,         // kernel_user_link::syscalls::SYS_SLEEP
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -594,6 +595,32 @@ fn sys_get_file_meta(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     // Safety: we checked that the pointer is valid
     unsafe { *meta_data_ptr = data }
 
+    SyscallResult::Ok(0)
+}
+
+fn sys_sleep(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (seconds, nanoseconds, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => u64),
+        sys_arg!(1, all_state.rest => u64),
+    };
+
+    if nanoseconds >= clock::NANOS_PER_SEC {
+        return Err(to_arg_err!(1, SyscallArgError::InvalidNanoseconds));
+    }
+
+    let time = clock::ClockTime {
+        seconds,
+        nanoseconds,
+    };
+
+    // put the result manually, as we will go back to the kernel after the call below
+    all_state.rest.rax = 0;
+
+    // modify the all_state to go back to the kernel, the current all_state will be dropped
+    sleep_current_process(time, all_state);
+
+    // the result will be saved in kernel's all_state, so we should write the result we want before calling
+    // `sleep_current_process`
     SyscallResult::Ok(0)
 }
 

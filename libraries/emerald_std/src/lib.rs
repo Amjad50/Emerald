@@ -1,6 +1,7 @@
 #![no_std]
 
 pub mod alloc;
+pub mod clock;
 pub mod io;
 pub mod process;
 mod sync;
