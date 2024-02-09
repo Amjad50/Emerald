@@ -7,6 +7,7 @@ use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
 use crate::{
     cpu::{self, gdt},
+    devices::clock::ClockTime,
     executable::{elf, load_elf_to_vm},
     fs,
     memory_management::{
@@ -101,6 +102,7 @@ pub enum ProcessState {
     Sleeping,
     Exited,
     WaitingForPid(u64),
+    WaitingForTime(ClockTime),
 }
 
 // TODO: implement threads, for now each process acts as a thread also
