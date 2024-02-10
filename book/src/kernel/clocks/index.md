@@ -31,5 +31,7 @@ We have 2 **time**s in the system:
     - When we need this value, we calculate it based on the `boot time` and the `start` time
       we got at   boot.
 
+These times can be fetched with the `get_time` [syscall](../processes/syscalls.md#syscalls-list).
+
 [RTC]: ./rtc.md
 

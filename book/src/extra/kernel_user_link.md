@@ -13,6 +13,11 @@ It contains common definitions such as:
     - `BlockingMode`: For blocking modes of the operations on files.
     - `FileType`: For file types.
     - `FileMeta`: For assigning and getting metadata of files.
+- `clock` related structures and arguments:
+    - `ClockType`: For specifying the type of the clock to get the time from.
+        - `RealTime`: For getting the real time, which is based on the `unix time`.
+        - `SystemTime`: For getting the time since the system booted.
+    - `ClockTime`: Structure holding the time, `seconds` and `nanos`.
 - `STDIN`, `STDOUT`, `STDERR` file descriptors numbers.
 
 [`emerald_kernel_user_link`]: https://crates.io/crates/emerald_kernel_user_link
