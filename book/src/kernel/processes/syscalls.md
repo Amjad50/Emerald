@@ -45,3 +45,4 @@ these pointers/values to the correct types.
 | `chdir` | `path: &Path` | `()` | Changes the current working directory |
 | `set_file_meta` | `file_index: usize, meta_id: u64, meta_data: u64` | `()` | Sets the file meta |
 | `get_file_meta` | `file_index: usize, meta_id: u64, meta_data: *mut u64` | `()` | Gets the file meta |
+| `sleep` | `seconds: u64, nanos: u64` | `()` | Sleeps for a duration |

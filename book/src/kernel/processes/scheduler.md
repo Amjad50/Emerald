@@ -11,11 +11,14 @@ The `scheduler` is responsible for scheduling the processes, and managing the CP
 Currently, the algorithm is very stupid and very bad. Not even round-robin.
 
 Its like so:
-- Go through all `processes`, if the `process` is `ProcessState::Scheduled`, we will run it next.
+- Go through all `processes`, if the `process` is one of the following, we will run it next:
+    - `ProcessState::Scheduled` or
+    - `ProcessState::WaitingForTime(deadline)`, and the `current` time is greater than or equal to `deadline`, this will have 
+      more priority than `ProcessState::Scheduled`.
 - If the process is `ProcessState::Yielded`, we will skip it, and mark it as `ProcessState::Scheduled`, for next time, and this what prevents us from running the same process forever and give us fake round-robin.
 - If the process is `ProcessState::Exited`, we will remove it from the list of processes.
 
-When we schedule a `process` with `ProcessState::Scheduled`, this is what's done:
+When we schedule a `process` with `ProcessState::Scheduled` (`ProcessState::WaitingForTime` that is done, i.e. running it next), this is what's done:
 - copy the `context` of the `process` to the saved `context` of the `CPU`, see [processor saved state](../processor/index.md#saved-cpu-state), which will be used by the [scheduler interrupt](#scheduler-interrupt) to jump to it.
 - Set the `pid` of the `process` to the `process_id` of the `CPU`.
 - Mark the `process` as `ProcessState::Running`.
@@ -30,6 +33,19 @@ and this gives us preemptive multitasking.
 When yielding, we perform the following:
 - Save the `all_state` of the CPU to the `context` of the `process`, and this `all_state` comes from the interrupt, i.e. we can only yield when an interrupt occurs from that process, since we have to save the exact `cpu` before the interrupt.
 - Mark the `process` as `ProcessState::Yielded`.
+
+## Sleeping
+    
+When a `process` is running, it can sleep, and this is done through the `syscall` `sleep`, see [syscalls](./syscalls.md).
+    
+When sleeping, we perform the following:
+- Mark the `process` as `ProcessState::WaitingForTime(deadline)`, 
+  where `deadline` is the expected time to finish the sleep from the `current` time. 
+  See [Clocks](../clocks/index.md).
+- Yield the `process` to the scheduler.
+
+And then, in the scheduler, we handle sleeping processes (see [scheduling algorithm](#scheduling-algorithm)).
+
 
 ## Scheduler Interrupt
 
