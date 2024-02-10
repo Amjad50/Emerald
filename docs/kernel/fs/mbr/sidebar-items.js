@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["MbrRaw","PartitionEntry"]};
+window.SIDEBAR_ITEMS = {"struct":["Mbr","PartitionEntry"]};

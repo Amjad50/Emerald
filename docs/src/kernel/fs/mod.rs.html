@@ -804,22 +804,7 @@
 <a href="#802" id="802">802</a>
 <a href="#803" id="803">803</a>
 <a href="#804" id="804">804</a>
-<a href="#805" id="805">805</a>
-<a href="#806" id="806">806</a>
-<a href="#807" id="807">807</a>
-<a href="#808" id="808">808</a>
-<a href="#809" id="809">809</a>
-<a href="#810" id="810">810</a>
-<a href="#811" id="811">811</a>
-<a href="#812" id="812">812</a>
-<a href="#813" id="813">813</a>
-<a href="#814" id="814">814</a>
-<a href="#815" id="815">815</a>
-<a href="#816" id="816">816</a>
-<a href="#817" id="817">817</a>
-<a href="#818" id="818">818</a>
-<a href="#819" id="819">819</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::{mem, ops};
+</pre></div><pre class="rust"><code><span class="kw">use </span>core::ops;
 
 <span class="kw">use </span>alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 <span class="kw">use </span>kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType};
@@ -829,12 +814,11 @@
         ide::{<span class="self">self</span>, IdeDeviceIndex, IdeDeviceType},
         Device, DEVICES_FILESYSTEM_CLUSTER_MAGIC,
     },
-    memory_management::memory_layout::align_up,
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 <span class="kw">use </span><span class="self">self</span>::{
-    mbr::MbrRaw,
+    mbr::Mbr,
     path::{Component, Path},
 };
 
@@ -1194,38 +1178,24 @@
 
     <span class="kw">let </span>device = ide::get_ide_device(ide_index).ok_or(FileSystemError::DeviceNotFound)<span class="question-mark">?</span>;
 
-    <span class="kw">let </span>size = align_up(mem::size_of::&lt;MbrRaw&gt;(), device.sector_size() <span class="kw">as </span>usize);
-    <span class="kw">let </span><span class="kw-2">mut </span>sectors = <span class="macro">vec!</span>[<span class="number">0</span>; size];
+    <span class="kw">let </span>mbr = Mbr::try_create_from_disk(<span class="kw-2">&amp;</span>device)<span class="question-mark">?</span>;
 
-    device
-        .read_sync(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>sectors)
-        .map_err(|e| FileSystemError::DiskReadError {
-            sector: <span class="number">0</span>,
-            error: e,
-        })<span class="question-mark">?</span>;
+    <span class="comment">// load the first partition for now
+    </span><span class="kw">let </span>first_partition = <span class="kw-2">&amp;</span>mbr.partition_table[<span class="number">0</span>];
+    <span class="kw">let </span>filesystem = fat::load_fat_filesystem(
+        device,
+        first_partition.start_lba,
+        first_partition.size_in_sectors,
+    )<span class="question-mark">?</span>;
+    <span class="macro">println!</span>(
+        <span class="string">"Mapping / to FAT filesystem {:?} ({:?}), parition_type: 0x{:02X}"</span>,
+        filesystem.volume_label(),
+        filesystem.fat_type(),
+        first_partition.partition_type
+    );
+    mount(<span class="string">"/"</span>, Arc::new(Mutex::new(filesystem)));
 
-    <span class="comment">// SAFETY: This is a valid allocated memory
-    </span><span class="kw">let </span>mbr = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span>(sectors.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>MbrRaw) };
-
-    <span class="kw">if </span>mbr.is_valid() {
-        <span class="comment">// found MBR
-        </span><span class="kw">let </span>first_partition = <span class="kw-2">&amp;</span>mbr.partition_table[<span class="number">0</span>];
-        <span class="kw">let </span>filesystem = fat::load_fat_filesystem(
-            ide_index,
-            first_partition.start_lba,
-            first_partition.size_in_sectors,
-        )<span class="question-mark">?</span>;
-        <span class="macro">println!</span>(
-            <span class="string">"Mapping / to FAT filesystem {:?} ({:?})"</span>,
-            filesystem.volume_label(),
-            filesystem.fat_type()
-        );
-        mount(<span class="string">"/"</span>, Arc::new(Mutex::new(filesystem)));
-
-        <span class="prelude-val">Ok</span>(())
-    } <span class="kw">else </span>{
-        <span class="prelude-val">Err</span>(FileSystemError::PartitionTableNotFound)
-    }
+    <span class="prelude-val">Ok</span>(())
 }
 
 <span class="doccomment">/// Open the inode of a path, this include directories and files.

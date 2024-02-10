@@ -883,10 +883,6 @@
 <a href="#881" id="881">881</a>
 <a href="#882" id="882">882</a>
 <a href="#883" id="883">883</a>
-<a href="#884" id="884">884</a>
-<a href="#885" id="885">885</a>
-<a href="#886" id="886">886</a>
-<a href="#887" id="887">887</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem};
 
 <span class="kw">use </span>alloc::{
@@ -898,9 +894,7 @@
 };
 
 <span class="kw">use crate</span>::{
-    devices::ide::{<span class="self">self</span>, IdeDeviceIndex},
-    io::NoDebug,
-    memory_management::memory_layout::align_up,
+    devices::ide::IdeDevice, io::NoDebug, memory_management::memory_layout::align_up,
     sync::spin::mutex::Mutex,
 };
 
@@ -935,12 +929,10 @@
 }
 
 <span class="kw">pub fn </span>load_fat_filesystem(
-    ide_index: IdeDeviceIndex,
+    device: Arc&lt;IdeDevice&gt;,
     start_lba: u32,
     size_in_sectors: u32,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;FatFilesystem, FileSystemError&gt; {
-    <span class="kw">let </span>device = ide::get_ide_device(ide_index).ok_or(FileSystemError::DeviceNotFound)<span class="question-mark">?</span>;
-
     <span class="kw">let </span>size = align_up(
         mem::size_of::&lt;FatBootSectorRaw&gt;(),
         device.sector_size() <span class="kw">as </span>usize,
@@ -1483,7 +1475,7 @@
     </span>size_in_sectors: u32,
     boot_sector: Box&lt;FatBootSector&gt;,
     fat: NoDebug&lt;Vec&lt;u8&gt;&gt;,
-    device: NoDebug&lt;Arc&lt;ide::IdeDevice&gt;&gt;,
+    device: NoDebug&lt;Arc&lt;IdeDevice&gt;&gt;,
 }
 
 <span class="kw">impl </span>FatFilesystem {
@@ -1491,7 +1483,7 @@
         start_lba: u32,
         size_in_sectors: u32,
         boot_sector: FatBootSector,
-        device: Arc&lt;ide::IdeDevice&gt;,
+        device: Arc&lt;IdeDevice&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FileSystemError&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>s = FatFilesystem {
             start_lba,
