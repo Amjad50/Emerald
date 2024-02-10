@@ -20,7 +20,7 @@ checksum = "3686cc48897ce1950aa70fd595bd2dc9f767a3c4cca4cd17b2cb52a2d37e6eb4"
 
 [[package]]
 name = "emerald_kernel_user_link"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-core",
@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "emerald_std"
-version = "0.2.3"
+version = "0.2.5"
 dependencies = [
  "compiler_builtins",
  "emerald_kernel_user_link",

@@ -1,5 +1,6 @@
 #![no_std]
 
+pub mod clock;
 pub mod file;
 pub mod process;
 pub mod syscalls;

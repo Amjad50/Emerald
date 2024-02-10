@@ -2,6 +2,7 @@ use core::{ffi::CStr, mem};
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use kernel_user_link::{
+    clock::ClockType,
     file::{BlockingMode, DirEntry, FileMeta},
     process::SpawnFileMapping,
     sys_arg,
@@ -44,6 +45,7 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_set_file_meta, // kernel_user_link::syscalls::SYS_SET_FILE_META
     sys_get_file_meta, // kernel_user_link::syscalls::SYS_GET_FILE_META
     sys_sleep,         // kernel_user_link::syscalls::SYS_SLEEP
+    sys_get_time,      // kernel_user_link::syscalls::SYS_GET_TIME
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -63,6 +65,16 @@ impl From<FileSystemError> for SyscallError {
             | FileSystemError::InvalidData
             | FileSystemError::MustBeAbsolute   // should not happen from user mode
             | FileSystemError::PartitionTableNotFound => panic!("should not happen?"),
+        }
+    }
+}
+
+impl From<clock::ClockTime> for kernel_user_link::clock::ClockTime {
+    fn from(time: clock::ClockTime) -> Self {
+        assert!(time.nanoseconds < clock::NANOS_PER_SEC);
+        Self {
+            seconds: time.seconds,
+            nanoseconds: time.nanoseconds as u32,
         }
     }
 }
@@ -621,6 +633,33 @@ fn sys_sleep(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     // the result will be saved in kernel's all_state, so we should write the result we want before calling
     // `sleep_current_process`
+    SyscallResult::Ok(0)
+}
+
+fn sys_get_time(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (time_type, time_ptr, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => u64),
+        sys_arg!(1, all_state.rest => *mut u64),
+    };
+    check_ptr(
+        time_ptr as *const u8,
+        mem::size_of::<kernel_user_link::clock::ClockTime>(),
+    )
+    .map_err(|err| to_arg_err!(1, err))?;
+    let time_ptr = time_ptr as *mut kernel_user_link::clock::ClockTime;
+
+    let time_type = ClockType::try_from(time_type)
+        .map_err(|_| to_arg_err!(0, SyscallArgError::GeneralInvalid))?;
+
+    let time = match time_type {
+        ClockType::RealTime => clock::clocks().time_since_unix_epoch().into(),
+        ClockType::SystemTime => clock::clocks().time_since_startup().into(),
+    };
+    // Safety: we checked that the pointer is valid
+    unsafe {
+        *time_ptr = time;
+    }
+
     SyscallResult::Ok(0)
 }
 
