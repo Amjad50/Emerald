@@ -1,4 +1,4 @@
-use core::{mem, ops};
+use core::ops;
 
 use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType};
@@ -8,12 +8,11 @@ use crate::{
         ide::{self, IdeDeviceIndex, IdeDeviceType},
         Device, DEVICES_FILESYSTEM_CLUSTER_MAGIC,
     },
-    memory_management::memory_layout::align_up,
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 use self::{
-    mbr::MbrRaw,
+    mbr::Mbr,
     path::{Component, Path},
 };
 
@@ -373,38 +372,24 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
 
     let device = ide::get_ide_device(ide_index).ok_or(FileSystemError::DeviceNotFound)?;
 
-    let size = align_up(mem::size_of::<MbrRaw>(), device.sector_size() as usize);
-    let mut sectors = vec![0; size];
+    let mbr = Mbr::try_create_from_disk(&device)?;
 
-    device
-        .read_sync(0, &mut sectors)
-        .map_err(|e| FileSystemError::DiskReadError {
-            sector: 0,
-            error: e,
-        })?;
+    // load the first partition for now
+    let first_partition = &mbr.partition_table[0];
+    let filesystem = fat::load_fat_filesystem(
+        device,
+        first_partition.start_lba,
+        first_partition.size_in_sectors,
+    )?;
+    println!(
+        "Mapping / to FAT filesystem {:?} ({:?}), parition_type: 0x{:02X}",
+        filesystem.volume_label(),
+        filesystem.fat_type(),
+        first_partition.partition_type
+    );
+    mount("/", Arc::new(Mutex::new(filesystem)));
 
-    // SAFETY: This is a valid allocated memory
-    let mbr = unsafe { &*(sectors.as_ptr() as *const MbrRaw) };
-
-    if mbr.is_valid() {
-        // found MBR
-        let first_partition = &mbr.partition_table[0];
-        let filesystem = fat::load_fat_filesystem(
-            ide_index,
-            first_partition.start_lba,
-            first_partition.size_in_sectors,
-        )?;
-        println!(
-            "Mapping / to FAT filesystem {:?} ({:?})",
-            filesystem.volume_label(),
-            filesystem.fat_type()
-        );
-        mount("/", Arc::new(Mutex::new(filesystem)));
-
-        Ok(())
-    } else {
-        Err(FileSystemError::PartitionTableNotFound)
-    }
+    Ok(())
 }
 
 /// Open the inode of a path, this include directories and files.

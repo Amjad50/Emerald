@@ -9,9 +9,7 @@ use alloc::{
 };
 
 use crate::{
-    devices::ide::{self, IdeDeviceIndex},
-    io::NoDebug,
-    memory_management::memory_layout::align_up,
+    devices::ide::IdeDevice, io::NoDebug, memory_management::memory_layout::align_up,
     sync::spin::mutex::Mutex,
 };
 
@@ -46,12 +44,10 @@ impl From<FatError> for FileSystemError {
 }
 
 pub fn load_fat_filesystem(
-    ide_index: IdeDeviceIndex,
+    device: Arc<IdeDevice>,
     start_lba: u32,
     size_in_sectors: u32,
 ) -> Result<FatFilesystem, FileSystemError> {
-    let device = ide::get_ide_device(ide_index).ok_or(FileSystemError::DeviceNotFound)?;
-
     let size = align_up(
         mem::size_of::<FatBootSectorRaw>(),
         device.sector_size() as usize,
@@ -594,7 +590,7 @@ pub struct FatFilesystem {
     size_in_sectors: u32,
     boot_sector: Box<FatBootSector>,
     fat: NoDebug<Vec<u8>>,
-    device: NoDebug<Arc<ide::IdeDevice>>,
+    device: NoDebug<Arc<IdeDevice>>,
 }
 
 impl FatFilesystem {
@@ -602,7 +598,7 @@ impl FatFilesystem {
         start_lba: u32,
         size_in_sectors: u32,
         boot_sector: FatBootSector,
-        device: Arc<ide::IdeDevice>,
+        device: Arc<IdeDevice>,
     ) -> Result<Self, FileSystemError> {
         let mut s = FatFilesystem {
             start_lba,
