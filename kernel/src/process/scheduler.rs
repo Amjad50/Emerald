@@ -17,7 +17,6 @@ static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
 struct Scheduler {
     interrupt_initialized: bool,
     processes: Vec<Process>,
-    /// There is a process waiting for this time
     earliest_wait: Option<ClockTime>,
 }
 
@@ -57,10 +56,13 @@ pub fn schedule() -> ! {
         assert!(current_cpu.context.is_none());
 
         let mut scheduler = SCHEDULER.lock();
+
         let earliest_wait = scheduler.earliest_wait.take();
+        let mut new_earliest_wait: Option<ClockTime> = None;
         let time_now = clock::clocks().time_since_startup();
         // we are going to wake one process, so make it a priority
         let going_to_wake = earliest_wait.map(|t| t <= time_now).unwrap_or(false);
+
         // no context holding, i.e. free to take a new process
         for process in scheduler.processes.iter_mut() {
             let mut run = false;
@@ -69,10 +71,13 @@ pub fn schedule() -> ! {
                 ProcessState::Scheduled if current_cpu.context.is_none() && !going_to_wake => {
                     run = true;
                 }
-                ProcessState::WaitingForTime(t)
-                    if current_cpu.context.is_none() && t <= time_now =>
-                {
-                    run = true;
+                ProcessState::WaitingForTime(t) => {
+                    if current_cpu.context.is_none() && t <= time_now {
+                        run = true;
+                    } else {
+                        // this is not done yet, add it to the earliest wait
+                        new_earliest_wait = Some(new_earliest_wait.map_or(t, |et| et.min(t)));
+                    }
                 }
                 ProcessState::Yielded => {
                     // schedule for next time
@@ -97,6 +102,7 @@ pub fn schedule() -> ! {
                 current_cpu.pop_cli();
             }
         }
+        scheduler.earliest_wait = new_earliest_wait;
         scheduler
             .processes
             .retain(|p| p.state != ProcessState::Exited);
@@ -192,6 +198,12 @@ pub fn sleep_current_process(time: ClockTime, all_state: &mut InterruptAllSavedS
         // clear context from the CPU
         process.context = current_cpu.context.take().unwrap();
     });
+    {
+        let mut scheduler = SCHEDULER.lock();
+        let earliest_wait = scheduler.earliest_wait.take();
+        let new_earliest_wait = earliest_wait.map_or(deadline, |et| et.min(deadline));
+        scheduler.earliest_wait = Some(new_earliest_wait);
+    }
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
 }
