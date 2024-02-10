@@ -43,6 +43,7 @@ jobs:
         run: cargo make kernel_iso
       - name: Restore cached rust build
         id: cache-os-rust-restore
+        if: steps.rust-changes.outputs.any_changed != 'true'
         uses: actions/cache/restore@v4
         with:
           path: extern/rust/build/host/stage2

@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
+    devices::clock::{self, ClockTime},
     memory_management::virtual_memory_mapper,
     process::{syscalls, FxSave},
     sync::spin::mutex::Mutex,
@@ -16,6 +17,7 @@ static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
 struct Scheduler {
     interrupt_initialized: bool,
     processes: Vec<Process>,
+    earliest_wait: Option<ClockTime>,
 }
 
 impl Scheduler {
@@ -23,6 +25,7 @@ impl Scheduler {
         Self {
             interrupt_initialized: false,
             processes: Vec::new(),
+            earliest_wait: None,
         }
     }
 
@@ -53,21 +56,28 @@ pub fn schedule() -> ! {
         assert!(current_cpu.context.is_none());
 
         let mut scheduler = SCHEDULER.lock();
+
+        let earliest_wait = scheduler.earliest_wait.take();
+        let mut new_earliest_wait: Option<ClockTime> = None;
+        let time_now = clock::clocks().time_since_startup();
+        // we are going to wake one process, so make it a priority
+        let going_to_wake = earliest_wait.map(|t| t <= time_now).unwrap_or(false);
+
         // no context holding, i.e. free to take a new process
         for process in scheduler.processes.iter_mut() {
+            let mut run = false;
             match process.state {
                 // only schedule another if we don't have current process ready to be run
-                ProcessState::Scheduled if current_cpu.context.is_none() => {
-                    // found a process to run
-                    current_cpu.push_cli();
-                    process.state = ProcessState::Running;
-                    // SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
-                    // as it has clones of our kernel mappings
-                    unsafe { process.switch_to_this_vm() };
-                    current_cpu.process_id = process.id;
-                    current_cpu.context = Some(process.context);
-                    current_cpu.scheduling = true;
-                    current_cpu.pop_cli();
+                ProcessState::Scheduled if current_cpu.context.is_none() && !going_to_wake => {
+                    run = true;
+                }
+                ProcessState::WaitingForTime(t) => {
+                    if current_cpu.context.is_none() && t <= time_now {
+                        run = true;
+                    } else {
+                        // this is not done yet, add it to the earliest wait
+                        new_earliest_wait = Some(new_earliest_wait.map_or(t, |et| et.min(t)));
+                    }
                 }
                 ProcessState::Yielded => {
                     // schedule for next time
@@ -79,7 +89,20 @@ pub fn schedule() -> ! {
                 }
                 _ => {}
             }
+            if run {
+                // found a process to run
+                current_cpu.push_cli();
+                process.state = ProcessState::Running;
+                // SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
+                // as it has clones of our kernel mappings
+                unsafe { process.switch_to_this_vm() };
+                current_cpu.process_id = process.id;
+                current_cpu.context = Some(process.context);
+                current_cpu.scheduling = true;
+                current_cpu.pop_cli();
+            }
         }
+        scheduler.earliest_wait = new_earliest_wait;
         scheduler
             .processes
             .retain(|p| p.state != ProcessState::Exited);
@@ -156,6 +179,31 @@ pub fn exit_current_process(exit_code: i32, all_state: &mut InterruptAllSavedSta
         }
     }
 
+    current_cpu.pop_cli();
+    // go back to the kernel after the scheduler interrupt
+}
+
+pub fn sleep_current_process(time: ClockTime, all_state: &mut InterruptAllSavedState) {
+    let current_cpu = cpu::cpu();
+    assert!(current_cpu.context.is_some());
+
+    let deadline = clock::clocks().time_since_startup() + time;
+
+    with_current_process(|process| {
+        assert!(process.state == ProcessState::Running);
+        current_cpu.push_cli();
+        process.state = ProcessState::WaitingForTime(deadline);
+        eprintln!("Process {} is waiting for time {:?}", process.id, deadline);
+        swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+        // clear context from the CPU
+        process.context = current_cpu.context.take().unwrap();
+    });
+    {
+        let mut scheduler = SCHEDULER.lock();
+        let earliest_wait = scheduler.earliest_wait.take();
+        let new_earliest_wait = earliest_wait.map_or(deadline, |et| et.min(deadline));
+        scheduler.earliest_wait = Some(new_earliest_wait);
+    }
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
 }

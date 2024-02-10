@@ -20,7 +20,7 @@ It just means that we can read the table, and that's it, some of them are used, 
 - [RSDT]: This is the Root System Description Table, and it contains pointers to other tables.
 - [MADT/APIC]: This is the Multiple APIC Description Table, and it contains information about the APIC,see [APIC](./apic.md) for more details.
 - [FACP]: This is the Fixed ACPI Description Table, and it contains information about the power management features of the system, also contain some info about the [RTC](../drivers/rtc.md).
-- [HPET]: This is the High Precision Event Timer, and it contains information about the HPET, see [HPET](../drivers/hpet.md) for more details.
+- [HPET][HPET_acpi]: This is the High Precision Event Timer, and it contains information about the HPET, see [HPET](../clocks/hpet.md) for more details.
 - [DSDT] (not used*): This is the Differentiated System Description Table, and it contains [AML](./aml.md) code, which is used to configure the system.
 - [SSDT] (not used*): This is the Secondary System Description Table, and it also contains [AML](./aml.md) code, which is used to configure the system.
 - [BGRT] (not used): This is the Boot Graphics Resource Table, and it contains information about the boot logo, and it is used by the [UEFI] firmware.
@@ -37,7 +37,7 @@ them to the heap, this will make it easier to use, and we can reclaim `ACPI` mem
 [RSDT]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#root-system-description-table-rsdt
 [MADT/APIC]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#multiple-apic-description-table-madt
 [FACP]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#fixed-acpi-description-table-fadt
-[HPET]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#high-precision-event-timer-hpet
+[HPET_acpi]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#high-precision-event-timer-hpet
 [DSDT]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#differentiated-system-description-table-dsdt
 [SSDT]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#secondary-system-description-table-ssdt
 [BGRT]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#boot-graphics-resource-table-bgrt

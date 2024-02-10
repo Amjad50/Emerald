@@ -130,6 +130,8 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     println!("BIOS tables: {}", bios_tables);
     apic::init(&bios_tables);
     clock::init(&bios_tables);
+    // APIC timer interrupt rely on the clock, so it must be initialized after the clock
+    // and interrupts should be disabled until
     unsafe { cpu::set_interrupts() };
     devices::init_legacy_devices();
     console::init_late_device();

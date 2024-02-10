@@ -6,7 +6,7 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 17;
+pub const NUM_SYSCALLS: usize = 19;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
@@ -27,6 +27,8 @@ mod numbers {
     pub const SYS_CHDIR: u64 = 14;
     pub const SYS_SET_FILE_META: u64 = 15;
     pub const SYS_GET_FILE_META: u64 = 16;
+    pub const SYS_SLEEP: u64 = 17;
+    pub const SYS_GET_TIME: u64 = 18;
 }
 pub use numbers::*;
 
@@ -201,6 +203,7 @@ pub enum SyscallArgError {
     NotValidUtf8 = 3,
     InvalidHeapIncrement = 4,
     DuplicateFileMappings = 5,
+    InvalidNanoseconds = 6,
 }
 
 impl SyscallArgError {
@@ -212,6 +215,7 @@ impl SyscallArgError {
             3 => Ok(Some(SyscallArgError::NotValidUtf8)),
             4 => Ok(Some(SyscallArgError::InvalidHeapIncrement)),
             5 => Ok(Some(SyscallArgError::DuplicateFileMappings)),
+            6 => Ok(Some(SyscallArgError::InvalidNanoseconds)),
             _ => Err(()),
         }
     }

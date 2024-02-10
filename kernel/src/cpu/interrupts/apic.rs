@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use crate::{
     acpi::tables::{self, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
-    cpu::{self, idt::InterruptStackFrame64, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS},
+    cpu::{self, idt::InterruptStackFrame64, Cpu, CPUS, MAX_CPUS},
     memory_management::virtual_space,
     sync::spin::mutex::Mutex,
 };
@@ -16,8 +16,6 @@ use super::{
     allocate_basic_user_interrupt, allocate_user_interrupt, allocate_user_interrupt_all_saved,
     InterruptHandler,
 };
-
-const CPUID_FEAT_EDX_APIC: u32 = 1 << 9;
 
 const APIC_BAR_ENABLED: u64 = 1 << 11;
 const APIC_BASE_MASK: u64 = 0xFFFF_FFFF_FFFF_F000;
@@ -360,8 +358,8 @@ impl Apic {
 
     fn init(&mut self, bios_tables: &BiosTables) {
         // do we have APIC in this cpu?
-        let cpuid = unsafe { cpu::cpuid!(CPUID_FN_FEAT) };
-        if cpuid.edx & CPUID_FEAT_EDX_APIC == 0 {
+        let cpuid = unsafe { cpu::cpuid::cpuid!(cpu::cpuid::FN_FEAT) };
+        if cpuid.edx & cpu::cpuid::FEAT_EDX_APIC == 0 {
             panic!("APIC is not supported");
         }
         let apic_bar = unsafe { cpu::msr::read(cpu::msr::APIC_BASE) };

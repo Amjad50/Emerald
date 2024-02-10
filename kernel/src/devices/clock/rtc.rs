@@ -2,31 +2,60 @@ use core::fmt;
 
 use crate::cpu;
 
-mod consts {
-    pub const CURRENT_CENTURY: u16 = 2000 / 100;
+pub const CURRENT_CENTURY: u16 = 2000 / 100;
 
-    pub const RTC_ADDRESS: u16 = 0x70;
-    pub const RTC_DATA: u16 = 0x71;
+pub const RTC_ADDRESS: u16 = 0x70;
+pub const RTC_DATA: u16 = 0x71;
 
-    pub const RTC_SECONDS: u8 = 0x00;
-    pub const RTC_MINUTES: u8 = 0x02;
-    pub const RTC_HOURS: u8 = 0x04;
-    pub const RTC_DAY_OF_MONTH: u8 = 0x07;
-    pub const RTC_MONTH: u8 = 0x08;
-    pub const RTC_YEAR: u8 = 0x09;
+pub const RTC_SECONDS: u8 = 0x00;
+pub const RTC_MINUTES: u8 = 0x02;
+pub const RTC_HOURS: u8 = 0x04;
+pub const RTC_DAY_OF_MONTH: u8 = 0x07;
+pub const RTC_MONTH: u8 = 0x08;
+pub const RTC_YEAR: u8 = 0x09;
 
-    pub const RTC_STATUS_A: u8 = 0x0A;
-    pub const RTC_STATUS_B: u8 = 0x0B;
-}
+pub const RTC_STATUS_A: u8 = 0x0A;
+pub const RTC_STATUS_B: u8 = 0x0B;
+
+pub const SECONDS_PER_MINUTE: u64 = 60;
+pub const SECONDS_PER_HOUR: u64 = 60 * SECONDS_PER_MINUTE;
+pub const SECONDS_PER_DAY: u64 = 24 * SECONDS_PER_HOUR;
+/// This is very inaccurate, but we only use it for `ClockDevice` which
+/// doesn't care about the start of time, just a forward moving time
+pub const SECONDS_PER_MONTH: u64 = 30 * SECONDS_PER_DAY;
+/// (365.25925925925924 * SECONDS_PER_DAY);
+/// idk why this works better than what we think it should be, i.e. `365.242374`
+/// This number produce more accurate unix time conversion
+pub const SECONDS_PER_YEAR: u64 = 31558400;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RtcTime {
-    seconds: u8,
-    minutes: u8,
-    hours: u8,
-    day_of_month: u8,
-    month: u8,
-    year: u16,
+    pub seconds: u8,
+    pub minutes: u8,
+    pub hours: u8,
+    pub day_of_month: u8,
+    pub month: u8,
+    pub year: u16,
+}
+
+impl RtcTime {
+    pub fn seconds_since_unix_epoch(&self) -> Option<u64> {
+        // unix starts at 1970-01-01 00:00:00
+        if self.year < 1970 {
+            return None;
+        }
+
+        let timestamp_since_0 = self.year as u64 * SECONDS_PER_YEAR
+            + ((self.month - 1) as u64 * SECONDS_PER_MONTH)
+            + ((self.day_of_month - 1) as u64 * SECONDS_PER_DAY)
+            + self.hours as u64 * SECONDS_PER_HOUR
+            + self.minutes as u64 * SECONDS_PER_MINUTE
+            + self.seconds as u64;
+
+        const UNIX_EPOCH: u64 = 1970 * SECONDS_PER_YEAR;
+
+        Some(timestamp_since_0 - UNIX_EPOCH)
+    }
 }
 
 pub struct Rtc {
@@ -64,17 +93,17 @@ impl Rtc {
 
     fn read_register(&self, reg: u8) -> u8 {
         unsafe {
-            cpu::io_out(consts::RTC_ADDRESS, reg);
-            cpu::io_in(consts::RTC_DATA)
+            cpu::io_out(RTC_ADDRESS, reg);
+            cpu::io_in(RTC_DATA)
         }
     }
 
     fn is_updating(&self) -> bool {
-        self.read_register(consts::RTC_STATUS_A) & 0x80 != 0
+        self.read_register(RTC_STATUS_A) & 0x80 != 0
     }
 
     fn is_bcd(&self) -> bool {
-        self.read_register(consts::RTC_STATUS_B) & 0x04 == 0
+        self.read_register(RTC_STATUS_B) & 0x04 == 0
     }
 
     fn get_time_sync(&self) -> (RtcTime, u8) {
@@ -86,12 +115,12 @@ impl Rtc {
             while self.is_updating() {}
             let mut century_new = century;
             let t_new = RtcTime {
-                seconds: self.read_register(consts::RTC_SECONDS),
-                minutes: self.read_register(consts::RTC_MINUTES),
-                hours: self.read_register(consts::RTC_HOURS),
-                day_of_month: self.read_register(consts::RTC_DAY_OF_MONTH),
-                month: self.read_register(consts::RTC_MONTH),
-                year: self.read_register(consts::RTC_YEAR) as u16,
+                seconds: self.read_register(RTC_SECONDS),
+                minutes: self.read_register(RTC_MINUTES),
+                hours: self.read_register(RTC_HOURS),
+                day_of_month: self.read_register(RTC_DAY_OF_MONTH),
+                month: self.read_register(RTC_MONTH),
+                year: self.read_register(RTC_YEAR) as u16,
             };
 
             if let Some(century_reg) = self.century_reg {
@@ -128,7 +157,7 @@ impl Rtc {
         let century = if self.century_reg.is_some() {
             century as u16
         } else {
-            consts::CURRENT_CENTURY
+            CURRENT_CENTURY
         };
         t.year += century * 100;
 

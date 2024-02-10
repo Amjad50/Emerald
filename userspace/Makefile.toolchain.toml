@@ -1,3 +1,7 @@
+[env]
+# set to `false` if its not set
+# so that the below `env_false` condition works
+NO_TOOLCHAIN_BUILD = { value = "false", condition = { env_not_set = ["NO_TOOLCHAIN_BUILD"] } }
 
 [tasks.copy_config_toml]
 workspace = false

@@ -32,7 +32,7 @@ It will setup the interrupts with the correct `IO APIC` based on the argument `i
 Currently, we have these interrupts configured:
 - `1`: Used by the [keyboard](../drivers/keyboard.md) driver.
 - `14 & 15`: Used by the [IDE](../drivers/ide.md) driver.
-- [HPET](../drivers/hpet.md) timer, with interrupt number specified dynamically based on its configuration,
+- [HPET](../clocks/hpet.md) timer, with interrupt number specified dynamically based on its configuration,
 but looks to be `2` on the VM.
 
 

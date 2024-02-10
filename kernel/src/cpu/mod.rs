@@ -9,7 +9,6 @@ pub mod gdt;
 pub mod idt;
 pub mod interrupts;
 
-const CPUID_FN_FEAT: u32 = 1;
 const MAX_CPUS: usize = 8;
 
 pub mod flags {
@@ -32,6 +31,26 @@ pub mod msr {
         let edx = (val >> 32) as u32;
         core::arch::asm!("wrmsr", in("ecx") reg, in("eax") eax, in("edx") edx, options(readonly, nostack, preserves_flags));
     }
+}
+
+#[allow(dead_code)]
+pub mod cpuid {
+    pub const FN_FEAT: u32 = 1;
+
+    pub const FEAT_EDX_TSC: u32 = 1 << 4;
+    pub const FEAT_EDX_APIC: u32 = 1 << 9;
+
+    #[macro_export]
+    macro_rules! cpuid {
+        ($rax:expr) => {
+            ::core::arch::x86_64::__cpuid_count($rax, 0)
+        };
+        ($rax:expr, $rcx:expr) => {
+            ::core::arch::x86_64::__cpuid_count($rax, $rcx)
+        };
+    }
+    #[allow(unused_imports)]
+    pub use cpuid;
 }
 
 static mut CPUS: [Cpu; MAX_CPUS] = [Cpu::empty(); MAX_CPUS];
@@ -284,14 +303,9 @@ pub unsafe fn invalidate_tlp(virtual_address: u64) {
     core::arch::asm!("invlpg [{0}]", in(reg) virtual_address);
 }
 
-#[macro_export]
-macro_rules! cpuid {
-    ($rax:expr) => {
-        ::core::arch::x86_64::__cpuid_count($rax, 0)
-    };
-    ($rax:expr, $rcx:expr) => {
-        ::core::arch::x86_64::__cpuid_count($rax, $rcx)
-    };
+#[allow(dead_code)]
+pub unsafe fn read_tsc() -> u64 {
+    let (low, high): (u32, u32);
+    core::arch::asm!("rdtsc", out("eax") low, out("edx") high, options(nomem, nostack, preserves_flags));
+    ((high as u64) << 32) | (low as u64)
 }
-#[allow(unused_imports)]
-pub use cpuid;
