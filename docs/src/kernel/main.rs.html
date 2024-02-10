@@ -157,6 +157,8 @@
 <a href="#155" id="155">155</a>
 <a href="#156" id="156">156</a>
 <a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
 </pre></div><pre class="rust"><code><span class="attr">#![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
@@ -289,7 +291,9 @@
     <span class="macro">println!</span>(<span class="string">"BIOS tables: {}"</span>, bios_tables);
     apic::init(<span class="kw-2">&amp;</span>bios_tables);
     clock::init(<span class="kw-2">&amp;</span>bios_tables);
-    <span class="kw">unsafe </span>{ cpu::set_interrupts() };
+    <span class="comment">// APIC timer interrupt rely on the clock, so it must be initialized after the clock
+    // and interrupts should be disabled until
+    </span><span class="kw">unsafe </span>{ cpu::set_interrupts() };
     devices::init_legacy_devices();
     console::init_late_device();
     devices::prope_pci_devices();

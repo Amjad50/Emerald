@@ -425,6 +425,8 @@
 <a href="#423" id="423">423</a>
 <a href="#424" id="424">424</a>
 <a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>scheduler;
 <span class="kw">mod </span>syscalls;
 
@@ -434,6 +436,7 @@
 
 <span class="kw">use crate</span>::{
     cpu::{<span class="self">self</span>, gdt},
+    devices::clock::ClockTime,
     executable::{elf, load_elf_to_vm},
     fs,
     memory_management::{
@@ -528,6 +531,7 @@
     Sleeping,
     Exited,
     WaitingForPid(u64),
+    WaitingForTime(ClockTime),
 }
 
 <span class="comment">// TODO: implement threads, for now each process acts as a thread also

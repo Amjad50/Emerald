@@ -137,35 +137,93 @@
 <a href="#135" id="135">135</a>
 <a href="#136" id="136">136</a>
 <a href="#137" id="137">137</a>
+<a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span><span class="kw">crate</span>::cpu;
 
-<span class="kw">mod </span>consts {
-    <span class="kw">pub const </span>CURRENT_CENTURY: u16 = <span class="number">2000 </span>/ <span class="number">100</span>;
+<span class="kw">pub const </span>CURRENT_CENTURY: u16 = <span class="number">2000 </span>/ <span class="number">100</span>;
 
-    <span class="kw">pub const </span>RTC_ADDRESS: u16 = <span class="number">0x70</span>;
-    <span class="kw">pub const </span>RTC_DATA: u16 = <span class="number">0x71</span>;
+<span class="kw">pub const </span>RTC_ADDRESS: u16 = <span class="number">0x70</span>;
+<span class="kw">pub const </span>RTC_DATA: u16 = <span class="number">0x71</span>;
 
-    <span class="kw">pub const </span>RTC_SECONDS: u8 = <span class="number">0x00</span>;
-    <span class="kw">pub const </span>RTC_MINUTES: u8 = <span class="number">0x02</span>;
-    <span class="kw">pub const </span>RTC_HOURS: u8 = <span class="number">0x04</span>;
-    <span class="kw">pub const </span>RTC_DAY_OF_MONTH: u8 = <span class="number">0x07</span>;
-    <span class="kw">pub const </span>RTC_MONTH: u8 = <span class="number">0x08</span>;
-    <span class="kw">pub const </span>RTC_YEAR: u8 = <span class="number">0x09</span>;
+<span class="kw">pub const </span>RTC_SECONDS: u8 = <span class="number">0x00</span>;
+<span class="kw">pub const </span>RTC_MINUTES: u8 = <span class="number">0x02</span>;
+<span class="kw">pub const </span>RTC_HOURS: u8 = <span class="number">0x04</span>;
+<span class="kw">pub const </span>RTC_DAY_OF_MONTH: u8 = <span class="number">0x07</span>;
+<span class="kw">pub const </span>RTC_MONTH: u8 = <span class="number">0x08</span>;
+<span class="kw">pub const </span>RTC_YEAR: u8 = <span class="number">0x09</span>;
 
-    <span class="kw">pub const </span>RTC_STATUS_A: u8 = <span class="number">0x0A</span>;
-    <span class="kw">pub const </span>RTC_STATUS_B: u8 = <span class="number">0x0B</span>;
-}
+<span class="kw">pub const </span>RTC_STATUS_A: u8 = <span class="number">0x0A</span>;
+<span class="kw">pub const </span>RTC_STATUS_B: u8 = <span class="number">0x0B</span>;
+
+<span class="kw">pub const </span>SECONDS_PER_MINUTE: u64 = <span class="number">60</span>;
+<span class="kw">pub const </span>SECONDS_PER_HOUR: u64 = <span class="number">60 </span>* SECONDS_PER_MINUTE;
+<span class="kw">pub const </span>SECONDS_PER_DAY: u64 = <span class="number">24 </span>* SECONDS_PER_HOUR;
+<span class="doccomment">/// This is very inaccurate, but we only use it for `ClockDevice` which
+/// doesn't care about the start of time, just a forward moving time
+</span><span class="kw">pub const </span>SECONDS_PER_MONTH: u64 = <span class="number">30 </span>* SECONDS_PER_DAY;
+<span class="doccomment">/// (365.25925925925924 * SECONDS_PER_DAY);
+/// idk why this works better than what we think it should be, i.e. `365.242374`
+/// This number produce more accurate unix time conversion
+</span><span class="kw">pub const </span>SECONDS_PER_YEAR: u64 = <span class="number">31558400</span>;
 
 <span class="attr">#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>RtcTime {
-    seconds: u8,
-    minutes: u8,
-    hours: u8,
-    day_of_month: u8,
-    month: u8,
-    year: u16,
+    <span class="kw">pub </span>seconds: u8,
+    <span class="kw">pub </span>minutes: u8,
+    <span class="kw">pub </span>hours: u8,
+    <span class="kw">pub </span>day_of_month: u8,
+    <span class="kw">pub </span>month: u8,
+    <span class="kw">pub </span>year: u16,
+}
+
+<span class="kw">impl </span>RtcTime {
+    <span class="kw">pub fn </span>seconds_since_unix_epoch(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+        <span class="comment">// unix starts at 1970-01-01 00:00:00
+        </span><span class="kw">if </span><span class="self">self</span>.year &lt; <span class="number">1970 </span>{
+            <span class="kw">return </span><span class="prelude-val">None</span>;
+        }
+
+        <span class="kw">let </span>timestamp_since_0 = <span class="self">self</span>.year <span class="kw">as </span>u64 * SECONDS_PER_YEAR
+            + ((<span class="self">self</span>.month - <span class="number">1</span>) <span class="kw">as </span>u64 * SECONDS_PER_MONTH)
+            + ((<span class="self">self</span>.day_of_month - <span class="number">1</span>) <span class="kw">as </span>u64 * SECONDS_PER_DAY)
+            + <span class="self">self</span>.hours <span class="kw">as </span>u64 * SECONDS_PER_HOUR
+            + <span class="self">self</span>.minutes <span class="kw">as </span>u64 * SECONDS_PER_MINUTE
+            + <span class="self">self</span>.seconds <span class="kw">as </span>u64;
+
+        <span class="kw">const </span>UNIX_EPOCH: u64 = <span class="number">1970 </span>* SECONDS_PER_YEAR;
+
+        <span class="prelude-val">Some</span>(timestamp_since_0 - UNIX_EPOCH)
+    }
 }
 
 <span class="kw">pub struct </span>Rtc {
@@ -203,17 +261,17 @@
 
     <span class="kw">fn </span>read_register(<span class="kw-2">&amp;</span><span class="self">self</span>, reg: u8) -&gt; u8 {
         <span class="kw">unsafe </span>{
-            cpu::io_out(consts::RTC_ADDRESS, reg);
-            cpu::io_in(consts::RTC_DATA)
+            cpu::io_out(RTC_ADDRESS, reg);
+            cpu::io_in(RTC_DATA)
         }
     }
 
     <span class="kw">fn </span>is_updating(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-        <span class="self">self</span>.read_register(consts::RTC_STATUS_A) &amp; <span class="number">0x80 </span>!= <span class="number">0
+        <span class="self">self</span>.read_register(RTC_STATUS_A) &amp; <span class="number">0x80 </span>!= <span class="number">0
     </span>}
 
     <span class="kw">fn </span>is_bcd(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-        <span class="self">self</span>.read_register(consts::RTC_STATUS_B) &amp; <span class="number">0x04 </span>== <span class="number">0
+        <span class="self">self</span>.read_register(RTC_STATUS_B) &amp; <span class="number">0x04 </span>== <span class="number">0
     </span>}
 
     <span class="kw">fn </span>get_time_sync(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (RtcTime, u8) {
@@ -225,12 +283,12 @@
             <span class="kw">while </span><span class="self">self</span>.is_updating() {}
             <span class="kw">let </span><span class="kw-2">mut </span>century_new = century;
             <span class="kw">let </span>t_new = RtcTime {
-                seconds: <span class="self">self</span>.read_register(consts::RTC_SECONDS),
-                minutes: <span class="self">self</span>.read_register(consts::RTC_MINUTES),
-                hours: <span class="self">self</span>.read_register(consts::RTC_HOURS),
-                day_of_month: <span class="self">self</span>.read_register(consts::RTC_DAY_OF_MONTH),
-                month: <span class="self">self</span>.read_register(consts::RTC_MONTH),
-                year: <span class="self">self</span>.read_register(consts::RTC_YEAR) <span class="kw">as </span>u16,
+                seconds: <span class="self">self</span>.read_register(RTC_SECONDS),
+                minutes: <span class="self">self</span>.read_register(RTC_MINUTES),
+                hours: <span class="self">self</span>.read_register(RTC_HOURS),
+                day_of_month: <span class="self">self</span>.read_register(RTC_DAY_OF_MONTH),
+                month: <span class="self">self</span>.read_register(RTC_MONTH),
+                year: <span class="self">self</span>.read_register(RTC_YEAR) <span class="kw">as </span>u16,
             };
 
             <span class="kw">if let </span><span class="prelude-val">Some</span>(century_reg) = <span class="self">self</span>.century_reg {
@@ -267,7 +325,7 @@
         <span class="kw">let </span>century = <span class="kw">if </span><span class="self">self</span>.century_reg.is_some() {
             century <span class="kw">as </span>u16
         } <span class="kw">else </span>{
-            consts::CURRENT_CENTURY
+            CURRENT_CENTURY
         };
         t.year += century * <span class="number">100</span>;
 

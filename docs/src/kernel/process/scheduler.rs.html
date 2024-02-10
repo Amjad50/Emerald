@@ -270,12 +270,61 @@
 <a href="#268" id="268">268</a>
 <a href="#269" id="269">269</a>
 <a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::mem;
 
 <span class="kw">use </span>alloc::vec::Vec;
 
 <span class="kw">use crate</span>::{
     cpu::{<span class="self">self</span>, idt::InterruptAllSavedState, interrupts},
+    devices::clock::{<span class="self">self</span>, ClockTime},
     memory_management::virtual_memory_mapper,
     process::{syscalls, FxSave},
     sync::spin::mutex::Mutex,
@@ -288,6 +337,7 @@
 <span class="kw">struct </span>Scheduler {
     interrupt_initialized: bool,
     processes: Vec&lt;Process&gt;,
+    earliest_wait: <span class="prelude-ty">Option</span>&lt;ClockTime&gt;,
 }
 
 <span class="kw">impl </span>Scheduler {
@@ -295,6 +345,7 @@
         <span class="self">Self </span>{
             interrupt_initialized: <span class="bool-val">false</span>,
             processes: Vec::new(),
+            earliest_wait: <span class="prelude-val">None</span>,
         }
     }
 
@@ -325,21 +376,28 @@
         <span class="macro">assert!</span>(current_cpu.context.is_none());
 
         <span class="kw">let </span><span class="kw-2">mut </span>scheduler = SCHEDULER.lock();
+
+        <span class="kw">let </span>earliest_wait = scheduler.earliest_wait.take();
+        <span class="kw">let </span><span class="kw-2">mut </span>new_earliest_wait: <span class="prelude-ty">Option</span>&lt;ClockTime&gt; = <span class="prelude-val">None</span>;
+        <span class="kw">let </span>time_now = clock::clocks().time_since_startup();
+        <span class="comment">// we are going to wake one process, so make it a priority
+        </span><span class="kw">let </span>going_to_wake = earliest_wait.map(|t| t &lt;= time_now).unwrap_or(<span class="bool-val">false</span>);
+
         <span class="comment">// no context holding, i.e. free to take a new process
         </span><span class="kw">for </span>process <span class="kw">in </span>scheduler.processes.iter_mut() {
+            <span class="kw">let </span><span class="kw-2">mut </span>run = <span class="bool-val">false</span>;
             <span class="kw">match </span>process.state {
                 <span class="comment">// only schedule another if we don't have current process ready to be run
-                </span>ProcessState::Scheduled <span class="kw">if </span>current_cpu.context.is_none() =&gt; {
-                    <span class="comment">// found a process to run
-                    </span>current_cpu.push_cli();
-                    process.state = ProcessState::Running;
-                    <span class="comment">// SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
-                    // as it has clones of our kernel mappings
-                    </span><span class="kw">unsafe </span>{ process.switch_to_this_vm() };
-                    current_cpu.process_id = process.id;
-                    current_cpu.context = <span class="prelude-val">Some</span>(process.context);
-                    current_cpu.scheduling = <span class="bool-val">true</span>;
-                    current_cpu.pop_cli();
+                </span>ProcessState::Scheduled <span class="kw">if </span>current_cpu.context.is_none() &amp;&amp; !going_to_wake =&gt; {
+                    run = <span class="bool-val">true</span>;
+                }
+                ProcessState::WaitingForTime(t) =&gt; {
+                    <span class="kw">if </span>current_cpu.context.is_none() &amp;&amp; t &lt;= time_now {
+                        run = <span class="bool-val">true</span>;
+                    } <span class="kw">else </span>{
+                        <span class="comment">// this is not done yet, add it to the earliest wait
+                        </span>new_earliest_wait = <span class="prelude-val">Some</span>(new_earliest_wait.map_or(t, |et| et.min(t)));
+                    }
                 }
                 ProcessState::Yielded =&gt; {
                     <span class="comment">// schedule for next time
@@ -351,7 +409,20 @@
                 </span>}
                 <span class="kw">_ </span>=&gt; {}
             }
+            <span class="kw">if </span>run {
+                <span class="comment">// found a process to run
+                </span>current_cpu.push_cli();
+                process.state = ProcessState::Running;
+                <span class="comment">// SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
+                // as it has clones of our kernel mappings
+                </span><span class="kw">unsafe </span>{ process.switch_to_this_vm() };
+                current_cpu.process_id = process.id;
+                current_cpu.context = <span class="prelude-val">Some</span>(process.context);
+                current_cpu.scheduling = <span class="bool-val">true</span>;
+                current_cpu.pop_cli();
+            }
         }
+        scheduler.earliest_wait = new_earliest_wait;
         scheduler
             .processes
             .retain(|p| p.state != ProcessState::Exited);
@@ -428,6 +499,31 @@
         }
     }
 
+    current_cpu.pop_cli();
+    <span class="comment">// go back to the kernel after the scheduler interrupt
+</span>}
+
+<span class="kw">pub fn </span>sleep_current_process(time: ClockTime, all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) {
+    <span class="kw">let </span>current_cpu = cpu::cpu();
+    <span class="macro">assert!</span>(current_cpu.context.is_some());
+
+    <span class="kw">let </span>deadline = clock::clocks().time_since_startup() + time;
+
+    with_current_process(|process| {
+        <span class="macro">assert!</span>(process.state == ProcessState::Running);
+        current_cpu.push_cli();
+        process.state = ProcessState::WaitingForTime(deadline);
+        <span class="macro">eprintln!</span>(<span class="string">"Process {} is waiting for time {:?}"</span>, process.id, deadline);
+        swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+        <span class="comment">// clear context from the CPU
+        </span>process.context = current_cpu.context.take().unwrap();
+    });
+    {
+        <span class="kw">let </span><span class="kw-2">mut </span>scheduler = SCHEDULER.lock();
+        <span class="kw">let </span>earliest_wait = scheduler.earliest_wait.take();
+        <span class="kw">let </span>new_earliest_wait = earliest_wait.map_or(deadline, |et| et.min(deadline));
+        scheduler.earliest_wait = <span class="prelude-val">Some</span>(new_earliest_wait);
+    }
     current_cpu.pop_cli();
     <span class="comment">// go back to the kernel after the scheduler interrupt
 </span>}

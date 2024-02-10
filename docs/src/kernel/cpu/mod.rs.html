@@ -297,6 +297,20 @@
 <a href="#295" id="295">295</a>
 <a href="#296" id="296">296</a>
 <a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::process::ProcessContext;
 
 <span class="kw">use </span><span class="self">self</span>::{
@@ -308,7 +322,6 @@
 <span class="kw">pub mod </span>idt;
 <span class="kw">pub mod </span>interrupts;
 
-<span class="kw">const </span>CPUID_FN_FEAT: u32 = <span class="number">1</span>;
 <span class="kw">const </span>MAX_CPUS: usize = <span class="number">8</span>;
 
 <span class="kw">pub mod </span>flags {
@@ -331,6 +344,26 @@
         <span class="kw">let </span>edx = (val &gt;&gt; <span class="number">32</span>) <span class="kw">as </span>u32;
         <span class="macro">core::arch::asm!</span>(<span class="string">"wrmsr"</span>, <span class="kw">in</span>(<span class="string">"ecx"</span>) reg, <span class="kw">in</span>(<span class="string">"eax"</span>) eax, <span class="kw">in</span>(<span class="string">"edx"</span>) edx, options(readonly, nostack, preserves_flags));
     }
+}
+
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">pub mod </span>cpuid {
+    <span class="kw">pub const </span>FN_FEAT: u32 = <span class="number">1</span>;
+
+    <span class="kw">pub const </span>FEAT_EDX_TSC: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>;
+    <span class="kw">pub const </span>FEAT_EDX_APIC: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">9</span>;
+
+    <span class="attr">#[macro_export]
+    </span><span class="macro">macro_rules! </span>cpuid {
+        (<span class="macro-nonterminal">$rax</span>:expr) =&gt; {
+            ::core::arch::x86_64::__cpuid_count(<span class="macro-nonterminal">$rax</span>, <span class="number">0</span>)
+        };
+        (<span class="macro-nonterminal">$rax</span>:expr, <span class="macro-nonterminal">$rcx</span>:expr) =&gt; {
+            ::core::arch::x86_64::__cpuid_count(<span class="macro-nonterminal">$rax</span>, <span class="macro-nonterminal">$rcx</span>)
+        };
+    }
+    <span class="attr">#[allow(unused_imports)]
+    </span><span class="kw">pub use </span>cpuid;
 }
 
 <span class="kw">static </span><span class="kw-2">mut </span>CPUS: [Cpu; MAX_CPUS] = [Cpu::empty(); MAX_CPUS];
@@ -583,15 +616,10 @@
     <span class="macro">core::arch::asm!</span>(<span class="string">"invlpg [{0}]"</span>, <span class="kw">in</span>(reg) virtual_address);
 }
 
-<span class="attr">#[macro_export]
-</span><span class="macro">macro_rules! </span>cpuid {
-    (<span class="macro-nonterminal">$rax</span>:expr) =&gt; {
-        ::core::arch::x86_64::__cpuid_count(<span class="macro-nonterminal">$rax</span>, <span class="number">0</span>)
-    };
-    (<span class="macro-nonterminal">$rax</span>:expr, <span class="macro-nonterminal">$rcx</span>:expr) =&gt; {
-        ::core::arch::x86_64::__cpuid_count(<span class="macro-nonterminal">$rax</span>, <span class="macro-nonterminal">$rcx</span>)
-    };
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">pub unsafe fn </span>read_tsc() -&gt; u64 {
+    <span class="kw">let </span>(low, high): (u32, u32);
+    <span class="macro">core::arch::asm!</span>(<span class="string">"rdtsc"</span>, out(<span class="string">"eax"</span>) low, out(<span class="string">"edx"</span>) high, options(nomem, nostack, preserves_flags));
+    ((high <span class="kw">as </span>u64) &lt;&lt; <span class="number">32</span>) | (low <span class="kw">as </span>u64)
 }
-<span class="attr">#[allow(unused_imports)]
-</span><span class="kw">pub use </span>cpuid;
 </code></pre></div></section></main></body></html>

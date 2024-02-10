@@ -599,8 +599,6 @@
 <a href="#597" id="597">597</a>
 <a href="#598" id="598">598</a>
 <a href="#599" id="599">599</a>
-<a href="#600" id="600">600</a>
-<a href="#601" id="601">601</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     borrow::{Borrow, BorrowMut},
     mem,
@@ -610,7 +608,7 @@
 
 <span class="kw">use crate</span>::{
     acpi::tables::{<span class="self">self</span>, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
-    cpu::{<span class="self">self</span>, idt::InterruptStackFrame64, Cpu, CPUID_FN_FEAT, CPUS, MAX_CPUS},
+    cpu::{<span class="self">self</span>, idt::InterruptStackFrame64, Cpu, CPUS, MAX_CPUS},
     memory_management::virtual_space,
     sync::spin::mutex::Mutex,
 };
@@ -619,8 +617,6 @@
     allocate_basic_user_interrupt, allocate_user_interrupt, allocate_user_interrupt_all_saved,
     InterruptHandler,
 };
-
-<span class="kw">const </span>CPUID_FEAT_EDX_APIC: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">9</span>;
 
 <span class="kw">const </span>APIC_BAR_ENABLED: u64 = <span class="number">1 </span>&lt;&lt; <span class="number">11</span>;
 <span class="kw">const </span>APIC_BASE_MASK: u64 = <span class="number">0xFFFF_FFFF_FFFF_F000</span>;
@@ -963,8 +959,8 @@
 
     <span class="kw">fn </span>init(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bios_tables: <span class="kw-2">&amp;</span>BiosTables) {
         <span class="comment">// do we have APIC in this cpu?
-        </span><span class="kw">let </span>cpuid = <span class="kw">unsafe </span>{ <span class="macro">cpu::cpuid!</span>(CPUID_FN_FEAT) };
-        <span class="kw">if </span>cpuid.edx &amp; CPUID_FEAT_EDX_APIC == <span class="number">0 </span>{
+        </span><span class="kw">let </span>cpuid = <span class="kw">unsafe </span>{ <span class="macro">cpu::cpuid::cpuid!</span>(cpu::cpuid::FN_FEAT) };
+        <span class="kw">if </span>cpuid.edx &amp; cpu::cpuid::FEAT_EDX_APIC == <span class="number">0 </span>{
             <span class="macro">panic!</span>(<span class="string">"APIC is not supported"</span>);
         }
         <span class="kw">let </span>apic_bar = <span class="kw">unsafe </span>{ cpu::msr::read(cpu::msr::APIC_BASE) };

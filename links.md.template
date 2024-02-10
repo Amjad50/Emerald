@@ -26,8 +26,6 @@
 [kernel_cpu_apic]: {ROOT_PATH}docs/kernel/cpu/interrupts/apic
 [kernel_cpu_apic_assign_io_irq]: {ROOT_PATH}docs/kernel/cpu/interrupts/apic/fn.assign_io_irq.html
 [kernel_cpu_apic_allocate_io_irq_custom]: {ROOT_PATH}docs/kernel/cpu/interrupts/apic/fn.assign_io_irq_custom.html
-[hpet]: {ROOT_PATH}docs/kernel/devices/clock/hpet
-[rtc]: {ROOT_PATH}docs/kernel/devices/clock/rtc
 [kernel_gdt]: {ROOT_PATH}docs/kernel/cpu/gdt
 [kernel_idt]: {ROOT_PATH}docs/kernel/cpu/idt
 [kernel_acpi]: {ROOT_PATH}docs/kernel/acpi
@@ -40,3 +38,7 @@
 [executable]: {ROOT_PATH}docs/kernel/executable
 [elf]: {ROOT_PATH}docs/kernel/executable/elf
 [syscalls]: {ROOT_PATH}docs/kernel/process/syscalls
+[hpet]: {ROOT_PATH}docs/kernel/devices/clock/hpet
+[rtc]: {ROOT_PATH}docs/kernel/devices/clock/rtc
+[tsc]: {ROOT_PATH}docs/kernel/devices/clock/tsc
+[clocks]: {ROOT_PATH}docs/kernel/devices/clock

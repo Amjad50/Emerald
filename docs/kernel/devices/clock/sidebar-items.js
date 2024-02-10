@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["init"],"mod":["hpet","rtc"],"static":["HPET_CLOCK"]};
+window.SIDEBAR_ITEMS = {"constant":["NANOS_PER_SEC"],"fn":["clocks","init"],"mod":["hpet","rtc","tsc"],"static":["CLOCKS"],"struct":["Clock","ClockTime","SystemTime"],"trait":["ClockDevice"]};

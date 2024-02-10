@@ -11,15 +11,19 @@
 <a href="#9" id="9">9</a>
 <a href="#10" id="10">10</a>
 <a href="#11" id="11">11</a>
+<a href="#12" id="12">12</a>
+<a href="#13" id="13">13</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Global handlers that have several purposes and doesn't belong in 1 place specifically
 
-</span><span class="kw">use crate</span>::{cpu::idt::InterruptAllSavedState, process::scheduler};
+</span><span class="kw">use crate</span>::{cpu::idt::InterruptAllSavedState, devices::clock, process::scheduler};
 
 <span class="kw">use </span><span class="kw">super</span>::apic;
 
 <span class="kw">pub extern </span><span class="string">"cdecl" </span><span class="kw">fn </span>apic_timer_handler(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) {
-    scheduler::yield_current_if_any(all_state);
+    <span class="comment">// make sure its initialized
+    </span>clock::clocks().tick_system_time();
 
+    scheduler::yield_current_if_any(all_state);
     apic::return_from_interrupt();
 }
 </code></pre></div></section></main></body></html>

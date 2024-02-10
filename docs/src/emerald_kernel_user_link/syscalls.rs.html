@@ -386,6 +386,10 @@
 <a href="#384" id="384">384</a>
 <a href="#385" id="385">385</a>
 <a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>types_conversions;
 
 <span class="doccomment">/// must be one of user interrupts, i.e. 0x20+
@@ -394,7 +398,7 @@
 /// user-kernel
 </span><span class="kw">pub const </span>SYSCALL_INTERRUPT_NUMBER: u8 = <span class="number">0xFE</span>;
 
-<span class="kw">pub const </span>NUM_SYSCALLS: usize = <span class="number">17</span>;
+<span class="kw">pub const </span>NUM_SYSCALLS: usize = <span class="number">19</span>;
 
 <span class="kw">mod </span>numbers {
     <span class="kw">pub const </span>SYS_OPEN: u64 = <span class="number">0</span>;
@@ -415,6 +419,8 @@
     <span class="kw">pub const </span>SYS_CHDIR: u64 = <span class="number">14</span>;
     <span class="kw">pub const </span>SYS_SET_FILE_META: u64 = <span class="number">15</span>;
     <span class="kw">pub const </span>SYS_GET_FILE_META: u64 = <span class="number">16</span>;
+    <span class="kw">pub const </span>SYS_SLEEP: u64 = <span class="number">17</span>;
+    <span class="kw">pub const </span>SYS_GET_TIME: u64 = <span class="number">18</span>;
 }
 <span class="kw">pub use </span>numbers::<span class="kw-2">*</span>;
 
@@ -589,6 +595,7 @@
     NotValidUtf8 = <span class="number">3</span>,
     InvalidHeapIncrement = <span class="number">4</span>,
     DuplicateFileMappings = <span class="number">5</span>,
+    InvalidNanoseconds = <span class="number">6</span>,
 }
 
 <span class="kw">impl </span>SyscallArgError {
@@ -600,6 +607,7 @@
             <span class="number">3 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(SyscallArgError::NotValidUtf8)),
             <span class="number">4 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(SyscallArgError::InvalidHeapIncrement)),
             <span class="number">5 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(SyscallArgError::DuplicateFileMappings)),
+            <span class="number">6 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(SyscallArgError::InvalidNanoseconds)),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(()),
         }
     }
