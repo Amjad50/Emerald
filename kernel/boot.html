@@ -323,7 +323,7 @@ its needed like this due to our recursive AML (ACPI) parser, which we should imp
 <li>Empty <code>IDT</code> setup (i.e. exceptions will trigger triple faults)</li>
 <li>interrupts are disabled</li>
 <li><code>cr3</code> is set to the <code>.boot_page_tables</code> (which is a temporary page tables)</li>
-<li><code>cr0 = CR0_PG | CR0_PE</code></li>
+<li><code>cr0 = CR0_PG | CR0_PE | CR0_MP</code></li>
 <li><code>cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT</code></li>
 <li><code>EFER = EFER_LME</code> | (EFER_LMA would be set by the CPU, indicating that long mode is active)</li>
 <li>The stack is setup at the end of the <code>.stack</code> section</li>
