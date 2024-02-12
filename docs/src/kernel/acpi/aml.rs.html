@@ -1815,9 +1815,6 @@
 <a href="#1813" id="1813">1813</a>
 <a href="#1814" id="1814">1814</a>
 <a href="#1815" id="1815">1815</a>
-<a href="#1816" id="1816">1816</a>
-<a href="#1817" id="1817">1817</a>
-<a href="#1818" id="1818">1818</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{
@@ -2058,9 +2055,9 @@
 
 <span class="attr">#[derive(Debug, Clone)]
 </span><span class="kw">pub enum </span>FieldElement {
-    ReservedField(usize),
-    NamedField(String, usize),
-    AccessField(u8, u8),
+    Reserved(usize),
+    Named(String, usize),
+    Access(u8, u8),
 }
 
 <span class="attr">#[derive(Debug, Clone)]
@@ -2423,15 +2420,12 @@
                     <span class="kw">_ </span>=&gt; {}
                 },
                 <span class="prelude-val">Err</span>(e) =&gt; {
-                    <span class="kw">match </span>e {
-                        AmlParseError::UnexpectedEndOfCode =&gt; {
-                            <span class="comment">// if we took what is not ours, return it
-                            </span><span class="kw">if </span>n_args &gt; <span class="number">0 </span>&amp;&amp; expect_data_after &amp;&amp; inner.remaining_bytes() == <span class="number">0 </span>{
-                                n_args -= <span class="number">1</span>;
-                            }
-                            <span class="kw">return </span>n_args;
+                    <span class="kw">if let </span>AmlParseError::UnexpectedEndOfCode = e {
+                        <span class="comment">// if we took what is not ours, return it
+                        </span><span class="kw">if </span>n_args &gt; <span class="number">0 </span>&amp;&amp; expect_data_after &amp;&amp; inner.remaining_bytes() == <span class="number">0 </span>{
+                            n_args -= <span class="number">1</span>;
                         }
-                        <span class="kw">_ </span>=&gt; {}
+                        <span class="kw">return </span>n_args;
                     }
                     <span class="kw">break</span>;
                 }
@@ -3023,14 +3017,14 @@
                     <span class="kw">let </span>pkg_length = <span class="self">self</span>.get_pkg_length()<span class="question-mark">?</span>;
                     <span class="macro">eprintln!</span>(<span class="string">"reserved field element pkg length: {:x}"</span>, pkg_length);
                     <span class="comment">// add 1 since we are not using it as normal pkg length
-                    </span>FieldElement::ReservedField(pkg_length + <span class="number">1</span>)
+                    </span>FieldElement::Reserved(pkg_length + <span class="number">1</span>)
                 }
                 <span class="number">1 </span>=&gt; {
                     <span class="self">self</span>.forward(<span class="number">1</span>)<span class="question-mark">?</span>;
                     <span class="kw">let </span>access_type = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
                     <span class="kw">let </span>access_attrib = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
 
-                    FieldElement::AccessField(access_type, access_attrib)
+                    FieldElement::Access(access_type, access_attrib)
                 }
                 <span class="number">2 </span>=&gt; <span class="macro">todo!</span>(<span class="string">"connection field"</span>),
                 <span class="number">3 </span>=&gt; <span class="macro">todo!</span>(<span class="string">"extended access field"</span>),
@@ -3043,7 +3037,7 @@
                     <span class="kw">let </span>pkg_length = <span class="self">self</span>.get_pkg_length()<span class="question-mark">?</span>;
                     <span class="macro">eprintln!</span>(<span class="string">"field element pkg length: {:x}"</span>, pkg_length);
                     <span class="comment">// add 1 since we are not using it as normal pkg length
-                    </span>FieldElement::NamedField(name, pkg_length + <span class="number">1</span>)
+                    </span>FieldElement::Named(name, pkg_length + <span class="number">1</span>)
                 }
             };
             field_list.push(field);
@@ -3223,9 +3217,9 @@
     <span class="kw">for </span>(i, field) <span class="kw">in </span>fields.iter().enumerate() {
         display_depth(f, depth)<span class="question-mark">?</span>;
         <span class="kw">match </span>field {
-            FieldElement::ReservedField(len) =&gt; <span class="macro">write!</span>(f, <span class="string">"_Reserved (0x{:02X})"</span>, len)<span class="question-mark">?</span>,
-            FieldElement::NamedField(name, len) =&gt; <span class="macro">write!</span>(f, <span class="string">"{},     (0x{:02X})"</span>, name, len)<span class="question-mark">?</span>,
-            FieldElement::AccessField(access_type, access_attrib) =&gt; <span class="macro">write!</span>(
+            FieldElement::Reserved(len) =&gt; <span class="macro">write!</span>(f, <span class="string">"_Reserved (0x{:02X})"</span>, len)<span class="question-mark">?</span>,
+            FieldElement::Named(name, len) =&gt; <span class="macro">write!</span>(f, <span class="string">"{},     (0x{:02X})"</span>, name, len)<span class="question-mark">?</span>,
+            FieldElement::Access(access_type, access_attrib) =&gt; <span class="macro">write!</span>(
                 f,
                 <span class="string">"AccessAs  (0x{:02X}, 0x{:02X})"</span>,
                 access_type, access_attrib

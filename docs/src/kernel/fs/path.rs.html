@@ -2171,7 +2171,7 @@
 
 <span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; cmp::PartialOrd <span class="kw">for </span>Components&lt;<span class="lifetime">'a</span>&gt; {
     <span class="kw">fn </span>partial_cmp(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>Components&lt;<span class="lifetime">'a</span>&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;cmp::Ordering&gt; {
-        Iterator::partial_cmp(<span class="self">self</span>.clone(), other.clone())
+        <span class="prelude-val">Some</span>(<span class="self">self</span>.cmp(other))
     }
 }
 
@@ -2652,7 +2652,7 @@
 
 <span class="kw">impl </span>cmp::PartialOrd <span class="kw">for </span>PathBuf {
     <span class="kw">fn </span>partial_cmp(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>PathBuf) -&gt; <span class="prelude-ty">Option</span>&lt;cmp::Ordering&gt; {
-        <span class="self">self</span>.components().partial_cmp(other.components())
+        <span class="prelude-val">Some</span>(<span class="self">self</span>.cmp(other))
     }
 }
 
@@ -2753,7 +2753,7 @@
     /// assert_eq!(path.to_str(), Some("foo.txt"));
     /// ```
     </span><span class="kw">pub fn </span>to_str(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
-        <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.as_str())
+        <span class="prelude-val">Some</span>(<span class="self">self</span>.as_str())
     }
 
     <span class="doccomment">/// Converts a `Path` to a `Cow&lt;str&gt;`.
@@ -2958,7 +2958,7 @@
     ///
     /// [`parent`]: struct.Path.html#method.parent
     </span><span class="kw">pub fn </span>ancestors(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Ancestors&lt;<span class="lifetime">'_</span>&gt; {
-        Ancestors { next: <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) }
+        Ancestors { next: <span class="prelude-val">Some</span>(<span class="self">self</span>) }
     }
 
     <span class="doccomment">/// Returns the final component of the `Path`, if there is one.
@@ -3212,7 +3212,7 @@
 
 <span class="kw">impl </span>cmp::PartialOrd <span class="kw">for </span>Path {
     <span class="kw">fn </span>partial_cmp(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Option</span>&lt;cmp::Ordering&gt; {
-        <span class="self">self</span>.components().partial_cmp(other.components())
+        <span class="prelude-val">Some</span>(<span class="self">self</span>.cmp(other))
     }
 }
 

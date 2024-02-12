@@ -1157,7 +1157,7 @@
     EndOfFile,
 }
 
-<span class="kw">fn </span>get_mapping&lt;<span class="lifetime">'p</span>&gt;(path: <span class="kw-2">&amp;</span><span class="lifetime">'p </span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="kw-2">&amp;</span><span class="lifetime">'p </span>Path, Arc&lt;<span class="kw">dyn </span>FileSystem&gt;), FileSystemError&gt; {
+<span class="kw">fn </span>get_mapping(path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="kw-2">&amp;</span>Path, Arc&lt;<span class="kw">dyn </span>FileSystem&gt;), FileSystemError&gt; {
     FILESYSTEM_MAPPING.lock().get_mapping(path)
 }
 

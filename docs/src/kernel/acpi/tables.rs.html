@@ -835,7 +835,7 @@
         <span class="kw">let </span>header_virtual = (physical_addr + KERNEL_BASE) <span class="kw">as </span><span class="kw-2">*const </span>DescriptionHeader;
         <span class="kw">let </span>len = (<span class="kw-2">*</span>header_virtual).length <span class="kw">as </span>usize;
         <span class="macro">assert!</span>(physical_addr + len &lt;= virtual2physical(KERNEL_END));
-        <span class="kw">return </span>(header_virtual, len);
+        (header_virtual, len)
     } <span class="kw">else </span>{
         <span class="kw">let </span>header = virtual_space::get_virtual_for_physical(
             physical_addr <span class="kw">as _</span>,

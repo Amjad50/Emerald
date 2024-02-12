@@ -580,7 +580,7 @@
         );
         <span class="kw">let </span><span class="kw-2">mut </span>devs = <span class="self">self</span>.devices.lock();
         devs.push(device);
-        devs.sort_unstable_by_key(|device| device.rating() <span class="kw">as </span>i64 * -<span class="number">1</span>);
+        devs.sort_unstable_by_key(|device| -(device.rating() <span class="kw">as </span>i64));
         <span class="self">self</span>.system_time
             .lock()
             .update_device(devs[<span class="number">0</span>].clone(), <span class="kw-2">&amp;</span><span class="self">self</span>.rtc);
@@ -588,7 +588,7 @@
 
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">fn </span>get_best_clock(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>ClockDevice&gt;&gt; {
-        <span class="self">self</span>.devices.lock().first().map(|device| Arc::clone(device))
+        <span class="self">self</span>.devices.lock().first().map(Arc::clone)
     }
 
     <span class="kw">fn </span>get_best_for_calibration(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>ClockDevice&gt;&gt; {
@@ -596,7 +596,7 @@
             .lock()
             .iter()
             .find(|device| !device.require_calibration())
-            .map(|device| Arc::clone(device))
+            .map(Arc::clone)
     }
 
     <span class="attr">#[allow(dead_code)]

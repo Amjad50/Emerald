@@ -451,9 +451,6 @@
 <a href="#449" id="449">449</a>
 <a href="#450" id="450">450</a>
 <a href="#451" id="451">451</a>
-<a href="#452" id="452">452</a>
-<a href="#453" id="453">453</a>
-<a href="#454" id="454">454</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     cell::RefCell,
     fmt::{<span class="self">self</span>, Write},
@@ -718,7 +715,7 @@
                 }
                 <span class="string">b'm' </span>=&gt; {
                     <span class="comment">// end of the color command
-                    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(inner_cmd) = buf.strip_prefix(<span class="string">"["</span>) {
+                    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(inner_cmd) = buf.strip_prefix(<span class="string">'['</span>) {
                         inner_cmd.split(<span class="string">';'</span>).for_each(|cmd| {
                             <span class="kw">if let </span><span class="prelude-val">Ok</span>(cmd) = cmd.parse::&lt;u8&gt;() {
                                 <span class="kw">match </span>cmd {
@@ -756,8 +753,8 @@
                                         <span class="kw">let </span><span class="kw-2">mut </span>color = cmd - <span class="number">30</span>;
                                         <span class="self">self</span>.current_foreground = color;
                                         <span class="kw">if </span><span class="self">self</span>.is_bold {
-                                            color = color + <span class="number">8
-                                        </span>}
+                                            color += <span class="number">8</span>;
+                                        }
                                         <span class="self">self</span>.current_vga_attrib |= terminal_to_vga_color(color);
                                     }
                                     <span class="number">90</span>..=<span class="number">97 </span>=&gt; {
@@ -765,8 +762,8 @@
                                         <span class="kw">let </span><span class="kw-2">mut </span>color = (cmd - <span class="number">90</span>) + <span class="number">8</span>;
                                         <span class="self">self</span>.current_foreground = color;
                                         <span class="kw">if </span><span class="self">self</span>.is_faint {
-                                            color = color - <span class="number">8
-                                        </span>}
+                                            color -= <span class="number">8</span>;
+                                        }
                                         <span class="self">self</span>.current_vga_attrib |= terminal_to_vga_color(color);
                                     }
                                     <span class="number">40</span>..=<span class="number">47 </span>=&gt; {
@@ -809,13 +806,10 @@
             }
         } <span class="kw">else </span>{
             <span class="comment">// start of a new command
-            </span><span class="kw">match </span>byte {
-                <span class="comment">// ESC
-                </span><span class="number">0x1b </span>=&gt; {
-                    <span class="self">self</span>.console_cmd_buffer = <span class="prelude-val">Some</span>(String::new());
-                    <span class="kw">return</span>;
-                }
-                <span class="kw">_ </span>=&gt; {}
+            // 0x1b = ESC
+            </span><span class="kw">if </span>byte == <span class="number">0x1b </span>{
+                <span class="self">self</span>.console_cmd_buffer = <span class="prelude-val">Some</span>(String::new());
+                <span class="kw">return</span>;
             }
             <span class="comment">// otherwise, just write to the screen
             </span>write_byte_inner(byte);

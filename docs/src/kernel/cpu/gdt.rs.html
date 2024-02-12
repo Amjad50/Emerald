@@ -331,7 +331,7 @@
 <a href="#329" id="329">329</a>
 <a href="#330" id="330">330</a>
 <a href="#331" id="331">331</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::mem;
+</pre></div><pre class="rust"><code><span class="kw">use </span>core::{mem, ptr::addr_of};
 
 <span class="kw">use crate</span>::{
     memory_management::{
@@ -435,7 +435,7 @@
         </span><span class="kw">unsafe </span>{ TSS.rsp[KERNEL_RING <span class="kw">as </span>usize] = PROCESS_KERNEL_STACK_END <span class="kw">as </span>u64 - <span class="number">8 </span>};
     }
 
-    <span class="kw">let </span>tss_ptr = (<span class="kw">unsafe </span>{ <span class="kw-2">&amp;</span>TSS } <span class="kw">as </span><span class="kw-2">*const </span><span class="kw">_</span>) <span class="kw">as </span>u64;
+    <span class="kw">let </span>tss_ptr = <span class="kw">unsafe </span>{ <span class="macro">addr_of!</span>(TSS) } <span class="kw">as </span>u64;
 
     manager.tss_seg = SegmentSelector::from_index(<span class="kw">unsafe </span>{
         manager.gdt.push_system(SystemDescriptorEntry {

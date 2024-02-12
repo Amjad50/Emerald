@@ -211,8 +211,6 @@
 <a href="#209" id="209">209</a>
 <a href="#210" id="210">210</a>
 <a href="#211" id="211">211</a>
-<a href="#212" id="212">212</a>
-<a href="#213" id="213">213</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::sync::atomic::{AtomicU64, Ordering};
 
 <span class="kw">use crate</span>::{cpu, devices::clock::NANOS_PER_SEC};
@@ -382,11 +380,9 @@
     }
 
     <span class="kw">fn </span>time_nanos_since_start(<span class="kw-2">&amp;</span><span class="self">self</span>, cycles: u64) -&gt; u64 {
-        <span class="kw">let </span>nanos = <span class="self">self
-            </span>.start_time
+        <span class="self">self</span>.start_time
             .load(Ordering::Relaxed)
-            .wrapping_add(<span class="self">self</span>.cycles_to_time_nanos(cycles));
-        nanos
+            .wrapping_add(<span class="self">self</span>.cycles_to_time_nanos(cycles))
     }
 
     <span class="kw">fn </span>cycles_to_time_nanos(<span class="kw-2">&amp;</span><span class="self">self</span>, cycles: u64) -&gt; u64 {
