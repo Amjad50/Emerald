@@ -14,14 +14,14 @@ static VIRTUAL_SPACE_ALLOCATOR: Mutex<VirtualSpaceAllocator> =
     Mutex::new(VirtualSpaceAllocator::empty());
 
 pub fn get_virtual_for_physical(physical_start: u64, size: usize) -> usize {
-    let (aligned_start, size, offset) = align_range(physical_start as _, size, PAGE_4K);
+    let (aligned_start, size, offset) = align_range(physical_start, size, PAGE_4K);
 
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    let virtual_addr = allocator.get_virtual_for_physical(aligned_start as u64, size);
+    let virtual_addr = allocator.get_virtual_for_physical(aligned_start, size);
     // ensure its mapped
     virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
-        physical_address: Some(aligned_start as u64),
+        physical_address: Some(aligned_start),
         size,
         flags: virtual_memory_mapper::flags::PTE_WRITABLE,
     });
@@ -32,14 +32,14 @@ pub fn get_virtual_for_physical(physical_start: u64, size: usize) -> usize {
 }
 
 pub fn allocate_and_map_virtual_space(physical_start: u64, size: usize) -> usize {
-    let (aligned_start, size, offset) = align_range(physical_start as _, size, PAGE_4K);
+    let (aligned_start, size, offset) = align_range(physical_start, size, PAGE_4K);
 
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    let virtual_addr = allocator.allocate(aligned_start as u64, size);
+    let virtual_addr = allocator.allocate(aligned_start, size);
 
     virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
-        physical_address: Some(aligned_start as u64),
+        physical_address: Some(aligned_start),
         size,
         flags: virtual_memory_mapper::flags::PTE_WRITABLE,
     });
@@ -112,7 +112,7 @@ impl VirtualSpaceAllocator {
         req_size: usize,
     ) -> Option<(&VirtualSpaceEntry, bool)> {
         assert!(req_size > 0);
-        assert!(is_aligned(req_phy_start as _, PAGE_4K));
+        assert!(is_aligned(req_phy_start, PAGE_4K));
         assert!(is_aligned(req_size, PAGE_4K));
 
         let mut cursor = self.entries.cursor_front();
@@ -160,7 +160,7 @@ impl VirtualSpaceAllocator {
 
     fn allocate(&mut self, phy_start: u64, size: usize) -> usize {
         assert!(size > 0);
-        assert!(is_aligned(phy_start as _, PAGE_4K));
+        assert!(is_aligned(phy_start, PAGE_4K));
         assert!(is_aligned(size, PAGE_4K));
 
         let mut cursor = self.entries.cursor_front_mut();
@@ -202,8 +202,8 @@ impl VirtualSpaceAllocator {
 
     fn deallocate(&mut self, req_virtual_start: usize, req_size: usize) {
         assert!(req_size > 0);
-        assert!(is_aligned(req_virtual_start as _, PAGE_4K));
-        assert!(is_aligned(req_size as _, PAGE_4K));
+        assert!(is_aligned(req_virtual_start, PAGE_4K));
+        assert!(is_aligned(req_size, PAGE_4K));
 
         let mut cursor = self.entries.cursor_front_mut();
         while let Some(entry) = cursor.current() {

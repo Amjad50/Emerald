@@ -89,28 +89,64 @@ pub fn stack_guard_page_ptr() -> usize {
     (unsafe { &stack_guard_page } as *const usize as usize)
 }
 
-pub const fn align_up(addr: usize, alignment: usize) -> usize {
-    (addr + alignment - 1) & !(alignment - 1)
+pub trait AlignMem: Sized {
+    fn align_up(self, alignment: usize) -> Self;
+    fn align_down(self, alignment: usize) -> Self;
+    fn is_aligned(self, alignment: usize) -> bool;
+    fn align_range(self, size: usize, alignment: usize) -> (Self, usize, usize);
 }
 
-pub fn align_down(addr: usize, alignment: usize) -> usize {
-    addr & !(alignment - 1)
+macro_rules! impl_align_mem {
+    ($t:ty) => {
+        impl AlignMem for $t {
+            #[inline(always)]
+            fn align_up(self, alignment: usize) -> Self {
+                (self + (alignment as $t) - 1) & !((alignment as $t) - 1)
+            }
+
+            #[inline(always)]
+            fn align_down(self, alignment: usize) -> Self {
+                self & !((alignment as $t) - 1)
+            }
+
+            #[inline(always)]
+            fn is_aligned(self, alignment: usize) -> bool {
+                (self & ((alignment as $t) - 1)) == 0
+            }
+
+            #[inline(always)]
+            fn align_range(self, size: usize, alignment: usize) -> (Self, usize, usize) {
+                let addr_end = self + size as $t;
+                let start_aligned = self.align_down(alignment);
+                let end_aligned = addr_end.align_up(alignment);
+                let size: usize = (end_aligned - start_aligned).try_into().unwrap();
+                assert!(size > 0);
+                assert!(size.is_aligned(alignment));
+                let offset = (self - start_aligned).try_into().unwrap();
+
+                (start_aligned, size, offset)
+            }
+        }
+    };
 }
 
-pub fn is_aligned(addr: usize, alignment: usize) -> bool {
-    (addr & (alignment - 1)) == 0
+impl_align_mem!(usize);
+impl_align_mem!(u64);
+
+pub fn align_up<T: AlignMem>(addr: T, alignment: usize) -> T {
+    addr.align_up(alignment)
 }
 
-pub fn align_range(addr: usize, size: usize, alignment: usize) -> (usize, usize, usize) {
-    let addr_end: usize = addr + size;
-    let start_aligned = align_down(addr, alignment);
-    let end_aligned = align_up(addr_end, alignment);
-    let size = end_aligned - start_aligned;
-    assert!(size > 0);
-    assert!(is_aligned(size, alignment));
-    let offset = addr - start_aligned;
+pub fn align_down<T: AlignMem>(addr: T, alignment: usize) -> T {
+    addr.align_down(alignment)
+}
 
-    (start_aligned, size, offset)
+pub fn is_aligned<T: AlignMem>(addr: T, alignment: usize) -> bool {
+    addr.is_aligned(alignment)
+}
+
+pub fn align_range<T: AlignMem>(addr: T, size: usize, alignment: usize) -> (T, usize, usize) {
+    addr.align_range(size, alignment)
 }
 
 #[inline(always)]

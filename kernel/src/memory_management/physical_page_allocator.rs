@@ -83,9 +83,9 @@ impl PhysicalPageAllocator {
         // because the multiboot info might be stored there by grub
         let mut physical_kernel_end = virtual2physical(align_up(kernel_elf_end(), PAGE_4K));
         let multiboot_end = align_up(
-            virtual2physical(multiboot_info.end_address() as usize) as usize,
+            virtual2physical(multiboot_info.end_address() as usize),
             PAGE_4K,
-        ) as u64;
+        );
         println!("multiboot end: {multiboot_end:x}",);
         println!(
             "physical_kernel_start: {:p}",
@@ -121,15 +121,13 @@ impl PhysicalPageAllocator {
                 && (memory.base_addr + memory.length) >= physical_kernel_end
             {
                 start_physical = physical_kernel_end;
-                end_physical =
-                    align_down(memory.base_addr as usize + memory.length as usize, PAGE_4K) as u64;
+                end_physical = align_down(memory.base_addr + memory.length, PAGE_4K);
                 self.start = physical2virtual(physical_kernel_end) as _;
             } else {
                 assert!(memory.base_addr >= physical_kernel_end);
 
-                start_physical = align_up(memory.base_addr as usize, PAGE_4K) as u64;
-                end_physical =
-                    align_down(memory.base_addr as usize + memory.length as usize, PAGE_4K) as u64;
+                start_physical = align_up(memory.base_addr, PAGE_4K);
+                end_physical = align_down(memory.base_addr + memory.length, PAGE_4K);
             }
             let mut high_mem_start = core::ptr::null_mut();
             let end_virtual = if end_physical >= virtual2physical(KERNEL_END) as _ {
@@ -196,7 +194,7 @@ impl PhysicalPageAllocator {
         let page = page as *mut FreePage;
 
         if page.is_null()
-            || !is_aligned(page as _, PAGE_4K)
+            || !is_aligned(page as usize, PAGE_4K)
             || page > unsafe { page.add(1) }
             || page >= self.end as _
             || page < self.start as _

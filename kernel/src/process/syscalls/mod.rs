@@ -392,7 +392,7 @@ fn sys_inc_heap(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(0, all_state.rest => i64),
     };
 
-    if !is_aligned(increment.unsigned_abs() as usize, PAGE_4K) {
+    if !is_aligned(increment.unsigned_abs(), PAGE_4K) {
         return Err(to_arg_err!(0, SyscallArgError::InvalidHeapIncrement));
     }
 

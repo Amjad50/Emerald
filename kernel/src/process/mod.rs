@@ -422,7 +422,7 @@ impl Process {
         // we consider the program starts after an imaginary function call from the kernel
         //
         // first align it to 16 bytes
-        rsp = align_down(rsp as _, 16) as _;
+        rsp = align_down(rsp, 16);
         // second, subtract 8, the call instruction
         rsp -= 8;
 

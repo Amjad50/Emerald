@@ -386,9 +386,9 @@ impl VirtualMemoryMapper {
 
         if let Some(start_physical_address) = start_physical_address.as_mut() {
             let (aligned_start, physical_size, _) =
-                align_range(*start_physical_address as usize, *requested_size, PAGE_4K);
+                align_range(*start_physical_address, *requested_size, PAGE_4K);
             assert!(physical_size == size);
-            *start_physical_address = aligned_start as u64;
+            *start_physical_address = aligned_start;
         }
 
         // keep track of current address and size
