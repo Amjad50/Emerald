@@ -11,7 +11,7 @@ use crate::{
     executable::{elf, load_elf_to_vm},
     fs,
     memory_management::{
-        memory_layout::{align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
+        memory_layout::{align_down, align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
         virtual_memory_mapper::{
             self, VirtualMemoryMapEntry, VirtualMemoryMapper, MAX_USER_VIRTUAL_ADDRESS,
         },
@@ -157,7 +157,7 @@ impl Process {
 
         let rsp = stack_end as u64 - 8;
         let (new_rsp, argc, argv_ptr) =
-            Self::load_argv_into_stack(&mut vm, &argv, rsp, stack_start as u64);
+            Self::prepare_stack(&mut vm, &argv, rsp, stack_start as u64);
 
         // SAFETY: we know that the vm passed is an exact kernel copy of this vm, so its safe to switch to it
         // TODO: maybe it would be best to create the new vm inside this function?
@@ -346,7 +346,7 @@ impl Process {
 
 impl Process {
     // NOTE: this is very specific to 64bit x86
-    fn load_argv_into_stack(
+    fn prepare_stack(
         vm: &mut VirtualMemoryMapper,
         argv: &[String],
         mut rsp: u64,
@@ -415,6 +415,16 @@ impl Process {
         unsafe { old_vm.switch_to_this() };
         // we can be interrupted again
         cpu::cpu().pop_cli();
+
+        // according ot the SYSV ABI, the stack is 16-byte aligned just before the call instruction
+        // is executed.
+        // i.e. we will subtract 8, as this is the alignment the stack will have after the call
+        // we consider the program starts after an imaginary function call from the kernel
+        //
+        // first align it to 16 bytes
+        rsp = align_down(rsp as _, 16) as _;
+        // second, subtract 8, the call instruction
+        rsp -= 8;
 
         (rsp, argc as u64, argv_array_ptr)
     }
