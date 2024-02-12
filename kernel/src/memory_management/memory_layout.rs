@@ -142,83 +142,87 @@ pub fn display_kernel_map() {
         "  range={:016x}..{:016x}, len={:4}  nothing",
         nothing.start,
         nothing.end,
-        MemSize(nothing.len() as u64)
+        MemSize(nothing.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  kernel elf",
         kernel_elf.start,
         kernel_elf.end,
-        MemSize(kernel_elf.len() as u64)
+        MemSize(kernel_elf.len())
     );
     // inner map for the elf
     println!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf text",
         kernel_elf_text.start,
         kernel_elf_text.end,
-        MemSize(kernel_elf_text.len() as u64)
+        MemSize(kernel_elf_text.len())
     );
     println!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf rodata",
         kernel_elf_rodata.start,
         kernel_elf_rodata.end,
-        MemSize(kernel_elf_rodata.len() as u64)
+        MemSize(kernel_elf_rodata.len())
     );
     println!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf data",
         kernel_elf_data.start,
         kernel_elf_data.end,
-        MemSize(kernel_elf_data.len() as u64)
+        MemSize(kernel_elf_data.len())
     );
     println!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf bss",
         kernel_elf_bss.start,
         kernel_elf_bss.end,
-        MemSize(kernel_elf_bss.len() as u64)
+        MemSize(kernel_elf_bss.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  kernel physical allocator low",
         kernel_physical_allocator_low.start,
         kernel_physical_allocator_low.end,
-        MemSize(kernel_physical_allocator_low.len() as u64)
+        MemSize(kernel_physical_allocator_low.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  kernel heap",
         kernel_heap.start,
         kernel_heap.end,
-        MemSize(kernel_heap.len() as u64)
+        MemSize(kernel_heap.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  interrupt stack",
         interrupt_stack.start,
         interrupt_stack.end,
-        MemSize(interrupt_stack.len() as u64)
+        MemSize(interrupt_stack.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  kernel extra (virtual space)",
         kernel_extra_memory.start,
         kernel_extra_memory.end,
-        MemSize(kernel_extra_memory.len() as u64)
+        MemSize(kernel_extra_memory.len())
     );
 
     // number of bytes approx used from physical memory
     println!(
         "whole kernel physical size (startup/low): {}",
-        MemSize((KERNEL_END - KERNEL_BASE) as u64)
+        MemSize(KERNEL_END - KERNEL_BASE)
     );
     // total addressable virtual kernel memory
     println!(
         "whole kernel size: {}",
-        MemSize(u64::MAX - KERNEL_BASE as u64 + 1)
+        MemSize(usize::MAX - KERNEL_BASE + 1)
     );
 }
 
 #[repr(transparent)]
-pub struct MemSize(pub u64);
+pub struct MemSize<T>(pub T);
 
-impl fmt::Display for MemSize {
+impl<T> fmt::Display for MemSize<T>
+where
+    T: TryInto<u64> + Copy,
+    <T as TryInto<u64>>::Error: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // find the best unit
-        let mut size = self.0;
+        let mut size = self.0.try_into().unwrap();
         let mut remaining = 0;
         let mut unit = "B";
         if size >= 1024 {
@@ -255,7 +259,11 @@ impl fmt::Display for MemSize {
     }
 }
 
-impl fmt::Debug for MemSize {
+impl<T> fmt::Debug for MemSize<T>
+where
+    T: TryInto<u64> + Copy,
+    <T as TryInto<u64>>::Error: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
