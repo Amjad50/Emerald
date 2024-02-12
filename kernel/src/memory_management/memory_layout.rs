@@ -114,13 +114,15 @@ pub fn align_range(addr: usize, size: usize, alignment: usize) -> (usize, usize,
 }
 
 #[inline(always)]
-pub const fn virtual2physical(addr: usize) -> usize {
-    addr - KERNEL_BASE
+pub const fn virtual2physical(addr: usize) -> u64 {
+    debug_assert!(addr >= KERNEL_BASE && addr <= KERNEL_BASE + KERNEL_MAPPED_SIZE);
+    (addr - KERNEL_BASE) as u64
 }
 
 #[inline(always)]
-pub const fn physical2virtual(addr: usize) -> usize {
-    addr + KERNEL_BASE
+pub const fn physical2virtual(addr: u64) -> usize {
+    debug_assert!(addr < KERNEL_MAPPED_SIZE as u64);
+    addr as usize + KERNEL_BASE
 }
 
 pub fn display_kernel_map() {

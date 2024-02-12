@@ -65,22 +65,22 @@ pub const MAX_USER_VIRTUAL_ADDRESS: usize =
         | (0x1FF << 12);
 
 #[inline(always)]
-const fn get_l4(addr: u64) -> u64 {
+const fn get_l4(addr: usize) -> usize {
     (addr >> 39) & 0x1FF
 }
 
 #[inline(always)]
-const fn get_l3(addr: u64) -> u64 {
+const fn get_l3(addr: usize) -> usize {
     (addr >> 30) & 0x1FF
 }
 
 #[inline(always)]
-const fn get_l2(addr: u64) -> u64 {
+const fn get_l2(addr: usize) -> usize {
     (addr >> 21) & 0x1FF
 }
 
 #[inline(always)]
-const fn get_l1(addr: u64) -> u64 {
+const fn get_l1(addr: usize) -> usize {
     (addr >> 12) & 0x1FF
 }
 
@@ -88,9 +88,15 @@ const fn get_l1(addr: u64) -> u64 {
 #[repr(C, align(32))]
 #[derive(Debug, Copy, Clone)]
 pub struct VirtualMemoryMapEntry {
-    pub virtual_address: u64,
+    /// The virtual address to map, this is constrained by the memory model, and thus `usize`
+    pub virtual_address: usize,
+    /// The physical address to map, if `None` then it will be allocated
+    /// This can be above `usize` in `32-bit`, as it support (in intel) up to `40-bit` physical address
+    /// for 32-bit paging
     pub physical_address: Option<u64>,
-    pub size: u64,
+    /// The size of the mapping, this is constrained by the memory model, and thus `usize`
+    pub size: usize,
+    /// The flags to use for the mapping, look at [flags] for more information
     pub flags: u64,
 }
 
@@ -114,7 +120,7 @@ impl PageDirectoryTablePtr {
 
     /// An ugly hack used in `do_for_every_user_entry` to get a mutable reference to the page directory table
     fn enteries_from_mut_entry(entry: &mut u64) -> &mut PageDirectoryTable {
-        let table = physical2virtual((*entry & ADDR_MASK) as _) as *mut PageDirectoryTable;
+        let table = physical2virtual(*entry & ADDR_MASK) as *mut PageDirectoryTable;
         unsafe { &mut *table }
     }
 
@@ -122,17 +128,18 @@ impl PageDirectoryTablePtr {
         self.physical_addr
     }
 
-    fn as_virtual(&self) -> u64 {
+    fn as_virtual(&self) -> usize {
         // for now, it must be within the lower kernel memory, easier to support
         assert!(self.physical_addr < KERNEL_END as u64);
-        physical2virtual(self.physical_addr as _) as _
+        physical2virtual(self.physical_addr)
     }
 
     fn alloc_new() -> Self {
         // SAFETY: it will panic if it couldn't allocate, so if it returns, it is safe
         Self {
-            physical_addr: unsafe { virtual2physical(physical_page_allocator::alloc_zeroed() as _) }
-                as _,
+            physical_addr: unsafe {
+                virtual2physical(physical_page_allocator::alloc_zeroed() as _)
+            },
         }
     }
 
@@ -172,7 +179,7 @@ pub unsafe fn switch_to_kernel() {
 
 pub fn map_kernel(entry: &VirtualMemoryMapEntry) {
     // make sure we are only mapping to kernel memory
-    assert!(entry.virtual_address >= KERNEL_BASE as u64);
+    assert!(entry.virtual_address >= KERNEL_BASE);
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().map(entry);
 }
 
@@ -182,14 +189,14 @@ pub fn map_kernel(entry: &VirtualMemoryMapEntry) {
 // TODO: maybe its better to keep track of this information somewhere in the mapper here
 pub fn unmap_kernel(entry: &VirtualMemoryMapEntry, is_allocated: bool) {
     // make sure we are only mapping to kernel memory
-    assert!(entry.virtual_address >= KERNEL_BASE as u64);
+    assert!(entry.virtual_address >= KERNEL_BASE);
     KERNEL_VIRTUAL_MEMORY_MANAGER
         .lock()
         .unmap(entry, is_allocated);
 }
 
 #[allow(dead_code)]
-pub fn is_address_mapped_in_kernel(addr: u64) -> bool {
+pub fn is_address_mapped_in_kernel(addr: usize) -> bool {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr)
 }
 
@@ -269,9 +276,9 @@ impl VirtualMemoryMapper {
         self.is_user = false;
         // load new kernel stack for this process
         self.map(&VirtualMemoryMapEntry {
-            virtual_address: PROCESS_KERNEL_STACK_BASE as u64,
+            virtual_address: PROCESS_KERNEL_STACK_BASE,
             physical_address: None, // allocate
-            size: PROCESS_KERNEL_STACK_SIZE as u64,
+            size: PROCESS_KERNEL_STACK_SIZE,
             flags: flags::PTE_WRITABLE,
         });
         self.is_user = true;
@@ -290,7 +297,7 @@ impl VirtualMemoryMapper {
             .lock()
             .page_map_l4
             .as_physical();
-        let cr3 = unsafe { cpu::get_cr3() } as _; // cr3 is physical address
+        let cr3 = unsafe { cpu::get_cr3() }; // cr3 is physical address
         let is_user = cr3 != kernel_vm_addr;
         Self {
             page_map_l4: PageDirectoryTablePtr::from_entry(cr3),
@@ -312,24 +319,24 @@ impl VirtualMemoryMapper {
         let kernel_vm = [
             // Low memory (has some BIOS stuff): mapped to kernel space
             VirtualMemoryMapEntry {
-                virtual_address: KERNEL_BASE as u64,
+                virtual_address: KERNEL_BASE,
                 physical_address: Some(0),
-                size: EXTENDED_OFFSET as u64,
+                size: EXTENDED_OFFSET,
                 flags: flags::PTE_WRITABLE,
             },
             // Extended memory: kernel .text and .rodata sections
             VirtualMemoryMapEntry {
-                virtual_address: KERNEL_LINK as u64,
-                physical_address: Some(virtual2physical(KERNEL_LINK) as u64),
-                size: virtual2physical(data_start) as u64 - virtual2physical(KERNEL_LINK) as u64,
+                virtual_address: KERNEL_LINK,
+                physical_address: Some(virtual2physical(KERNEL_LINK)),
+                size: (virtual2physical(data_start) - virtual2physical(KERNEL_LINK)) as usize,
                 flags: 0, // read-only
             },
             // Extended memory: kernel .data and .bss sections and the rest of the data for the `whole` memory
             // we decided to use in the kernel
             VirtualMemoryMapEntry {
-                virtual_address: data_start as u64,
-                physical_address: Some(virtual2physical(data_start) as u64),
-                size: KERNEL_MAPPED_SIZE as u64 - virtual2physical(data_start) as u64,
+                virtual_address: data_start,
+                physical_address: Some(virtual2physical(data_start)),
+                size: KERNEL_MAPPED_SIZE - virtual2physical(data_start) as usize,
                 flags: flags::PTE_WRITABLE,
             },
         ];
@@ -345,9 +352,9 @@ impl VirtualMemoryMapper {
         // unmap stack guard
         s.unmap(
             &VirtualMemoryMapEntry {
-                virtual_address: stack_guard_page_ptr() as u64,
+                virtual_address: stack_guard_page_ptr(),
                 physical_address: None,
-                size: PAGE_4K as u64,
+                size: PAGE_4K,
                 flags: 0,
             },
             false,
@@ -365,25 +372,23 @@ impl VirtualMemoryMapper {
         } = entry;
 
         assert!(!self.page_map_l4.as_ptr().is_null());
-        assert!(is_aligned(self.page_map_l4.as_virtual() as _, PAGE_4K));
+        assert!(is_aligned(self.page_map_l4.as_virtual(), PAGE_4K));
 
-        let (aligned_start, size, _) =
-            align_range(virtual_address as _, *requested_size as _, PAGE_4K);
-        let mut size = size as u64;
-        virtual_address = aligned_start as _;
+        let (aligned_start, mut size, _) = align_range(virtual_address, *requested_size, PAGE_4K);
+        virtual_address = aligned_start;
 
         if self.is_user {
             assert!(*flags & flags::PTE_USER != 0);
-            assert!(get_l4(virtual_address) != KERNEL_L4_INDEX as u64);
+            assert!(get_l4(virtual_address) != KERNEL_L4_INDEX);
             let end = virtual_address + size;
-            assert!(end <= MAX_USER_VIRTUAL_ADDRESS as u64);
+            assert!(end <= MAX_USER_VIRTUAL_ADDRESS);
         }
 
         if let Some(start_physical_address) = start_physical_address.as_mut() {
             let (aligned_start, physical_size, _) =
-                align_range(*start_physical_address as _, *requested_size as _, PAGE_4K);
-            assert!(physical_size as u64 == size);
-            *start_physical_address = aligned_start as _;
+                align_range(*start_physical_address as usize, *requested_size, PAGE_4K);
+            assert!(physical_size == size);
+            *start_physical_address = aligned_start as u64;
         }
 
         // keep track of current address and size
@@ -395,8 +400,8 @@ impl VirtualMemoryMapper {
             "{} {:08X?}",
             MemSize(size),
             VirtualMemoryMapEntry {
-                virtual_address: virtual_address as _,
-                physical_address: physical_address as _,
+                virtual_address,
+                physical_address,
                 size,
                 flags: *flags,
             }
@@ -404,16 +409,16 @@ impl VirtualMemoryMapper {
 
         while size > 0 {
             let current_physical_address = physical_address.unwrap_or_else(|| {
-                virtual2physical(unsafe { physical_page_allocator::alloc_zeroed() as _ }) as _
+                virtual2physical(unsafe { physical_page_allocator::alloc_zeroed() as _ })
             });
             eprintln!(
                 "[!] Mapping {:p} to {:p}",
                 virtual_address as *const u8, current_physical_address as *const u8
             );
-            let page_map_l4_index = get_l4(virtual_address) as usize;
-            let page_directory_pointer_index = get_l3(virtual_address) as usize;
-            let page_directory_index = get_l2(virtual_address) as usize;
-            let page_table_index = get_l1(virtual_address) as usize;
+            let page_map_l4_index = get_l4(virtual_address);
+            let page_directory_pointer_index = get_l3(virtual_address);
+            let page_directory_index = get_l2(virtual_address);
+            let page_table_index = get_l1(virtual_address);
 
             // Level 4
             let page_map_l4_entry = &mut self.page_map_l4.as_mut().entries[page_map_l4_index];
@@ -494,12 +499,12 @@ impl VirtualMemoryMapper {
                     page_directory_index, page_directory_entry, *page_directory_entry
                 );
 
-                size -= PAGE_2M as u64;
+                size -= PAGE_2M;
                 // do not overflow the address
                 if size == 0 {
                     break;
                 }
-                virtual_address += PAGE_2M as u64;
+                virtual_address += PAGE_2M;
                 if let Some(physical_address) = physical_address.as_mut() {
                     *physical_address += PAGE_2M as u64;
                 }
@@ -527,12 +532,12 @@ impl VirtualMemoryMapper {
                     page_table_index, page_table_entry, *page_table_entry
                 );
 
-                size -= PAGE_4K as u64;
+                size -= PAGE_4K;
                 // do not overflow the address
                 if size == 0 {
                     break;
                 }
-                virtual_address += PAGE_4K as u64;
+                virtual_address += PAGE_4K;
                 if let Some(physical_address) = physical_address.as_mut() {
                     *physical_address += PAGE_4K as u64;
                 }
@@ -554,9 +559,8 @@ impl VirtualMemoryMapper {
         assert!(physical_address.is_none());
 
         // get the end before alignment
-        let (aligned_start, size, _) = align_range(virtual_address as _, *size as _, PAGE_4K);
-        let mut size = size as u64;
-        virtual_address = aligned_start as _;
+        let (aligned_start, mut size, _) = align_range(virtual_address, *size, PAGE_4K);
+        virtual_address = aligned_start;
 
         assert!(size > 0);
 
@@ -564,7 +568,7 @@ impl VirtualMemoryMapper {
             "{} {:08X?}",
             MemSize(size),
             VirtualMemoryMapEntry {
-                virtual_address: virtual_address as _,
+                virtual_address,
                 physical_address: *physical_address,
                 size,
                 flags: *flags,
@@ -576,10 +580,10 @@ impl VirtualMemoryMapper {
                 cpu::invalidate_tlp(virtual_address as _);
             }
 
-            let page_map_l4_index = get_l4(virtual_address) as usize;
-            let page_directory_pointer_index = get_l3(virtual_address) as usize;
-            let page_directory_index = get_l2(virtual_address) as usize;
-            let page_table_index = get_l1(virtual_address) as usize;
+            let page_map_l4_index = get_l4(virtual_address);
+            let page_directory_pointer_index = get_l3(virtual_address);
+            let page_directory_index = get_l2(virtual_address);
+            let page_table_index = get_l1(virtual_address);
 
             // Level 4
             let page_map_l4_entry = &mut self.page_map_l4.as_mut().entries[page_map_l4_index];
@@ -642,20 +646,20 @@ impl VirtualMemoryMapper {
                 page_table_index, page_table_entry, *page_table_entry
             );
 
-            size -= PAGE_4K as u64;
+            size -= PAGE_4K;
             // do not overflow the address
             if size == 0 {
                 break;
             }
-            virtual_address += PAGE_4K as u64;
+            virtual_address += PAGE_4K;
         }
     }
 
-    pub fn is_address_mapped(&self, addr: u64) -> bool {
-        let page_map_l4_index = get_l4(addr) as usize;
-        let page_directory_pointer_index = get_l3(addr) as usize;
-        let page_directory_index = get_l2(addr) as usize;
-        let page_table_index = get_l1(addr) as usize;
+    pub fn is_address_mapped(&self, addr: usize) -> bool {
+        let page_map_l4_index = get_l4(addr);
+        let page_directory_pointer_index = get_l3(addr);
+        let page_directory_index = get_l2(addr);
+        let page_table_index = get_l1(addr);
 
         // Level 4
         let page_map_l4 = self.page_map_l4.as_ref();

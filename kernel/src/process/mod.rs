@@ -148,9 +148,9 @@ impl Process {
         let stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
         let stack_start = stack_end - stack_size;
         vm.map(&VirtualMemoryMapEntry {
-            virtual_address: stack_start as u64,
+            virtual_address: stack_start,
             physical_address: None,
-            size: stack_size as u64,
+            size: stack_size,
             flags: virtual_memory_mapper::flags::PTE_USER
                 | virtual_memory_mapper::flags::PTE_WRITABLE,
         });
@@ -220,7 +220,7 @@ impl Process {
         self.parent_id
     }
 
-    pub fn is_user_address_mapped(&self, address: u64) -> bool {
+    pub fn is_user_address_mapped(&self, address: usize) -> bool {
         self.vm.is_address_mapped(address)
     }
 
@@ -311,9 +311,9 @@ impl Process {
         if increment > 0 {
             // map the new heap
             let entry = VirtualMemoryMapEntry {
-                virtual_address: old_end as u64,
+                virtual_address: old_end,
                 physical_address: None,
-                size: increment as u64,
+                size: increment as usize,
                 flags: virtual_memory_mapper::flags::PTE_USER
                     | virtual_memory_mapper::flags::PTE_WRITABLE,
             };
@@ -322,9 +322,9 @@ impl Process {
             let new_end = old_end - increment.unsigned_abs();
             // unmap old heap
             let entry = VirtualMemoryMapEntry {
-                virtual_address: new_end as u64,
+                virtual_address: new_end,
                 physical_address: None,
-                size: increment.unsigned_abs() as u64,
+                size: increment.unsigned_abs(),
                 flags: virtual_memory_mapper::flags::PTE_USER
                     | virtual_memory_mapper::flags::PTE_WRITABLE,
             };

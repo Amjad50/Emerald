@@ -19,19 +19,20 @@ pub unsafe fn load_elf_to_vm(
     //         kernel regions
     vm.switch_to_this();
 
-    let mut min_address = u64::MAX;
+    let mut min_address = usize::MAX;
     let mut max_address = 0;
 
     for segment in elf.program_headers() {
         if let elf::ElfProgramType::Load = segment.ty() {
             let segment_virtual = segment.virtual_address();
             assert!(segment_virtual == segment.physical_address());
+
             let mut flags = elf::to_virtual_memory_flags(segment.flags());
             flags |= virtual_memory_mapper::flags::PTE_USER;
             let entry = virtual_memory_mapper::VirtualMemoryMapEntry {
-                virtual_address: segment_virtual,
+                virtual_address: segment_virtual as usize,
                 physical_address: None,
-                size: segment.mem_size(),
+                size: segment.mem_size() as usize,
                 flags,
             };
             min_address = min_address.min(entry.virtual_address);
@@ -56,5 +57,5 @@ pub unsafe fn load_elf_to_vm(
     // we can be interrupted again
     cpu::cpu().pop_cli();
 
-    Ok((min_address as usize, max_address as usize))
+    Ok((min_address, max_address))
 }

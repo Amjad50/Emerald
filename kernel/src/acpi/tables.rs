@@ -19,8 +19,8 @@ use crate::{
 
 use super::aml::{parse_aml, AmlCode};
 
-const BIOS_RO_MEM_START: usize = 0x000E0000;
-const BIOS_RO_MEM_END: usize = 0x000FFFFF;
+const BIOS_RO_MEM_START: u64 = 0x000E0000;
+const BIOS_RO_MEM_END: u64 = 0x000FFFFF;
 
 /// # Safety
 ///
@@ -28,15 +28,16 @@ const BIOS_RO_MEM_END: usize = 0x000FFFFF;
 /// Must ensure that the `physical_address` is not used in virtual_space before calling this function
 /// If any address is used, this may panic, and undefined behavior may occur due to aliasing memory referenced by other code
 /// call `deallocate_acpi_mapping` after using any memory in the acpi region
-unsafe fn get_acpi_header_with_len(physical_addr: usize) -> (*const DescriptionHeader, usize) {
+unsafe fn get_acpi_header_with_len(physical_addr: u64) -> (*const DescriptionHeader, usize) {
     if physical_addr < virtual2physical(KERNEL_END) {
         assert!(
-            physical_addr + mem::size_of::<DescriptionHeader>() <= virtual2physical(KERNEL_END)
+            physical_addr + mem::size_of::<DescriptionHeader>() as u64
+                <= virtual2physical(KERNEL_END)
         );
 
-        let header_virtual = (physical_addr + KERNEL_BASE) as *const DescriptionHeader;
+        let header_virtual = (physical_addr + KERNEL_BASE as u64) as *const DescriptionHeader;
         let len = (*header_virtual).length as usize;
-        assert!(physical_addr + len <= virtual2physical(KERNEL_END));
+        assert!(physical_addr + len as u64 <= virtual2physical(KERNEL_END));
         (header_virtual, len)
     } else {
         let header = virtual_space::get_virtual_for_physical(
@@ -70,9 +71,9 @@ unsafe fn get_acpi_header_with_len(physical_addr: usize) -> (*const DescriptionH
 ///
 /// This will affect all pages of memory that are touching the address space of `addr` and `size`
 /// Thus, this should only be used when we are sure that we are not holding any references to any data of this space.
-unsafe fn deallocate_acpi_mapping(addr: usize, size: usize) {
+unsafe fn deallocate_acpi_mapping(addr: u64, size: usize) {
     if addr < virtual2physical(KERNEL_END) {
-        assert!(addr + size <= virtual2physical(KERNEL_END));
+        assert!(addr + size as u64 <= virtual2physical(KERNEL_END));
     } else {
         virtual_space::deallocate_virtual_space(addr as _, size as _);
     }

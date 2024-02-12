@@ -41,26 +41,26 @@ pub fn init_kernel_gdt() {
             access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(KERNEL_RING),
             flags_and_limit: flags::LONG_MODE,
             ..UserDescriptorEntry::empty()
-        }) as _
+        })
     });
     manager.user_code_seg = SegmentSelector::from_index(unsafe {
         manager.gdt.push_user(UserDescriptorEntry {
             access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(USER_RING),
             flags_and_limit: flags::LONG_MODE,
             ..UserDescriptorEntry::empty()
-        }) as _
+        })
     });
     manager.kernel_data_seg = SegmentSelector::from_index(unsafe {
         manager.gdt.push_user(UserDescriptorEntry {
             access: flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(KERNEL_RING),
             ..UserDescriptorEntry::empty()
-        }) as _
+        })
     });
     manager.user_data_seg = SegmentSelector::from_index(unsafe {
         manager.gdt.push_user(UserDescriptorEntry {
             access: flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(USER_RING),
             ..UserDescriptorEntry::empty()
-        }) as _
+        })
     });
 
     // setup TSS
@@ -80,15 +80,14 @@ pub fn init_kernel_gdt() {
             }
             // make sure that the stack is aligned, so we can easily allocate pages
             assert!(
-                is_aligned(INTR_STACK_SIZE as _, PAGE_4K)
-                    && is_aligned(stack_start_virtual as _, PAGE_4K)
+                is_aligned(INTR_STACK_SIZE, PAGE_4K) && is_aligned(stack_start_virtual, PAGE_4K)
             );
 
             // map the stack
             virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
-                virtual_address: stack_start_virtual as u64,
+                virtual_address: stack_start_virtual,
                 physical_address: None,
-                size: INTR_STACK_SIZE as u64,
+                size: INTR_STACK_SIZE,
                 flags: virtual_memory_mapper::flags::PTE_WRITABLE,
             });
 
@@ -113,7 +112,7 @@ pub fn init_kernel_gdt() {
             base_high: ((tss_ptr >> 24) & 0xFF) as u8,
             base_upper: ((tss_ptr >> 32) & 0xFFFFFFFF) as u32,
             ..SystemDescriptorEntry::empty()
-        }) as _
+        })
     });
     drop(manager);
     // call the special `run_with` so that we get the `static` lifetime

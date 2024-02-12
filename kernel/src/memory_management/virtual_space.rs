@@ -13,54 +13,54 @@ use super::virtual_memory_mapper::{self, VirtualMemoryMapEntry};
 static VIRTUAL_SPACE_ALLOCATOR: Mutex<VirtualSpaceAllocator> =
     Mutex::new(VirtualSpaceAllocator::empty());
 
-pub fn get_virtual_for_physical(physical_start: u64, size: u64) -> u64 {
-    let (aligned_start, size, offset) = align_range(physical_start as _, size as _, PAGE_4K);
+pub fn get_virtual_for_physical(physical_start: u64, size: usize) -> usize {
+    let (aligned_start, size, offset) = align_range(physical_start as _, size, PAGE_4K);
 
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    let virtual_addr = allocator.get_virtual_for_physical(aligned_start as u64, size as u64);
+    let virtual_addr = allocator.get_virtual_for_physical(aligned_start as u64, size);
     // ensure its mapped
     virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
         physical_address: Some(aligned_start as u64),
-        size: size as _,
+        size,
         flags: virtual_memory_mapper::flags::PTE_WRITABLE,
     });
     // to make sure no one else play around with the space while we are mapping it
     drop(allocator);
 
-    virtual_addr + offset as u64
+    virtual_addr + offset
 }
 
-pub fn allocate_and_map_virtual_space(physical_start: u64, size: u64) -> u64 {
-    let (aligned_start, size, offset) = align_range(physical_start as _, size as _, PAGE_4K);
+pub fn allocate_and_map_virtual_space(physical_start: u64, size: usize) -> usize {
+    let (aligned_start, size, offset) = align_range(physical_start as _, size, PAGE_4K);
 
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    let virtual_addr = allocator.allocate(aligned_start as u64, size as u64);
+    let virtual_addr = allocator.allocate(aligned_start as u64, size);
 
     virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
         physical_address: Some(aligned_start as u64),
-        size: size as _,
+        size,
         flags: virtual_memory_mapper::flags::PTE_WRITABLE,
     });
     // to make sure no one else play around with the space while we are mapping it
     drop(allocator);
 
-    virtual_addr + offset as u64
+    virtual_addr + offset
 }
 
 #[allow(dead_code)]
-pub fn deallocate_virtual_space(virtual_start: u64, size: u64) {
-    let (aligned_start, size, _) = align_range(virtual_start as _, size as _, PAGE_4K);
+pub fn deallocate_virtual_space(virtual_start: usize, size: usize) {
+    let (aligned_start, size, _) = align_range(virtual_start, size, PAGE_4K);
 
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    allocator.deallocate(aligned_start as u64, size as u64);
+    allocator.deallocate(aligned_start, size);
     // unmap it after we deallocate (it will panic if its not valid deallocation)
     virtual_memory_mapper::unmap_kernel(
         &VirtualMemoryMapEntry {
-            virtual_address: aligned_start as u64,
+            virtual_address: aligned_start,
             physical_address: None,
-            size: size as _,
+            size,
             flags: virtual_memory_mapper::flags::PTE_WRITABLE,
         },
         // we did specify our own physical address on allocation, so we must set this to false
@@ -75,18 +75,19 @@ pub fn debug_blocks() {
 
 struct VirtualSpaceEntry {
     physical_start: Option<u64>,
-    virtual_start: u64,
-    size: u64,
+    virtual_start: usize,
+    size: usize,
 }
 
 impl VirtualSpaceEntry {
     /// Return `None` if its not mapped, or if the `physical_start` is not inside this entry
-    fn virtual_for_physical(&self, physical_start: u64) -> Option<u64> {
+    fn virtual_for_physical(&self, physical_start: u64) -> Option<usize> {
         if let Some(current_phy_start) = self.physical_start {
             // is inside?
-            if current_phy_start <= physical_start && current_phy_start + self.size > physical_start
+            if current_phy_start <= physical_start
+                && current_phy_start + self.size as u64 > physical_start
             {
-                return Some(self.virtual_start + (physical_start - current_phy_start));
+                return Some(self.virtual_start + (physical_start - current_phy_start) as usize);
             }
         }
         None
@@ -108,22 +109,22 @@ impl VirtualSpaceAllocator {
     fn get_entry_containing(
         &mut self,
         req_phy_start: u64,
-        req_size: u64,
+        req_size: usize,
     ) -> Option<(&VirtualSpaceEntry, bool)> {
         assert!(req_size > 0);
         assert!(is_aligned(req_phy_start as _, PAGE_4K));
-        assert!(is_aligned(req_size as _, PAGE_4K));
+        assert!(is_aligned(req_size, PAGE_4K));
 
         let mut cursor = self.entries.cursor_front();
         while let Some(entry) = cursor.current() {
             if let Some(current_phy_start) = entry.physical_start {
                 // is inside?
                 if current_phy_start <= req_phy_start
-                    && current_phy_start + entry.size > req_phy_start
+                    && current_phy_start + entry.size as u64 > req_phy_start
                 {
                     // this has parts of it inside
                     // is it fully inside?
-                    if current_phy_start + entry.size >= req_phy_start + req_size {
+                    if current_phy_start + entry.size as u64 >= req_phy_start + req_size as u64 {
                         // yes, it is fully inside
                         return Some((entry, true));
                     } else {
@@ -140,27 +141,27 @@ impl VirtualSpaceAllocator {
 
     /// Checks if we have this range allocated, returns it, otherwise perform an allocation, map it, and return
     /// the new address
-    fn get_virtual_for_physical(&mut self, req_phy_start: u64, req_size: u64) -> u64 {
+    fn get_virtual_for_physical(&mut self, req_phy_start: u64, req_size: usize) -> usize {
         if let Some((entry, is_fully_inside)) = self.get_entry_containing(req_phy_start, req_size) {
             if is_fully_inside {
                 // we already have it, return it
                 // we know its inside, so we can unwrap, it may not be fully, but that's fine
-                let virtual_start: u64 = entry.virtual_for_physical(req_phy_start).unwrap();
+                let virtual_start = entry.virtual_for_physical(req_phy_start).unwrap();
                 return virtual_start;
             }
             // we have it, but not fully inside, we need to allocate
             panic!("Could not get virtual space for {:016X}..{:016X}, it is not fully inside {:016X}..{:016X}",
-                req_phy_start, req_phy_start + req_size, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size);
+                req_phy_start, req_phy_start + req_size as u64, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size as u64);
         }
 
         // we didn't find it, allocate it
         self.allocate(req_phy_start, req_size)
     }
 
-    fn allocate(&mut self, phy_start: u64, size: u64) -> u64 {
+    fn allocate(&mut self, phy_start: u64, size: usize) -> usize {
         assert!(size > 0);
         assert!(is_aligned(phy_start as _, PAGE_4K));
-        assert!(is_aligned(size as _, PAGE_4K));
+        assert!(is_aligned(size, PAGE_4K));
 
         let mut cursor = self.entries.cursor_front_mut();
         // find largest fitting entry and allocate from it
@@ -190,8 +191,8 @@ impl VirtualSpaceAllocator {
             assert!(is_aligned(KERNEL_EXTRA_MEMORY_SIZE, PAGE_4K));
             self.entries.push_back(VirtualSpaceEntry {
                 physical_start: None,
-                virtual_start: KERNEL_EXTRA_MEMORY_BASE as u64,
-                size: KERNEL_EXTRA_MEMORY_SIZE as u64,
+                virtual_start: KERNEL_EXTRA_MEMORY_BASE,
+                size: KERNEL_EXTRA_MEMORY_SIZE,
             });
             self.allocate(phy_start, size)
         } else {
@@ -199,7 +200,7 @@ impl VirtualSpaceAllocator {
         }
     }
 
-    fn deallocate(&mut self, req_virtual_start: u64, req_size: u64) {
+    fn deallocate(&mut self, req_virtual_start: usize, req_size: usize) {
         assert!(req_size > 0);
         assert!(is_aligned(req_virtual_start as _, PAGE_4K));
         assert!(is_aligned(req_size as _, PAGE_4K));
