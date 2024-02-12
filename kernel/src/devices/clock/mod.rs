@@ -8,8 +8,8 @@ use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
     acpi::tables::{self, BiosTables, Facp},
-    cpu::{self},
-    sync::{once::OnceLock, spin::mutex::Mutex},
+    cpu,
+    sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
 use self::rtc::Rtc;
@@ -222,13 +222,11 @@ impl SystemTime {
 #[allow(dead_code)]
 pub struct Clock {
     /// devices sorted based on their rating
-    // TODO: replace with read-write lock
-    devices: Mutex<Vec<Arc<dyn ClockDevice>>>,
+    devices: RwLock<Vec<Arc<dyn ClockDevice>>>,
     /// Used to determine the outside world time and use it as a base
     rtc: Rtc,
     /// System time
-    // TODO: replace with read-write lock
-    system_time: Mutex<SystemTime>,
+    system_time: RwLock<SystemTime>,
 }
 
 impl fmt::Debug for Clock {
@@ -240,8 +238,8 @@ impl fmt::Debug for Clock {
 impl Clock {
     fn new(rtc: Rtc) -> Self {
         Self {
-            devices: Mutex::new(Vec::new()),
-            system_time: Mutex::new(SystemTime::new(&rtc)),
+            devices: RwLock::new(Vec::new()),
+            system_time: RwLock::new(SystemTime::new(&rtc)),
             rtc,
         }
     }
@@ -252,22 +250,22 @@ impl Clock {
             device.name(),
             device.rating()
         );
-        let mut devs = self.devices.lock();
+        let mut devs = self.devices.write();
         devs.push(device);
         devs.sort_unstable_by_key(|device| -(device.rating() as i64));
         self.system_time
-            .lock()
+            .write()
             .update_device(devs[0].clone(), &self.rtc);
     }
 
     #[allow(dead_code)]
     fn get_best_clock(&self) -> Option<Arc<dyn ClockDevice>> {
-        self.devices.lock().first().map(Arc::clone)
+        self.devices.read().first().map(Arc::clone)
     }
 
     fn get_best_for_calibration(&self) -> Option<Arc<dyn ClockDevice>> {
         self.devices
-            .lock()
+            .read()
             .iter()
             .find(|device| !device.require_calibration())
             .map(Arc::clone)
@@ -275,13 +273,13 @@ impl Clock {
 
     #[allow(dead_code)]
     pub fn tick_system_time(&self) {
-        self.system_time.lock().tick();
+        self.system_time.write().tick();
     }
 
     #[allow(dead_code)]
     pub fn time_since_startup(&self) -> ClockTime {
         // TODO: find a better way to do this
-        let mut time = self.system_time.lock();
+        let mut time = self.system_time.write();
         time.tick();
         time.time_since_startup()
     }
@@ -289,7 +287,7 @@ impl Clock {
     #[allow(dead_code)]
     pub fn time_since_unix_epoch(&self) -> ClockTime {
         // TODO: find a better way to do this
-        let mut time = self.system_time.lock();
+        let mut time = self.system_time.write();
         time.tick();
         time.time_since_unix_epoch()
     }

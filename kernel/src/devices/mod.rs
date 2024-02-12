@@ -5,7 +5,7 @@ use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 use crate::{
     fs::{self, path::Path, FileAttributes, FileSystem, FileSystemError, INode},
     io,
-    sync::{once::OnceLock, spin::mutex::Mutex},
+    sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
 use self::pci::{PciDeviceConfig, PciDevicePropeIterator};
@@ -15,8 +15,7 @@ pub mod ide;
 pub mod pci;
 pub mod pipe;
 
-// TODO: replace with rwlock
-static DEVICES: OnceLock<Arc<Mutex<Devices>>> = OnceLock::new();
+static DEVICES: OnceLock<Arc<RwLock<Devices>>> = OnceLock::new();
 
 pub(crate) const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u64 = 0xdef1ce5;
 pub(crate) const DEVICES_FILESYSTEM_ROOT_INODE_MAGIC: u64 = 0xdef1ce55007;
@@ -44,7 +43,7 @@ pub trait Device: Sync + Send + fmt::Debug {
     }
 }
 
-impl FileSystem for Mutex<Devices> {
+impl FileSystem for RwLock<Devices> {
     fn open_root(&self) -> Result<INode, FileSystemError> {
         Ok(INode::new_file(
             String::from("/"),
@@ -57,7 +56,7 @@ impl FileSystem for Mutex<Devices> {
     fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError> {
         if path.is_root() || path.is_empty() {
             Ok(self
-                .lock()
+                .read()
                 .devices
                 .iter()
                 .map(|(name, device)| {
@@ -80,7 +79,7 @@ impl FileSystem for Mutex<Devices> {
 
 pub fn init_devices_mapping() {
     DEVICES
-        .set(Arc::new(Mutex::new(Devices {
+        .set(Arc::new(RwLock::new(Devices {
             devices: BTreeMap::new(),
         })))
         .expect("Devices already initialized");
@@ -89,7 +88,7 @@ pub fn init_devices_mapping() {
 }
 
 pub fn register_device(device: Arc<dyn Device>) {
-    let mut devices = DEVICES.get().lock();
+    let mut devices = DEVICES.get().write();
     assert!(
         !devices.devices.contains_key(device.name()),
         "Device {} already registered",
