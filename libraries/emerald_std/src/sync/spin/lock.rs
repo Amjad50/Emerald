@@ -8,6 +8,8 @@ use core::{
 /// This is an unsafe lock, it doesn't have any protection against deadlocks, or multiple locking
 /// A safe wrappers are implemented with `Mutex` and `ReMutex`
 pub(super) struct Lock {
+    // we still use `bool` that is not cache aligned
+    // because this will change in the future to use os mutexes, and better synchronization methods
     locked: AtomicBool,
 }
 
@@ -20,7 +22,9 @@ impl Lock {
 
     pub fn lock(&self) {
         while !self.try_lock() {
-            hint::spin_loop();
+            while self.locked.load(Ordering::Relaxed) {
+                hint::spin_loop();
+            }
         }
     }
 

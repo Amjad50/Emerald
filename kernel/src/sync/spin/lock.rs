@@ -3,24 +3,30 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+use crate::sync::cache_padded::CachePadded;
+
 /// A raw spin lock, only provides `lock` and `unlock` and waiting for the lock
 ///
 /// This is an unsafe lock, it doesn't have any protection against deadlocks, or multiple locking
 /// A safe wrappers are implemented with `Mutex` and `ReMutex`
 pub(super) struct Lock {
-    locked: AtomicBool,
+    locked: CachePadded<AtomicBool>,
 }
 
 impl Lock {
     pub const fn new() -> Self {
         Self {
-            locked: AtomicBool::new(false),
+            locked: CachePadded::new(AtomicBool::new(false)),
         }
     }
 
     pub fn lock(&self) {
+        // only try to lock once, then loop until we can, then try again
+        // this reduces `cache exclusion` and improve performance
         while !self.try_lock() {
-            hint::spin_loop();
+            while self.locked.load(Ordering::Relaxed) {
+                hint::spin_loop();
+            }
         }
     }
 
@@ -29,7 +35,7 @@ impl Lock {
     /// Try to lock the lock, returns true if successful
     pub fn try_lock(&self) -> bool {
         self.locked
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
     }
 
