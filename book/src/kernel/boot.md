@@ -178,7 +178,7 @@ When we jump into rust, here is the state of the CPU (do note, that the kernel m
 - Empty `IDT` setup (i.e. exceptions will trigger triple faults)
 - interrupts are disabled
 - `cr3` is set to the `.boot_page_tables` (which is a temporary page tables)
-- `cr0 = CR0_PG | CR0_PE`
+- `cr0 = CR0_PG | CR0_PE | CR0_MP`
 - `cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT`
 - `EFER = EFER_LME` | (EFER_LMA would be set by the CPU, indicating that long mode is active)
 - The stack is setup at the end of the `.stack` section

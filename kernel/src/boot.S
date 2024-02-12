@@ -16,7 +16,7 @@
  *  - Empty IDT setup (i.e. exceptions will trigger triple faults)
  *  - interrupts are disabled
  *  - cr3 is set to the `.boot_page_tables` (which is a temporary page tables)
- *  - cr0 = CR0_PG | CR0_PE
+ *  - cr0 = CR0_PG | CR0_PE | CR0_MP
  *  - cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT
  *  - EFER = EFER_LME | (EFER_LMA would be set by the CPU, indicating that long mode is active)
  *  - The stack is setup at the end of the `.stack` section
@@ -51,6 +51,7 @@ GDT_PRESENT   = 1 << 7
 
 # cpu registers flags
 CR0_PE   = 1 << 0
+CR0_MP   = 1 << 1
 CR0_WP   = 1 << 16
 CR0_PG   = 1 << 31
 CR4_PAE  = 1 << 5
@@ -227,7 +228,8 @@ fill_pdt_loop:
     mov eax, EFER_LME
     wrmsr
 # enable paging, and protection (should be enabled already)
-    mov eax, CR0_PG | CR0_PE
+# setup cr0, MP is needed for SSE support
+    mov eax, CR0_PG | CR0_PE | CR0_MP
     mov cr0, eax
 
 # setup gdt and jump
