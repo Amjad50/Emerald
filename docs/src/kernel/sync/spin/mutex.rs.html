@@ -160,6 +160,10 @@
 <a href="#158" id="158">158</a>
 <a href="#159" id="159">159</a>
 <a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     cell::UnsafeCell,
     fmt,
@@ -205,12 +209,15 @@
 
 <span class="kw">unsafe impl</span>&lt;T: <span class="question-mark">?</span>Sized + Sync&gt; Sync <span class="kw">for </span>MutexGuard&lt;<span class="lifetime">'_</span>, T&gt; {}
 
-<span class="kw">impl</span>&lt;T&gt; fmt::Debug <span class="kw">for </span>MutexGuard&lt;<span class="lifetime">'_</span>, T&gt;
-<span class="kw">where
-    </span>T: fmt::Debug,
-{
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized + fmt::Debug&gt; fmt::Debug <span class="kw">for </span>MutexGuard&lt;<span class="lifetime">'_</span>, T&gt; {
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
-        <span class="self">self</span>.deref().fmt(f)
+        (<span class="kw-2">**</span><span class="self">self</span>).fmt(f)
+    }
+}
+
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized + fmt::Display&gt; fmt::Display <span class="kw">for </span>MutexGuard&lt;<span class="lifetime">'_</span>, T&gt; {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+        (<span class="kw-2">**</span><span class="self">self</span>).fmt(f)
     }
 }
 
@@ -222,7 +229,9 @@
             data: UnsafeCell::new(data),
         }
     }
+}
 
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; Mutex&lt;T&gt; {
     <span class="kw">pub fn </span>lock(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; MutexGuard&lt;T&gt; {
         <span class="kw">let </span>cpu = cpu::cpu();
         cpu.push_cli(); <span class="comment">// disable interrupts to avoid deadlock
@@ -231,8 +240,7 @@
         <span class="kw">if </span><span class="self">self</span>.owner_cpu.load(Ordering::Relaxed) == cpu_id {
             <span class="macro">panic!</span>(<span class="string">"Mutex already locked by this CPU"</span>);
         } <span class="kw">else </span>{
-            <span class="comment">// SAFETY: we are the only accessor, and we are locking it, its never locked again until unlocked
-            </span><span class="self">self</span>.lock.lock();
+            <span class="self">self</span>.lock.write_lock();
             <span class="self">self</span>.owner_cpu.store(cpu_id, Ordering::Relaxed);
             MutexGuard {
                 lock: <span class="self">self</span>,
@@ -250,7 +258,7 @@
             <span class="comment">// we will not throw here, since the CPU might want to try to lock it again, at least its not a deadlock
             </span>cpu.pop_cli();
             <span class="prelude-val">None
-        </span>} <span class="kw">else if </span><span class="self">self</span>.lock.try_lock() {
+        </span>} <span class="kw">else if </span><span class="self">self</span>.lock.try_write_lock() {
             <span class="self">self</span>.owner_cpu.store(cpu_id, Ordering::Relaxed);
             <span class="prelude-val">Some</span>(MutexGuard {
                 lock: <span class="self">self</span>,
@@ -294,7 +302,7 @@
     }
 }
 
-<span class="kw">impl</span>&lt;T&gt; Deref <span class="kw">for </span>MutexGuard&lt;<span class="lifetime">'_</span>, T&gt; {
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; Deref <span class="kw">for </span>MutexGuard&lt;<span class="lifetime">'_</span>, T&gt; {
     <span class="kw">type </span>Target = T;
 
     <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
@@ -304,7 +312,7 @@
     }
 }
 
-<span class="kw">impl</span>&lt;T&gt; DerefMut <span class="kw">for </span>MutexGuard&lt;<span class="lifetime">'_</span>, T&gt; {
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; DerefMut <span class="kw">for </span>MutexGuard&lt;<span class="lifetime">'_</span>, T&gt; {
     <span class="kw">fn </span>deref_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target {
         <span class="comment">// SAFETY: the mutex is locked, we are the only accessors,
         //         and the pointer is valid, since it was generated for a valid T
@@ -316,7 +324,7 @@
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="self">self</span>.lock.owner_cpu.store(-<span class="number">1</span>, Ordering::Relaxed);
         <span class="comment">// SAFETY: the mutex is locked, we are the only accessor
-        </span><span class="kw">unsafe </span>{ <span class="self">self</span>.lock.lock.unlock() };
+        </span><span class="kw">unsafe </span>{ <span class="self">self</span>.lock.lock.write_unlock() };
         cpu::cpu().pop_cli(); <span class="comment">// re-enable interrupts
     </span>}
 }

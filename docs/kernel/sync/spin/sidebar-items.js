@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["lock","mutex","remutex"]};
+window.SIDEBAR_ITEMS = {"mod":["lock","mutex","remutex","rwlock"]};

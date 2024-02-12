@@ -322,8 +322,6 @@
 <a href="#320" id="320">320</a>
 <a href="#321" id="321">321</a>
 <a href="#322" id="322">322</a>
-<a href="#323" id="323">323</a>
-<a href="#324" id="324">324</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>hpet;
 <span class="kw">mod </span>rtc;
 <span class="kw">mod </span>tsc;
@@ -334,8 +332,8 @@
 
 <span class="kw">use crate</span>::{
     acpi::tables::{<span class="self">self</span>, BiosTables, Facp},
-    cpu::{<span class="self">self</span>},
-    sync::{once::OnceLock, spin::mutex::Mutex},
+    cpu,
+    sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
 <span class="kw">use </span><span class="self">self</span>::rtc::Rtc;
@@ -548,13 +546,11 @@
 <span class="attr">#[allow(dead_code)]
 </span><span class="kw">pub struct </span>Clock {
     <span class="doccomment">/// devices sorted based on their rating
-    </span><span class="comment">// TODO: replace with read-write lock
-    </span>devices: Mutex&lt;Vec&lt;Arc&lt;<span class="kw">dyn </span>ClockDevice&gt;&gt;&gt;,
+    </span>devices: RwLock&lt;Vec&lt;Arc&lt;<span class="kw">dyn </span>ClockDevice&gt;&gt;&gt;,
     <span class="doccomment">/// Used to determine the outside world time and use it as a base
     </span>rtc: Rtc,
     <span class="doccomment">/// System time
-    </span><span class="comment">// TODO: replace with read-write lock
-    </span>system_time: Mutex&lt;SystemTime&gt;,
+    </span>system_time: RwLock&lt;SystemTime&gt;,
 }
 
 <span class="kw">impl </span>fmt::Debug <span class="kw">for </span>Clock {
@@ -566,8 +562,8 @@
 <span class="kw">impl </span>Clock {
     <span class="kw">fn </span>new(rtc: Rtc) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
-            devices: Mutex::new(Vec::new()),
-            system_time: Mutex::new(SystemTime::new(<span class="kw-2">&amp;</span>rtc)),
+            devices: RwLock::new(Vec::new()),
+            system_time: RwLock::new(SystemTime::new(<span class="kw-2">&amp;</span>rtc)),
             rtc,
         }
     }
@@ -578,22 +574,22 @@
             device.name(),
             device.rating()
         );
-        <span class="kw">let </span><span class="kw-2">mut </span>devs = <span class="self">self</span>.devices.lock();
+        <span class="kw">let </span><span class="kw-2">mut </span>devs = <span class="self">self</span>.devices.write();
         devs.push(device);
         devs.sort_unstable_by_key(|device| -(device.rating() <span class="kw">as </span>i64));
         <span class="self">self</span>.system_time
-            .lock()
+            .write()
             .update_device(devs[<span class="number">0</span>].clone(), <span class="kw-2">&amp;</span><span class="self">self</span>.rtc);
     }
 
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">fn </span>get_best_clock(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>ClockDevice&gt;&gt; {
-        <span class="self">self</span>.devices.lock().first().map(Arc::clone)
+        <span class="self">self</span>.devices.read().first().map(Arc::clone)
     }
 
     <span class="kw">fn </span>get_best_for_calibration(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>ClockDevice&gt;&gt; {
         <span class="self">self</span>.devices
-            .lock()
+            .read()
             .iter()
             .find(|device| !device.require_calibration())
             .map(Arc::clone)
@@ -601,13 +597,13 @@
 
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">pub fn </span>tick_system_time(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="self">self</span>.system_time.lock().tick();
+        <span class="self">self</span>.system_time.write().tick();
     }
 
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">pub fn </span>time_since_startup(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ClockTime {
         <span class="comment">// TODO: find a better way to do this
-        </span><span class="kw">let </span><span class="kw-2">mut </span>time = <span class="self">self</span>.system_time.lock();
+        </span><span class="kw">let </span><span class="kw-2">mut </span>time = <span class="self">self</span>.system_time.write();
         time.tick();
         time.time_since_startup()
     }
@@ -615,7 +611,7 @@
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">pub fn </span>time_since_unix_epoch(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ClockTime {
         <span class="comment">// TODO: find a better way to do this
-        </span><span class="kw">let </span><span class="kw-2">mut </span>time = <span class="self">self</span>.system_time.lock();
+        </span><span class="kw">let </span><span class="kw-2">mut </span>time = <span class="self">self</span>.system_time.write();
         time.tick();
         time.time_since_unix_epoch()
     }

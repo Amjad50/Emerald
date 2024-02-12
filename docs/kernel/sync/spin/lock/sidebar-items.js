@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Lock"]};
+window.SIDEBAR_ITEMS = {"constant":["MASK","MAX_READERS","READ_LOCKED","UNLOCKED","WRITE_LOCKED"],"fn":["is_read_lockable"],"struct":["Lock"]};

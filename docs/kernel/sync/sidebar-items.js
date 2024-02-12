@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["once","spin"]};
+window.SIDEBAR_ITEMS = {"mod":["cache_padded","once","spin"]};

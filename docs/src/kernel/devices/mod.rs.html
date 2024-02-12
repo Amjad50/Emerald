@@ -135,7 +135,6 @@
 <a href="#133" id="133">133</a>
 <a href="#134" id="134">134</a>
 <a href="#135" id="135">135</a>
-<a href="#136" id="136">136</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
@@ -143,7 +142,7 @@
 <span class="kw">use crate</span>::{
     fs::{<span class="self">self</span>, path::Path, FileAttributes, FileSystem, FileSystemError, INode},
     io,
-    sync::{once::OnceLock, spin::mutex::Mutex},
+    sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
 <span class="kw">use </span><span class="self">self</span>::pci::{PciDeviceConfig, PciDevicePropeIterator};
@@ -153,8 +152,7 @@
 <span class="kw">pub mod </span>pci;
 <span class="kw">pub mod </span>pipe;
 
-<span class="comment">// TODO: replace with rwlock
-</span><span class="kw">static </span>DEVICES: OnceLock&lt;Arc&lt;Mutex&lt;Devices&gt;&gt;&gt; = OnceLock::new();
+<span class="kw">static </span>DEVICES: OnceLock&lt;Arc&lt;RwLock&lt;Devices&gt;&gt;&gt; = OnceLock::new();
 
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>DEVICES_FILESYSTEM_CLUSTER_MAGIC: u64 = <span class="number">0xdef1ce5</span>;
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>DEVICES_FILESYSTEM_ROOT_INODE_MAGIC: u64 = <span class="number">0xdef1ce55007</span>;
@@ -182,7 +180,7 @@
     }
 }
 
-<span class="kw">impl </span>FileSystem <span class="kw">for </span>Mutex&lt;Devices&gt; {
+<span class="kw">impl </span>FileSystem <span class="kw">for </span>RwLock&lt;Devices&gt; {
     <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;INode, FileSystemError&gt; {
         <span class="prelude-val">Ok</span>(INode::new_file(
             String::from(<span class="string">"/"</span>),
@@ -195,7 +193,7 @@
     <span class="kw">fn </span>open_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;INode&gt;, FileSystemError&gt; {
         <span class="kw">if </span>path.is_root() || path.is_empty() {
             <span class="prelude-val">Ok</span>(<span class="self">self
-                </span>.lock()
+                </span>.read()
                 .devices
                 .iter()
                 .map(|(name, device)| {
@@ -218,7 +216,7 @@
 
 <span class="kw">pub fn </span>init_devices_mapping() {
     DEVICES
-        .set(Arc::new(Mutex::new(Devices {
+        .set(Arc::new(RwLock::new(Devices {
             devices: BTreeMap::new(),
         })))
         .expect(<span class="string">"Devices already initialized"</span>);
@@ -227,7 +225,7 @@
 }
 
 <span class="kw">pub fn </span>register_device(device: Arc&lt;<span class="kw">dyn </span>Device&gt;) {
-    <span class="kw">let </span><span class="kw-2">mut </span>devices = DEVICES.get().lock();
+    <span class="kw">let </span><span class="kw-2">mut </span>devices = DEVICES.get().write();
     <span class="macro">assert!</span>(
         !devices.devices.contains_key(device.name()),
         <span class="string">"Device {} already registered"</span>,

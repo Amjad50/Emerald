@@ -244,7 +244,7 @@
                 marker: PhantomData,
             }
         } <span class="kw">else </span>{
-            <span class="self">self</span>.lock.lock();
+            <span class="self">self</span>.lock.write_lock();
             <span class="self">self</span>.owner_cpu.store(cpu_id, Ordering::Relaxed);
             <span class="self">self</span>.lock_count.set(<span class="number">1</span>);
             ReMutexGuard {
@@ -271,7 +271,7 @@
                 lock: <span class="self">self</span>,
                 marker: PhantomData,
             })
-        } <span class="kw">else if </span><span class="self">self</span>.lock.try_lock() {
+        } <span class="kw">else if </span><span class="self">self</span>.lock.try_write_lock() {
             <span class="comment">// already locked here
             </span><span class="self">self</span>.owner_cpu.store(cpu_id, Ordering::Relaxed);
             <span class="self">self</span>.lock_count.set(<span class="number">1</span>);
@@ -305,7 +305,7 @@
         <span class="kw">if </span><span class="self">self</span>.lock.lock_count.get() == <span class="number">0 </span>{
             <span class="self">self</span>.lock.owner_cpu.store(-<span class="number">1</span>, Ordering::Relaxed);
             <span class="comment">// SAFETY: the mutex is locked, we are the only accessor
-            </span><span class="kw">unsafe </span>{ <span class="self">self</span>.lock.lock.unlock() };
+            </span><span class="kw">unsafe </span>{ <span class="self">self</span>.lock.lock.write_unlock() };
         }
         <span class="comment">// re-enable interrupts
         // (we have to do this for every drop, even if we are the same owner, as we are pushing cli in each lock())
