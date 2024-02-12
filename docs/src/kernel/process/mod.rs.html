@@ -427,6 +427,16 @@
 <a href="#425" id="425">425</a>
 <a href="#426" id="426">426</a>
 <a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>scheduler;
 <span class="kw">mod </span>syscalls;
 
@@ -440,7 +450,7 @@
     executable::{elf, load_elf_to_vm},
     fs,
     memory_management::{
-        memory_layout::{align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
+        memory_layout::{align_down, align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
         virtual_memory_mapper::{
             <span class="self">self</span>, VirtualMemoryMapEntry, VirtualMemoryMapper, MAX_USER_VIRTUAL_ADDRESS,
         },
@@ -586,7 +596,7 @@
 
         <span class="kw">let </span>rsp = stack_end <span class="kw">as </span>u64 - <span class="number">8</span>;
         <span class="kw">let </span>(new_rsp, argc, argv_ptr) =
-            <span class="self">Self</span>::load_argv_into_stack(<span class="kw-2">&amp;mut </span>vm, <span class="kw-2">&amp;</span>argv, rsp, stack_start <span class="kw">as </span>u64);
+            <span class="self">Self</span>::prepare_stack(<span class="kw-2">&amp;mut </span>vm, <span class="kw-2">&amp;</span>argv, rsp, stack_start <span class="kw">as </span>u64);
 
         <span class="comment">// SAFETY: we know that the vm passed is an exact kernel copy of this vm, so its safe to switch to it
         // TODO: maybe it would be best to create the new vm inside this function?
@@ -775,7 +785,7 @@
 
 <span class="kw">impl </span>Process {
     <span class="comment">// NOTE: this is very specific to 64bit x86
-    </span><span class="kw">fn </span>load_argv_into_stack(
+    </span><span class="kw">fn </span>prepare_stack(
         vm: <span class="kw-2">&amp;mut </span>VirtualMemoryMapper,
         argv: <span class="kw-2">&amp;</span>[String],
         <span class="kw-2">mut </span>rsp: u64,
@@ -844,6 +854,16 @@
         </span><span class="kw">unsafe </span>{ old_vm.switch_to_this() };
         <span class="comment">// we can be interrupted again
         </span>cpu::cpu().pop_cli();
+
+        <span class="comment">// according ot the SYSV ABI, the stack is 16-byte aligned just before the call instruction
+        // is executed.
+        // i.e. we will subtract 8, as this is the alignment the stack will have after the call
+        // we consider the program starts after an imaginary function call from the kernel
+        //
+        // first align it to 16 bytes
+        </span>rsp = align_down(rsp <span class="kw">as _</span>, <span class="number">16</span>) <span class="kw">as _</span>;
+        <span class="comment">// second, subtract 8, the call instruction
+        </span>rsp -= <span class="number">8</span>;
 
         (rsp, argc <span class="kw">as </span>u64, argv_array_ptr)
     }
