@@ -43,12 +43,15 @@ pub struct MutexGuard<'a, T: ?Sized + 'a> {
 
 unsafe impl<T: ?Sized + Sync> Sync for MutexGuard<'_, T> {}
 
-impl<T> fmt::Debug for MutexGuard<'_, T>
-where
-    T: fmt::Debug,
-{
+impl<T: ?Sized + fmt::Debug> fmt::Debug for MutexGuard<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.deref().fmt(f)
+        (**self).fmt(f)
+    }
+}
+
+impl<T: ?Sized + fmt::Display> fmt::Display for MutexGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (**self).fmt(f)
     }
 }
 
@@ -60,7 +63,9 @@ impl<T> Mutex<T> {
             data: UnsafeCell::new(data),
         }
     }
+}
 
+impl<T: ?Sized> Mutex<T> {
     pub fn lock(&self) -> MutexGuard<T> {
         let cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
@@ -69,8 +74,7 @@ impl<T> Mutex<T> {
         if self.owner_cpu.load(Ordering::Relaxed) == cpu_id {
             panic!("Mutex already locked by this CPU");
         } else {
-            // SAFETY: we are the only accessor, and we are locking it, its never locked again until unlocked
-            self.lock.lock();
+            self.lock.write_lock();
             self.owner_cpu.store(cpu_id, Ordering::Relaxed);
             MutexGuard {
                 lock: self,
@@ -88,7 +92,7 @@ impl<T> Mutex<T> {
             // we will not throw here, since the CPU might want to try to lock it again, at least its not a deadlock
             cpu.pop_cli();
             None
-        } else if self.lock.try_lock() {
+        } else if self.lock.try_write_lock() {
             self.owner_cpu.store(cpu_id, Ordering::Relaxed);
             Some(MutexGuard {
                 lock: self,
@@ -132,7 +136,7 @@ impl<T> Mutex<T> {
     }
 }
 
-impl<T> Deref for MutexGuard<'_, T> {
+impl<T: ?Sized> Deref for MutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -142,7 +146,7 @@ impl<T> Deref for MutexGuard<'_, T> {
     }
 }
 
-impl<T> DerefMut for MutexGuard<'_, T> {
+impl<T: ?Sized> DerefMut for MutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: the mutex is locked, we are the only accessors,
         //         and the pointer is valid, since it was generated for a valid T
@@ -154,7 +158,7 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         self.lock.owner_cpu.store(-1, Ordering::Relaxed);
         // SAFETY: the mutex is locked, we are the only accessor
-        unsafe { self.lock.lock.unlock() };
+        unsafe { self.lock.lock.write_unlock() };
         cpu::cpu().pop_cli(); // re-enable interrupts
     }
 }
