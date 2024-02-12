@@ -167,11 +167,9 @@ impl Tsc {
     }
 
     fn time_nanos_since_start(&self, cycles: u64) -> u64 {
-        let nanos = self
-            .start_time
+        self.start_time
             .load(Ordering::Relaxed)
-            .wrapping_add(self.cycles_to_time_nanos(cycles));
-        nanos
+            .wrapping_add(self.cycles_to_time_nanos(cycles))
     }
 
     fn cycles_to_time_nanos(&self, cycles: u64) -> u64 {

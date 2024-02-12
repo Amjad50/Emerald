@@ -128,8 +128,8 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     devices::init_devices_mapping();
     let bios_tables = acpi::get_acpi_tables(multiboot_info).expect("BIOS tables not found");
     println!("BIOS tables: {}", bios_tables);
-    apic::init(&bios_tables);
-    clock::init(&bios_tables);
+    apic::init(bios_tables);
+    clock::init(bios_tables);
     // APIC timer interrupt rely on the clock, so it must be initialized after the clock
     // and interrupts should be disabled until
     unsafe { cpu::set_interrupts() };

@@ -507,7 +507,7 @@ impl cmp::Eq for Components<'_> {}
 
 impl<'a> cmp::PartialOrd for Components<'a> {
     fn partial_cmp(&self, other: &Components<'a>) -> Option<cmp::Ordering> {
-        Iterator::partial_cmp(self.clone(), other.clone())
+        Some(self.cmp(other))
     }
 }
 
@@ -988,7 +988,7 @@ impl cmp::Eq for PathBuf {}
 
 impl cmp::PartialOrd for PathBuf {
     fn partial_cmp(&self, other: &PathBuf) -> Option<cmp::Ordering> {
-        self.components().partial_cmp(other.components())
+        Some(self.cmp(other))
     }
 }
 
@@ -1089,7 +1089,7 @@ impl Path {
     /// assert_eq!(path.to_str(), Some("foo.txt"));
     /// ```
     pub fn to_str(&self) -> Option<&str> {
-        Some(&self.as_str())
+        Some(self.as_str())
     }
 
     /// Converts a `Path` to a `Cow<str>`.
@@ -1294,7 +1294,7 @@ impl Path {
     ///
     /// [`parent`]: struct.Path.html#method.parent
     pub fn ancestors(&self) -> Ancestors<'_> {
-        Ancestors { next: Some(&self) }
+        Ancestors { next: Some(self) }
     }
 
     /// Returns the final component of the `Path`, if there is one.
@@ -1548,7 +1548,7 @@ impl cmp::Eq for Path {}
 
 impl cmp::PartialOrd for Path {
     fn partial_cmp(&self, other: &Path) -> Option<cmp::Ordering> {
-        self.components().partial_cmp(other.components())
+        Some(self.cmp(other))
     }
 }
 

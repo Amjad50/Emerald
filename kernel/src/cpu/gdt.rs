@@ -1,4 +1,4 @@
-use core::mem;
+use core::{mem, ptr::addr_of};
 
 use crate::{
     memory_management::{
@@ -102,7 +102,7 @@ pub fn init_kernel_gdt() {
         unsafe { TSS.rsp[KERNEL_RING as usize] = PROCESS_KERNEL_STACK_END as u64 - 8 };
     }
 
-    let tss_ptr = (unsafe { &TSS } as *const _) as u64;
+    let tss_ptr = unsafe { addr_of!(TSS) } as u64;
 
     manager.tss_seg = SegmentSelector::from_index(unsafe {
         manager.gdt.push_system(SystemDescriptorEntry {

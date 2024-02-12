@@ -238,9 +238,9 @@ impl IndexFieldDef {
 
 #[derive(Debug, Clone)]
 pub enum FieldElement {
-    ReservedField(usize),
-    NamedField(String, usize),
-    AccessField(u8, u8),
+    Reserved(usize),
+    Named(String, usize),
+    Access(u8, u8),
 }
 
 #[derive(Debug, Clone)]
@@ -603,15 +603,12 @@ impl Parser<'_> {
                     _ => {}
                 },
                 Err(e) => {
-                    match e {
-                        AmlParseError::UnexpectedEndOfCode => {
-                            // if we took what is not ours, return it
-                            if n_args > 0 && expect_data_after && inner.remaining_bytes() == 0 {
-                                n_args -= 1;
-                            }
-                            return n_args;
+                    if let AmlParseError::UnexpectedEndOfCode = e {
+                        // if we took what is not ours, return it
+                        if n_args > 0 && expect_data_after && inner.remaining_bytes() == 0 {
+                            n_args -= 1;
                         }
-                        _ => {}
+                        return n_args;
                     }
                     break;
                 }
@@ -1203,14 +1200,14 @@ impl Parser<'_> {
                     let pkg_length = self.get_pkg_length()?;
                     eprintln!("reserved field element pkg length: {:x}", pkg_length);
                     // add 1 since we are not using it as normal pkg length
-                    FieldElement::ReservedField(pkg_length + 1)
+                    FieldElement::Reserved(pkg_length + 1)
                 }
                 1 => {
                     self.forward(1)?;
                     let access_type = self.get_next_byte()?;
                     let access_attrib = self.get_next_byte()?;
 
-                    FieldElement::AccessField(access_type, access_attrib)
+                    FieldElement::Access(access_type, access_attrib)
                 }
                 2 => todo!("connection field"),
                 3 => todo!("extended access field"),
@@ -1223,7 +1220,7 @@ impl Parser<'_> {
                     let pkg_length = self.get_pkg_length()?;
                     eprintln!("field element pkg length: {:x}", pkg_length);
                     // add 1 since we are not using it as normal pkg length
-                    FieldElement::NamedField(name, pkg_length + 1)
+                    FieldElement::Named(name, pkg_length + 1)
                 }
             };
             field_list.push(field);
@@ -1403,9 +1400,9 @@ fn display_fields(
     for (i, field) in fields.iter().enumerate() {
         display_depth(f, depth)?;
         match field {
-            FieldElement::ReservedField(len) => write!(f, "_Reserved (0x{:02X})", len)?,
-            FieldElement::NamedField(name, len) => write!(f, "{},     (0x{:02X})", name, len)?,
-            FieldElement::AccessField(access_type, access_attrib) => write!(
+            FieldElement::Reserved(len) => write!(f, "_Reserved (0x{:02X})", len)?,
+            FieldElement::Named(name, len) => write!(f, "{},     (0x{:02X})", name, len)?,
+            FieldElement::Access(access_type, access_attrib) => write!(
                 f,
                 "AccessAs  (0x{:02X}, 0x{:02X})",
                 access_type, access_attrib

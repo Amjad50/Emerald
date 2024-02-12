@@ -351,7 +351,7 @@ pub enum FileSystemError {
     EndOfFile,
 }
 
-fn get_mapping<'p>(path: &'p Path) -> Result<(&'p Path, Arc<dyn FileSystem>), FileSystemError> {
+fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
     FILESYSTEM_MAPPING.lock().get_mapping(path)
 }
 

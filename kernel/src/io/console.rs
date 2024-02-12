@@ -262,7 +262,7 @@ impl LateConsole {
                 }
                 b'm' => {
                     // end of the color command
-                    if let Some(inner_cmd) = buf.strip_prefix("[") {
+                    if let Some(inner_cmd) = buf.strip_prefix('[') {
                         inner_cmd.split(';').for_each(|cmd| {
                             if let Ok(cmd) = cmd.parse::<u8>() {
                                 match cmd {
@@ -300,7 +300,7 @@ impl LateConsole {
                                         let mut color = cmd - 30;
                                         self.current_foreground = color;
                                         if self.is_bold {
-                                            color = color + 8
+                                            color += 8;
                                         }
                                         self.current_vga_attrib |= terminal_to_vga_color(color);
                                     }
@@ -309,7 +309,7 @@ impl LateConsole {
                                         let mut color = (cmd - 90) + 8;
                                         self.current_foreground = color;
                                         if self.is_faint {
-                                            color = color - 8
+                                            color -= 8;
                                         }
                                         self.current_vga_attrib |= terminal_to_vga_color(color);
                                     }
@@ -353,13 +353,10 @@ impl LateConsole {
             }
         } else {
             // start of a new command
-            match byte {
-                // ESC
-                0x1b => {
-                    self.console_cmd_buffer = Some(String::new());
-                    return;
-                }
-                _ => {}
+            // 0x1b = ESC
+            if byte == 0x1b {
+                self.console_cmd_buffer = Some(String::new());
+                return;
             }
             // otherwise, just write to the screen
             write_byte_inner(byte);

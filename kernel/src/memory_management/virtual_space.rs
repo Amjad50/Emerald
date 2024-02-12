@@ -141,20 +141,16 @@ impl VirtualSpaceAllocator {
     /// Checks if we have this range allocated, returns it, otherwise perform an allocation, map it, and return
     /// the new address
     fn get_virtual_for_physical(&mut self, req_phy_start: u64, req_size: u64) -> u64 {
-        match self.get_entry_containing(req_phy_start, req_size) {
-            Some((entry, is_fully_inside)) => {
-                if is_fully_inside {
-                    // we already have it, return it
-                    // we know its inside, so we can unwrap, it may not be fully, but that's fine
-                    let virtual_start: u64 = entry.virtual_for_physical(req_phy_start).unwrap();
-                    return virtual_start;
-                } else {
-                    // we have it, but not fully inside, we need to allocate
-                    panic!("Could not get virtual space for {:016X}..{:016X}, it is not fully inside {:016X}..{:016X}",
-                        req_phy_start, req_phy_start + req_size, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size);
-                }
+        if let Some((entry, is_fully_inside)) = self.get_entry_containing(req_phy_start, req_size) {
+            if is_fully_inside {
+                // we already have it, return it
+                // we know its inside, so we can unwrap, it may not be fully, but that's fine
+                let virtual_start: u64 = entry.virtual_for_physical(req_phy_start).unwrap();
+                return virtual_start;
             }
-            None => {}
+            // we have it, but not fully inside, we need to allocate
+            panic!("Could not get virtual space for {:016X}..{:016X}, it is not fully inside {:016X}..{:016X}",
+                req_phy_start, req_phy_start + req_size, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size);
         }
 
         // we didn't find it, allocate it

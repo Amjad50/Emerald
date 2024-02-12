@@ -254,7 +254,7 @@ impl Clock {
         );
         let mut devs = self.devices.lock();
         devs.push(device);
-        devs.sort_unstable_by_key(|device| device.rating() as i64 * -1);
+        devs.sort_unstable_by_key(|device| -(device.rating() as i64));
         self.system_time
             .lock()
             .update_device(devs[0].clone(), &self.rtc);
@@ -262,7 +262,7 @@ impl Clock {
 
     #[allow(dead_code)]
     fn get_best_clock(&self) -> Option<Arc<dyn ClockDevice>> {
-        self.devices.lock().first().map(|device| Arc::clone(device))
+        self.devices.lock().first().map(Arc::clone)
     }
 
     fn get_best_for_calibration(&self) -> Option<Arc<dyn ClockDevice>> {
@@ -270,7 +270,7 @@ impl Clock {
             .lock()
             .iter()
             .find(|device| !device.require_calibration())
-            .map(|device| Arc::clone(device))
+            .map(Arc::clone)
     }
 
     #[allow(dead_code)]

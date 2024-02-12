@@ -1,4 +1,8 @@
-use core::{fmt, hint, mem, sync::atomic::AtomicBool};
+use core::{
+    fmt, hint, mem,
+    ptr::{addr_of, addr_of_mut},
+    sync::atomic::AtomicBool,
+};
 
 use alloc::sync::Arc;
 
@@ -31,7 +35,7 @@ pub fn try_register_ide_device(pci_device: &PciDeviceConfig) -> bool {
             };
 
             // SAFETY: we are muting only to add elements, and we are not accessing the old elements or changing thems
-            let ide_devices = unsafe { &mut IDE_DEVICES };
+            let ide_devices = unsafe { addr_of_mut!(IDE_DEVICES).as_mut().unwrap() };
             let slot = ide_devices.iter_mut().find(|x| x.is_none());
 
             if let Some(slot) = slot {
@@ -61,7 +65,7 @@ pub struct IdeDeviceIndex {
 }
 
 pub fn get_ide_device(index: IdeDeviceIndex) -> Option<Arc<IdeDevice>> {
-    let ide_devices = unsafe { &IDE_DEVICES };
+    let ide_devices = unsafe { addr_of!(IDE_DEVICES).as_ref().unwrap() };
     let mut passed = 0;
     if index.index < ide_devices.len() {
         for ide_device in ide_devices.iter().filter_map(Option::as_ref) {
@@ -985,7 +989,7 @@ impl PciDevice for IdeDevice {
 }
 
 extern "x86-interrupt" fn ide_interrupt_primary(_stack_frame: InterruptStackFrame64) {
-    let ide_devices = unsafe { &IDE_DEVICES };
+    let ide_devices = unsafe { addr_of!(IDE_DEVICES).as_ref().unwrap() };
     for ide_device in ide_devices.iter().filter_map(Option::as_ref) {
         if ide_device.is_primary() {
             ide_device.interrupt()
@@ -995,7 +999,7 @@ extern "x86-interrupt" fn ide_interrupt_primary(_stack_frame: InterruptStackFram
 }
 
 extern "x86-interrupt" fn ide_interrupt_secondary(_stack_frame: InterruptStackFrame64) {
-    let ide_devices = unsafe { &IDE_DEVICES };
+    let ide_devices = unsafe { addr_of!(IDE_DEVICES).as_ref().unwrap() };
     for ide_device in ide_devices.iter().filter_map(Option::as_ref) {
         if ide_device.is_secondary() {
             ide_device.interrupt()

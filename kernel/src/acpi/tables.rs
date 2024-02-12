@@ -37,7 +37,7 @@ unsafe fn get_acpi_header_with_len(physical_addr: usize) -> (*const DescriptionH
         let header_virtual = (physical_addr + KERNEL_BASE) as *const DescriptionHeader;
         let len = (*header_virtual).length as usize;
         assert!(physical_addr + len <= virtual2physical(KERNEL_END));
-        return (header_virtual, len);
+        (header_virtual, len)
     } else {
         let header = virtual_space::get_virtual_for_physical(
             physical_addr as _,

@@ -48,7 +48,7 @@ fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
             println!("{}", std::env::current_dir().unwrap().display());
         }
         "sleep" => {
-            if args.len() < 1 {
+            if args.is_empty() {
                 println!("sleep: missing operand");
             } else {
                 let seconds = args[0].parse::<u64>();
