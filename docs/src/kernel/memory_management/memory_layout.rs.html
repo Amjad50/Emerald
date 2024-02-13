@@ -262,6 +262,52 @@
 <a href="#260" id="260">260</a>
 <a href="#261" id="261">261</a>
 <a href="#262" id="262">262</a>
+<a href="#263" id="263">263</a>
+<a href="#264" id="264">264</a>
+<a href="#265" id="265">265</a>
+<a href="#266" id="266">266</a>
+<a href="#267" id="267">267</a>
+<a href="#268" id="268">268</a>
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span><span class="kw">super</span>::virtual_memory_mapper;
@@ -353,38 +399,76 @@
     (<span class="kw">unsafe </span>{ <span class="kw-2">&amp;</span>stack_guard_page } <span class="kw">as </span><span class="kw-2">*const </span>usize <span class="kw">as </span>usize)
 }
 
-<span class="kw">pub const fn </span>align_up(addr: usize, alignment: usize) -&gt; usize {
-    (addr + alignment - <span class="number">1</span>) &amp; !(alignment - <span class="number">1</span>)
+<span class="kw">pub trait </span>AlignMem: Sized {
+    <span class="kw">fn </span>align_up(<span class="self">self</span>, alignment: usize) -&gt; <span class="self">Self</span>;
+    <span class="kw">fn </span>align_down(<span class="self">self</span>, alignment: usize) -&gt; <span class="self">Self</span>;
+    <span class="kw">fn </span>is_aligned(<span class="self">self</span>, alignment: usize) -&gt; bool;
+    <span class="kw">fn </span>align_range(<span class="self">self</span>, size: usize, alignment: usize) -&gt; (<span class="self">Self</span>, usize, usize);
 }
 
-<span class="kw">pub fn </span>align_down(addr: usize, alignment: usize) -&gt; usize {
-    addr &amp; !(alignment - <span class="number">1</span>)
+<span class="macro">macro_rules! </span>impl_align_mem {
+    (<span class="macro-nonterminal">$t</span>:ty) =&gt; {
+        <span class="kw">impl </span>AlignMem <span class="kw">for </span><span class="macro-nonterminal">$t </span>{
+            <span class="attr">#[inline(always)]
+            </span><span class="kw">fn </span>align_up(<span class="self">self</span>, alignment: usize) -&gt; <span class="self">Self </span>{
+                (<span class="self">self </span>+ (alignment <span class="kw">as </span><span class="macro-nonterminal">$t</span>) - <span class="number">1</span>) &amp; !((alignment <span class="kw">as </span><span class="macro-nonterminal">$t</span>) - <span class="number">1</span>)
+            }
+
+            <span class="attr">#[inline(always)]
+            </span><span class="kw">fn </span>align_down(<span class="self">self</span>, alignment: usize) -&gt; <span class="self">Self </span>{
+                <span class="self">self </span>&amp; !((alignment <span class="kw">as </span><span class="macro-nonterminal">$t</span>) - <span class="number">1</span>)
+            }
+
+            <span class="attr">#[inline(always)]
+            </span><span class="kw">fn </span>is_aligned(<span class="self">self</span>, alignment: usize) -&gt; bool {
+                (<span class="self">self </span>&amp; ((alignment <span class="kw">as </span><span class="macro-nonterminal">$t</span>) - <span class="number">1</span>)) == <span class="number">0
+            </span>}
+
+            <span class="attr">#[inline(always)]
+            </span><span class="kw">fn </span>align_range(<span class="self">self</span>, size: usize, alignment: usize) -&gt; (<span class="self">Self</span>, usize, usize) {
+                <span class="kw">let </span>addr_end = <span class="self">self </span>+ size <span class="kw">as </span><span class="macro-nonterminal">$t</span>;
+                <span class="kw">let </span>start_aligned = <span class="self">self</span>.align_down(alignment);
+                <span class="kw">let </span>end_aligned = addr_end.align_up(alignment);
+                <span class="kw">let </span>size: usize = (end_aligned - start_aligned).try_into().unwrap();
+                <span class="macro">assert!</span>(size &gt; <span class="number">0</span>);
+                <span class="macro">assert!</span>(size.is_aligned(alignment));
+                <span class="kw">let </span>offset = (<span class="self">self </span>- start_aligned).try_into().unwrap();
+
+                (start_aligned, size, offset)
+            }
+        }
+    };
 }
 
-<span class="kw">pub fn </span>is_aligned(addr: usize, alignment: usize) -&gt; bool {
-    (addr &amp; (alignment - <span class="number">1</span>)) == <span class="number">0
-</span>}
+<span class="macro">impl_align_mem!</span>(usize);
+<span class="macro">impl_align_mem!</span>(u64);
 
-<span class="kw">pub fn </span>align_range(addr: usize, size: usize, alignment: usize) -&gt; (usize, usize, usize) {
-    <span class="kw">let </span>addr_end: usize = addr + size;
-    <span class="kw">let </span>start_aligned = align_down(addr, alignment);
-    <span class="kw">let </span>end_aligned = align_up(addr_end, alignment);
-    <span class="kw">let </span>size = end_aligned - start_aligned;
-    <span class="macro">assert!</span>(size &gt; <span class="number">0</span>);
-    <span class="macro">assert!</span>(is_aligned(size, alignment));
-    <span class="kw">let </span>offset = addr - start_aligned;
+<span class="kw">pub fn </span>align_up&lt;T: AlignMem&gt;(addr: T, alignment: usize) -&gt; T {
+    addr.align_up(alignment)
+}
 
-    (start_aligned, size, offset)
+<span class="kw">pub fn </span>align_down&lt;T: AlignMem&gt;(addr: T, alignment: usize) -&gt; T {
+    addr.align_down(alignment)
+}
+
+<span class="kw">pub fn </span>is_aligned&lt;T: AlignMem&gt;(addr: T, alignment: usize) -&gt; bool {
+    addr.is_aligned(alignment)
+}
+
+<span class="kw">pub fn </span>align_range&lt;T: AlignMem&gt;(addr: T, size: usize, alignment: usize) -&gt; (T, usize, usize) {
+    addr.align_range(size, alignment)
 }
 
 <span class="attr">#[inline(always)]
-</span><span class="kw">pub const fn </span>virtual2physical(addr: usize) -&gt; usize {
-    addr - KERNEL_BASE
+</span><span class="kw">pub const fn </span>virtual2physical(addr: usize) -&gt; u64 {
+    <span class="macro">debug_assert!</span>(addr &gt;= KERNEL_BASE &amp;&amp; addr &lt;= KERNEL_BASE + KERNEL_MAPPED_SIZE);
+    (addr - KERNEL_BASE) <span class="kw">as </span>u64
 }
 
 <span class="attr">#[inline(always)]
-</span><span class="kw">pub const fn </span>physical2virtual(addr: usize) -&gt; usize {
-    addr + KERNEL_BASE
+</span><span class="kw">pub const fn </span>physical2virtual(addr: u64) -&gt; usize {
+    <span class="macro">debug_assert!</span>(addr &lt; KERNEL_MAPPED_SIZE <span class="kw">as </span>u64);
+    addr <span class="kw">as </span>usize + KERNEL_BASE
 }
 
 <span class="kw">pub fn </span>display_kernel_map() {
@@ -406,83 +490,87 @@
         <span class="string">"  range={:016x}..{:016x}, len={:4}  nothing"</span>,
         nothing.start,
         nothing.end,
-        MemSize(nothing.len() <span class="kw">as </span>u64)
+        MemSize(nothing.len())
     );
     <span class="macro">println!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  kernel elf"</span>,
         kernel_elf.start,
         kernel_elf.end,
-        MemSize(kernel_elf.len() <span class="kw">as </span>u64)
+        MemSize(kernel_elf.len())
     );
     <span class="comment">// inner map for the elf
     </span><span class="macro">println!</span>(
         <span class="string">"    range={:016x}..{:016x}, len={:4}  kernel elf text"</span>,
         kernel_elf_text.start,
         kernel_elf_text.end,
-        MemSize(kernel_elf_text.len() <span class="kw">as </span>u64)
+        MemSize(kernel_elf_text.len())
     );
     <span class="macro">println!</span>(
         <span class="string">"    range={:016x}..{:016x}, len={:4}  kernel elf rodata"</span>,
         kernel_elf_rodata.start,
         kernel_elf_rodata.end,
-        MemSize(kernel_elf_rodata.len() <span class="kw">as </span>u64)
+        MemSize(kernel_elf_rodata.len())
     );
     <span class="macro">println!</span>(
         <span class="string">"    range={:016x}..{:016x}, len={:4}  kernel elf data"</span>,
         kernel_elf_data.start,
         kernel_elf_data.end,
-        MemSize(kernel_elf_data.len() <span class="kw">as </span>u64)
+        MemSize(kernel_elf_data.len())
     );
     <span class="macro">println!</span>(
         <span class="string">"    range={:016x}..{:016x}, len={:4}  kernel elf bss"</span>,
         kernel_elf_bss.start,
         kernel_elf_bss.end,
-        MemSize(kernel_elf_bss.len() <span class="kw">as </span>u64)
+        MemSize(kernel_elf_bss.len())
     );
     <span class="macro">println!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  kernel physical allocator low"</span>,
         kernel_physical_allocator_low.start,
         kernel_physical_allocator_low.end,
-        MemSize(kernel_physical_allocator_low.len() <span class="kw">as </span>u64)
+        MemSize(kernel_physical_allocator_low.len())
     );
     <span class="macro">println!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  kernel heap"</span>,
         kernel_heap.start,
         kernel_heap.end,
-        MemSize(kernel_heap.len() <span class="kw">as </span>u64)
+        MemSize(kernel_heap.len())
     );
     <span class="macro">println!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  interrupt stack"</span>,
         interrupt_stack.start,
         interrupt_stack.end,
-        MemSize(interrupt_stack.len() <span class="kw">as </span>u64)
+        MemSize(interrupt_stack.len())
     );
     <span class="macro">println!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  kernel extra (virtual space)"</span>,
         kernel_extra_memory.start,
         kernel_extra_memory.end,
-        MemSize(kernel_extra_memory.len() <span class="kw">as </span>u64)
+        MemSize(kernel_extra_memory.len())
     );
 
     <span class="comment">// number of bytes approx used from physical memory
     </span><span class="macro">println!</span>(
         <span class="string">"whole kernel physical size (startup/low): {}"</span>,
-        MemSize((KERNEL_END - KERNEL_BASE) <span class="kw">as </span>u64)
+        MemSize(KERNEL_END - KERNEL_BASE)
     );
     <span class="comment">// total addressable virtual kernel memory
     </span><span class="macro">println!</span>(
         <span class="string">"whole kernel size: {}"</span>,
-        MemSize(u64::MAX - KERNEL_BASE <span class="kw">as </span>u64 + <span class="number">1</span>)
+        MemSize(usize::MAX - KERNEL_BASE + <span class="number">1</span>)
     );
 }
 
 <span class="attr">#[repr(transparent)]
-</span><span class="kw">pub struct </span>MemSize(<span class="kw">pub </span>u64);
+</span><span class="kw">pub struct </span>MemSize&lt;T&gt;(<span class="kw">pub </span>T);
 
-<span class="kw">impl </span>fmt::Display <span class="kw">for </span>MemSize {
+<span class="kw">impl</span>&lt;T&gt; fmt::Display <span class="kw">for </span>MemSize&lt;T&gt;
+<span class="kw">where
+    </span>T: TryInto&lt;u64&gt; + Copy,
+    &lt;T <span class="kw">as </span>TryInto&lt;u64&gt;&gt;::Error: fmt::Debug,
+{
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
         <span class="comment">// find the best unit
-        </span><span class="kw">let </span><span class="kw-2">mut </span>size = <span class="self">self</span>.<span class="number">0</span>;
+        </span><span class="kw">let </span><span class="kw-2">mut </span>size = <span class="self">self</span>.<span class="number">0</span>.try_into().unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>remaining = <span class="number">0</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>unit = <span class="string">"B"</span>;
         <span class="kw">if </span>size &gt;= <span class="number">1024 </span>{
@@ -519,7 +607,11 @@
     }
 }
 
-<span class="kw">impl </span>fmt::Debug <span class="kw">for </span>MemSize {
+<span class="kw">impl</span>&lt;T&gt; fmt::Debug <span class="kw">for </span>MemSize&lt;T&gt;
+<span class="kw">where
+    </span>T: TryInto&lt;u64&gt; + Copy,
+    &lt;T <span class="kw">as </span>TryInto&lt;u64&gt;&gt;::Error: fmt::Debug,
+{
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
         fmt::Display::fmt(<span class="self">self</span>, f)
     }

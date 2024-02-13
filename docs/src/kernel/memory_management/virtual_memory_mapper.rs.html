@@ -812,6 +812,10 @@
 <a href="#810" id="810">810</a>
 <a href="#811" id="811">811</a>
 <a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This very specific to 64-bit x86 architecture, if this is to be ported to other architectures
 //! this will need to be changed
 
@@ -879,22 +883,22 @@
         | (<span class="number">0x1FF </span>&lt;&lt; <span class="number">12</span>);
 
 <span class="attr">#[inline(always)]
-</span><span class="kw">const fn </span>get_l4(addr: u64) -&gt; u64 {
+</span><span class="kw">const fn </span>get_l4(addr: usize) -&gt; usize {
     (addr &gt;&gt; <span class="number">39</span>) &amp; <span class="number">0x1FF
 </span>}
 
 <span class="attr">#[inline(always)]
-</span><span class="kw">const fn </span>get_l3(addr: u64) -&gt; u64 {
+</span><span class="kw">const fn </span>get_l3(addr: usize) -&gt; usize {
     (addr &gt;&gt; <span class="number">30</span>) &amp; <span class="number">0x1FF
 </span>}
 
 <span class="attr">#[inline(always)]
-</span><span class="kw">const fn </span>get_l2(addr: u64) -&gt; u64 {
+</span><span class="kw">const fn </span>get_l2(addr: usize) -&gt; usize {
     (addr &gt;&gt; <span class="number">21</span>) &amp; <span class="number">0x1FF
 </span>}
 
 <span class="attr">#[inline(always)]
-</span><span class="kw">const fn </span>get_l1(addr: u64) -&gt; u64 {
+</span><span class="kw">const fn </span>get_l1(addr: usize) -&gt; usize {
     (addr &gt;&gt; <span class="number">12</span>) &amp; <span class="number">0x1FF
 </span>}
 
@@ -902,10 +906,16 @@
 </span><span class="attr">#[repr(C, align(<span class="number">32</span>))]
 #[derive(Debug, Copy, Clone)]
 </span><span class="kw">pub struct </span>VirtualMemoryMapEntry {
-    <span class="kw">pub </span>virtual_address: u64,
-    <span class="kw">pub </span>physical_address: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-    <span class="kw">pub </span>size: u64,
-    <span class="kw">pub </span>flags: u64,
+    <span class="doccomment">/// The virtual address to map, this is constrained by the memory model, and thus `usize`
+    </span><span class="kw">pub </span>virtual_address: usize,
+    <span class="doccomment">/// The physical address to map, if `None` then it will be allocated
+    /// This can be above `usize` in `32-bit`, as it support (in intel) up to `40-bit` physical address
+    /// for 32-bit paging
+    </span><span class="kw">pub </span>physical_address: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+    <span class="doccomment">/// The size of the mapping, this is constrained by the memory model, and thus `usize`
+    </span><span class="kw">pub </span>size: usize,
+    <span class="doccomment">/// The flags to use for the mapping, look at [flags] for more information
+    </span><span class="kw">pub </span>flags: u64,
 }
 
 <span class="comment">// This is a general structure for all levels
@@ -928,7 +938,7 @@
 
     <span class="doccomment">/// An ugly hack used in `do_for_every_user_entry` to get a mutable reference to the page directory table
     </span><span class="kw">fn </span>enteries_from_mut_entry(entry: <span class="kw-2">&amp;mut </span>u64) -&gt; <span class="kw-2">&amp;mut </span>PageDirectoryTable {
-        <span class="kw">let </span>table = physical2virtual((<span class="kw-2">*</span>entry &amp; ADDR_MASK) <span class="kw">as _</span>) <span class="kw">as </span><span class="kw-2">*mut </span>PageDirectoryTable;
+        <span class="kw">let </span>table = physical2virtual(<span class="kw-2">*</span>entry &amp; ADDR_MASK) <span class="kw">as </span><span class="kw-2">*mut </span>PageDirectoryTable;
         <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>table }
     }
 
@@ -936,17 +946,18 @@
         <span class="self">self</span>.physical_addr
     }
 
-    <span class="kw">fn </span>as_virtual(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+    <span class="kw">fn </span>as_virtual(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
         <span class="comment">// for now, it must be within the lower kernel memory, easier to support
         </span><span class="macro">assert!</span>(<span class="self">self</span>.physical_addr &lt; KERNEL_END <span class="kw">as </span>u64);
-        physical2virtual(<span class="self">self</span>.physical_addr <span class="kw">as _</span>) <span class="kw">as _
-    </span>}
+        physical2virtual(<span class="self">self</span>.physical_addr)
+    }
 
     <span class="kw">fn </span>alloc_new() -&gt; <span class="self">Self </span>{
         <span class="comment">// SAFETY: it will panic if it couldn't allocate, so if it returns, it is safe
         </span><span class="self">Self </span>{
-            physical_addr: <span class="kw">unsafe </span>{ virtual2physical(physical_page_allocator::alloc_zeroed() <span class="kw">as _</span>) }
-                <span class="kw">as _</span>,
+            physical_addr: <span class="kw">unsafe </span>{
+                virtual2physical(physical_page_allocator::alloc_zeroed() <span class="kw">as _</span>)
+            },
         }
     }
 
@@ -986,7 +997,7 @@
 
 <span class="kw">pub fn </span>map_kernel(entry: <span class="kw-2">&amp;</span>VirtualMemoryMapEntry) {
     <span class="comment">// make sure we are only mapping to kernel memory
-    </span><span class="macro">assert!</span>(entry.virtual_address &gt;= KERNEL_BASE <span class="kw">as </span>u64);
+    </span><span class="macro">assert!</span>(entry.virtual_address &gt;= KERNEL_BASE);
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().map(entry);
 }
 
@@ -996,14 +1007,14 @@
 </span><span class="comment">// TODO: maybe its better to keep track of this information somewhere in the mapper here
 </span><span class="kw">pub fn </span>unmap_kernel(entry: <span class="kw-2">&amp;</span>VirtualMemoryMapEntry, is_allocated: bool) {
     <span class="comment">// make sure we are only mapping to kernel memory
-    </span><span class="macro">assert!</span>(entry.virtual_address &gt;= KERNEL_BASE <span class="kw">as </span>u64);
+    </span><span class="macro">assert!</span>(entry.virtual_address &gt;= KERNEL_BASE);
     KERNEL_VIRTUAL_MEMORY_MANAGER
         .lock()
         .unmap(entry, is_allocated);
 }
 
 <span class="attr">#[allow(dead_code)]
-</span><span class="kw">pub fn </span>is_address_mapped_in_kernel(addr: u64) -&gt; bool {
+</span><span class="kw">pub fn </span>is_address_mapped_in_kernel(addr: usize) -&gt; bool {
     KERNEL_VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr)
 }
 
@@ -1083,9 +1094,9 @@
         </span><span class="self">self</span>.is_user = <span class="bool-val">false</span>;
         <span class="comment">// load new kernel stack for this process
         </span><span class="self">self</span>.map(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
-            virtual_address: PROCESS_KERNEL_STACK_BASE <span class="kw">as </span>u64,
+            virtual_address: PROCESS_KERNEL_STACK_BASE,
             physical_address: <span class="prelude-val">None</span>, <span class="comment">// allocate
-            </span>size: PROCESS_KERNEL_STACK_SIZE <span class="kw">as </span>u64,
+            </span>size: PROCESS_KERNEL_STACK_SIZE,
             flags: flags::PTE_WRITABLE,
         });
         <span class="self">self</span>.is_user = <span class="bool-val">true</span>;
@@ -1104,7 +1115,7 @@
             .lock()
             .page_map_l4
             .as_physical();
-        <span class="kw">let </span>cr3 = <span class="kw">unsafe </span>{ cpu::get_cr3() } <span class="kw">as _</span>; <span class="comment">// cr3 is physical address
+        <span class="kw">let </span>cr3 = <span class="kw">unsafe </span>{ cpu::get_cr3() }; <span class="comment">// cr3 is physical address
         </span><span class="kw">let </span>is_user = cr3 != kernel_vm_addr;
         <span class="self">Self </span>{
             page_map_l4: PageDirectoryTablePtr::from_entry(cr3),
@@ -1126,24 +1137,24 @@
         <span class="kw">let </span>kernel_vm = [
             <span class="comment">// Low memory (has some BIOS stuff): mapped to kernel space
             </span>VirtualMemoryMapEntry {
-                virtual_address: KERNEL_BASE <span class="kw">as </span>u64,
+                virtual_address: KERNEL_BASE,
                 physical_address: <span class="prelude-val">Some</span>(<span class="number">0</span>),
-                size: EXTENDED_OFFSET <span class="kw">as </span>u64,
+                size: EXTENDED_OFFSET,
                 flags: flags::PTE_WRITABLE,
             },
             <span class="comment">// Extended memory: kernel .text and .rodata sections
             </span>VirtualMemoryMapEntry {
-                virtual_address: KERNEL_LINK <span class="kw">as </span>u64,
-                physical_address: <span class="prelude-val">Some</span>(virtual2physical(KERNEL_LINK) <span class="kw">as </span>u64),
-                size: virtual2physical(data_start) <span class="kw">as </span>u64 - virtual2physical(KERNEL_LINK) <span class="kw">as </span>u64,
+                virtual_address: KERNEL_LINK,
+                physical_address: <span class="prelude-val">Some</span>(virtual2physical(KERNEL_LINK)),
+                size: (virtual2physical(data_start) - virtual2physical(KERNEL_LINK)) <span class="kw">as </span>usize,
                 flags: <span class="number">0</span>, <span class="comment">// read-only
             </span>},
             <span class="comment">// Extended memory: kernel .data and .bss sections and the rest of the data for the `whole` memory
             // we decided to use in the kernel
             </span>VirtualMemoryMapEntry {
-                virtual_address: data_start <span class="kw">as </span>u64,
-                physical_address: <span class="prelude-val">Some</span>(virtual2physical(data_start) <span class="kw">as </span>u64),
-                size: KERNEL_MAPPED_SIZE <span class="kw">as </span>u64 - virtual2physical(data_start) <span class="kw">as </span>u64,
+                virtual_address: data_start,
+                physical_address: <span class="prelude-val">Some</span>(virtual2physical(data_start)),
+                size: KERNEL_MAPPED_SIZE - virtual2physical(data_start) <span class="kw">as </span>usize,
                 flags: flags::PTE_WRITABLE,
             },
         ];
@@ -1159,9 +1170,9 @@
         <span class="comment">// unmap stack guard
         </span>s.unmap(
             <span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
-                virtual_address: stack_guard_page_ptr() <span class="kw">as </span>u64,
+                virtual_address: stack_guard_page_ptr(),
                 physical_address: <span class="prelude-val">None</span>,
-                size: PAGE_4K <span class="kw">as </span>u64,
+                size: PAGE_4K,
                 flags: <span class="number">0</span>,
             },
             <span class="bool-val">false</span>,
@@ -1179,25 +1190,23 @@
         } = entry;
 
         <span class="macro">assert!</span>(!<span class="self">self</span>.page_map_l4.as_ptr().is_null());
-        <span class="macro">assert!</span>(is_aligned(<span class="self">self</span>.page_map_l4.as_virtual() <span class="kw">as _</span>, PAGE_4K));
+        <span class="macro">assert!</span>(is_aligned(<span class="self">self</span>.page_map_l4.as_virtual(), PAGE_4K));
 
-        <span class="kw">let </span>(aligned_start, size, <span class="kw">_</span>) =
-            align_range(virtual_address <span class="kw">as _</span>, <span class="kw-2">*</span>requested_size <span class="kw">as _</span>, PAGE_4K);
-        <span class="kw">let </span><span class="kw-2">mut </span>size = size <span class="kw">as </span>u64;
-        virtual_address = aligned_start <span class="kw">as _</span>;
+        <span class="kw">let </span>(aligned_start, <span class="kw-2">mut </span>size, <span class="kw">_</span>) = align_range(virtual_address, <span class="kw-2">*</span>requested_size, PAGE_4K);
+        virtual_address = aligned_start;
 
         <span class="kw">if </span><span class="self">self</span>.is_user {
             <span class="macro">assert!</span>(<span class="kw-2">*</span>flags &amp; flags::PTE_USER != <span class="number">0</span>);
-            <span class="macro">assert!</span>(get_l4(virtual_address) != KERNEL_L4_INDEX <span class="kw">as </span>u64);
+            <span class="macro">assert!</span>(get_l4(virtual_address) != KERNEL_L4_INDEX);
             <span class="kw">let </span>end = virtual_address + size;
-            <span class="macro">assert!</span>(end &lt;= MAX_USER_VIRTUAL_ADDRESS <span class="kw">as </span>u64);
+            <span class="macro">assert!</span>(end &lt;= MAX_USER_VIRTUAL_ADDRESS);
         }
 
         <span class="kw">if let </span><span class="prelude-val">Some</span>(start_physical_address) = start_physical_address.as_mut() {
             <span class="kw">let </span>(aligned_start, physical_size, <span class="kw">_</span>) =
-                align_range(<span class="kw-2">*</span>start_physical_address <span class="kw">as _</span>, <span class="kw-2">*</span>requested_size <span class="kw">as _</span>, PAGE_4K);
-            <span class="macro">assert!</span>(physical_size <span class="kw">as </span>u64 == size);
-            <span class="kw-2">*</span>start_physical_address = aligned_start <span class="kw">as _</span>;
+                align_range(<span class="kw-2">*</span>start_physical_address, <span class="kw-2">*</span>requested_size, PAGE_4K);
+            <span class="macro">assert!</span>(physical_size == size);
+            <span class="kw-2">*</span>start_physical_address = aligned_start;
         }
 
         <span class="comment">// keep track of current address and size
@@ -1209,8 +1218,8 @@
             <span class="string">"{} {:08X?}"</span>,
             MemSize(size),
             VirtualMemoryMapEntry {
-                virtual_address: virtual_address <span class="kw">as _</span>,
-                physical_address: physical_address <span class="kw">as _</span>,
+                virtual_address,
+                physical_address,
                 size,
                 flags: <span class="kw-2">*</span>flags,
             }
@@ -1218,16 +1227,16 @@
 
         <span class="kw">while </span>size &gt; <span class="number">0 </span>{
             <span class="kw">let </span>current_physical_address = physical_address.unwrap_or_else(|| {
-                virtual2physical(<span class="kw">unsafe </span>{ physical_page_allocator::alloc_zeroed() <span class="kw">as _ </span>}) <span class="kw">as _
-            </span>});
+                virtual2physical(<span class="kw">unsafe </span>{ physical_page_allocator::alloc_zeroed() <span class="kw">as _ </span>})
+            });
             <span class="macro">eprintln!</span>(
                 <span class="string">"[!] Mapping {:p} to {:p}"</span>,
                 virtual_address <span class="kw">as </span><span class="kw-2">*const </span>u8, current_physical_address <span class="kw">as </span><span class="kw-2">*const </span>u8
             );
-            <span class="kw">let </span>page_map_l4_index = get_l4(virtual_address) <span class="kw">as </span>usize;
-            <span class="kw">let </span>page_directory_pointer_index = get_l3(virtual_address) <span class="kw">as </span>usize;
-            <span class="kw">let </span>page_directory_index = get_l2(virtual_address) <span class="kw">as </span>usize;
-            <span class="kw">let </span>page_table_index = get_l1(virtual_address) <span class="kw">as </span>usize;
+            <span class="kw">let </span>page_map_l4_index = get_l4(virtual_address);
+            <span class="kw">let </span>page_directory_pointer_index = get_l3(virtual_address);
+            <span class="kw">let </span>page_directory_index = get_l2(virtual_address);
+            <span class="kw">let </span>page_table_index = get_l1(virtual_address);
 
             <span class="comment">// Level 4
             </span><span class="kw">let </span>page_map_l4_entry = <span class="kw-2">&amp;mut </span><span class="self">self</span>.page_map_l4.as_mut().entries[page_map_l4_index];
@@ -1308,12 +1317,12 @@
                     page_directory_index, page_directory_entry, <span class="kw-2">*</span>page_directory_entry
                 );
 
-                size -= PAGE_2M <span class="kw">as </span>u64;
+                size -= PAGE_2M;
                 <span class="comment">// do not overflow the address
                 </span><span class="kw">if </span>size == <span class="number">0 </span>{
                     <span class="kw">break</span>;
                 }
-                virtual_address += PAGE_2M <span class="kw">as </span>u64;
+                virtual_address += PAGE_2M;
                 <span class="kw">if let </span><span class="prelude-val">Some</span>(physical_address) = physical_address.as_mut() {
                     <span class="kw-2">*</span>physical_address += PAGE_2M <span class="kw">as </span>u64;
                 }
@@ -1341,12 +1350,12 @@
                     page_table_index, page_table_entry, <span class="kw-2">*</span>page_table_entry
                 );
 
-                size -= PAGE_4K <span class="kw">as </span>u64;
+                size -= PAGE_4K;
                 <span class="comment">// do not overflow the address
                 </span><span class="kw">if </span>size == <span class="number">0 </span>{
                     <span class="kw">break</span>;
                 }
-                virtual_address += PAGE_4K <span class="kw">as </span>u64;
+                virtual_address += PAGE_4K;
                 <span class="kw">if let </span><span class="prelude-val">Some</span>(physical_address) = physical_address.as_mut() {
                     <span class="kw-2">*</span>physical_address += PAGE_4K <span class="kw">as </span>u64;
                 }
@@ -1368,9 +1377,8 @@
         <span class="macro">assert!</span>(physical_address.is_none());
 
         <span class="comment">// get the end before alignment
-        </span><span class="kw">let </span>(aligned_start, size, <span class="kw">_</span>) = align_range(virtual_address <span class="kw">as _</span>, <span class="kw-2">*</span>size <span class="kw">as _</span>, PAGE_4K);
-        <span class="kw">let </span><span class="kw-2">mut </span>size = size <span class="kw">as </span>u64;
-        virtual_address = aligned_start <span class="kw">as _</span>;
+        </span><span class="kw">let </span>(aligned_start, <span class="kw-2">mut </span>size, <span class="kw">_</span>) = align_range(virtual_address, <span class="kw-2">*</span>size, PAGE_4K);
+        virtual_address = aligned_start;
 
         <span class="macro">assert!</span>(size &gt; <span class="number">0</span>);
 
@@ -1378,7 +1386,7 @@
             <span class="string">"{} {:08X?}"</span>,
             MemSize(size),
             VirtualMemoryMapEntry {
-                virtual_address: virtual_address <span class="kw">as _</span>,
+                virtual_address,
                 physical_address: <span class="kw-2">*</span>physical_address,
                 size,
                 flags: <span class="kw-2">*</span>flags,
@@ -1390,10 +1398,10 @@
                 cpu::invalidate_tlp(virtual_address <span class="kw">as _</span>);
             }
 
-            <span class="kw">let </span>page_map_l4_index = get_l4(virtual_address) <span class="kw">as </span>usize;
-            <span class="kw">let </span>page_directory_pointer_index = get_l3(virtual_address) <span class="kw">as </span>usize;
-            <span class="kw">let </span>page_directory_index = get_l2(virtual_address) <span class="kw">as </span>usize;
-            <span class="kw">let </span>page_table_index = get_l1(virtual_address) <span class="kw">as </span>usize;
+            <span class="kw">let </span>page_map_l4_index = get_l4(virtual_address);
+            <span class="kw">let </span>page_directory_pointer_index = get_l3(virtual_address);
+            <span class="kw">let </span>page_directory_index = get_l2(virtual_address);
+            <span class="kw">let </span>page_table_index = get_l1(virtual_address);
 
             <span class="comment">// Level 4
             </span><span class="kw">let </span>page_map_l4_entry = <span class="kw-2">&amp;mut </span><span class="self">self</span>.page_map_l4.as_mut().entries[page_map_l4_index];
@@ -1456,20 +1464,20 @@
                 page_table_index, page_table_entry, <span class="kw-2">*</span>page_table_entry
             );
 
-            size -= PAGE_4K <span class="kw">as </span>u64;
+            size -= PAGE_4K;
             <span class="comment">// do not overflow the address
             </span><span class="kw">if </span>size == <span class="number">0 </span>{
                 <span class="kw">break</span>;
             }
-            virtual_address += PAGE_4K <span class="kw">as </span>u64;
+            virtual_address += PAGE_4K;
         }
     }
 
-    <span class="kw">pub fn </span>is_address_mapped(<span class="kw-2">&amp;</span><span class="self">self</span>, addr: u64) -&gt; bool {
-        <span class="kw">let </span>page_map_l4_index = get_l4(addr) <span class="kw">as </span>usize;
-        <span class="kw">let </span>page_directory_pointer_index = get_l3(addr) <span class="kw">as </span>usize;
-        <span class="kw">let </span>page_directory_index = get_l2(addr) <span class="kw">as </span>usize;
-        <span class="kw">let </span>page_table_index = get_l1(addr) <span class="kw">as </span>usize;
+    <span class="kw">pub fn </span>is_address_mapped(<span class="kw-2">&amp;</span><span class="self">self</span>, addr: usize) -&gt; bool {
+        <span class="kw">let </span>page_map_l4_index = get_l4(addr);
+        <span class="kw">let </span>page_directory_pointer_index = get_l3(addr);
+        <span class="kw">let </span>page_directory_index = get_l2(addr);
+        <span class="kw">let </span>page_table_index = get_l1(addr);
 
         <span class="comment">// Level 4
         </span><span class="kw">let </span>page_map_l4 = <span class="self">self</span>.page_map_l4.as_ref();

@@ -185,6 +185,17 @@ which we can use later with the <a href="virtual_mapper.html">virtual mapper</a>
 <p>The heap in the kernel is implemented with <a href="../../extra/heap_allocator.html">heap allocator</a>, and the <code>PageAllocator</code> will allocate pages using the <a href="virtual_mapper.html">virtual mapper</a>.</p>
 <p>Lastly we have the <a href="virtual_space.html">virtual space</a> which is a very useful tool to get a virtual address for components that are not
 part of the kernel directly but we know where they are located in physical space. This includes, <code>Memory mapped IO</code>, <code>ACPI</code> structures, <code>Multiboot</code> structures, etc.</p>
+<h2 id="memory-pointer-types"><a class="header" href="#memory-pointer-types">Memory pointer types</a></h2>
+<p>Another thing you might notice in the code is that we use <code>u64</code> sometimes and <code>usize</code> other times. Here is what they mean:</p>
+<ul>
+<li><code>u64</code>: This is a 64-bit unsigned integer, and it will be <code>64</code> no matter the platform.
+It is used to represent physical addresses. Because in <code>x86</code> with <code>CR0.PG</code> bit enabled, the CPU can map
+<code>40-bit</code> physical addresses to <code>32-bit</code> virtual addresses. And thus it can be more than <code>32-bit</code>.</li>
+<li><code>usize</code>: This is a pointer-sized unsigned integer, and it will be <code>32</code> or <code>64</code> depending on the platform.
+It is used to represent virtual addresses, and it is the same size as a pointer on the platform.</li>
+</ul>
+<p>Something tangent. For filesystem operations we only use <code>u64</code>,
+as hardware drives can have easily more than <code>4GB</code> of space. without needing for the CPU to be <code>64-bit</code>.</p>
 
                     </main>
 

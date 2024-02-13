@@ -475,6 +475,10 @@
 <a href="#473" id="473">473</a>
 <a href="#474" id="474">474</a>
 <a href="#475" id="475">475</a>
+<a href="#476" id="476">476</a>
+<a href="#477" id="477">477</a>
+<a href="#478" id="478">478</a>
+<a href="#479" id="479">479</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span><span class="kw">crate</span>::cpu::{<span class="self">self</span>, IoPortInt};
@@ -754,27 +758,27 @@
 #[derive(Debug, Clone, Copy)]
 </span><span class="kw">pub enum </span>PciBar {
     Memory {
-        addr: u64,
-        size: u64,
+        addr: usize,
+        size: usize,
         prefetchable: bool,
     },
     Io {
         addr: u16,
-        size: u64,
+        size: usize,
     },
     <span class="prelude-val">None</span>,
 }
 
 <span class="attr">#[allow(dead_code)]
 </span><span class="kw">impl </span>PciBar {
-    <span class="kw">pub fn </span>get_io(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(u16, u64)&gt; {
+    <span class="kw">pub fn </span>get_io(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(u16, usize)&gt; {
         <span class="kw">match </span><span class="self">self </span>{
             <span class="self">Self</span>::Io { addr, size } =&gt; <span class="prelude-val">Some</span>((<span class="kw-2">*</span>addr, <span class="kw-2">*</span>size)),
             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
         }
     }
 
-    <span class="kw">pub fn </span>get_memory(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(u64, u64, bool)&gt; {
+    <span class="kw">pub fn </span>get_memory(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(usize, usize, bool)&gt; {
         <span class="kw">match </span><span class="self">self </span>{
             <span class="self">Self</span>::Memory {
                 addr,
@@ -835,7 +839,7 @@
                 write_pci_config(bus, dev, func, reg::BAR0 + i * <span class="number">4</span>, <span class="number">0xFFFF_FFFCu32</span>);
                 <span class="kw">let </span>bar = read_pci_config::&lt;u32&gt;(bus, dev, func, reg::BAR0 + i * <span class="number">4</span>);
                 write_pci_config(bus, dev, func, reg::BAR0 + i * <span class="number">4</span>, old_bar);
-                <span class="kw">let </span>size = (!(bar &amp; <span class="number">0xFFFF_FFFC</span>) + <span class="number">1</span>) <span class="kw">as </span>u64;
+                <span class="kw">let </span>size = (!(bar &amp; <span class="number">0xFFFF_FFFC</span>) + <span class="number">1</span>) <span class="kw">as </span>usize;
 
                 base_address[i <span class="kw">as </span>usize] = PciBar::Io {
                     addr: old_bar <span class="kw">as </span>u16,
@@ -848,7 +852,7 @@
                 write_pci_config(bus, dev, func, reg::BAR0 + i * <span class="number">4</span>, <span class="number">0xFFFF_FFF0u32</span>);
                 <span class="kw">let </span>bar = read_pci_config::&lt;u32&gt;(bus, dev, func, reg::BAR0 + i * <span class="number">4</span>);
                 write_pci_config(bus, dev, func, reg::BAR0 + i * <span class="number">4</span>, old_bar);
-                <span class="kw">let </span>size = (!(bar &amp; <span class="number">0xFFFF_FFF0</span>) + <span class="number">1</span>) <span class="kw">as </span>u64;
+                <span class="kw">let </span>size = (!(bar &amp; <span class="number">0xFFFF_FFF0</span>) + <span class="number">1</span>) <span class="kw">as </span>usize;
 
                 <span class="kw">let </span>prefetchable = (bar_v &amp; <span class="number">0x8</span>) == <span class="number">0x8</span>;
                 <span class="kw">let </span>ty = (bar_v &amp; <span class="number">0x6</span>) &gt;&gt; <span class="number">1</span>;
@@ -856,18 +860,22 @@
                     <span class="number">0x0 </span>=&gt; {
                         <span class="comment">// 32-bit
                         </span>base_address[i <span class="kw">as </span>usize] = PciBar::Memory {
-                            addr: old_bar <span class="kw">as </span>u64,
+                            addr: old_bar <span class="kw">as </span>usize,
                             size,
                             prefetchable,
                         }
                     }
                     <span class="number">0x2 </span>=&gt; {
+                        <span class="kw">if </span><span class="macro">cfg!</span>(target_pointer_width = <span class="string">"32"</span>) {
+                            <span class="macro">panic!</span>(<span class="string">"64-bit bar on 32-bit system"</span>);
+                        }
+
                         <span class="comment">// 64-bit
                         </span><span class="macro">assert!</span>(i &lt; <span class="number">5</span>);
                         <span class="kw">let </span>bar_2 = read_pci_config::&lt;u32&gt;(bus, dev, func, reg::BAR0 + (i + <span class="number">1</span>) * <span class="number">4</span>);
                         i += <span class="number">1</span>;
 
-                        <span class="kw">let </span>whole_bar = (bar_2 <span class="kw">as </span>u64) &lt;&lt; <span class="number">32 </span>| (old_bar <span class="kw">as </span>u64);
+                        <span class="kw">let </span>whole_bar = (bar_2 <span class="kw">as </span>usize) &lt;&lt; <span class="number">32 </span>| (old_bar <span class="kw">as </span>usize);
                         base_address[i <span class="kw">as </span>usize] = PciBar::Memory {
                             addr: whole_bar,
                             size,

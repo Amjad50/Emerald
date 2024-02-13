@@ -330,7 +330,6 @@
 <a href="#328" id="328">328</a>
 <a href="#329" id="329">329</a>
 <a href="#330" id="330">330</a>
-<a href="#331" id="331">331</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{mem, ptr::addr_of};
 
 <span class="kw">use crate</span>::{
@@ -374,27 +373,27 @@
             access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(KERNEL_RING),
             flags_and_limit: flags::LONG_MODE,
             ..UserDescriptorEntry::empty()
-        }) <span class="kw">as _
-    </span>});
+        })
+    });
     manager.user_code_seg = SegmentSelector::from_index(<span class="kw">unsafe </span>{
         manager.gdt.push_user(UserDescriptorEntry {
             access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(USER_RING),
             flags_and_limit: flags::LONG_MODE,
             ..UserDescriptorEntry::empty()
-        }) <span class="kw">as _
-    </span>});
+        })
+    });
     manager.kernel_data_seg = SegmentSelector::from_index(<span class="kw">unsafe </span>{
         manager.gdt.push_user(UserDescriptorEntry {
             access: flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(KERNEL_RING),
             ..UserDescriptorEntry::empty()
-        }) <span class="kw">as _
-    </span>});
+        })
+    });
     manager.user_data_seg = SegmentSelector::from_index(<span class="kw">unsafe </span>{
         manager.gdt.push_user(UserDescriptorEntry {
             access: flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(USER_RING),
             ..UserDescriptorEntry::empty()
-        }) <span class="kw">as _
-    </span>});
+        })
+    });
 
     <span class="comment">// setup TSS
 
@@ -413,15 +412,14 @@
             }
             <span class="comment">// make sure that the stack is aligned, so we can easily allocate pages
             </span><span class="macro">assert!</span>(
-                is_aligned(INTR_STACK_SIZE <span class="kw">as _</span>, PAGE_4K)
-                    &amp;&amp; is_aligned(stack_start_virtual <span class="kw">as _</span>, PAGE_4K)
+                is_aligned(INTR_STACK_SIZE, PAGE_4K) &amp;&amp; is_aligned(stack_start_virtual, PAGE_4K)
             );
 
             <span class="comment">// map the stack
             </span>virtual_memory_mapper::map_kernel(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
-                virtual_address: stack_start_virtual <span class="kw">as </span>u64,
+                virtual_address: stack_start_virtual,
                 physical_address: <span class="prelude-val">None</span>,
-                size: INTR_STACK_SIZE <span class="kw">as </span>u64,
+                size: INTR_STACK_SIZE,
                 flags: virtual_memory_mapper::flags::PTE_WRITABLE,
             });
 
@@ -446,8 +444,8 @@
             base_high: ((tss_ptr &gt;&gt; <span class="number">24</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8,
             base_upper: ((tss_ptr &gt;&gt; <span class="number">32</span>) &amp; <span class="number">0xFFFFFFFF</span>) <span class="kw">as </span>u32,
             ..SystemDescriptorEntry::empty()
-        }) <span class="kw">as _
-    </span>});
+        })
+    });
     drop(manager);
     <span class="comment">// call the special `run_with` so that we get the `static` lifetime
     </span>GDT.run_with(|manager| {

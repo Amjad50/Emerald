@@ -267,6 +267,7 @@
 <a href="#265" id="265">265</a>
 <a href="#266" id="266">266</a>
 <a href="#267" id="267">267</a>
+<a href="#268" id="268">268</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>alloc::collections::LinkedList;
 
 <span class="kw">use crate</span>::{
@@ -282,54 +283,54 @@
 <span class="kw">static </span>VIRTUAL_SPACE_ALLOCATOR: Mutex&lt;VirtualSpaceAllocator&gt; =
     Mutex::new(VirtualSpaceAllocator::empty());
 
-<span class="kw">pub fn </span>get_virtual_for_physical(physical_start: u64, size: u64) -&gt; u64 {
-    <span class="kw">let </span>(aligned_start, size, offset) = align_range(physical_start <span class="kw">as _</span>, size <span class="kw">as _</span>, PAGE_4K);
+<span class="kw">pub fn </span>get_virtual_for_physical(physical_start: u64, size: usize) -&gt; usize {
+    <span class="kw">let </span>(aligned_start, size, offset) = align_range(physical_start, size, PAGE_4K);
 
     <span class="kw">let </span><span class="kw-2">mut </span>allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    <span class="kw">let </span>virtual_addr = allocator.get_virtual_for_physical(aligned_start <span class="kw">as </span>u64, size <span class="kw">as </span>u64);
+    <span class="kw">let </span>virtual_addr = allocator.get_virtual_for_physical(aligned_start, size);
     <span class="comment">// ensure its mapped
     </span>virtual_memory_mapper::map_kernel(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
-        physical_address: <span class="prelude-val">Some</span>(aligned_start <span class="kw">as </span>u64),
-        size: size <span class="kw">as _</span>,
+        physical_address: <span class="prelude-val">Some</span>(aligned_start),
+        size,
         flags: virtual_memory_mapper::flags::PTE_WRITABLE,
     });
     <span class="comment">// to make sure no one else play around with the space while we are mapping it
     </span>drop(allocator);
 
-    virtual_addr + offset <span class="kw">as </span>u64
+    virtual_addr + offset
 }
 
-<span class="kw">pub fn </span>allocate_and_map_virtual_space(physical_start: u64, size: u64) -&gt; u64 {
-    <span class="kw">let </span>(aligned_start, size, offset) = align_range(physical_start <span class="kw">as _</span>, size <span class="kw">as _</span>, PAGE_4K);
+<span class="kw">pub fn </span>allocate_and_map_virtual_space(physical_start: u64, size: usize) -&gt; usize {
+    <span class="kw">let </span>(aligned_start, size, offset) = align_range(physical_start, size, PAGE_4K);
 
     <span class="kw">let </span><span class="kw-2">mut </span>allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    <span class="kw">let </span>virtual_addr = allocator.allocate(aligned_start <span class="kw">as </span>u64, size <span class="kw">as </span>u64);
+    <span class="kw">let </span>virtual_addr = allocator.allocate(aligned_start, size);
 
     virtual_memory_mapper::map_kernel(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
-        physical_address: <span class="prelude-val">Some</span>(aligned_start <span class="kw">as </span>u64),
-        size: size <span class="kw">as _</span>,
+        physical_address: <span class="prelude-val">Some</span>(aligned_start),
+        size,
         flags: virtual_memory_mapper::flags::PTE_WRITABLE,
     });
     <span class="comment">// to make sure no one else play around with the space while we are mapping it
     </span>drop(allocator);
 
-    virtual_addr + offset <span class="kw">as </span>u64
+    virtual_addr + offset
 }
 
 <span class="attr">#[allow(dead_code)]
-</span><span class="kw">pub fn </span>deallocate_virtual_space(virtual_start: u64, size: u64) {
-    <span class="kw">let </span>(aligned_start, size, <span class="kw">_</span>) = align_range(virtual_start <span class="kw">as _</span>, size <span class="kw">as _</span>, PAGE_4K);
+</span><span class="kw">pub fn </span>deallocate_virtual_space(virtual_start: usize, size: usize) {
+    <span class="kw">let </span>(aligned_start, size, <span class="kw">_</span>) = align_range(virtual_start, size, PAGE_4K);
 
     <span class="kw">let </span><span class="kw-2">mut </span>allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    allocator.deallocate(aligned_start <span class="kw">as </span>u64, size <span class="kw">as </span>u64);
+    allocator.deallocate(aligned_start, size);
     <span class="comment">// unmap it after we deallocate (it will panic if its not valid deallocation)
     </span>virtual_memory_mapper::unmap_kernel(
         <span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
-            virtual_address: aligned_start <span class="kw">as </span>u64,
+            virtual_address: aligned_start,
             physical_address: <span class="prelude-val">None</span>,
-            size: size <span class="kw">as _</span>,
+            size,
             flags: virtual_memory_mapper::flags::PTE_WRITABLE,
         },
         <span class="comment">// we did specify our own physical address on allocation, so we must set this to false
@@ -344,18 +345,19 @@
 
 <span class="kw">struct </span>VirtualSpaceEntry {
     physical_start: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-    virtual_start: u64,
-    size: u64,
+    virtual_start: usize,
+    size: usize,
 }
 
 <span class="kw">impl </span>VirtualSpaceEntry {
     <span class="doccomment">/// Return `None` if its not mapped, or if the `physical_start` is not inside this entry
-    </span><span class="kw">fn </span>virtual_for_physical(<span class="kw-2">&amp;</span><span class="self">self</span>, physical_start: u64) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+    </span><span class="kw">fn </span>virtual_for_physical(<span class="kw-2">&amp;</span><span class="self">self</span>, physical_start: u64) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(current_phy_start) = <span class="self">self</span>.physical_start {
             <span class="comment">// is inside?
-            </span><span class="kw">if </span>current_phy_start &lt;= physical_start &amp;&amp; current_phy_start + <span class="self">self</span>.size &gt; physical_start
+            </span><span class="kw">if </span>current_phy_start &lt;= physical_start
+                &amp;&amp; current_phy_start + <span class="self">self</span>.size <span class="kw">as </span>u64 &gt; physical_start
             {
-                <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="self">self</span>.virtual_start + (physical_start - current_phy_start));
+                <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="self">self</span>.virtual_start + (physical_start - current_phy_start) <span class="kw">as </span>usize);
             }
         }
         <span class="prelude-val">None
@@ -377,22 +379,22 @@
     </span><span class="kw">fn </span>get_entry_containing(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         req_phy_start: u64,
-        req_size: u64,
+        req_size: usize,
     ) -&gt; <span class="prelude-ty">Option</span>&lt;(<span class="kw-2">&amp;</span>VirtualSpaceEntry, bool)&gt; {
         <span class="macro">assert!</span>(req_size &gt; <span class="number">0</span>);
-        <span class="macro">assert!</span>(is_aligned(req_phy_start <span class="kw">as _</span>, PAGE_4K));
-        <span class="macro">assert!</span>(is_aligned(req_size <span class="kw">as _</span>, PAGE_4K));
+        <span class="macro">assert!</span>(is_aligned(req_phy_start, PAGE_4K));
+        <span class="macro">assert!</span>(is_aligned(req_size, PAGE_4K));
 
         <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="self">self</span>.entries.cursor_front();
         <span class="kw">while let </span><span class="prelude-val">Some</span>(entry) = cursor.current() {
             <span class="kw">if let </span><span class="prelude-val">Some</span>(current_phy_start) = entry.physical_start {
                 <span class="comment">// is inside?
                 </span><span class="kw">if </span>current_phy_start &lt;= req_phy_start
-                    &amp;&amp; current_phy_start + entry.size &gt; req_phy_start
+                    &amp;&amp; current_phy_start + entry.size <span class="kw">as </span>u64 &gt; req_phy_start
                 {
                     <span class="comment">// this has parts of it inside
                     // is it fully inside?
-                    </span><span class="kw">if </span>current_phy_start + entry.size &gt;= req_phy_start + req_size {
+                    </span><span class="kw">if </span>current_phy_start + entry.size <span class="kw">as </span>u64 &gt;= req_phy_start + req_size <span class="kw">as </span>u64 {
                         <span class="comment">// yes, it is fully inside
                         </span><span class="kw">return </span><span class="prelude-val">Some</span>((entry, <span class="bool-val">true</span>));
                     } <span class="kw">else </span>{
@@ -409,27 +411,27 @@
 
     <span class="doccomment">/// Checks if we have this range allocated, returns it, otherwise perform an allocation, map it, and return
     /// the new address
-    </span><span class="kw">fn </span>get_virtual_for_physical(<span class="kw-2">&amp;mut </span><span class="self">self</span>, req_phy_start: u64, req_size: u64) -&gt; u64 {
+    </span><span class="kw">fn </span>get_virtual_for_physical(<span class="kw-2">&amp;mut </span><span class="self">self</span>, req_phy_start: u64, req_size: usize) -&gt; usize {
         <span class="kw">if let </span><span class="prelude-val">Some</span>((entry, is_fully_inside)) = <span class="self">self</span>.get_entry_containing(req_phy_start, req_size) {
             <span class="kw">if </span>is_fully_inside {
                 <span class="comment">// we already have it, return it
                 // we know its inside, so we can unwrap, it may not be fully, but that's fine
-                </span><span class="kw">let </span>virtual_start: u64 = entry.virtual_for_physical(req_phy_start).unwrap();
+                </span><span class="kw">let </span>virtual_start = entry.virtual_for_physical(req_phy_start).unwrap();
                 <span class="kw">return </span>virtual_start;
             }
             <span class="comment">// we have it, but not fully inside, we need to allocate
             </span><span class="macro">panic!</span>(<span class="string">"Could not get virtual space for {:016X}..{:016X}, it is not fully inside {:016X}..{:016X}"</span>,
-                req_phy_start, req_phy_start + req_size, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size);
+                req_phy_start, req_phy_start + req_size <span class="kw">as </span>u64, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size <span class="kw">as </span>u64);
         }
 
         <span class="comment">// we didn't find it, allocate it
         </span><span class="self">self</span>.allocate(req_phy_start, req_size)
     }
 
-    <span class="kw">fn </span>allocate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, phy_start: u64, size: u64) -&gt; u64 {
+    <span class="kw">fn </span>allocate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, phy_start: u64, size: usize) -&gt; usize {
         <span class="macro">assert!</span>(size &gt; <span class="number">0</span>);
-        <span class="macro">assert!</span>(is_aligned(phy_start <span class="kw">as _</span>, PAGE_4K));
-        <span class="macro">assert!</span>(is_aligned(size <span class="kw">as _</span>, PAGE_4K));
+        <span class="macro">assert!</span>(is_aligned(phy_start, PAGE_4K));
+        <span class="macro">assert!</span>(is_aligned(size, PAGE_4K));
 
         <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="self">self</span>.entries.cursor_front_mut();
         <span class="comment">// find largest fitting entry and allocate from it
@@ -459,8 +461,8 @@
             <span class="macro">assert!</span>(is_aligned(KERNEL_EXTRA_MEMORY_SIZE, PAGE_4K));
             <span class="self">self</span>.entries.push_back(VirtualSpaceEntry {
                 physical_start: <span class="prelude-val">None</span>,
-                virtual_start: KERNEL_EXTRA_MEMORY_BASE <span class="kw">as </span>u64,
-                size: KERNEL_EXTRA_MEMORY_SIZE <span class="kw">as </span>u64,
+                virtual_start: KERNEL_EXTRA_MEMORY_BASE,
+                size: KERNEL_EXTRA_MEMORY_SIZE,
             });
             <span class="self">self</span>.allocate(phy_start, size)
         } <span class="kw">else </span>{
@@ -468,10 +470,10 @@
         }
     }
 
-    <span class="kw">fn </span>deallocate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, req_virtual_start: u64, req_size: u64) {
+    <span class="kw">fn </span>deallocate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, req_virtual_start: usize, req_size: usize) {
         <span class="macro">assert!</span>(req_size &gt; <span class="number">0</span>);
-        <span class="macro">assert!</span>(is_aligned(req_virtual_start <span class="kw">as _</span>, PAGE_4K));
-        <span class="macro">assert!</span>(is_aligned(req_size <span class="kw">as _</span>, PAGE_4K));
+        <span class="macro">assert!</span>(is_aligned(req_virtual_start, PAGE_4K));
+        <span class="macro">assert!</span>(is_aligned(req_size, PAGE_4K));
 
         <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="self">self</span>.entries.cursor_front_mut();
         <span class="kw">while let </span><span class="prelude-val">Some</span>(entry) = cursor.current() {

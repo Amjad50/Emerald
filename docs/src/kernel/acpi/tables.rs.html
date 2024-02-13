@@ -796,6 +796,7 @@
 <a href="#794" id="794">794</a>
 <a href="#795" id="795">795</a>
 <a href="#796" id="796">796</a>
+<a href="#797" id="797">797</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     any::Any,
     fmt,
@@ -817,8 +818,8 @@
 
 <span class="kw">use </span><span class="kw">super</span>::aml::{parse_aml, AmlCode};
 
-<span class="kw">const </span>BIOS_RO_MEM_START: usize = <span class="number">0x000E0000</span>;
-<span class="kw">const </span>BIOS_RO_MEM_END: usize = <span class="number">0x000FFFFF</span>;
+<span class="kw">const </span>BIOS_RO_MEM_START: u64 = <span class="number">0x000E0000</span>;
+<span class="kw">const </span>BIOS_RO_MEM_END: u64 = <span class="number">0x000FFFFF</span>;
 
 <span class="doccomment">/// # Safety
 ///
@@ -826,15 +827,16 @@
 /// Must ensure that the `physical_address` is not used in virtual_space before calling this function
 /// If any address is used, this may panic, and undefined behavior may occur due to aliasing memory referenced by other code
 /// call `deallocate_acpi_mapping` after using any memory in the acpi region
-</span><span class="kw">unsafe fn </span>get_acpi_header_with_len(physical_addr: usize) -&gt; (<span class="kw-2">*const </span>DescriptionHeader, usize) {
+</span><span class="kw">unsafe fn </span>get_acpi_header_with_len(physical_addr: u64) -&gt; (<span class="kw-2">*const </span>DescriptionHeader, usize) {
     <span class="kw">if </span>physical_addr &lt; virtual2physical(KERNEL_END) {
         <span class="macro">assert!</span>(
-            physical_addr + mem::size_of::&lt;DescriptionHeader&gt;() &lt;= virtual2physical(KERNEL_END)
+            physical_addr + mem::size_of::&lt;DescriptionHeader&gt;() <span class="kw">as </span>u64
+                &lt;= virtual2physical(KERNEL_END)
         );
 
-        <span class="kw">let </span>header_virtual = (physical_addr + KERNEL_BASE) <span class="kw">as </span><span class="kw-2">*const </span>DescriptionHeader;
+        <span class="kw">let </span>header_virtual = (physical_addr + KERNEL_BASE <span class="kw">as </span>u64) <span class="kw">as </span><span class="kw-2">*const </span>DescriptionHeader;
         <span class="kw">let </span>len = (<span class="kw-2">*</span>header_virtual).length <span class="kw">as </span>usize;
-        <span class="macro">assert!</span>(physical_addr + len &lt;= virtual2physical(KERNEL_END));
+        <span class="macro">assert!</span>(physical_addr + len <span class="kw">as </span>u64 &lt;= virtual2physical(KERNEL_END));
         (header_virtual, len)
     } <span class="kw">else </span>{
         <span class="kw">let </span>header = virtual_space::get_virtual_for_physical(
@@ -868,9 +870,9 @@
 ///
 /// This will affect all pages of memory that are touching the address space of `addr` and `size`
 /// Thus, this should only be used when we are sure that we are not holding any references to any data of this space.
-</span><span class="kw">unsafe fn </span>deallocate_acpi_mapping(addr: usize, size: usize) {
+</span><span class="kw">unsafe fn </span>deallocate_acpi_mapping(addr: u64, size: usize) {
     <span class="kw">if </span>addr &lt; virtual2physical(KERNEL_END) {
-        <span class="macro">assert!</span>(addr + size &lt;= virtual2physical(KERNEL_END));
+        <span class="macro">assert!</span>(addr + size <span class="kw">as </span>u64 &lt;= virtual2physical(KERNEL_END));
     } <span class="kw">else </span>{
         virtual_space::deallocate_virtual_space(addr <span class="kw">as _</span>, size <span class="kw">as _</span>);
     }

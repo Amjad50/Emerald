@@ -142,9 +142,9 @@
         }
 
         virtual_memory_mapper::map_kernel(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
-            virtual_address: current_heap_base <span class="kw">as </span>u64,
+            virtual_address: current_heap_base,
             physical_address: <span class="prelude-val">None</span>,
-            size: (PAGE_4K * pages) <span class="kw">as </span>u64,
+            size: PAGE_4K * pages,
             flags: flags::PTE_WRITABLE,
         });
 

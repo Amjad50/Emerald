@@ -186,9 +186,9 @@
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>pub struct VirtualMemoryMapEntry {
-    pub virtual_address: u64,
+    pub virtual_address: usize,
     pub physical_address: Option&lt;u64&gt;,
-    pub size: u64,
+    pub size: usize,
     pub flags: u64,
 }
 <span class="boring">}</span></code></pre></pre>

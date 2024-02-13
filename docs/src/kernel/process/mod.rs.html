@@ -587,9 +587,9 @@
         <span class="kw">let </span>stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
         <span class="kw">let </span>stack_start = stack_end - stack_size;
         vm.map(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
-            virtual_address: stack_start <span class="kw">as </span>u64,
+            virtual_address: stack_start,
             physical_address: <span class="prelude-val">None</span>,
-            size: stack_size <span class="kw">as </span>u64,
+            size: stack_size,
             flags: virtual_memory_mapper::flags::PTE_USER
                 | virtual_memory_mapper::flags::PTE_WRITABLE,
         });
@@ -659,7 +659,7 @@
         <span class="self">self</span>.parent_id
     }
 
-    <span class="kw">pub fn </span>is_user_address_mapped(<span class="kw-2">&amp;</span><span class="self">self</span>, address: u64) -&gt; bool {
+    <span class="kw">pub fn </span>is_user_address_mapped(<span class="kw-2">&amp;</span><span class="self">self</span>, address: usize) -&gt; bool {
         <span class="self">self</span>.vm.is_address_mapped(address)
     }
 
@@ -750,9 +750,9 @@
         <span class="kw">if </span>increment &gt; <span class="number">0 </span>{
             <span class="comment">// map the new heap
             </span><span class="kw">let </span>entry = VirtualMemoryMapEntry {
-                virtual_address: old_end <span class="kw">as </span>u64,
+                virtual_address: old_end,
                 physical_address: <span class="prelude-val">None</span>,
-                size: increment <span class="kw">as </span>u64,
+                size: increment <span class="kw">as </span>usize,
                 flags: virtual_memory_mapper::flags::PTE_USER
                     | virtual_memory_mapper::flags::PTE_WRITABLE,
             };
@@ -761,9 +761,9 @@
             <span class="kw">let </span>new_end = old_end - increment.unsigned_abs();
             <span class="comment">// unmap old heap
             </span><span class="kw">let </span>entry = VirtualMemoryMapEntry {
-                virtual_address: new_end <span class="kw">as </span>u64,
+                virtual_address: new_end,
                 physical_address: <span class="prelude-val">None</span>,
-                size: increment.unsigned_abs() <span class="kw">as </span>u64,
+                size: increment.unsigned_abs(),
                 flags: virtual_memory_mapper::flags::PTE_USER
                     | virtual_memory_mapper::flags::PTE_WRITABLE,
             };
@@ -861,7 +861,7 @@
         // we consider the program starts after an imaginary function call from the kernel
         //
         // first align it to 16 bytes
-        </span>rsp = align_down(rsp <span class="kw">as _</span>, <span class="number">16</span>) <span class="kw">as _</span>;
+        </span>rsp = align_down(rsp, <span class="number">16</span>);
         <span class="comment">// second, subtract 8, the call instruction
         </span>rsp -= <span class="number">8</span>;
 

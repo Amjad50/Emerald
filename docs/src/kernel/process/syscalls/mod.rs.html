@@ -767,7 +767,7 @@
         process.is_user_address_mapped(arg <span class="kw">as _</span>)
         <span class="comment">// very basic check, just check the last byte
         // TODO: check all mapped pages
-            </span>&amp;&amp; process.is_user_address_mapped((arg <span class="kw">as </span>usize + len - <span class="number">1</span>) <span class="kw">as _</span>)
+            </span>&amp;&amp; process.is_user_address_mapped(arg <span class="kw">as </span>usize + len - <span class="number">1 </span>)
     }) {
         <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallArgError::InvalidUserPointer);
     }
@@ -794,7 +794,7 @@
 
     check_ptr(buf, len * mem::size_of::&lt;T&gt;())<span class="question-mark">?</span>;
 
-    <span class="kw">let </span>slice = <span class="kw">unsafe </span>{ core::slice::from_raw_parts(buf <span class="kw">as _</span>, len <span class="kw">as _</span>) };
+    <span class="kw">let </span>slice = <span class="kw">unsafe </span>{ core::slice::from_raw_parts(buf <span class="kw">as _</span>, len) };
     <span class="prelude-val">Ok</span>(slice)
 }
 
@@ -808,7 +808,7 @@
 
     check_ptr(buf, len * mem::size_of::&lt;T&gt;())<span class="question-mark">?</span>;
 
-    <span class="kw">let </span>slice = <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(buf <span class="kw">as _</span>, len <span class="kw">as _</span>) };
+    <span class="kw">let </span>slice = <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(buf <span class="kw">as _</span>, len) };
     <span class="prelude-val">Ok</span>(slice)
 }
 
@@ -1016,7 +1016,7 @@
         </span>with_current_process(|process| {
             <span class="kw">for </span>mapping <span class="kw">in </span>file_mappings {
                 process
-                    .get_fs_node(mapping.src_fd <span class="kw">as _</span>)
+                    .get_fs_node(mapping.src_fd)
                     .ok_or(SyscallError::InvalidFileIndex)<span class="question-mark">?</span>;
             }
             <span class="prelude-val">Ok</span>::&lt;<span class="kw">_</span>, SyscallError&gt;(())
@@ -1038,9 +1038,9 @@
         <span class="comment">// take the files if any
         </span><span class="kw">for </span>mapping <span class="kw">in </span>file_mappings.iter() {
             <span class="kw">let </span>file = process
-                .take_fs_node(mapping.src_fd <span class="kw">as _</span>)
+                .take_fs_node(mapping.src_fd)
                 .ok_or(SyscallError::InvalidFileIndex)<span class="question-mark">?</span>;
-            new_process.attach_fs_node_to_fd(mapping.dst_fd <span class="kw">as _</span>, file);
+            new_process.attach_fs_node_to_fd(mapping.dst_fd, file);
             <span class="kw">if </span>mapping.dst_fd &lt;= FD_STDERR {
                 std_needed[mapping.dst_fd] = <span class="bool-val">false</span>;
             }
@@ -1049,10 +1049,10 @@
         <span class="comment">// inherit files STD files if not set
         </span><span class="kw">for </span>(i, <span class="kw">_</span>) <span class="kw">in </span>std_needed.iter().enumerate().filter(|(<span class="kw">_</span>, <span class="kw-2">&amp;</span>b)| b) {
             <span class="kw">let </span>file = process
-                .get_fs_node(i <span class="kw">as _</span>)
+                .get_fs_node(i)
                 .ok_or(SyscallError::InvalidFileIndex)<span class="question-mark">?</span>;
             <span class="kw">let </span>inherited_file = file.as_file()<span class="question-mark">?</span>.clone_inherit();
-            new_process.attach_fs_node_to_fd(i <span class="kw">as _</span>, inherited_file);
+            new_process.attach_fs_node_to_fd(i, inherited_file);
         }
 
         <span class="prelude-val">Ok</span>::&lt;<span class="kw">_</span>, SyscallError&gt;(())
@@ -1071,7 +1071,7 @@
         <span class="macro">sys_arg!</span>(<span class="number">0</span>, all_state.rest =&gt; i64),
     };
 
-    <span class="kw">if </span>!is_aligned(increment.unsigned_abs() <span class="kw">as </span>usize, PAGE_4K) {
+    <span class="kw">if </span>!is_aligned(increment.unsigned_abs(), PAGE_4K) {
         <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">to_arg_err!</span>(<span class="number">0</span>, SyscallArgError::InvalidHeapIncrement));
     }
 

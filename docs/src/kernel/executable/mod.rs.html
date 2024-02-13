@@ -60,6 +60,7 @@
 <a href="#58" id="58">58</a>
 <a href="#59" id="59">59</a>
 <a href="#60" id="60">60</a>
+<a href="#61" id="61">61</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{cpu, fs, memory_management::virtual_memory_mapper};
 
 <span class="kw">pub mod </span>elf;
@@ -81,19 +82,20 @@
     //         kernel regions
     </span>vm.switch_to_this();
 
-    <span class="kw">let </span><span class="kw-2">mut </span>min_address = u64::MAX;
+    <span class="kw">let </span><span class="kw-2">mut </span>min_address = usize::MAX;
     <span class="kw">let </span><span class="kw-2">mut </span>max_address = <span class="number">0</span>;
 
     <span class="kw">for </span>segment <span class="kw">in </span>elf.program_headers() {
         <span class="kw">if let </span>elf::ElfProgramType::Load = segment.ty() {
             <span class="kw">let </span>segment_virtual = segment.virtual_address();
             <span class="macro">assert!</span>(segment_virtual == segment.physical_address());
+
             <span class="kw">let </span><span class="kw-2">mut </span>flags = elf::to_virtual_memory_flags(segment.flags());
             flags |= virtual_memory_mapper::flags::PTE_USER;
             <span class="kw">let </span>entry = virtual_memory_mapper::VirtualMemoryMapEntry {
-                virtual_address: segment_virtual,
+                virtual_address: segment_virtual <span class="kw">as </span>usize,
                 physical_address: <span class="prelude-val">None</span>,
-                size: segment.mem_size(),
+                size: segment.mem_size() <span class="kw">as </span>usize,
                 flags,
             };
             min_address = min_address.min(entry.virtual_address);
@@ -118,6 +120,6 @@
     <span class="comment">// we can be interrupted again
     </span>cpu::cpu().pop_cli();
 
-    <span class="prelude-val">Ok</span>((min_address <span class="kw">as </span>usize, max_address <span class="kw">as </span>usize))
+    <span class="prelude-val">Ok</span>((min_address, max_address))
 }
 </code></pre></div></section></main></body></html>

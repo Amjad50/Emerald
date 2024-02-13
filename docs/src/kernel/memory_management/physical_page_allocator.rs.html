@@ -211,8 +211,6 @@
 <a href="#209" id="209">209</a>
 <a href="#210" id="210">210</a>
 <a href="#211" id="211">211</a>
-<a href="#212" id="212">212</a>
-<a href="#213" id="213">213</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::memory_layout::{align_down, align_up, is_aligned, PAGE_4K};
 <span class="kw">use crate</span>::{
     memory_management::memory_layout::{
@@ -293,10 +291,10 @@
     }
 
     <span class="kw">fn </span>init(<span class="kw-2">&amp;mut </span><span class="self">self</span>, multiboot_info: <span class="kw-2">&amp;</span>MultiBoot2Info) {
-        <span class="kw">const </span>PHYSICAL_KERNEL_START: usize = virtual2physical(KERNEL_LINK);
+        <span class="kw">const </span>PHYSICAL_KERNEL_START: u64 = virtual2physical(KERNEL_LINK);
         <span class="comment">// get the end of the kernel, align, and add 5 PAGES of alignment as well
         // because the multiboot info might be stored there by grub
-        </span><span class="kw">let </span><span class="kw-2">mut </span>physical_kernel_end: usize = virtual2physical(align_up(kernel_elf_end(), PAGE_4K));
+        </span><span class="kw">let </span><span class="kw-2">mut </span>physical_kernel_end = virtual2physical(align_up(kernel_elf_end(), PAGE_4K));
         <span class="kw">let </span>multiboot_end = align_up(
             virtual2physical(multiboot_info.end_address() <span class="kw">as </span>usize),
             PAGE_4K,
@@ -313,7 +311,7 @@
             <span class="comment">// if its after the kernel by a lot, then panic, so we can handle it, we don't want
             // to make this more complex if we don't need to
             </span><span class="macro">assert!</span>(
-                multiboot_end - physical_kernel_end &lt; PAGE_4K * <span class="number">5</span>,
+                multiboot_end - physical_kernel_end &lt; PAGE_4K <span class="kw">as </span>u64 * <span class="number">5</span>,
                 <span class="string">"Multiboot is after the kernel by a lot"</span>,
             );
             physical_kernel_end = multiboot_end;
@@ -332,28 +330,26 @@
             // and start after that
             </span><span class="kw">let </span>start_physical;
             <span class="kw">let </span>end_physical;
-            <span class="kw">if </span>memory.base_addr &lt;= PHYSICAL_KERNEL_START <span class="kw">as </span>u64
-                &amp;&amp; (memory.base_addr + memory.length) &gt;= physical_kernel_end <span class="kw">as </span>u64
+            <span class="kw">if </span>memory.base_addr &lt;= PHYSICAL_KERNEL_START
+                &amp;&amp; (memory.base_addr + memory.length) &gt;= physical_kernel_end
             {
-                start_physical = physical_kernel_end <span class="kw">as </span>u64;
-                end_physical =
-                    align_down(memory.base_addr <span class="kw">as </span>usize + memory.length <span class="kw">as </span>usize, PAGE_4K) <span class="kw">as </span>u64;
-                <span class="self">self</span>.start = physical2virtual(physical_kernel_end <span class="kw">as _</span>) <span class="kw">as _</span>;
+                start_physical = physical_kernel_end;
+                end_physical = align_down(memory.base_addr + memory.length, PAGE_4K);
+                <span class="self">self</span>.start = physical2virtual(physical_kernel_end) <span class="kw">as _</span>;
             } <span class="kw">else </span>{
-                <span class="macro">assert!</span>(memory.base_addr &gt;= physical_kernel_end <span class="kw">as </span>u64);
+                <span class="macro">assert!</span>(memory.base_addr &gt;= physical_kernel_end);
 
-                start_physical = align_up(memory.base_addr <span class="kw">as </span>usize, PAGE_4K) <span class="kw">as </span>u64;
-                end_physical =
-                    align_down(memory.base_addr <span class="kw">as </span>usize + memory.length <span class="kw">as </span>usize, PAGE_4K) <span class="kw">as </span>u64;
+                start_physical = align_up(memory.base_addr, PAGE_4K);
+                end_physical = align_down(memory.base_addr + memory.length, PAGE_4K);
             }
             <span class="kw">let </span><span class="kw-2">mut </span>high_mem_start = core::ptr::null_mut();
             <span class="kw">let </span>end_virtual = <span class="kw">if </span>end_physical &gt;= virtual2physical(KERNEL_END) <span class="kw">as _ </span>{
                 high_mem_start = KERNEL_END <span class="kw">as </span><span class="kw-2">*mut </span>u8;
                 KERNEL_END <span class="kw">as </span><span class="kw-2">*mut </span>u8
             } <span class="kw">else </span>{
-                physical2virtual(end_physical <span class="kw">as _</span>) <span class="kw">as _
+                physical2virtual(end_physical) <span class="kw">as _
             </span>};
-            <span class="kw">let </span>start_virtual = physical2virtual(start_physical <span class="kw">as _</span>) <span class="kw">as _</span>;
+            <span class="kw">let </span>start_virtual = physical2virtual(start_physical) <span class="kw">as _</span>;
 
             <span class="kw">if </span>start_virtual &lt; end_virtual {
                 <span class="self">self</span>.end = end_virtual;
@@ -411,7 +407,7 @@
         <span class="kw">let </span>page = page <span class="kw">as </span><span class="kw-2">*mut </span>FreePage;
 
         <span class="kw">if </span>page.is_null()
-            || !is_aligned(page <span class="kw">as _</span>, PAGE_4K)
+            || !is_aligned(page <span class="kw">as </span>usize, PAGE_4K)
             || page &gt; <span class="kw">unsafe </span>{ page.add(<span class="number">1</span>) }
             || page &gt;= <span class="self">self</span>.end <span class="kw">as _
             </span>|| page &lt; <span class="self">self</span>.start <span class="kw">as _
