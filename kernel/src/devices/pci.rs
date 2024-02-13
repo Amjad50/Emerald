@@ -277,27 +277,27 @@ impl fmt::Display for PciDeviceType {
 #[derive(Debug, Clone, Copy)]
 pub enum PciBar {
     Memory {
-        addr: u64,
-        size: u64,
+        addr: usize,
+        size: usize,
         prefetchable: bool,
     },
     Io {
         addr: u16,
-        size: u64,
+        size: usize,
     },
     None,
 }
 
 #[allow(dead_code)]
 impl PciBar {
-    pub fn get_io(&self) -> Option<(u16, u64)> {
+    pub fn get_io(&self) -> Option<(u16, usize)> {
         match self {
             Self::Io { addr, size } => Some((*addr, *size)),
             _ => None,
         }
     }
 
-    pub fn get_memory(&self) -> Option<(u64, u64, bool)> {
+    pub fn get_memory(&self) -> Option<(usize, usize, bool)> {
         match self {
             Self::Memory {
                 addr,
@@ -358,7 +358,7 @@ impl PciDeviceConfig {
                 write_pci_config(bus, dev, func, reg::BAR0 + i * 4, 0xFFFF_FFFCu32);
                 let bar = read_pci_config::<u32>(bus, dev, func, reg::BAR0 + i * 4);
                 write_pci_config(bus, dev, func, reg::BAR0 + i * 4, old_bar);
-                let size = (!(bar & 0xFFFF_FFFC) + 1) as u64;
+                let size = (!(bar & 0xFFFF_FFFC) + 1) as usize;
 
                 base_address[i as usize] = PciBar::Io {
                     addr: old_bar as u16,
@@ -371,7 +371,7 @@ impl PciDeviceConfig {
                 write_pci_config(bus, dev, func, reg::BAR0 + i * 4, 0xFFFF_FFF0u32);
                 let bar = read_pci_config::<u32>(bus, dev, func, reg::BAR0 + i * 4);
                 write_pci_config(bus, dev, func, reg::BAR0 + i * 4, old_bar);
-                let size = (!(bar & 0xFFFF_FFF0) + 1) as u64;
+                let size = (!(bar & 0xFFFF_FFF0) + 1) as usize;
 
                 let prefetchable = (bar_v & 0x8) == 0x8;
                 let ty = (bar_v & 0x6) >> 1;
@@ -379,18 +379,22 @@ impl PciDeviceConfig {
                     0x0 => {
                         // 32-bit
                         base_address[i as usize] = PciBar::Memory {
-                            addr: old_bar as u64,
+                            addr: old_bar as usize,
                             size,
                             prefetchable,
                         }
                     }
                     0x2 => {
+                        if cfg!(target_pointer_width = "32") {
+                            panic!("64-bit bar on 32-bit system");
+                        }
+
                         // 64-bit
                         assert!(i < 5);
                         let bar_2 = read_pci_config::<u32>(bus, dev, func, reg::BAR0 + (i + 1) * 4);
                         i += 1;
 
-                        let whole_bar = (bar_2 as u64) << 32 | (old_bar as u64);
+                        let whole_bar = (bar_2 as usize) << 32 | (old_bar as usize);
                         base_address[i as usize] = PciBar::Memory {
                             addr: whole_bar,
                             size,

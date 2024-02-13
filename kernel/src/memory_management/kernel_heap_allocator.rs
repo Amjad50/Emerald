@@ -43,9 +43,9 @@ impl PageAllocatorProvider<PAGE_4K> for PageAllocator {
         }
 
         virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
-            virtual_address: current_heap_base as u64,
+            virtual_address: current_heap_base,
             physical_address: None,
-            size: (PAGE_4K * pages) as u64,
+            size: PAGE_4K * pages,
             flags: flags::PTE_WRITABLE,
         });
 

@@ -328,8 +328,8 @@ impl From<tables::IoApic> for IoApic {
             global_irq_base: table.global_system_interrupt_base,
             n_entries: 0, // to be filled next
             mmio: virtual_space::allocate_and_map_virtual_space(
-                table.io_apic_address as _,
-                mem::size_of::<IoApicMmio>() as _,
+                table.io_apic_address as u64,
+                mem::size_of::<IoApicMmio>(),
             ) as *mut IoApicMmio,
         };
         s.n_entries = (s.read_register(io_apic::IO_APIC_VERSION) >> 16) as u8 + 1;
@@ -374,7 +374,7 @@ impl Apic {
                 panic!("APIC is not enabled");
             }
         }
-        let mut apic_address = (apic_bar & APIC_BASE_MASK) as usize;
+        let mut apic_address = apic_bar & APIC_BASE_MASK;
 
         // process the MADT table
         let madt_table = bios_tables
@@ -382,12 +382,12 @@ impl Apic {
             .get_table::<tables::Apic>()
             .expect("MADT table not found");
 
-        if madt_table.local_apic_address as usize != apic_address {
+        if madt_table.local_apic_address as u64 != apic_address {
             println!(
                 "WARNING: MADT table has a different APIC address (CPU:{:X}, MADT:{:X}), using MADT...",
                 apic_address, madt_table.local_apic_address
             );
-            apic_address = madt_table.local_apic_address as usize;
+            apic_address = madt_table.local_apic_address as u64;
         }
 
         for strct in &madt_table.interrupt_controller_structs {
@@ -424,7 +424,7 @@ impl Apic {
                     // assert!(s.local_apic_lint == 1);
                 }
                 InterruptControllerStruct::LocalApicAddressOverride(s) => {
-                    apic_address = s.local_apic_address as usize;
+                    apic_address = s.local_apic_address;
                 }
                 InterruptControllerStruct::Unknown { struct_type, bytes } => {
                     println!(
@@ -445,10 +445,9 @@ impl Apic {
         );
         assert!(apic_address != 0, "APIC address is 0, cannot continue");
         assert!(apic_address & 0xF == 0, "APIC address is not aligned");
-        self.mmio = virtual_space::allocate_and_map_virtual_space(
-            apic_address as _,
-            mem::size_of::<ApicMmio>() as _,
-        ) as *mut ApicMmio;
+        self.mmio =
+            virtual_space::allocate_and_map_virtual_space(apic_address, mem::size_of::<ApicMmio>())
+                as *mut ApicMmio;
 
         // reset all interrupts
         self.io_apics.iter_mut().for_each(|io_apic| {

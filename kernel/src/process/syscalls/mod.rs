@@ -88,7 +88,7 @@ fn check_ptr(arg: *const u8, len: usize) -> Result<(), SyscallArgError> {
         process.is_user_address_mapped(arg as _)
         // very basic check, just check the last byte
         // TODO: check all mapped pages
-            && process.is_user_address_mapped((arg as usize + len - 1) as _)
+            && process.is_user_address_mapped(arg as usize + len - 1 )
     }) {
         return Err(SyscallArgError::InvalidUserPointer);
     }
@@ -115,7 +115,7 @@ fn sys_arg_to_slice<'a, T: Sized>(buf: *const u8, len: usize) -> Result<&'a [T],
 
     check_ptr(buf, len * mem::size_of::<T>())?;
 
-    let slice = unsafe { core::slice::from_raw_parts(buf as _, len as _) };
+    let slice = unsafe { core::slice::from_raw_parts(buf as _, len) };
     Ok(slice)
 }
 
@@ -129,7 +129,7 @@ fn sys_arg_to_mut_slice<'a, T: Sized>(
 
     check_ptr(buf, len * mem::size_of::<T>())?;
 
-    let slice = unsafe { core::slice::from_raw_parts_mut(buf as _, len as _) };
+    let slice = unsafe { core::slice::from_raw_parts_mut(buf as _, len) };
     Ok(slice)
 }
 
@@ -337,7 +337,7 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         with_current_process(|process| {
             for mapping in file_mappings {
                 process
-                    .get_fs_node(mapping.src_fd as _)
+                    .get_fs_node(mapping.src_fd)
                     .ok_or(SyscallError::InvalidFileIndex)?;
             }
             Ok::<_, SyscallError>(())
@@ -359,9 +359,9 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         // take the files if any
         for mapping in file_mappings.iter() {
             let file = process
-                .take_fs_node(mapping.src_fd as _)
+                .take_fs_node(mapping.src_fd)
                 .ok_or(SyscallError::InvalidFileIndex)?;
-            new_process.attach_fs_node_to_fd(mapping.dst_fd as _, file);
+            new_process.attach_fs_node_to_fd(mapping.dst_fd, file);
             if mapping.dst_fd <= FD_STDERR {
                 std_needed[mapping.dst_fd] = false;
             }
@@ -370,10 +370,10 @@ fn sys_spawn(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         // inherit files STD files if not set
         for (i, _) in std_needed.iter().enumerate().filter(|(_, &b)| b) {
             let file = process
-                .get_fs_node(i as _)
+                .get_fs_node(i)
                 .ok_or(SyscallError::InvalidFileIndex)?;
             let inherited_file = file.as_file()?.clone_inherit();
-            new_process.attach_fs_node_to_fd(i as _, inherited_file);
+            new_process.attach_fs_node_to_fd(i, inherited_file);
         }
 
         Ok::<_, SyscallError>(())
@@ -392,7 +392,7 @@ fn sys_inc_heap(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(0, all_state.rest => i64),
     };
 
-    if !is_aligned(increment.unsigned_abs() as usize, PAGE_4K) {
+    if !is_aligned(increment.unsigned_abs(), PAGE_4K) {
         return Err(to_arg_err!(0, SyscallArgError::InvalidHeapIncrement));
     }
 

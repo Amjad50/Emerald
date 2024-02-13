@@ -89,38 +89,76 @@ pub fn stack_guard_page_ptr() -> usize {
     (unsafe { &stack_guard_page } as *const usize as usize)
 }
 
-pub const fn align_up(addr: usize, alignment: usize) -> usize {
-    (addr + alignment - 1) & !(alignment - 1)
+pub trait AlignMem: Sized {
+    fn align_up(self, alignment: usize) -> Self;
+    fn align_down(self, alignment: usize) -> Self;
+    fn is_aligned(self, alignment: usize) -> bool;
+    fn align_range(self, size: usize, alignment: usize) -> (Self, usize, usize);
 }
 
-pub fn align_down(addr: usize, alignment: usize) -> usize {
-    addr & !(alignment - 1)
+macro_rules! impl_align_mem {
+    ($t:ty) => {
+        impl AlignMem for $t {
+            #[inline(always)]
+            fn align_up(self, alignment: usize) -> Self {
+                (self + (alignment as $t) - 1) & !((alignment as $t) - 1)
+            }
+
+            #[inline(always)]
+            fn align_down(self, alignment: usize) -> Self {
+                self & !((alignment as $t) - 1)
+            }
+
+            #[inline(always)]
+            fn is_aligned(self, alignment: usize) -> bool {
+                (self & ((alignment as $t) - 1)) == 0
+            }
+
+            #[inline(always)]
+            fn align_range(self, size: usize, alignment: usize) -> (Self, usize, usize) {
+                let addr_end = self + size as $t;
+                let start_aligned = self.align_down(alignment);
+                let end_aligned = addr_end.align_up(alignment);
+                let size: usize = (end_aligned - start_aligned).try_into().unwrap();
+                assert!(size > 0);
+                assert!(size.is_aligned(alignment));
+                let offset = (self - start_aligned).try_into().unwrap();
+
+                (start_aligned, size, offset)
+            }
+        }
+    };
 }
 
-pub fn is_aligned(addr: usize, alignment: usize) -> bool {
-    (addr & (alignment - 1)) == 0
+impl_align_mem!(usize);
+impl_align_mem!(u64);
+
+pub fn align_up<T: AlignMem>(addr: T, alignment: usize) -> T {
+    addr.align_up(alignment)
 }
 
-pub fn align_range(addr: usize, size: usize, alignment: usize) -> (usize, usize, usize) {
-    let addr_end: usize = addr + size;
-    let start_aligned = align_down(addr, alignment);
-    let end_aligned = align_up(addr_end, alignment);
-    let size = end_aligned - start_aligned;
-    assert!(size > 0);
-    assert!(is_aligned(size, alignment));
-    let offset = addr - start_aligned;
+pub fn align_down<T: AlignMem>(addr: T, alignment: usize) -> T {
+    addr.align_down(alignment)
+}
 
-    (start_aligned, size, offset)
+pub fn is_aligned<T: AlignMem>(addr: T, alignment: usize) -> bool {
+    addr.is_aligned(alignment)
+}
+
+pub fn align_range<T: AlignMem>(addr: T, size: usize, alignment: usize) -> (T, usize, usize) {
+    addr.align_range(size, alignment)
 }
 
 #[inline(always)]
-pub const fn virtual2physical(addr: usize) -> usize {
-    addr - KERNEL_BASE
+pub const fn virtual2physical(addr: usize) -> u64 {
+    debug_assert!(addr >= KERNEL_BASE && addr <= KERNEL_BASE + KERNEL_MAPPED_SIZE);
+    (addr - KERNEL_BASE) as u64
 }
 
 #[inline(always)]
-pub const fn physical2virtual(addr: usize) -> usize {
-    addr + KERNEL_BASE
+pub const fn physical2virtual(addr: u64) -> usize {
+    debug_assert!(addr < KERNEL_MAPPED_SIZE as u64);
+    addr as usize + KERNEL_BASE
 }
 
 pub fn display_kernel_map() {
@@ -142,83 +180,87 @@ pub fn display_kernel_map() {
         "  range={:016x}..{:016x}, len={:4}  nothing",
         nothing.start,
         nothing.end,
-        MemSize(nothing.len() as u64)
+        MemSize(nothing.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  kernel elf",
         kernel_elf.start,
         kernel_elf.end,
-        MemSize(kernel_elf.len() as u64)
+        MemSize(kernel_elf.len())
     );
     // inner map for the elf
     println!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf text",
         kernel_elf_text.start,
         kernel_elf_text.end,
-        MemSize(kernel_elf_text.len() as u64)
+        MemSize(kernel_elf_text.len())
     );
     println!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf rodata",
         kernel_elf_rodata.start,
         kernel_elf_rodata.end,
-        MemSize(kernel_elf_rodata.len() as u64)
+        MemSize(kernel_elf_rodata.len())
     );
     println!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf data",
         kernel_elf_data.start,
         kernel_elf_data.end,
-        MemSize(kernel_elf_data.len() as u64)
+        MemSize(kernel_elf_data.len())
     );
     println!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf bss",
         kernel_elf_bss.start,
         kernel_elf_bss.end,
-        MemSize(kernel_elf_bss.len() as u64)
+        MemSize(kernel_elf_bss.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  kernel physical allocator low",
         kernel_physical_allocator_low.start,
         kernel_physical_allocator_low.end,
-        MemSize(kernel_physical_allocator_low.len() as u64)
+        MemSize(kernel_physical_allocator_low.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  kernel heap",
         kernel_heap.start,
         kernel_heap.end,
-        MemSize(kernel_heap.len() as u64)
+        MemSize(kernel_heap.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  interrupt stack",
         interrupt_stack.start,
         interrupt_stack.end,
-        MemSize(interrupt_stack.len() as u64)
+        MemSize(interrupt_stack.len())
     );
     println!(
         "  range={:016x}..{:016x}, len={:4}  kernel extra (virtual space)",
         kernel_extra_memory.start,
         kernel_extra_memory.end,
-        MemSize(kernel_extra_memory.len() as u64)
+        MemSize(kernel_extra_memory.len())
     );
 
     // number of bytes approx used from physical memory
     println!(
         "whole kernel physical size (startup/low): {}",
-        MemSize((KERNEL_END - KERNEL_BASE) as u64)
+        MemSize(KERNEL_END - KERNEL_BASE)
     );
     // total addressable virtual kernel memory
     println!(
         "whole kernel size: {}",
-        MemSize(u64::MAX - KERNEL_BASE as u64 + 1)
+        MemSize(usize::MAX - KERNEL_BASE + 1)
     );
 }
 
 #[repr(transparent)]
-pub struct MemSize(pub u64);
+pub struct MemSize<T>(pub T);
 
-impl fmt::Display for MemSize {
+impl<T> fmt::Display for MemSize<T>
+where
+    T: TryInto<u64> + Copy,
+    <T as TryInto<u64>>::Error: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // find the best unit
-        let mut size = self.0;
+        let mut size = self.0.try_into().unwrap();
         let mut remaining = 0;
         let mut unit = "B";
         if size >= 1024 {
@@ -255,7 +297,11 @@ impl fmt::Display for MemSize {
     }
 }
 
-impl fmt::Debug for MemSize {
+impl<T> fmt::Debug for MemSize<T>
+where
+    T: TryInto<u64> + Copy,
+    <T as TryInto<u64>>::Error: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }

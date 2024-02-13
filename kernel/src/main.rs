@@ -52,8 +52,8 @@ use crate::{
 
 fn finish_boot() {
     let physical_pages_stats = physical_page_allocator::stats();
-    let free_mem = MemSize((physical_pages_stats.0 * PAGE_4K) as u64);
-    let used_mem = MemSize((physical_pages_stats.1 * PAGE_4K) as u64);
+    let free_mem = MemSize(physical_pages_stats.0 * PAGE_4K);
+    let used_mem = MemSize(physical_pages_stats.1 * PAGE_4K);
     // this stats is recorded at this point, meaning that we could have allocated a lot,
     //  but then it got freed we don't record that
     let HeapStats {
@@ -69,15 +69,15 @@ fn finish_boot() {
         used_mem,
         used_mem.0 as f64 / (used_mem.0 + free_mem.0) as f64 * 100.
     );
-    println!("Free heap: {}", MemSize(free_size as u64));
+    println!("Free heap: {}", MemSize(free_size));
     println!(
         "Used heap: {} ({:0.3}%)",
-        MemSize(allocated as u64),
+        MemSize(allocated),
         allocated as f64 / (heap_size) as f64 * 100.
     );
     println!(
         "From possible heap: {} ({:0.3}%)",
-        MemSize(KERNEL_HEAP_SIZE as u64),
+        MemSize(KERNEL_HEAP_SIZE),
         allocated as f64 / KERNEL_HEAP_SIZE as f64 * 100.
     );
     virtual_space::debug_blocks();

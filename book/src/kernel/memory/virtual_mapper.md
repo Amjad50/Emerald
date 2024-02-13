@@ -11,9 +11,9 @@ The main features is to map and unmap physical memory to virtual memory, and to 
 The `map` function takes 1 argument `VirtualMemoryMapEntry` which is a struct contains information about the mapping:
 ```rust
 pub struct VirtualMemoryMapEntry {
-    pub virtual_address: u64,
+    pub virtual_address: usize,
     pub physical_address: Option<u64>,
-    pub size: u64,
+    pub size: usize,
     pub flags: u64,
 }
 ```
