@@ -57,6 +57,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 impl<T> ReMutex<T> {
     pub const fn new(data: T) -> Self {
         Self {
