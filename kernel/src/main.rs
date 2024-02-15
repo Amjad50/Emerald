@@ -134,7 +134,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // and interrupts should be disabled until
     unsafe { cpu::set_interrupts() };
     devices::init_legacy_devices();
-    console::init_late_device();
+    console::init_late_device(multiboot_info.framebuffer());
     devices::prope_pci_devices();
     fs::create_disk_mapping(0).expect("Could not load filesystem");
     finish_boot();

@@ -7,10 +7,11 @@ use alloc::{boxed::Box, string::String, sync::Arc};
 use crate::{
     devices::{self, Device},
     fs::FileSystemError,
+    multiboot2::{self, FramebufferColorInfo},
     sync::spin::mutex::Mutex,
 };
 
-use self::vga_text::{VgaBuffer, DEFAULT_ATTRIB};
+use self::vga_text::{VgaText, DEFAULT_ATTRIB};
 
 use super::{
     keyboard::{self, Keyboard},
@@ -42,18 +43,29 @@ pub fn early_init() {
 
 /// Create a late console, this is used after the kernel heap is initialized
 /// And also assign a console device
-pub fn init_late_device() {
+pub fn init_late_device(framebuffer: Option<multiboot2::Framebuffer>) {
     // SAFETY: we are running this initialization at `kernel_main` and its done alone
     //  without printing anything at the same time since we are only
     //  running 1 CPU at the  time
     //  We are also sure that no one is printing at this time
     let device = unsafe {
-        CONSOLE.init_late();
+        CONSOLE.init_late(framebuffer);
         // Must have a device
         CONSOLE.late_device().unwrap()
     };
 
     devices::register_device(device);
+}
+
+fn create_video_console(framebuffer: Option<multiboot2::Framebuffer>) -> Box<dyn VideoConsole> {
+    match framebuffer {
+        Some(framebuffer) => match framebuffer.color_info {
+            FramebufferColorInfo::Indexed { .. } => todo!(),
+            FramebufferColorInfo::Rgb { .. } => todo!(),
+            FramebufferColorInfo::EgaText => Box::new(VgaText::new(framebuffer)),
+        },
+        None => panic!("No framebuffer provided"),
+    }
 }
 
 trait VideoConsole: Send + Sync {
@@ -93,13 +105,18 @@ impl ConsoleController {
 
     /// # SAFETY
     /// Must ensure that there is no console is being printed to/running at the same time
-    unsafe fn init_late(&mut self) {
+    unsafe fn init_late(&mut self, framebuffer: Option<multiboot2::Framebuffer>) {
         match self {
             Self::Early(console) => {
+                let video_console = create_video_console(framebuffer);
+
+                // take the uart, replace the old one with dummy uart
+                let uart =
+                    core::mem::replace(&mut console.get_mut().uart, Uart::new(UartPort::COM1));
                 // SAFETY: we are relying on the caller calling this function alone
                 //  since we are taking ownership of the early console, and we are sure that
                 //  its not being used anywhere, this is fine
-                let late_console = LateConsole::migrate_from_early(&console.lock());
+                let late_console = LateConsole::new(uart, video_console);
                 *self = Self::Late(Arc::new(Mutex::new(late_console)));
             }
             Self::Late(_) => {
@@ -187,10 +204,10 @@ pub(super) struct LateConsole {
 
 impl LateConsole {
     /// SAFETY: must ensure that there is no console running at the same time
-    unsafe fn migrate_from_early(early: &EarlyConsole) -> Self {
+    unsafe fn new(uart: Uart, video_console: Box<dyn VideoConsole>) -> Self {
         let mut s = Self {
-            uart: early.uart.clone(),
-            video_console: Box::new(VgaBuffer::new()),
+            uart,
+            video_console,
             keyboard: keyboard::get_keyboard(),
             console_cmd_buffer: None,
             current_foreground: 0xF, // white

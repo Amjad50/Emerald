@@ -1,52 +1,65 @@
 //! A temporary tool to allow for easy printing to the screen.
 //! We are using the VGA text mode buffer to print to the screen.
-//! Which is in the memory address 0xb8000.
 
-use crate::memory_management::memory_layout::physical2virtual;
+use crate::{memory_management::virtual_space, multiboot2};
 
 use super::VideoConsole;
-
-const VGA_BUFFER_ADDR: *mut u8 = physical2virtual(0xb8000) as *mut u8;
-const VGA_WIDTH: usize = 80;
-const VGA_HEIGHT: usize = 25;
 
 /// White on black text
 pub(super) const DEFAULT_ATTRIB: u8 = 0x0f;
 
-fn get_index(pos: (usize, usize)) -> isize {
-    (pos.0 + pos.1 * VGA_WIDTH) as isize
-}
-
-#[derive(Clone)]
-pub(super) struct VgaBuffer {
+pub(super) struct VgaText {
     pos: (usize, usize),
     attrib: u8,
+    pitch: usize,
+    height: usize,
+    width: usize,
+    memory: &'static mut [u8],
 }
 
-impl VgaBuffer {
-    pub const fn new() -> Self {
+impl VgaText {
+    pub fn new(framebuffer: multiboot2::Framebuffer) -> Self {
+        assert!(matches!(
+            framebuffer.color_info,
+            multiboot2::FramebufferColorInfo::EgaText
+        ));
+        let physical_addr = framebuffer.addr;
+        let memory_size = framebuffer.pitch * framebuffer.height;
+        let memory_addr =
+            virtual_space::allocate_and_map_virtual_space(physical_addr, memory_size as usize)
+                as *mut u8;
+        let memory = unsafe { core::slice::from_raw_parts_mut(memory_addr, memory_size as usize) };
+
         Self {
             pos: (0, 0),
             attrib: DEFAULT_ATTRIB,
+            pitch: framebuffer.pitch as usize,
+            height: framebuffer.height as usize,
+            width: framebuffer.width as usize,
+            memory,
         }
     }
 
+    fn get_arr_pos(&self, pos: (usize, usize)) -> usize {
+        pos.0 * 2 + pos.1 * self.pitch
+    }
+
     fn fix_after_advance(&mut self) {
-        if self.pos.0 >= VGA_WIDTH {
+        if self.pos.0 >= self.width {
             self.pos.0 = 0;
             self.pos.1 += 1;
         }
-        if self.pos.1 >= VGA_HEIGHT {
+        if self.pos.1 >= self.height {
             // scroll up
-            let start_arr_index = get_index((0, 1)) * 2;
-            let end_arr_end = get_index((VGA_WIDTH, VGA_HEIGHT)) * 2;
-            unsafe {
-                core::ptr::copy(
-                    VGA_BUFFER_ADDR.offset(start_arr_index),
-                    VGA_BUFFER_ADDR,
-                    (end_arr_end - start_arr_index) as usize,
-                );
+            for i in 0..self.height - 1 {
+                let copy_to = self.get_arr_pos((0, i));
+                let copy_from = self.get_arr_pos((0, i + 1));
+                let size = self.pitch;
+                let (before, after) = self.memory.split_at_mut(copy_from);
+
+                before[copy_to..copy_to + size].copy_from_slice(&after[..size]);
             }
+
             self.pos.1 -= 1;
             self.clear_line(self.pos.1);
             // just to make sure we are not out of bounds by more than 1 line
@@ -55,24 +68,23 @@ impl VgaBuffer {
     }
 
     fn clear(&mut self) {
-        for i in 0..VGA_HEIGHT {
+        for i in 0..self.height {
             self.clear_line(i);
         }
         self.pos = (0, 0);
     }
 
     fn clear_line(&mut self, line: usize) {
-        for i in 0..VGA_WIDTH {
-            let pos = get_index((i, line));
-            unsafe {
-                *VGA_BUFFER_ADDR.offset(pos * 2) = b' ';
-                *VGA_BUFFER_ADDR.offset(pos * 2 + 1) = 0x0;
-            }
+        for i in 0..self.width {
+            let pos = self.get_arr_pos((i, line));
+
+            self.memory[pos] = b' ';
+            self.memory[pos + 1] = 0x0;
         }
     }
 }
 
-impl VideoConsole for VgaBuffer {
+impl VideoConsole for VgaText {
     fn init(&mut self) {
         self.clear();
     }
@@ -84,11 +96,9 @@ impl VideoConsole for VgaBuffer {
             self.fix_after_advance();
             return;
         }
-        let i = get_index(self.pos);
-        unsafe {
-            *VGA_BUFFER_ADDR.offset(i * 2) = c;
-            *VGA_BUFFER_ADDR.offset(i * 2 + 1) = self.attrib;
-        }
+        let i = self.get_arr_pos(self.pos);
+        self.memory[i] = c;
+        self.memory[i + 1] = self.attrib;
         self.pos.0 += 1;
         self.fix_after_advance();
     }
