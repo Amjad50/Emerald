@@ -1,17 +1,21 @@
 use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Point},
-    mono_font::{ascii::FONT_9X15, MonoTextStyle},
+    mono_font::{
+        ascii::{FONT_9X15, FONT_9X15_BOLD},
+        MonoTextStyle,
+    },
     pixelcolor::{Rgb888, RgbColor},
-    text::{renderer::TextRenderer, Baseline},
+    text::{
+        renderer::{CharacterStyle, TextRenderer},
+        Baseline,
+    },
     Pixel,
 };
 
 use crate::{memory_management::virtual_space, multiboot2};
 
-use super::VideoConsole;
-
-const TEXT_STYLE: MonoTextStyle<Rgb888> = MonoTextStyle::new(&FONT_9X15, Rgb888::WHITE);
+use super::{VideoConsole, VideoConsoleAttribute};
 
 pub(super) struct VgaGraphics {
     pitch: usize,
@@ -23,6 +27,7 @@ pub(super) struct VgaGraphics {
     memory: &'static mut [u8],
 
     pos: Point,
+    text_style: MonoTextStyle<'static, Rgb888>,
 }
 
 impl VgaGraphics {
@@ -62,6 +67,7 @@ impl VgaGraphics {
             byte_per_pixel: (framebuffer.bpp + 7) / 8,
             memory,
             pos: Point::new(0, 0),
+            text_style: MonoTextStyle::new(&FONT_9X15, Rgb888::WHITE),
         }
     }
 
@@ -87,7 +93,7 @@ impl VgaGraphics {
 
     pub fn clear_current_text_line(&mut self) {
         let start = self.get_arr_pos((0, self.pos.y as usize));
-        let line_chunk_size = self.pitch * TEXT_STYLE.line_height() as usize;
+        let line_chunk_size = self.pitch * self.text_style.line_height() as usize;
         self.memory[start..start + line_chunk_size].fill(0);
     }
 
@@ -110,11 +116,11 @@ impl VgaGraphics {
     fn fix_after_advance(&mut self) {
         if self.pos.x >= self.width as i32 {
             self.pos.x = 0;
-            self.pos.y += TEXT_STYLE.line_height() as i32;
+            self.pos.y += self.text_style.line_height() as i32;
         }
-        if self.pos.y + TEXT_STYLE.line_height() as i32 >= self.height as i32 {
+        if self.pos.y + self.text_style.line_height() as i32 >= self.height as i32 {
             // scroll up
-            self.scroll(TEXT_STYLE.line_height() as usize);
+            self.scroll(self.text_style.line_height() as usize);
 
             // clear line
             self.clear_current_text_line();
@@ -153,24 +159,52 @@ impl VideoConsole for VgaGraphics {
 
     fn write_byte(&mut self, c: u8) {
         if c == b'\n' {
-            self.pos = Point::new(0, self.pos.y + TEXT_STYLE.line_height() as i32);
+            self.pos = Point::new(0, self.pos.y + self.text_style.line_height() as i32);
         } else {
             let mut dst = [0; 4];
             let str = (c as char).encode_utf8(&mut dst);
 
-            self.pos = TEXT_STYLE
+            let style = self.text_style;
+
+            self.pos = style
                 .draw_string(str, self.pos, Baseline::Bottom, self)
                 .unwrap();
         }
         self.fix_after_advance();
     }
 
-    fn set_attrib(&mut self, _attrib: u8) {
-        // TODO: implement
-    }
+    fn set_attrib(&mut self, attrib: VideoConsoleAttribute) {
+        // These colors are used in PowerShell 6 in Windows 10
+        // except for black, changed to all zeros
+        let to_color = |color: u8| match color {
+            0 => Rgb888::new(0, 0, 0),
+            1 => Rgb888::new(197, 15, 31),
+            2 => Rgb888::new(19, 161, 14),
+            3 => Rgb888::new(193, 156, 0),
+            4 => Rgb888::new(0, 55, 218),
+            5 => Rgb888::new(136, 23, 152),
+            6 => Rgb888::new(58, 150, 221),
+            7 => Rgb888::new(204, 204, 204),
 
-    fn get_attrib(&self) -> u8 {
-        // TODO: implement
-        0
+            8 => Rgb888::new(118, 118, 118),
+            9 => Rgb888::new(231, 72, 86),
+            10 => Rgb888::new(22, 198, 12),
+            11 => Rgb888::new(249, 241, 165),
+            12 => Rgb888::new(59, 120, 255),
+            13 => Rgb888::new(180, 0, 158),
+            14 => Rgb888::new(97, 214, 214),
+            _ => Rgb888::new(242, 242, 242),
+        };
+
+        self.text_style
+            .set_background_color(Some(to_color(attrib.background as u8)));
+        self.text_style
+            .set_text_color(Some(to_color(attrib.foreground as u8)));
+
+        if attrib.bold {
+            self.text_style.font = &FONT_9X15_BOLD;
+        } else {
+            self.text_style.font = &FONT_9X15;
+        }
     }
 }

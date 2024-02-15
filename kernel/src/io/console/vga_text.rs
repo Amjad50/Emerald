@@ -3,10 +3,10 @@
 
 use crate::{memory_management::virtual_space, multiboot2};
 
-use super::VideoConsole;
+use super::{VideoConsole, VideoConsoleAttribute};
 
 /// White on black text
-pub(super) const DEFAULT_ATTRIB: u8 = 0x0f;
+const DEFAULT_ATTRIB: u8 = 0x0f;
 
 pub(super) struct VgaText {
     pos: (usize, usize),
@@ -103,11 +103,39 @@ impl VideoConsole for VgaText {
         self.fix_after_advance();
     }
 
-    fn set_attrib(&mut self, attrib: u8) {
-        self.attrib = attrib;
-    }
+    fn set_attrib(&mut self, attrib: VideoConsoleAttribute) {
+        let to_vga_color = |color: u8| {
+            let mappings = &[
+                0,  // black
+                4,  // red
+                2,  // green
+                6,  // brown
+                1,  // blue
+                5,  // magenta
+                3,  // cyan
+                7,  // light gray
+                8,  // dark gray
+                12, // light red
+                10, // light green
+                14, // yellow
+                9,  // light blue
+                13, // light magenta
+                11, // light cyan
+                15, // white
+            ];
+            mappings[color as usize]
+        };
 
-    fn get_attrib(&self) -> u8 {
-        self.attrib
+        let mut fg_index = attrib.foreground as u8;
+        if attrib.faint && fg_index >= 8 {
+            fg_index -= 8;
+        }
+        if attrib.bold && fg_index < 8 {
+            fg_index += 8;
+        }
+
+        let fg = to_vga_color(fg_index);
+        let bg = to_vga_color(attrib.background as u8);
+        self.attrib = (bg << 4) | fg;
     }
 }
