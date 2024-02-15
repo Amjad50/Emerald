@@ -5,12 +5,11 @@ use core::{
     fmt::{self, Write},
 };
 
-use alloc::{string::String, sync::Arc};
+use alloc::{boxed::Box, string::String, sync::Arc};
 
 use crate::{
     devices::{self, Device},
     fs::FileSystemError,
-    multiboot2,
     sync::spin::{mutex::Mutex, remutex::ReMutex},
 };
 
@@ -22,7 +21,7 @@ use super::{
 };
 
 // SAFETY: the console is only used inside a lock or mutex
-static mut CONSOLE: Console = Console::empty_early();
+static mut CONSOLE: ConsoleController = ConsoleController::empty_early();
 
 /// # SAFETY
 /// the caller must assure that this is not called while not being initialized
@@ -60,22 +59,27 @@ pub fn init_late_device() {
     devices::register_device(device);
 }
 
-trait VideoConsole {
+trait VideoConsole: Send + Sync {
     fn write_byte(&mut self, c: u8);
     fn init(&mut self);
     fn set_attrib(&mut self, attrib: u8);
     fn get_attrib(&self) -> u8;
 }
 
-pub(super) enum Console {
+trait Console: Write {
+    fn write(&mut self, src: &[u8]) -> usize;
+    fn read(&mut self, dst: &mut [u8]) -> usize;
+}
+
+pub(super) enum ConsoleController {
     Early(ReMutex<RefCell<EarlyConsole>>),
     Late(Arc<ReMutex<RefCell<LateConsole>>>),
 }
 
-impl Console {
+impl ConsoleController {
     const fn empty_early() -> Self {
         // SAFETY: this is only called once on static context so nothing is running
-        Self::Early(ReMutex::new(RefCell::new(unsafe { EarlyConsole::empty() })))
+        Self::Early(ReMutex::new(RefCell::new(EarlyConsole::empty())))
     }
 
     fn init_early(&self) {
@@ -119,7 +123,7 @@ impl Console {
         F: FnMut(&mut dyn core::fmt::Write) -> U,
     {
         let ret = match self {
-            Console::Early(console) => {
+            ConsoleController::Early(console) => {
                 let console = console.lock();
                 let x = if let Ok(mut c) = console.try_borrow_mut() {
                     Some(f(&mut *c))
@@ -130,7 +134,7 @@ impl Console {
             }
             // we have to use another branch because the types are different
             // even though we use same function calls
-            Console::Late(console) => {
+            ConsoleController::Late(console) => {
                 let console = console.lock();
                 let x = if let Ok(mut c) = console.try_borrow_mut() {
                     Some(f(&mut *c))
@@ -146,7 +150,7 @@ impl Console {
         } else {
             // if we can't get the lock, we are inside `panic`
             //  create a new early console and print to it
-            let mut console = unsafe { EarlyConsole::empty() };
+            let mut console = EarlyConsole::empty();
             console.init();
             f(&mut console)
         }
@@ -155,51 +159,49 @@ impl Console {
 
 pub(super) struct EarlyConsole {
     uart: Uart,
-    video_buffer: VgaBuffer,
 }
 
 impl EarlyConsole {
-    /// SAFETY: the console must be used inside a lock or mutex
-    ///  as the Video buffer position is global
-    pub const unsafe fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             uart: Uart::new(UartPort::COM1),
-            video_buffer: VgaBuffer::new(),
         }
     }
 
     pub fn init(&mut self) {
-        self.video_buffer.init();
         self.uart.init();
     }
 
-    /// SAFETY: the caller must assure that this is called from once place at a time
-    ///         and should handle synchronization
-    unsafe fn write_byte(&mut self, byte: u8) {
-        self.video_buffer.write_byte(byte);
-        self.uart.write_byte(byte);
-    }
-
-    /// SAFETY: the caller must assure that this is called from once place at a time
-    ///        and should handle synchronization
-    pub unsafe fn write(&mut self, src: &[u8]) -> usize {
-        for &c in src {
-            self.write_byte(c);
-        }
-        src.len()
+    fn write_byte(&mut self, byte: u8) {
+        // Safety: we are sure that the uart is initialized
+        unsafe { self.uart.write_byte(byte) };
     }
 }
 
 impl Write for EarlyConsole {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        unsafe { self.write(s.as_bytes()) };
+        self.write(s.as_bytes());
         Ok(())
+    }
+}
+
+impl Console for EarlyConsole {
+    fn write(&mut self, src: &[u8]) -> usize {
+        for &c in src {
+            self.write_byte(c);
+        }
+        src.len()
+    }
+
+    fn read(&mut self, _dst: &mut [u8]) -> usize {
+        // we can't read from early console
+        0
     }
 }
 
 pub(super) struct LateConsole {
     uart: Uart,
-    video_buffer: VgaBuffer,
+    video_console: Box<dyn VideoConsole>,
     keyboard: Arc<Mutex<Keyboard>>,
     console_cmd_buffer: Option<String>,
     /// 0..=7 is normal, 8..=15 is bright
@@ -216,7 +218,7 @@ impl LateConsole {
     unsafe fn migrate_from_early(early: &EarlyConsole) -> Self {
         let mut s = Self {
             uart: early.uart.clone(),
-            video_buffer: early.video_buffer.clone(),
+            video_console: Box::new(VgaBuffer::new()),
             keyboard: keyboard::get_keyboard(),
             console_cmd_buffer: None,
             current_foreground: 0xF, // white
@@ -229,14 +231,13 @@ impl LateConsole {
         s
     }
 
-    /// SAFETY: the caller must assure that this is called from once place at a time
-    ///         and should handle synchronization
-    unsafe fn write_byte(&mut self, byte: u8) {
+    fn write_byte(&mut self, byte: u8) {
         let mut write_byte_inner = |byte: u8| {
             // backspace, ignore
             if byte != 8 {
-                self.video_buffer.write_byte(byte);
-                self.uart.write_byte(byte);
+                self.video_console.write_byte(byte);
+                // Safety: we are sure that the uart is initialized
+                unsafe { self.uart.write_byte(byte) };
             }
         };
 
@@ -274,7 +275,7 @@ impl LateConsole {
                     if let Some(inner_cmd) = buf.strip_prefix('[') {
                         inner_cmd.split(';').for_each(|cmd| {
                             if let Ok(cmd) = cmd.parse::<u8>() {
-                                let mut current_attrib = self.video_buffer.get_attrib();
+                                let mut current_attrib = self.video_console.get_attrib();
                                 match cmd {
                                     0 => {
                                         current_attrib = DEFAULT_ATTRIB;
@@ -335,17 +336,20 @@ impl LateConsole {
                                     }
                                     _ => {}
                                 }
-                                self.video_buffer.set_attrib(current_attrib);
+                                self.video_console.set_attrib(current_attrib);
                             }
                         });
 
                         // output all saved into the uart as well
-                        self.uart.write_byte(0x1b);
-                        self.uart.write_byte(b'[');
-                        for &c in inner_cmd.as_bytes() {
-                            self.uart.write_byte(c);
+                        // Safety: we are sure that the uart is initialized
+                        unsafe {
+                            self.uart.write_byte(0x1b);
+                            self.uart.write_byte(b'[');
+                            for &c in inner_cmd.as_bytes() {
+                                self.uart.write_byte(c);
+                            }
+                            self.uart.write_byte(b'm');
                         }
-                        self.uart.write_byte(b'm');
                         self.console_cmd_buffer = None;
                     } else {
                         // not a valid command
@@ -373,23 +377,31 @@ impl LateConsole {
             write_byte_inner(byte);
         }
     }
+}
 
-    /// SAFETY: the caller must assure that this is called from once place at a time
-    ///        and should handle synchronization
-    pub unsafe fn write(&mut self, src: &[u8]) -> usize {
+impl Write for LateConsole {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.write(s.as_bytes());
+        Ok(())
+    }
+}
+
+impl Console for LateConsole {
+    fn write(&mut self, src: &[u8]) -> usize {
         for &c in src {
             self.write_byte(c);
         }
         src.len()
     }
 
-    pub unsafe fn read(&mut self, dst: &mut [u8]) -> usize {
+    fn read(&mut self, dst: &mut [u8]) -> usize {
         let mut i = 0;
         let mut keyboard = self.keyboard.lock();
 
         // for some reason, uart returns \r instead of \n when pressing <enter>
         // so we have to convert it to \n
-        let read_uart = || {
+        // Safety: we are sure that the uart is initialized
+        let read_uart = || unsafe {
             self.uart
                 .try_read_byte()
                 .map(|c| if c == b'\r' { b'\n' } else { c })
@@ -414,13 +426,6 @@ impl LateConsole {
     }
 }
 
-impl Write for LateConsole {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        unsafe { self.write(s.as_bytes()) };
-        Ok(())
-    }
-}
-
 impl fmt::Debug for LateConsole {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LateConsole").finish()
@@ -435,7 +440,7 @@ impl Device for ReMutex<RefCell<LateConsole>> {
     fn read(&self, _offset: u64, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let console = self.lock();
         let x = if let Ok(mut c) = console.try_borrow_mut() {
-            unsafe { c.read(buf) }
+            c.read(buf)
         } else {
             // cannot read from console if its taken
             0
@@ -446,15 +451,15 @@ impl Device for ReMutex<RefCell<LateConsole>> {
     fn write(&self, _offset: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
         let console = self.lock();
         let x = if let Ok(mut c) = console.try_borrow_mut() {
-            unsafe { c.write(buf) }
+            c.write(buf)
         } else {
             // this should not be reached at all, but just in case
             //
             // if we can't get the lock, we are inside `panic`
             //  create a new early console and print to it
-            let mut console = unsafe { EarlyConsole::empty() };
+            let mut console = EarlyConsole::empty();
             console.init();
-            unsafe { console.write(buf) }
+            console.write(buf)
         };
 
         Ok(x as u64)
