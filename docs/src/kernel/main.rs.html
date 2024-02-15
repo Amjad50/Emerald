@@ -295,7 +295,7 @@
     // and interrupts should be disabled until
     </span><span class="kw">unsafe </span>{ cpu::set_interrupts() };
     devices::init_legacy_devices();
-    console::init_late_device();
+    console::init_late_device(multiboot_info.framebuffer());
     devices::prope_pci_devices();
     fs::create_disk_mapping(<span class="number">0</span>).expect(<span class="string">"Could not load filesystem"</span>);
     finish_boot();

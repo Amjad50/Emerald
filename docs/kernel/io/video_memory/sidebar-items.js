@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_ATTRIB","VGA_BUFFER_ADDR","VGA_HEIGHT","VGA_WIDTH"],"fn":["get_index"],"struct":["VgaBuffer"]};

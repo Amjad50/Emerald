@@ -186,13 +186,11 @@
 <a href="#184" id="184">184</a>
 <a href="#185" id="185">185</a>
 <a href="#186" id="186">186</a>
-<a href="#187" id="187">187</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, sync::atomic::AtomicBool};
 
 <span class="kw">pub mod </span>console;
 <span class="kw">pub mod </span>keyboard;
 <span class="kw">mod </span>uart;
-<span class="kw">mod </span>video_memory;
 
 <span class="kw">static </span>PRINT_ERR: AtomicBool = AtomicBool::new(<span class="bool-val">false</span>);
 

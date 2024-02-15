@@ -439,39 +439,29 @@
 <a href="#437" id="437">437</a>
 <a href="#438" id="438">438</a>
 <a href="#439" id="439">439</a>
-<a href="#440" id="440">440</a>
-<a href="#441" id="441">441</a>
-<a href="#442" id="442">442</a>
-<a href="#443" id="443">443</a>
-<a href="#444" id="444">444</a>
-<a href="#445" id="445">445</a>
-<a href="#446" id="446">446</a>
-<a href="#447" id="447">447</a>
-<a href="#448" id="448">448</a>
-<a href="#449" id="449">449</a>
-<a href="#450" id="450">450</a>
-<a href="#451" id="451">451</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::{
-    cell::RefCell,
-    fmt::{<span class="self">self</span>, Write},
-};
+</pre></div><pre class="rust"><code><span class="kw">mod </span>vga_graphics;
+<span class="kw">mod </span>vga_text;
 
-<span class="kw">use </span>alloc::{string::String, sync::Arc};
+<span class="kw">use </span>core::fmt::{<span class="self">self</span>, Write};
+
+<span class="kw">use </span>alloc::{boxed::Box, string::String, sync::Arc};
 
 <span class="kw">use crate</span>::{
     devices::{<span class="self">self</span>, Device},
     fs::FileSystemError,
-    sync::spin::{mutex::Mutex, remutex::ReMutex},
+    multiboot2::{<span class="self">self</span>, FramebufferColorInfo},
+    sync::spin::mutex::Mutex,
 };
+
+<span class="kw">use </span><span class="self">self</span>::{vga_graphics::VgaGraphics, vga_text::VgaText};
 
 <span class="kw">use super</span>::{
     keyboard::{<span class="self">self</span>, Keyboard},
     uart::{Uart, UartPort},
-    video_memory::{VgaBuffer, DEFAULT_ATTRIB},
 };
 
 <span class="comment">// SAFETY: the console is only used inside a lock or mutex
-</span><span class="kw">static </span><span class="kw-2">mut </span>CONSOLE: Console = Console::empty_early();
+</span><span class="kw">static </span><span class="kw-2">mut </span>CONSOLE: ConsoleController = ConsoleController::empty_early();
 
 <span class="doccomment">/// # SAFETY
 /// the caller must assure that this is not called while not being initialized
@@ -495,13 +485,13 @@
 
 <span class="doccomment">/// Create a late console, this is used after the kernel heap is initialized
 /// And also assign a console device
-</span><span class="kw">pub fn </span>init_late_device() {
+</span><span class="kw">pub fn </span>init_late_device(framebuffer: <span class="prelude-ty">Option</span>&lt;multiboot2::Framebuffer&gt;) {
     <span class="comment">// SAFETY: we are running this initialization at `kernel_main` and its done alone
     //  without printing anything at the same time since we are only
     //  running 1 CPU at the  time
     //  We are also sure that no one is printing at this time
     </span><span class="kw">let </span>device = <span class="kw">unsafe </span>{
-        CONSOLE.init_late();
+        CONSOLE.init_late(framebuffer);
         <span class="comment">// Must have a device
         </span>CONSOLE.late_device().unwrap()
     };
@@ -509,22 +499,108 @@
     devices::register_device(device);
 }
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">enum </span>Console {
-    Early(ReMutex&lt;RefCell&lt;EarlyConsole&gt;&gt;),
-    Late(Arc&lt;ReMutex&lt;RefCell&lt;LateConsole&gt;&gt;&gt;),
+<span class="kw">fn </span>create_video_console(framebuffer: <span class="prelude-ty">Option</span>&lt;multiboot2::Framebuffer&gt;) -&gt; Box&lt;<span class="kw">dyn </span>VideoConsole&gt; {
+    <span class="kw">match </span>framebuffer {
+        <span class="prelude-val">Some</span>(framebuffer) =&gt; <span class="kw">match </span>framebuffer.color_info {
+            FramebufferColorInfo::Indexed { .. } =&gt; <span class="macro">todo!</span>(),
+            FramebufferColorInfo::Rgb { .. } =&gt; Box::new(VgaGraphics::new(framebuffer)),
+            FramebufferColorInfo::EgaText =&gt; Box::new(VgaText::new(framebuffer)),
+        },
+        <span class="prelude-val">None </span>=&gt; <span class="macro">panic!</span>(<span class="string">"No framebuffer provided"</span>),
+    }
 }
 
-<span class="kw">impl </span>Console {
+<span class="attr">#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+</span><span class="kw">enum </span>AnsiColor {
+    Black = <span class="number">0</span>,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    Magenta,
+    Cyan,
+    White,
+    BrightBlack,
+    BrightRed,
+    BrightGreen,
+    BrightYellow,
+    BrightBlue,
+    BrightMagenta,
+    BrightCyan,
+    BrightWhite,
+}
+
+<span class="kw">impl </span>AnsiColor {
+    <span class="kw">fn </span>from_u8(color: u8) -&gt; <span class="self">Self </span>{
+        <span class="kw">match </span>color {
+            <span class="number">0 </span>=&gt; <span class="self">Self</span>::Black,
+            <span class="number">1 </span>=&gt; <span class="self">Self</span>::Red,
+            <span class="number">2 </span>=&gt; <span class="self">Self</span>::Green,
+            <span class="number">3 </span>=&gt; <span class="self">Self</span>::Yellow,
+            <span class="number">4 </span>=&gt; <span class="self">Self</span>::Blue,
+            <span class="number">5 </span>=&gt; <span class="self">Self</span>::Magenta,
+            <span class="number">6 </span>=&gt; <span class="self">Self</span>::Cyan,
+            <span class="number">7 </span>=&gt; <span class="self">Self</span>::White,
+            <span class="number">8 </span>=&gt; <span class="self">Self</span>::BrightBlack,
+            <span class="number">9 </span>=&gt; <span class="self">Self</span>::BrightRed,
+            <span class="number">10 </span>=&gt; <span class="self">Self</span>::BrightGreen,
+            <span class="number">11 </span>=&gt; <span class="self">Self</span>::BrightYellow,
+            <span class="number">12 </span>=&gt; <span class="self">Self</span>::BrightBlue,
+            <span class="number">13 </span>=&gt; <span class="self">Self</span>::BrightMagenta,
+            <span class="number">14 </span>=&gt; <span class="self">Self</span>::BrightCyan,
+            <span class="number">15 </span>=&gt; <span class="self">Self</span>::BrightWhite,
+            <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"Invalid color"</span>),
+        }
+    }
+}
+
+<span class="attr">#[derive(Debug, Clone, Copy)]
+</span><span class="kw">struct </span>VideoConsoleAttribute {
+    foreground: AnsiColor,
+    background: AnsiColor,
+    bold: bool,
+    faint: bool,
+}
+
+<span class="kw">impl </span>Default <span class="kw">for </span>VideoConsoleAttribute {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            foreground: AnsiColor::White,
+            background: AnsiColor::Black,
+            bold: <span class="bool-val">false</span>,
+            faint: <span class="bool-val">false</span>,
+        }
+    }
+}
+
+<span class="kw">trait </span>VideoConsole: Send + Sync {
+    <span class="kw">fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: u8);
+    <span class="kw">fn </span>init(<span class="kw-2">&amp;mut </span><span class="self">self</span>);
+    <span class="kw">fn </span>set_attrib(<span class="kw-2">&amp;mut </span><span class="self">self</span>, attrib: VideoConsoleAttribute);
+}
+
+<span class="kw">trait </span>Console: Write {
+    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize;
+    <span class="kw">fn </span>read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize;
+}
+
+<span class="attr">#[allow(clippy::large_enum_variant)]
+</span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">enum </span>ConsoleController {
+    Early(Mutex&lt;EarlyConsole&gt;),
+    Late(Arc&lt;Mutex&lt;LateConsole&gt;&gt;),
+}
+
+<span class="kw">impl </span>ConsoleController {
     <span class="kw">const fn </span>empty_early() -&gt; <span class="self">Self </span>{
         <span class="comment">// SAFETY: this is only called once on static context so nothing is running
-        </span><span class="self">Self</span>::Early(ReMutex::new(RefCell::new(<span class="kw">unsafe </span>{ EarlyConsole::empty() })))
+        </span><span class="self">Self</span>::Early(Mutex::new(EarlyConsole::empty()))
     }
 
     <span class="kw">fn </span>init_early(<span class="kw-2">&amp;</span><span class="self">self</span>) {
         <span class="kw">match </span><span class="self">self </span>{
             <span class="self">Self</span>::Early(console) =&gt; {
-                <span class="kw">let </span>console = console.lock();
-                console.borrow_mut().init();
+                console.lock().init();
             }
             <span class="self">Self</span>::Late(<span class="kw">_</span>) =&gt; {
                 <span class="macro">panic!</span>(<span class="string">"Unexpected late console"</span>);
@@ -534,14 +610,19 @@
 
     <span class="doccomment">/// # SAFETY
     /// Must ensure that there is no console is being printed to/running at the same time
-    </span><span class="kw">unsafe fn </span>init_late(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+    </span><span class="kw">unsafe fn </span>init_late(<span class="kw-2">&amp;mut </span><span class="self">self</span>, framebuffer: <span class="prelude-ty">Option</span>&lt;multiboot2::Framebuffer&gt;) {
         <span class="kw">match </span><span class="self">self </span>{
             <span class="self">Self</span>::Early(console) =&gt; {
+                <span class="kw">let </span>video_console = create_video_console(framebuffer);
+
+                <span class="comment">// take the uart, replace the old one with dummy uart
+                </span><span class="kw">let </span>uart =
+                    core::mem::replace(<span class="kw-2">&amp;mut </span>console.get_mut().uart, Uart::new(UartPort::COM1));
                 <span class="comment">// SAFETY: we are relying on the caller calling this function alone
                 //  since we are taking ownership of the early console, and we are sure that
                 //  its not being used anywhere, this is fine
-                </span><span class="kw">let </span>late_console = LateConsole::migrate_from_early(<span class="kw-2">&amp;</span>console.lock().borrow());
-                <span class="kw-2">*</span><span class="self">self </span>= <span class="self">Self</span>::Late(Arc::new(ReMutex::new(RefCell::new(late_console))));
+                </span><span class="kw">let </span>late_console = LateConsole::new(uart, video_console);
+                <span class="kw-2">*</span><span class="self">self </span>= <span class="self">Self</span>::Late(Arc::new(Mutex::new(late_console)));
             }
             <span class="self">Self</span>::Late(<span class="kw">_</span>) =&gt; {
                 <span class="macro">panic!</span>(<span class="string">"Unexpected late console"</span>);
@@ -549,7 +630,7 @@
         }
     }
 
-    <span class="kw">fn </span>late_device(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Arc&lt;ReMutex&lt;RefCell&lt;LateConsole&gt;&gt;&gt;&gt; {
+    <span class="kw">fn </span>late_device(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Arc&lt;Mutex&lt;LateConsole&gt;&gt;&gt; {
         <span class="kw">match </span><span class="self">self </span>{
             <span class="self">Self</span>::Early(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
             <span class="self">Self</span>::Late(console) =&gt; <span class="prelude-val">Some</span>(console.clone()),
@@ -561,111 +642,74 @@
         </span>F: FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>core::fmt::Write) -&gt; U,
     {
         <span class="kw">let </span>ret = <span class="kw">match </span><span class="self">self </span>{
-            Console::Early(console) =&gt; {
-                <span class="kw">let </span>console = console.lock();
-                <span class="kw">let </span>x = <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>c) = console.try_borrow_mut() {
-                    <span class="prelude-val">Some</span>(f(<span class="kw-2">&amp;mut *</span>c))
-                } <span class="kw">else </span>{
-                    <span class="prelude-val">None
-                </span>};
-                x
-            }
+            ConsoleController::Early(console) =&gt; f(<span class="kw-2">&amp;mut *</span>console.lock()),
             <span class="comment">// we have to use another branch because the types are different
             // even though we use same function calls
-            </span>Console::Late(console) =&gt; {
-                <span class="kw">let </span>console = console.lock();
-                <span class="kw">let </span>x = <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>c) = console.try_borrow_mut() {
-                    <span class="prelude-val">Some</span>(f(<span class="kw-2">&amp;mut *</span>c))
-                } <span class="kw">else </span>{
-                    <span class="prelude-val">None
-                </span>};
-                x
-            }
+            </span>ConsoleController::Late(console) =&gt; f(<span class="kw-2">&amp;mut *</span>console.lock()),
         };
-
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(ret) = ret {
-            ret
-        } <span class="kw">else </span>{
-            <span class="comment">// if we can't get the lock, we are inside `panic`
-            //  create a new early console and print to it
-            </span><span class="kw">let </span><span class="kw-2">mut </span>console = <span class="kw">unsafe </span>{ EarlyConsole::empty() };
-            console.init();
-            f(<span class="kw-2">&amp;mut </span>console)
-        }
+        ret
     }
 }
 
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>EarlyConsole {
     uart: Uart,
-    video_buffer: VgaBuffer,
 }
 
 <span class="kw">impl </span>EarlyConsole {
-    <span class="doccomment">/// SAFETY: the console must be used inside a lock or mutex
-    ///  as the Video buffer position is global
-    </span><span class="kw">pub const unsafe fn </span>empty() -&gt; <span class="self">Self </span>{
+    <span class="kw">pub const fn </span>empty() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             uart: Uart::new(UartPort::COM1),
-            video_buffer: VgaBuffer::new(),
         }
     }
 
     <span class="kw">pub fn </span>init(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="self">self</span>.video_buffer.init();
         <span class="self">self</span>.uart.init();
     }
 
-    <span class="doccomment">/// SAFETY: the caller must assure that this is called from once place at a time
-    ///         and should handle synchronization
-    </span><span class="kw">unsafe fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, byte: u8) {
-        <span class="self">self</span>.video_buffer.write_byte(byte, DEFAULT_ATTRIB);
-        <span class="self">self</span>.uart.write_byte(byte);
-    }
-
-    <span class="doccomment">/// SAFETY: the caller must assure that this is called from once place at a time
-    ///        and should handle synchronization
-    </span><span class="kw">pub unsafe fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize {
-        <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>src {
-            <span class="self">self</span>.write_byte(c);
-        }
-        src.len()
+    <span class="kw">fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, byte: u8) {
+        <span class="comment">// Safety: we are sure that the uart is initialized
+        </span><span class="kw">unsafe </span>{ <span class="self">self</span>.uart.write_byte(byte) };
     }
 }
 
 <span class="kw">impl </span>Write <span class="kw">for </span>EarlyConsole {
     <span class="kw">fn </span>write_str(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: <span class="kw-2">&amp;</span>str) -&gt; core::fmt::Result {
-        <span class="kw">unsafe </span>{ <span class="self">self</span>.write(s.as_bytes()) };
+        <span class="self">self</span>.write(s.as_bytes());
         <span class="prelude-val">Ok</span>(())
     }
 }
 
+<span class="kw">impl </span>Console <span class="kw">for </span>EarlyConsole {
+    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize {
+        <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>src {
+            <span class="self">self</span>.write_byte(c);
+        }
+        src.len()
+    }
+
+    <span class="kw">fn </span>read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
+        <span class="comment">// we can't read from early console
+        </span><span class="number">0
+    </span>}
+}
+
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>LateConsole {
     uart: Uart,
-    video_buffer: VgaBuffer,
+    video_console: Box&lt;<span class="kw">dyn </span>VideoConsole&gt;,
     keyboard: Arc&lt;Mutex&lt;Keyboard&gt;&gt;,
     console_cmd_buffer: <span class="prelude-ty">Option</span>&lt;String&gt;,
-    current_vga_attrib: u8,
-    <span class="doccomment">/// 0..=7 is normal, 8..=15 is bright
-    /// this is saved state, so we can use it to update the `VGA` attribute when `bold` or `faint` is changed
-    </span>current_foreground: u8,
-    <span class="doccomment">/// if the current color is bold, i.e. brighter
-    </span>is_bold: bool,
-    <span class="doccomment">/// if the current color is faint, i.e. darker
-    </span>is_faint: bool,
+    current_attrib: VideoConsoleAttribute,
 }
 
 <span class="kw">impl </span>LateConsole {
     <span class="doccomment">/// SAFETY: must ensure that there is no console running at the same time
-    </span><span class="kw">unsafe fn </span>migrate_from_early(early: <span class="kw-2">&amp;</span>EarlyConsole) -&gt; <span class="self">Self </span>{
+    </span><span class="kw">unsafe fn </span>new(uart: Uart, video_console: Box&lt;<span class="kw">dyn </span>VideoConsole&gt;) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self </span>{
-            uart: early.uart.clone(),
-            video_buffer: early.video_buffer.clone(),
+            uart,
+            video_console,
             keyboard: keyboard::get_keyboard(),
             console_cmd_buffer: <span class="prelude-val">None</span>,
-            current_vga_attrib: DEFAULT_ATTRIB,
-            current_foreground: <span class="number">0xF</span>, <span class="comment">// white
-            </span>is_bold: <span class="bool-val">false</span>,
-            is_faint: <span class="bool-val">false</span>,
+            current_attrib: Default::default(),
         };
 
         <span class="comment">// split inputs
@@ -673,37 +717,14 @@
         s
     }
 
-    <span class="doccomment">/// SAFETY: the caller must assure that this is called from once place at a time
-    ///         and should handle synchronization
-    </span><span class="kw">unsafe fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, byte: u8) {
+    <span class="kw">fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, byte: u8) {
         <span class="kw">let </span><span class="kw-2">mut </span>write_byte_inner = |byte: u8| {
             <span class="comment">// backspace, ignore
             </span><span class="kw">if </span>byte != <span class="number">8 </span>{
-                <span class="self">self</span>.video_buffer.write_byte(byte, <span class="self">self</span>.current_vga_attrib);
-                <span class="self">self</span>.uart.write_byte(byte);
+                <span class="self">self</span>.video_console.write_byte(byte);
+                <span class="comment">// Safety: we are sure that the uart is initialized
+                </span><span class="kw">unsafe </span>{ <span class="self">self</span>.uart.write_byte(byte) };
             }
-        };
-
-        <span class="kw">let </span>terminal_to_vga_color = |color: u8| {
-            <span class="kw">let </span>mappings = <span class="kw-2">&amp;</span>[
-                <span class="number">0</span>,  <span class="comment">// black
-                </span><span class="number">4</span>,  <span class="comment">// red
-                </span><span class="number">2</span>,  <span class="comment">// green
-                </span><span class="number">6</span>,  <span class="comment">// brown
-                </span><span class="number">1</span>,  <span class="comment">// blue
-                </span><span class="number">5</span>,  <span class="comment">// magenta
-                </span><span class="number">3</span>,  <span class="comment">// cyan
-                </span><span class="number">7</span>,  <span class="comment">// light gray
-                </span><span class="number">8</span>,  <span class="comment">// dark gray
-                </span><span class="number">12</span>, <span class="comment">// light red
-                </span><span class="number">10</span>, <span class="comment">// light green
-                </span><span class="number">14</span>, <span class="comment">// yellow
-                </span><span class="number">9</span>,  <span class="comment">// light blue
-                </span><span class="number">13</span>, <span class="comment">// light magenta
-                </span><span class="number">11</span>, <span class="comment">// light cyan
-                </span><span class="number">15</span>, <span class="comment">// white
-            </span>];
-            mappings[color <span class="kw">as </span>usize]
         };
 
         <span class="kw">if let </span><span class="prelude-val">Some</span>(buf) = <span class="kw-2">&amp;mut </span><span class="self">self</span>.console_cmd_buffer {
@@ -720,74 +741,48 @@
                             <span class="kw">if let </span><span class="prelude-val">Ok</span>(cmd) = cmd.parse::&lt;u8&gt;() {
                                 <span class="kw">match </span>cmd {
                                     <span class="number">0 </span>=&gt; {
-                                        <span class="self">self</span>.current_vga_attrib = DEFAULT_ATTRIB;
-                                        <span class="self">self</span>.is_bold = <span class="bool-val">false</span>;
-                                        <span class="self">self</span>.is_faint = <span class="bool-val">false</span>;
+                                        <span class="self">self</span>.current_attrib = Default::default();
                                     }
                                     <span class="number">1 </span>=&gt; {
-                                        <span class="self">self</span>.is_bold = <span class="bool-val">true</span>;
-                                        <span class="self">self</span>.is_faint = <span class="bool-val">false</span>;
-                                        <span class="comment">// recalculate the color
-                                        </span><span class="kw">let </span>color = <span class="kw">if </span><span class="self">self</span>.current_foreground &lt;= <span class="number">7 </span>{
-                                            <span class="self">self</span>.current_foreground + <span class="number">8
-                                        </span>} <span class="kw">else </span>{
-                                            <span class="self">self</span>.current_foreground
-                                        };
-                                        <span class="self">self</span>.current_vga_attrib &amp;= <span class="number">0b1111_0000</span>;
-                                        <span class="self">self</span>.current_vga_attrib |= terminal_to_vga_color(color);
+                                        <span class="self">self</span>.current_attrib.bold = <span class="bool-val">true</span>;
+                                        <span class="self">self</span>.current_attrib.faint = <span class="bool-val">false</span>;
                                     }
                                     <span class="number">2 </span>=&gt; {
-                                        <span class="self">self</span>.is_bold = <span class="bool-val">false</span>;
-                                        <span class="self">self</span>.is_faint = <span class="bool-val">true</span>;
-                                        <span class="comment">// recalculate the color
-                                        </span><span class="kw">let </span>color = <span class="kw">if </span><span class="self">self</span>.current_foreground &gt; <span class="number">7 </span>{
-                                            <span class="self">self</span>.current_foreground - <span class="number">8
-                                        </span>} <span class="kw">else </span>{
-                                            <span class="self">self</span>.current_foreground
-                                        };
-                                        <span class="self">self</span>.current_vga_attrib &amp;= <span class="number">0b1111_0000</span>;
-                                        <span class="self">self</span>.current_vga_attrib |= terminal_to_vga_color(color);
+                                        <span class="self">self</span>.current_attrib.bold = <span class="bool-val">false</span>;
+                                        <span class="self">self</span>.current_attrib.faint = <span class="bool-val">true</span>;
                                     }
                                     <span class="number">30</span>..=<span class="number">37 </span>=&gt; {
-                                        <span class="self">self</span>.current_vga_attrib &amp;= <span class="number">0b1111_0000</span>;
-                                        <span class="kw">let </span><span class="kw-2">mut </span>color = cmd - <span class="number">30</span>;
-                                        <span class="self">self</span>.current_foreground = color;
-                                        <span class="kw">if </span><span class="self">self</span>.is_bold {
-                                            color += <span class="number">8</span>;
-                                        }
-                                        <span class="self">self</span>.current_vga_attrib |= terminal_to_vga_color(color);
+                                        <span class="kw">let </span>color = cmd - <span class="number">30</span>;
+                                        <span class="self">self</span>.current_attrib.foreground = AnsiColor::from_u8(color);
                                     }
                                     <span class="number">90</span>..=<span class="number">97 </span>=&gt; {
-                                        <span class="self">self</span>.current_vga_attrib &amp;= <span class="number">0b1111_0000</span>;
-                                        <span class="kw">let </span><span class="kw-2">mut </span>color = (cmd - <span class="number">90</span>) + <span class="number">8</span>;
-                                        <span class="self">self</span>.current_foreground = color;
-                                        <span class="kw">if </span><span class="self">self</span>.is_faint {
-                                            color -= <span class="number">8</span>;
-                                        }
-                                        <span class="self">self</span>.current_vga_attrib |= terminal_to_vga_color(color);
+                                        <span class="kw">let </span>color = (cmd - <span class="number">90</span>) + <span class="number">8</span>;
+                                        <span class="self">self</span>.current_attrib.foreground = AnsiColor::from_u8(color);
                                     }
                                     <span class="number">40</span>..=<span class="number">47 </span>=&gt; {
-                                        <span class="self">self</span>.current_vga_attrib &amp;= <span class="number">0b1000_1111</span>;
-                                        <span class="self">self</span>.current_vga_attrib |=
-                                            (terminal_to_vga_color(cmd - <span class="number">40</span>) &amp; <span class="number">7</span>) &lt;&lt; <span class="number">4</span>;
+                                        <span class="kw">let </span>color = cmd - <span class="number">40</span>;
+                                        <span class="self">self</span>.current_attrib.background = AnsiColor::from_u8(color);
                                     }
                                     <span class="number">100</span>..=<span class="number">107 </span>=&gt; {
-                                        <span class="self">self</span>.current_vga_attrib &amp;= <span class="number">0b1000_1111</span>;
-                                        <span class="self">self</span>.current_vga_attrib |=
-                                            (terminal_to_vga_color((cmd - <span class="number">100</span>) + <span class="number">8</span>) &amp; <span class="number">7</span>) &lt;&lt; <span class="number">4</span>;
+                                        <span class="kw">let </span>color = (cmd - <span class="number">100</span>) + <span class="number">8</span>;
+                                        <span class="self">self</span>.current_attrib.background = AnsiColor::from_u8(color);
                                     }
                                     <span class="kw">_ </span>=&gt; {}
                                 }
+                                <span class="self">self</span>.video_console.set_attrib(<span class="self">self</span>.current_attrib);
                             }
                         });
 
                         <span class="comment">// output all saved into the uart as well
-                        </span><span class="self">self</span>.uart.write_byte(<span class="number">0x1b</span>);
-                        <span class="self">self</span>.uart.write_byte(<span class="string">b'['</span>);
-                        <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>inner_cmd.as_bytes() {
-                            <span class="self">self</span>.uart.write_byte(c);
+                        // Safety: we are sure that the uart is initialized
+                        </span><span class="kw">unsafe </span>{
+                            <span class="self">self</span>.uart.write_byte(<span class="number">0x1b</span>);
+                            <span class="self">self</span>.uart.write_byte(<span class="string">b'['</span>);
+                            <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>inner_cmd.as_bytes() {
+                                <span class="self">self</span>.uart.write_byte(c);
+                            }
+                            <span class="self">self</span>.uart.write_byte(<span class="string">b'm'</span>);
                         }
-                        <span class="self">self</span>.uart.write_byte(<span class="string">b'm'</span>);
                         <span class="self">self</span>.console_cmd_buffer = <span class="prelude-val">None</span>;
                     } <span class="kw">else </span>{
                         <span class="comment">// not a valid command
@@ -815,23 +810,31 @@
             </span>write_byte_inner(byte);
         }
     }
+}
 
-    <span class="doccomment">/// SAFETY: the caller must assure that this is called from once place at a time
-    ///        and should handle synchronization
-    </span><span class="kw">pub unsafe fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize {
+<span class="kw">impl </span>Write <span class="kw">for </span>LateConsole {
+    <span class="kw">fn </span>write_str(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: <span class="kw-2">&amp;</span>str) -&gt; core::fmt::Result {
+        <span class="self">self</span>.write(s.as_bytes());
+        <span class="prelude-val">Ok</span>(())
+    }
+}
+
+<span class="kw">impl </span>Console <span class="kw">for </span>LateConsole {
+    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize {
         <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>src {
             <span class="self">self</span>.write_byte(c);
         }
         src.len()
     }
 
-    <span class="kw">pub unsafe fn </span>read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
+    <span class="kw">fn </span>read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
         <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>keyboard = <span class="self">self</span>.keyboard.lock();
 
         <span class="comment">// for some reason, uart returns \r instead of \n when pressing &lt;enter&gt;
         // so we have to convert it to \n
-        </span><span class="kw">let </span>read_uart = || {
+        // Safety: we are sure that the uart is initialized
+        </span><span class="kw">let </span>read_uart = || <span class="kw">unsafe </span>{
             <span class="self">self</span>.uart
                 .try_read_byte()
                 .map(|c| <span class="kw">if </span>c == <span class="string">b'\r' </span>{ <span class="string">b'\n' </span>} <span class="kw">else </span>{ c })
@@ -856,50 +859,23 @@
     }
 }
 
-<span class="kw">impl </span>Write <span class="kw">for </span>LateConsole {
-    <span class="kw">fn </span>write_str(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: <span class="kw-2">&amp;</span>str) -&gt; core::fmt::Result {
-        <span class="kw">unsafe </span>{ <span class="self">self</span>.write(s.as_bytes()) };
-        <span class="prelude-val">Ok</span>(())
-    }
-}
-
 <span class="kw">impl </span>fmt::Debug <span class="kw">for </span>LateConsole {
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
         f.debug_struct(<span class="string">"LateConsole"</span>).finish()
     }
 }
 
-<span class="kw">impl </span>Device <span class="kw">for </span>ReMutex&lt;RefCell&lt;LateConsole&gt;&gt; {
+<span class="kw">impl </span>Device <span class="kw">for </span>Mutex&lt;LateConsole&gt; {
     <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
         <span class="string">"console"
     </span>}
 
     <span class="kw">fn </span>read(<span class="kw-2">&amp;</span><span class="self">self</span>, _offset: u64, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;u64, FileSystemError&gt; {
-        <span class="kw">let </span>console = <span class="self">self</span>.lock();
-        <span class="kw">let </span>x = <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>c) = console.try_borrow_mut() {
-            <span class="kw">unsafe </span>{ c.read(buf) }
-        } <span class="kw">else </span>{
-            <span class="comment">// cannot read from console if its taken
-            </span><span class="number">0
-        </span>};
-        <span class="prelude-val">Ok</span>(x <span class="kw">as </span>u64)
+        <span class="prelude-val">Ok</span>(<span class="self">self</span>.lock().read(buf) <span class="kw">as _</span>)
     }
 
     <span class="kw">fn </span>write(<span class="kw-2">&amp;</span><span class="self">self</span>, _offset: u64, buf: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;u64, FileSystemError&gt; {
-        <span class="kw">let </span>console = <span class="self">self</span>.lock();
-        <span class="kw">let </span>x = <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>c) = console.try_borrow_mut() {
-            <span class="kw">unsafe </span>{ c.write(buf) }
-        } <span class="kw">else </span>{
-            <span class="comment">// this should not be reached at all, but just in case
-            //
-            // if we can't get the lock, we are inside `panic`
-            //  create a new early console and print to it
-            </span><span class="kw">let </span><span class="kw-2">mut </span>console = <span class="kw">unsafe </span>{ EarlyConsole::empty() };
-            console.init();
-            <span class="kw">unsafe </span>{ console.write(buf) }
-        };
-
-        <span class="prelude-val">Ok</span>(x <span class="kw">as </span>u64)
+        <span class="prelude-val">Ok</span>(<span class="self">self</span>.lock().write(buf) <span class="kw">as _</span>)
     }
 }
 </code></pre></div></section></main></body></html>
