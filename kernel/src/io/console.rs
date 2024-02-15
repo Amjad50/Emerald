@@ -1,3 +1,4 @@
+mod vga_graphics;
 mod vga_text;
 
 use core::fmt::{self, Write};
@@ -11,7 +12,10 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use self::vga_text::{VgaText, DEFAULT_ATTRIB};
+use self::{
+    vga_graphics::VgaGraphics,
+    vga_text::{VgaText, DEFAULT_ATTRIB},
+};
 
 use super::{
     keyboard::{self, Keyboard},
@@ -61,7 +65,7 @@ fn create_video_console(framebuffer: Option<multiboot2::Framebuffer>) -> Box<dyn
     match framebuffer {
         Some(framebuffer) => match framebuffer.color_info {
             FramebufferColorInfo::Indexed { .. } => todo!(),
-            FramebufferColorInfo::Rgb { .. } => todo!(),
+            FramebufferColorInfo::Rgb { .. } => Box::new(VgaGraphics::new(framebuffer)),
             FramebufferColorInfo::EgaText => Box::new(VgaText::new(framebuffer)),
         },
         None => panic!("No framebuffer provided"),
