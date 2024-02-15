@@ -3,7 +3,6 @@ use core::{fmt, sync::atomic::AtomicBool};
 pub mod console;
 pub mod keyboard;
 mod uart;
-mod video_memory;
 
 static PRINT_ERR: AtomicBool = AtomicBool::new(false);
 

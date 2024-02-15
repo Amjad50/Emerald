@@ -4,6 +4,8 @@
 
 use crate::memory_management::memory_layout::physical2virtual;
 
+use super::VideoConsole;
+
 const VGA_BUFFER_ADDR: *mut u8 = physical2virtual(0xb8000) as *mut u8;
 const VGA_WIDTH: usize = 80;
 const VGA_HEIGHT: usize = 25;
@@ -18,15 +20,15 @@ fn get_index(pos: (usize, usize)) -> isize {
 #[derive(Clone)]
 pub(super) struct VgaBuffer {
     pos: (usize, usize),
+    attrib: u8,
 }
 
 impl VgaBuffer {
     pub const fn new() -> Self {
-        Self { pos: (0, 0) }
-    }
-
-    pub fn init(&mut self) {
-        self.clear();
+        Self {
+            pos: (0, 0),
+            attrib: DEFAULT_ATTRIB,
+        }
     }
 
     fn fix_after_advance(&mut self) {
@@ -52,22 +54,6 @@ impl VgaBuffer {
         }
     }
 
-    pub fn write_byte(&mut self, c: u8, attrib: u8) {
-        if c == b'\n' {
-            self.pos.0 = 0;
-            self.pos.1 += 1;
-            self.fix_after_advance();
-            return;
-        }
-        let i = get_index(self.pos);
-        unsafe {
-            *VGA_BUFFER_ADDR.offset(i * 2) = c;
-            *VGA_BUFFER_ADDR.offset(i * 2 + 1) = attrib;
-        }
-        self.pos.0 += 1;
-        self.fix_after_advance();
-    }
-
     fn clear(&mut self) {
         for i in 0..VGA_HEIGHT {
             self.clear_line(i);
@@ -83,5 +69,35 @@ impl VgaBuffer {
                 *VGA_BUFFER_ADDR.offset(pos * 2 + 1) = 0x0;
             }
         }
+    }
+}
+
+impl VideoConsole for VgaBuffer {
+    fn init(&mut self) {
+        self.clear();
+    }
+
+    fn write_byte(&mut self, c: u8) {
+        if c == b'\n' {
+            self.pos.0 = 0;
+            self.pos.1 += 1;
+            self.fix_after_advance();
+            return;
+        }
+        let i = get_index(self.pos);
+        unsafe {
+            *VGA_BUFFER_ADDR.offset(i * 2) = c;
+            *VGA_BUFFER_ADDR.offset(i * 2 + 1) = self.attrib;
+        }
+        self.pos.0 += 1;
+        self.fix_after_advance();
+    }
+
+    fn set_attrib(&mut self, attrib: u8) {
+        self.attrib = attrib;
+    }
+
+    fn get_attrib(&self) -> u8 {
+        self.attrib
     }
 }

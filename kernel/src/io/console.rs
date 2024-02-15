@@ -1,3 +1,5 @@
+mod vga_text;
+
 use core::{
     cell::RefCell,
     fmt::{self, Write},
@@ -8,13 +10,15 @@ use alloc::{string::String, sync::Arc};
 use crate::{
     devices::{self, Device},
     fs::FileSystemError,
+    multiboot2,
     sync::spin::{mutex::Mutex, remutex::ReMutex},
 };
+
+use self::vga_text::{VgaBuffer, DEFAULT_ATTRIB};
 
 use super::{
     keyboard::{self, Keyboard},
     uart::{Uart, UartPort},
-    video_memory::{VgaBuffer, DEFAULT_ATTRIB},
 };
 
 // SAFETY: the console is only used inside a lock or mutex
@@ -54,6 +58,13 @@ pub fn init_late_device() {
     };
 
     devices::register_device(device);
+}
+
+trait VideoConsole {
+    fn write_byte(&mut self, c: u8);
+    fn init(&mut self);
+    fn set_attrib(&mut self, attrib: u8);
+    fn get_attrib(&self) -> u8;
 }
 
 pub(super) enum Console {
@@ -165,7 +176,7 @@ impl EarlyConsole {
     /// SAFETY: the caller must assure that this is called from once place at a time
     ///         and should handle synchronization
     unsafe fn write_byte(&mut self, byte: u8) {
-        self.video_buffer.write_byte(byte, DEFAULT_ATTRIB);
+        self.video_buffer.write_byte(byte);
         self.uart.write_byte(byte);
     }
 
@@ -191,7 +202,6 @@ pub(super) struct LateConsole {
     video_buffer: VgaBuffer,
     keyboard: Arc<Mutex<Keyboard>>,
     console_cmd_buffer: Option<String>,
-    current_vga_attrib: u8,
     /// 0..=7 is normal, 8..=15 is bright
     /// this is saved state, so we can use it to update the `VGA` attribute when `bold` or `faint` is changed
     current_foreground: u8,
@@ -209,7 +219,6 @@ impl LateConsole {
             video_buffer: early.video_buffer.clone(),
             keyboard: keyboard::get_keyboard(),
             console_cmd_buffer: None,
-            current_vga_attrib: DEFAULT_ATTRIB,
             current_foreground: 0xF, // white
             is_bold: false,
             is_faint: false,
@@ -226,7 +235,7 @@ impl LateConsole {
         let mut write_byte_inner = |byte: u8| {
             // backspace, ignore
             if byte != 8 {
-                self.video_buffer.write_byte(byte, self.current_vga_attrib);
+                self.video_buffer.write_byte(byte);
                 self.uart.write_byte(byte);
             }
         };
@@ -265,9 +274,10 @@ impl LateConsole {
                     if let Some(inner_cmd) = buf.strip_prefix('[') {
                         inner_cmd.split(';').for_each(|cmd| {
                             if let Ok(cmd) = cmd.parse::<u8>() {
+                                let mut current_attrib = self.video_buffer.get_attrib();
                                 match cmd {
                                     0 => {
-                                        self.current_vga_attrib = DEFAULT_ATTRIB;
+                                        current_attrib = DEFAULT_ATTRIB;
                                         self.is_bold = false;
                                         self.is_faint = false;
                                     }
@@ -280,8 +290,8 @@ impl LateConsole {
                                         } else {
                                             self.current_foreground
                                         };
-                                        self.current_vga_attrib &= 0b1111_0000;
-                                        self.current_vga_attrib |= terminal_to_vga_color(color);
+                                        current_attrib &= 0b1111_0000;
+                                        current_attrib |= terminal_to_vga_color(color);
                                     }
                                     2 => {
                                         self.is_bold = false;
@@ -292,39 +302,40 @@ impl LateConsole {
                                         } else {
                                             self.current_foreground
                                         };
-                                        self.current_vga_attrib &= 0b1111_0000;
-                                        self.current_vga_attrib |= terminal_to_vga_color(color);
+                                        current_attrib &= 0b1111_0000;
+                                        current_attrib |= terminal_to_vga_color(color);
                                     }
                                     30..=37 => {
-                                        self.current_vga_attrib &= 0b1111_0000;
+                                        current_attrib &= 0b1111_0000;
                                         let mut color = cmd - 30;
                                         self.current_foreground = color;
                                         if self.is_bold {
                                             color += 8;
                                         }
-                                        self.current_vga_attrib |= terminal_to_vga_color(color);
+                                        current_attrib |= terminal_to_vga_color(color);
                                     }
                                     90..=97 => {
-                                        self.current_vga_attrib &= 0b1111_0000;
+                                        current_attrib &= 0b1111_0000;
                                         let mut color = (cmd - 90) + 8;
                                         self.current_foreground = color;
                                         if self.is_faint {
                                             color -= 8;
                                         }
-                                        self.current_vga_attrib |= terminal_to_vga_color(color);
+                                        current_attrib |= terminal_to_vga_color(color);
                                     }
                                     40..=47 => {
-                                        self.current_vga_attrib &= 0b1000_1111;
-                                        self.current_vga_attrib |=
+                                        current_attrib &= 0b1000_1111;
+                                        current_attrib |=
                                             (terminal_to_vga_color(cmd - 40) & 7) << 4;
                                     }
                                     100..=107 => {
-                                        self.current_vga_attrib &= 0b1000_1111;
-                                        self.current_vga_attrib |=
+                                        current_attrib &= 0b1000_1111;
+                                        current_attrib |=
                                             (terminal_to_vga_color((cmd - 100) + 8) & 7) << 4;
                                     }
                                     _ => {}
                                 }
+                                self.video_buffer.set_attrib(current_attrib);
                             }
                         });
 
