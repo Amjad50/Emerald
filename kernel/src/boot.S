@@ -30,6 +30,10 @@
 
 MULTIBOOT2_CHECK_MAGIC = 0x36d76289
 
+FRAMEBUFFER_WIDTH = 1280
+FRAMEBUFFER_HEIGHT = 720
+FRAMEBUFFER_BPP = 32
+
 PHY_PAGE_SIZE_4K = 0x1000
 PHY_PAGE_SIZE_2M = 0x200000
 PAGE_TABLE_ALLOC_PAGES = 4  # only need 4
@@ -121,6 +125,15 @@ mb2_header_start:
         .short 0 # flags
         .long mb2_module_align_tag_end - mb2_module_align_tag_start # size
     mb2_module_align_tag_end:
+    .align 8
+    mb2_framebuffer_tag_start:
+        .short 5 # type (framebuffer)
+        .short 0 # flags
+        .long mb2_framebuffer_tag_end - mb2_framebuffer_tag_start # size
+        .long FRAMEBUFFER_WIDTH
+        .long FRAMEBUFFER_HEIGHT
+        .long FRAMEBUFFER_BPP
+    mb2_framebuffer_tag_end:
     .align 8
     mb2_end_tag_start:
         .short 0 # type (end)
