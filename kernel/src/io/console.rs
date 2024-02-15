@@ -1,16 +1,13 @@
 mod vga_text;
 
-use core::{
-    cell::RefCell,
-    fmt::{self, Write},
-};
+use core::fmt::{self, Write};
 
 use alloc::{boxed::Box, string::String, sync::Arc};
 
 use crate::{
     devices::{self, Device},
     fs::FileSystemError,
-    sync::spin::{mutex::Mutex, remutex::ReMutex},
+    sync::spin::mutex::Mutex,
 };
 
 use self::vga_text::{VgaBuffer, DEFAULT_ATTRIB};
@@ -71,22 +68,22 @@ trait Console: Write {
     fn read(&mut self, dst: &mut [u8]) -> usize;
 }
 
+#[allow(clippy::large_enum_variant)]
 pub(super) enum ConsoleController {
-    Early(ReMutex<RefCell<EarlyConsole>>),
-    Late(Arc<ReMutex<RefCell<LateConsole>>>),
+    Early(Mutex<EarlyConsole>),
+    Late(Arc<Mutex<LateConsole>>),
 }
 
 impl ConsoleController {
     const fn empty_early() -> Self {
         // SAFETY: this is only called once on static context so nothing is running
-        Self::Early(ReMutex::new(RefCell::new(EarlyConsole::empty())))
+        Self::Early(Mutex::new(EarlyConsole::empty()))
     }
 
     fn init_early(&self) {
         match self {
             Self::Early(console) => {
-                let console = console.lock();
-                console.borrow_mut().init();
+                console.lock().init();
             }
             Self::Late(_) => {
                 panic!("Unexpected late console");
@@ -102,8 +99,8 @@ impl ConsoleController {
                 // SAFETY: we are relying on the caller calling this function alone
                 //  since we are taking ownership of the early console, and we are sure that
                 //  its not being used anywhere, this is fine
-                let late_console = LateConsole::migrate_from_early(&console.lock().borrow());
-                *self = Self::Late(Arc::new(ReMutex::new(RefCell::new(late_console))));
+                let late_console = LateConsole::migrate_from_early(&console.lock());
+                *self = Self::Late(Arc::new(Mutex::new(late_console)));
             }
             Self::Late(_) => {
                 panic!("Unexpected late console");
@@ -111,7 +108,7 @@ impl ConsoleController {
         }
     }
 
-    fn late_device(&self) -> Option<Arc<ReMutex<RefCell<LateConsole>>>> {
+    fn late_device(&self) -> Option<Arc<Mutex<LateConsole>>> {
         match self {
             Self::Early(_) => None,
             Self::Late(console) => Some(console.clone()),
@@ -123,37 +120,12 @@ impl ConsoleController {
         F: FnMut(&mut dyn core::fmt::Write) -> U,
     {
         let ret = match self {
-            ConsoleController::Early(console) => {
-                let console = console.lock();
-                let x = if let Ok(mut c) = console.try_borrow_mut() {
-                    Some(f(&mut *c))
-                } else {
-                    None
-                };
-                x
-            }
+            ConsoleController::Early(console) => f(&mut *console.lock()),
             // we have to use another branch because the types are different
             // even though we use same function calls
-            ConsoleController::Late(console) => {
-                let console = console.lock();
-                let x = if let Ok(mut c) = console.try_borrow_mut() {
-                    Some(f(&mut *c))
-                } else {
-                    None
-                };
-                x
-            }
+            ConsoleController::Late(console) => f(&mut *console.lock()),
         };
-
-        if let Some(ret) = ret {
-            ret
-        } else {
-            // if we can't get the lock, we are inside `panic`
-            //  create a new early console and print to it
-            let mut console = EarlyConsole::empty();
-            console.init();
-            f(&mut console)
-        }
+        ret
     }
 }
 
@@ -432,36 +404,16 @@ impl fmt::Debug for LateConsole {
     }
 }
 
-impl Device for ReMutex<RefCell<LateConsole>> {
+impl Device for Mutex<LateConsole> {
     fn name(&self) -> &str {
         "console"
     }
 
     fn read(&self, _offset: u64, buf: &mut [u8]) -> Result<u64, FileSystemError> {
-        let console = self.lock();
-        let x = if let Ok(mut c) = console.try_borrow_mut() {
-            c.read(buf)
-        } else {
-            // cannot read from console if its taken
-            0
-        };
-        Ok(x as u64)
+        Ok(self.lock().read(buf) as _)
     }
 
     fn write(&self, _offset: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
-        let console = self.lock();
-        let x = if let Ok(mut c) = console.try_borrow_mut() {
-            c.write(buf)
-        } else {
-            // this should not be reached at all, but just in case
-            //
-            // if we can't get the lock, we are inside `panic`
-            //  create a new early console and print to it
-            let mut console = EarlyConsole::empty();
-            console.init();
-            console.write(buf)
-        };
-
-        Ok(x as u64)
+        Ok(self.lock().write(buf) as _)
     }
 }
