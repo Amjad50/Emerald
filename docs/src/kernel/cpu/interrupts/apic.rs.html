@@ -580,24 +580,6 @@
 <a href="#578" id="578">578</a>
 <a href="#579" id="579">579</a>
 <a href="#580" id="580">580</a>
-<a href="#581" id="581">581</a>
-<a href="#582" id="582">582</a>
-<a href="#583" id="583">583</a>
-<a href="#584" id="584">584</a>
-<a href="#585" id="585">585</a>
-<a href="#586" id="586">586</a>
-<a href="#587" id="587">587</a>
-<a href="#588" id="588">588</a>
-<a href="#589" id="589">589</a>
-<a href="#590" id="590">590</a>
-<a href="#591" id="591">591</a>
-<a href="#592" id="592">592</a>
-<a href="#593" id="593">593</a>
-<a href="#594" id="594">594</a>
-<a href="#595" id="595">595</a>
-<a href="#596" id="596">596</a>
-<a href="#597" id="597">597</a>
-<a href="#598" id="598">598</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::borrow::{Borrow, BorrowMut};
 
 <span class="kw">use </span>alloc::vec::Vec;
@@ -606,7 +588,7 @@
     acpi::tables::{<span class="self">self</span>, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
     cpu::{<span class="self">self</span>, idt::InterruptStackFrame64, Cpu, CPUS, MAX_CPUS},
     memory_management::virtual_space::VirtualSpace,
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 <span class="kw">use super</span>::{
@@ -617,11 +599,15 @@
 <span class="kw">const </span>APIC_BAR_ENABLED: u64 = <span class="number">1 </span>&lt;&lt; <span class="number">11</span>;
 <span class="kw">const </span>APIC_BASE_MASK: u64 = <span class="number">0xFFFF_FFFF_FFFF_F000</span>;
 
-<span class="kw">static </span>APIC: Mutex&lt;Apic&gt; = Mutex::new(Apic::empty());
+<span class="kw">static </span>APIC: OnceLock&lt;Mutex&lt;Apic&gt;&gt; = OnceLock::new();
 
 <span class="kw">pub fn </span>init(bios_tables: <span class="kw-2">&amp;</span>BiosTables) {
+    <span class="kw">if </span>APIC.try_get().is_some() {
+        <span class="macro">panic!</span>(<span class="string">"APIC already initialized"</span>);
+    }
+
     disable_pic();
-    APIC.lock().init(bios_tables);
+    APIC.get_or_init(|| Mutex::new(Apic::new(bios_tables)));
 }
 
 <span class="kw">fn </span>disable_pic() {
@@ -632,11 +618,11 @@
 }
 
 <span class="kw">pub fn </span>return_from_interrupt() {
-    APIC.lock().return_from_interrupt();
+    APIC.get().lock().return_from_interrupt();
 }
 
 <span class="kw">pub fn </span>assign_io_irq&lt;H: InterruptHandler&gt;(handler: H, interrupt_num: u8, cpu: <span class="kw-2">&amp;</span>Cpu) {
-    APIC.lock().assign_io_irq(handler, interrupt_num, cpu)
+    APIC.get().lock().assign_io_irq(handler, interrupt_num, cpu)
 }
 
 <span class="kw">pub fn </span>assign_io_irq_custom&lt;H: InterruptHandler, F&gt;(
@@ -647,7 +633,8 @@
 ) <span class="kw">where
     </span>F: FnOnce(IoApicRedirectionBuilder) -&gt; IoApicRedirectionBuilder,
 {
-    APIC.lock()
+    APIC.get()
+        .lock()
         .assign_io_irq_custom(handler, interrupt_num, cpu, modify_entry)
 }
 
@@ -927,25 +914,14 @@
 }
 
 <span class="kw">struct </span>Apic {
-    mmio: <span class="prelude-ty">Option</span>&lt;VirtualSpace&lt;ApicMmio&gt;&gt;,
+    mmio: VirtualSpace&lt;ApicMmio&gt;,
     n_cpus: usize,
     io_apics: Vec&lt;IoApic&gt;,
     source_overrides: Vec&lt;InterruptSourceOverride&gt;,
 }
 
 <span class="kw">impl </span>Apic {
-    <span class="kw">const fn </span>empty() -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{
-            <span class="comment">// we should call `init` first, it will cause an exception
-            // if referenced and we should catch that.
-            </span>mmio: <span class="prelude-val">None</span>,
-            n_cpus: <span class="number">0</span>,
-            io_apics: Vec::new(),
-            source_overrides: Vec::new(),
-        }
-    }
-
-    <span class="kw">fn </span>init(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bios_tables: <span class="kw-2">&amp;</span>BiosTables) {
+    <span class="kw">fn </span>new(bios_tables: <span class="kw-2">&amp;</span>BiosTables) -&gt; <span class="self">Self </span>{
         <span class="comment">// do we have APIC in this cpu?
         </span><span class="kw">let </span>cpuid = <span class="kw">unsafe </span>{ <span class="macro">cpu::cpuid::cpuid!</span>(cpu::cpuid::FN_FEAT) };
         <span class="kw">if </span>cpuid.edx &amp; cpu::cpuid::FEAT_EDX_APIC == <span class="number">0 </span>{
@@ -979,6 +955,10 @@
             apic_address = madt_table.local_apic_address <span class="kw">as </span>u64;
         }
 
+        <span class="kw">let </span><span class="kw-2">mut </span>n_cpus = <span class="number">0</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>io_apics = Vec::new();
+        <span class="kw">let </span><span class="kw-2">mut </span>source_overrides = Vec::new();
+
         <span class="kw">for </span>strct <span class="kw">in </span><span class="kw-2">&amp;</span>madt_table.interrupt_controller_structs {
             <span class="kw">match </span>strct {
                 InterruptControllerStruct::ProcessorLocalApic(s) =&gt; {
@@ -986,7 +966,7 @@
                         <span class="comment">// this is a disabled processor
                         </span><span class="kw">continue</span>;
                     }
-                    <span class="kw">if </span><span class="self">self</span>.n_cpus &gt;= MAX_CPUS {
+                    <span class="kw">if </span>n_cpus &gt;= MAX_CPUS {
                         <span class="macro">println!</span>(
                             <span class="string">"WARNING: too many CPUs, have {MAX_CPUS} already, ignoring the rest"
                         </span>);
@@ -994,16 +974,16 @@
                         <span class="comment">// initialize the CPUs
                         // SAFETY: this is safe
                         </span><span class="kw">unsafe </span>{
-                            CPUS[<span class="self">self</span>.n_cpus].init(<span class="self">self</span>.n_cpus, s.apic_id);
+                            CPUS[n_cpus].init(n_cpus, s.apic_id);
                         }
-                        <span class="self">self</span>.n_cpus += <span class="number">1</span>;
+                        n_cpus += <span class="number">1</span>;
                     }
                 }
                 InterruptControllerStruct::IoApic(s) =&gt; {
-                    <span class="self">self</span>.io_apics.push(s.clone().into());
+                    io_apics.push(s.clone().into());
                 }
                 InterruptControllerStruct::InterruptSourceOverride(s) =&gt; {
-                    <span class="self">self</span>.source_overrides.push(s.clone());
+                    source_overrides.push(s.clone());
                 }
                 InterruptControllerStruct::NonMaskableInterrupt(<span class="kw">_</span>) =&gt; <span class="macro">todo!</span>(),
                 InterruptControllerStruct::LocalApicNmi(_s) =&gt; {
@@ -1025,41 +1005,49 @@
         }
 
         <span class="macro">assert!</span>(
-            <span class="self">self</span>.n_cpus &gt; <span class="number">0</span>,
+            n_cpus &gt; <span class="number">0</span>,
             <span class="string">"no CPUs found in the MADT table, cannot continue"
         </span>);
         <span class="macro">assert!</span>(
-            !<span class="self">self</span>.io_apics.is_empty(),
+            !io_apics.is_empty(),
             <span class="string">"no IO APICs found in the MADT table, cannot continue"
         </span>);
         <span class="macro">assert!</span>(apic_address != <span class="number">0</span>, <span class="string">"APIC address is 0, cannot continue"</span>);
         <span class="macro">assert!</span>(apic_address &amp; <span class="number">0xF </span>== <span class="number">0</span>, <span class="string">"APIC address is not aligned"</span>);
-        <span class="comment">// Safety: we are sure that the address is valid
-        </span><span class="self">self</span>.mmio = <span class="prelude-val">Some</span>(<span class="kw">unsafe </span>{ VirtualSpace::new(apic_address).unwrap() });
 
         <span class="comment">// reset all interrupts
-        </span><span class="self">self</span>.io_apics.iter_mut().for_each(|io_apic| {
+        </span>io_apics.iter_mut().for_each(|io_apic: <span class="kw-2">&amp;mut </span>IoApic| {
             io_apic.reset_all_interrupts();
         });
 
-        <span class="self">self</span>.initialize_spurious_interrupt();
-        <span class="self">self</span>.disable_local_interrupts();
-        <span class="self">self</span>.initialize_timer();
-        <span class="self">self</span>.setup_error_interrupt();
+        <span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self </span>{
+            <span class="comment">// Safety: we are sure that the address is valid
+            </span>mmio: <span class="kw">unsafe </span>{
+                VirtualSpace::new(apic_address).expect(<span class="string">"Could not map APIC virtual space"</span>)
+            },
+            n_cpus,
+            io_apics,
+            source_overrides,
+        };
+
+        s.initialize_spurious_interrupt();
+        s.disable_local_interrupts();
+        s.initialize_timer();
+        s.setup_error_interrupt();
         <span class="comment">// ack any pending interrupts
-        </span><span class="self">self</span>.return_from_interrupt();
+        </span>s.return_from_interrupt();
+
+        s
     }
 
     <span class="kw">fn </span>return_from_interrupt(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="self">self</span>.mmio.as_mut().unwrap().end_of_interrupt.write(<span class="number">0</span>);
+        <span class="self">self</span>.mmio.end_of_interrupt.write(<span class="number">0</span>);
     }
 
     <span class="kw">fn </span>initialize_spurious_interrupt(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">let </span>interrupt_num = allocate_basic_user_interrupt(spurious_handler);
         <span class="comment">// 1 &lt;&lt; 8, to enable spurious interrupts
         </span><span class="self">self</span>.mmio
-            .as_mut()
-            .unwrap()
             .spurious_interrupt_vector
             .write(SPURIOUS_ENABLE | interrupt_num <span class="kw">as </span>u32);
     }
@@ -1067,63 +1055,39 @@
     <span class="doccomment">/// disable the Local interrupts 0 and 1
     </span><span class="kw">fn </span>disable_local_interrupts(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">let </span>vector_table = LocalVectorRegisterBuilder::default().with_mask(<span class="bool-val">true</span>);
-        <span class="self">self</span>.mmio
-            .as_mut()
-            .unwrap()
-            .lint0_local_vector_table
-            .write(vector_table);
-        <span class="self">self</span>.mmio
-            .as_mut()
-            .unwrap()
-            .lint1_local_vector_table
-            .write(vector_table);
+        <span class="self">self</span>.mmio.lint0_local_vector_table.write(vector_table);
+        <span class="self">self</span>.mmio.lint1_local_vector_table.write(vector_table);
     }
 
     <span class="kw">fn </span>initialize_timer(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">let </span>interrupt_num = allocate_user_interrupt_all_saved(<span class="kw">super</span>::handlers::apic_timer_handler);
 
         <span class="comment">// divide by 1
-        </span><span class="self">self</span>.mmio
-            .as_mut()
-            .unwrap()
-            .timer_divide_configuration
-            .write(<span class="number">0b1011</span>);
+        </span><span class="self">self</span>.mmio.timer_divide_configuration.write(<span class="number">0b1011</span>);
         <span class="comment">// just random value, this is based on the CPU clock speed
         // so its not accurate timing.
-        </span><span class="self">self</span>.mmio
-            .as_mut()
-            .unwrap()
-            .timer_initial_count
-            .write(<span class="number">0x1000000</span>);
+        </span><span class="self">self</span>.mmio.timer_initial_count.write(<span class="number">0x1000000</span>);
         <span class="comment">// periodic mode, not masked, and with the allocated vector number
         </span><span class="kw">let </span>vector_table = LocalVectorRegisterBuilder::default()
             .with_periodic_timer(<span class="bool-val">true</span>)
             .with_mask(<span class="bool-val">false</span>)
             .with_vector(interrupt_num);
-        <span class="self">self</span>.mmio
-            .as_mut()
-            .unwrap()
-            .timer_local_vector_table
-            .write(vector_table);
+        <span class="self">self</span>.mmio.timer_local_vector_table.write(vector_table);
     }
 
     <span class="kw">fn </span>setup_error_interrupt(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="comment">// clear the error status and write 0 to it
         // 1- clear the error status
-        </span><span class="self">self</span>.mmio.as_mut().unwrap().error_status.write(<span class="number">0</span>);
+        </span><span class="self">self</span>.mmio.error_status.write(<span class="number">0</span>);
         <span class="comment">// 2- write 0 to it (yes, we have to do this twice)
-        </span><span class="self">self</span>.mmio.as_mut().unwrap().error_status.write(<span class="number">0</span>);
+        </span><span class="self">self</span>.mmio.error_status.write(<span class="number">0</span>);
 
         <span class="kw">let </span>interrupt_num = allocate_basic_user_interrupt(error_interrupt_handler);
         <span class="comment">// not masked, and with the allocated vector number
         </span><span class="kw">let </span>vector_table = LocalVectorRegisterBuilder::default()
             .with_mask(<span class="bool-val">false</span>)
             .with_vector(interrupt_num);
-        <span class="self">self</span>.mmio
-            .as_mut()
-            .unwrap()
-            .error_local_vector_table
-            .write(vector_table);
+        <span class="self">self</span>.mmio.error_local_vector_table.write(vector_table);
     }
 
     <span class="kw">fn </span>assign_io_irq&lt;H: InterruptHandler&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, handler: H, irq_num: u8, cpu: <span class="kw-2">&amp;</span>Cpu) {
@@ -1190,10 +1154,10 @@
 }
 
 <span class="kw">extern </span><span class="string">"x86-interrupt" </span><span class="kw">fn </span>error_interrupt_handler(_frame: InterruptStackFrame64) {
-    <span class="kw">let </span>error_status = APIC.lock().mmio.as_mut().unwrap().error_status.read();
+    <span class="kw">let </span>error_status = APIC.get().lock().mmio.error_status.read();
     <span class="macro">println!</span>(<span class="string">"APIC error: {:#X}"</span>, error_status);
     <span class="comment">// clear the error
-    </span>APIC.lock().mmio.as_mut().unwrap().error_status.write(<span class="number">0</span>);
+    </span>APIC.get().lock().mmio.error_status.write(<span class="number">0</span>);
     return_from_interrupt();
 }
 </code></pre></div></section></main></body></html>

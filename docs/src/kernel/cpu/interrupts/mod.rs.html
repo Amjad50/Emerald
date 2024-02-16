@@ -125,17 +125,28 @@
 <a href="#123" id="123">123</a>
 <a href="#124" id="124">124</a>
 <a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
+<a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>apic;
 <span class="kw">mod </span>handlers;
 
-<span class="kw">use </span><span class="kw">crate</span>::sync::spin::mutex::Mutex;
+<span class="kw">use </span><span class="kw">crate</span>::sync::{once::OnceLock, spin::mutex::Mutex};
 
 <span class="kw">use super</span>::{
     gdt::USER_RING,
     idt::{BasicInterruptHandler, InterruptDescriptorTable, InterruptHandlerWithAllState},
 };
 
-<span class="kw">static </span>INTERRUPTS: Mutex&lt;Interrupts&gt; = Mutex::new(Interrupts::empty());
+<span class="kw">static </span>INTERRUPTS: OnceLock&lt;Mutex&lt;Interrupts&gt;&gt; = OnceLock::new();
 
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">mod </span>stack_index {
     <span class="kw">pub const </span>FAULTS_STACK: u8 = <span class="number">0</span>;
@@ -154,13 +165,6 @@
 }
 
 <span class="kw">impl </span>Interrupts {
-    <span class="kw">const fn </span>empty() -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{
-            idt: InterruptDescriptorTable::empty(),
-            last_used_user_interrupt: <span class="number">0</span>,
-        }
-    }
-
     <span class="comment">// only apply init for static context
     </span><span class="kw">fn </span>init(<span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span><span class="self">self</span>) {
         <span class="self">self</span>.idt.init_default_handlers();
@@ -199,9 +203,21 @@
 }
 
 <span class="kw">pub fn </span>init_interrupts() {
-    INTERRUPTS.run_with_mut(|idt| {
-        idt.init();
-    });
+    <span class="kw">if </span>INTERRUPTS.try_get().is_some() {
+        <span class="macro">panic!</span>(<span class="string">"Interrupts already initialized"</span>);
+    }
+
+    INTERRUPTS
+        .get_or_init(|| {
+            <span class="kw">let </span>interrupts = Interrupts {
+                idt: InterruptDescriptorTable::empty(),
+                last_used_user_interrupt: <span class="number">0</span>,
+            };
+            Mutex::new(interrupts)
+        })
+        .run_with_mut(|interrupts| {
+            interrupts.init();
+        });
 }
 
 <span class="comment">// All Types of interrupt handlers
@@ -211,13 +227,19 @@
 
 <span class="kw">impl </span>InterruptHandler <span class="kw">for </span>BasicInterruptHandler {
     <span class="kw">fn </span>allocate_and_set_handler(handler: <span class="self">Self</span>) -&gt; u8 {
-        INTERRUPTS.lock().allocate_basic_user_interrupt(handler)
+        INTERRUPTS
+            .get()
+            .lock()
+            .allocate_basic_user_interrupt(handler)
     }
 }
 
 <span class="kw">impl </span>InterruptHandler <span class="kw">for </span>InterruptHandlerWithAllState {
     <span class="kw">fn </span>allocate_and_set_handler(handler: <span class="self">Self</span>) -&gt; u8 {
-        INTERRUPTS.lock().allocate_user_interrupt_all_saved(handler)
+        INTERRUPTS
+            .get()
+            .lock()
+            .allocate_user_interrupt_all_saved(handler)
     }
 }
 
@@ -237,14 +259,14 @@
 }
 
 <span class="kw">pub fn </span>create_scheduler_interrupt(handler: InterruptHandlerWithAllState) {
-    <span class="kw">let </span><span class="kw-2">mut </span>interrupts = INTERRUPTS.lock();
+    <span class="kw">let </span><span class="kw-2">mut </span>interrupts = INTERRUPTS.get().lock();
     interrupts.idt.user_defined[SPECIAL_SCHEDULER_INTERRUPT <span class="kw">as </span>usize]
         .set_handler_with_number(handler, SPECIAL_SCHEDULER_INTERRUPT + USER_INTERRUPTS_START)
         .set_disable_interrupts(<span class="bool-val">true</span>);
 }
 
 <span class="kw">pub fn </span>create_syscall_interrupt(handler: InterruptHandlerWithAllState) {
-    <span class="kw">let </span><span class="kw-2">mut </span>interrupts = INTERRUPTS.lock();
+    <span class="kw">let </span><span class="kw-2">mut </span>interrupts = INTERRUPTS.get().lock();
     interrupts.idt.user_defined[SPECIAL_SYSCALL_INTERRUPT <span class="kw">as </span>usize]
         .set_handler_with_number(handler, SPECIAL_SYSCALL_INTERRUPT + USER_INTERRUPTS_START)
         .set_privilege_level(USER_RING)

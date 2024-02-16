@@ -211,26 +211,36 @@
 <a href="#209" id="209">209</a>
 <a href="#210" id="210">210</a>
 <a href="#211" id="211">211</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::memory_layout::{align_down, align_up, is_aligned, PAGE_4K};
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>core::ptr::NonNull;
+
+<span class="kw">use </span><span class="kw">super</span>::memory_layout::{align_down, align_up, is_aligned, PAGE_4K};
 <span class="kw">use crate</span>::{
     memory_management::memory_layout::{
         kernel_elf_end, physical2virtual, virtual2physical, EXTENDED_OFFSET, KERNEL_END,
         KERNEL_LINK,
     },
     multiboot2::{MemoryMapType, MultiBoot2Info},
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 <span class="kw">struct </span>FreePage {
-    next: <span class="kw-2">*mut </span>FreePage,
+    next: <span class="prelude-ty">Option</span>&lt;NonNull&lt;FreePage&gt;&gt;,
 }
 
-<span class="kw">static </span><span class="kw-2">mut </span>ALLOCATOR: Mutex&lt;PhysicalPageAllocator&gt; = Mutex::new(PhysicalPageAllocator::empty());
+<span class="kw">static </span>ALLOCATOR: OnceLock&lt;Mutex&lt;PhysicalPageAllocator&gt;&gt; = OnceLock::new();
 
 <span class="kw">pub fn </span>init(multiboot_info: <span class="kw-2">&amp;</span>MultiBoot2Info) {
-    <span class="kw">unsafe </span>{
-        ALLOCATOR.lock().init(multiboot_info);
+    <span class="kw">if </span>ALLOCATOR.try_get().is_some() {
+        <span class="macro">panic!</span>(<span class="string">"PhysicalPageAllocator already initialized"</span>);
     }
+
+    ALLOCATOR.get_or_init(|| Mutex::new(PhysicalPageAllocator::new(multiboot_info)));
 }
 
 <span class="doccomment">/// SAFETY: this must be called after `init`
@@ -238,7 +248,7 @@
 /// Allocates a 4K page of memory, the returned address is guaranteed to be aligned to 4K, and is mapped into virtual space
 /// Please use `virtual2physical` to get the physical address
 </span><span class="kw">pub unsafe fn </span>alloc() -&gt; <span class="kw-2">*mut </span>u8 {
-    ALLOCATOR.lock().alloc()
+    ALLOCATOR.get().lock().alloc()
 }
 
 <span class="doccomment">/// SAFETY: this must be called after `init`
@@ -259,38 +269,29 @@
 /// - `page` is not in the range of the allocator
 /// - `page` is not aligned to 4K
 </span><span class="kw">pub unsafe fn </span>free(page: <span class="kw-2">*mut </span>u8) {
-    ALLOCATOR.lock().free(page);
+    ALLOCATOR.get().lock().free(page);
 }
 
 <span class="kw">pub fn </span>stats() -&gt; (usize, usize) {
-    <span class="kw">let </span>allocator = <span class="kw">unsafe </span>{ ALLOCATOR.lock() };
+    <span class="kw">let </span>allocator = ALLOCATOR.get().lock();
     (allocator.free_count, allocator.used_count)
 }
 
 <span class="kw">struct </span>PhysicalPageAllocator {
-    low_mem_free_list_head: <span class="kw-2">*mut </span>FreePage,
+    low_mem_free_list_head: <span class="prelude-ty">Option</span>&lt;NonNull&lt;FreePage&gt;&gt;,
     <span class="attr">#[allow(dead_code)]
     </span><span class="comment">// TODO: handle more memory
-    </span>high_mem_start: <span class="kw-2">*mut </span>u8,
-    start: <span class="kw-2">*mut </span>u8,
-    end: <span class="kw-2">*mut </span>u8,
+    </span>high_mem_start: usize,
+    start: usize,
+    end: usize,
     free_count: usize,
     used_count: usize,
 }
 
-<span class="kw">impl </span>PhysicalPageAllocator {
-    <span class="kw">const fn </span>empty() -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{
-            low_mem_free_list_head: core::ptr::null_mut(),
-            high_mem_start: core::ptr::null_mut(),
-            start: core::ptr::null_mut(),
-            end: core::ptr::null_mut(),
-            free_count: <span class="number">0</span>,
-            used_count: <span class="number">0</span>,
-        }
-    }
+<span class="kw">unsafe impl </span>Send <span class="kw">for </span>PhysicalPageAllocator {}
 
-    <span class="kw">fn </span>init(<span class="kw-2">&amp;mut </span><span class="self">self</span>, multiboot_info: <span class="kw-2">&amp;</span>MultiBoot2Info) {
+<span class="kw">impl </span>PhysicalPageAllocator {
+    <span class="kw">fn </span>new(multiboot_info: <span class="kw-2">&amp;</span>MultiBoot2Info) -&gt; <span class="self">Self </span>{
         <span class="kw">const </span>PHYSICAL_KERNEL_START: u64 = virtual2physical(KERNEL_LINK);
         <span class="comment">// get the end of the kernel, align, and add 5 PAGES of alignment as well
         // because the multiboot info might be stored there by grub
@@ -317,6 +318,15 @@
             physical_kernel_end = multiboot_end;
         }
 
+        <span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self </span>{
+            low_mem_free_list_head: <span class="prelude-val">None</span>,
+            high_mem_start: <span class="number">0</span>,
+            start: <span class="number">0</span>,
+            end: <span class="number">0</span>,
+            free_count: <span class="number">0</span>,
+            used_count: <span class="number">0</span>,
+        };
+
         <span class="kw">for </span>memory <span class="kw">in </span>multiboot_info.memory_maps().unwrap() {
             <span class="comment">// skip all the memory before the kernel, it could be used by the bootloader
             // its generally not a lot, just 1 MB, so its fine to skip it
@@ -335,32 +345,33 @@
             {
                 start_physical = physical_kernel_end;
                 end_physical = align_down(memory.base_addr + memory.length, PAGE_4K);
-                <span class="self">self</span>.start = physical2virtual(physical_kernel_end) <span class="kw">as _</span>;
+                s.start = physical2virtual(physical_kernel_end);
             } <span class="kw">else </span>{
                 <span class="macro">assert!</span>(memory.base_addr &gt;= physical_kernel_end);
 
                 start_physical = align_up(memory.base_addr, PAGE_4K);
                 end_physical = align_down(memory.base_addr + memory.length, PAGE_4K);
             }
-            <span class="kw">let </span><span class="kw-2">mut </span>high_mem_start = core::ptr::null_mut();
-            <span class="kw">let </span>end_virtual = <span class="kw">if </span>end_physical &gt;= virtual2physical(KERNEL_END) <span class="kw">as _ </span>{
-                high_mem_start = KERNEL_END <span class="kw">as </span><span class="kw-2">*mut </span>u8;
-                KERNEL_END <span class="kw">as </span><span class="kw-2">*mut </span>u8
+            <span class="kw">let </span><span class="kw-2">mut </span>high_mem_start = <span class="number">0</span>;
+            <span class="kw">let </span>end_virtual = <span class="kw">if </span>end_physical &gt;= virtual2physical(KERNEL_END) {
+                high_mem_start = KERNEL_END;
+                KERNEL_END
             } <span class="kw">else </span>{
-                physical2virtual(end_physical) <span class="kw">as _
-            </span>};
-            <span class="kw">let </span>start_virtual = physical2virtual(start_physical) <span class="kw">as _</span>;
+                physical2virtual(end_physical)
+            };
+            <span class="kw">let </span>start_virtual = physical2virtual(start_physical);
 
             <span class="kw">if </span>start_virtual &lt; end_virtual {
-                <span class="self">self</span>.end = end_virtual;
+                s.end = end_virtual;
 
-                <span class="self">self</span>.init_range(start_virtual, end_virtual);
-                <span class="kw">if </span>!high_mem_start.is_null() {
-                    <span class="self">self</span>.high_mem_start = high_mem_start;
+                s.init_range(start_virtual <span class="kw">as _</span>, end_virtual <span class="kw">as _</span>);
+                <span class="kw">if </span>high_mem_start != <span class="number">0 </span>{
+                    s.high_mem_start = high_mem_start;
                     <span class="kw">break</span>;
                 }
             }
         }
+        s
     }
 
     <span class="kw">fn </span>init_range(<span class="kw-2">&amp;mut </span><span class="self">self</span>, start: <span class="kw-2">*mut </span>u8, end: <span class="kw-2">*mut </span>u8) {
@@ -379,14 +390,14 @@
     ///
     /// Allocates a 4K page of memory
     </span><span class="kw">unsafe fn </span>alloc(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">*mut </span>u8 {
-        <span class="kw">if </span><span class="self">self</span>.low_mem_free_list_head.is_null() {
+        <span class="kw">let </span><span class="prelude-val">Some</span>(low_mem_free_list_head) = <span class="self">self</span>.low_mem_free_list_head <span class="kw">else </span>{
             <span class="macro">panic!</span>(<span class="string">"out of memory"</span>);
-        }
+        };
 
-        <span class="kw">let </span>page = <span class="self">self</span>.low_mem_free_list_head;
-        <span class="self">self</span>.low_mem_free_list_head = (<span class="kw-2">*</span>page).next;
+        <span class="kw">let </span>page = low_mem_free_list_head;
+        <span class="self">self</span>.low_mem_free_list_head = page.as_ref().next;
 
-        <span class="kw">let </span>page = page <span class="kw">as </span><span class="kw-2">*mut </span>u8;
+        <span class="kw">let </span>page = page.as_ptr() <span class="kw">as </span><span class="kw-2">*mut </span>u8;
         <span class="comment">// fill with random data to catch dangling pointer bugs
         </span>page.write_bytes(<span class="number">1</span>, PAGE_4K);
         <span class="self">self</span>.used_count += <span class="number">1</span>;
@@ -415,10 +426,11 @@
             <span class="macro">panic!</span>(<span class="string">"freeing invalid page: {:p}"</span>, page);
         }
         <span class="comment">// TODO: for now make sure we are not freeing the high memory for now
-        </span><span class="macro">assert!</span>(<span class="self">self</span>.high_mem_start.is_null() || page &lt; <span class="self">self</span>.high_mem_start <span class="kw">as _</span>);
+        </span><span class="macro">assert!</span>(<span class="self">self</span>.high_mem_start == <span class="number">0 </span>|| page &lt; <span class="self">self</span>.high_mem_start <span class="kw">as _</span>);
+        <span class="kw">let </span><span class="kw-2">mut </span>page = NonNull::new_unchecked(page);
 
-        (<span class="kw-2">*</span>page).next = <span class="self">self</span>.low_mem_free_list_head;
-        <span class="self">self</span>.low_mem_free_list_head = page;
+        page.as_mut().next = <span class="self">self</span>.low_mem_free_list_head;
+        <span class="self">self</span>.low_mem_free_list_head = <span class="prelude-val">Some</span>(page);
         <span class="self">self</span>.free_count += <span class="number">1</span>;
     }
 }

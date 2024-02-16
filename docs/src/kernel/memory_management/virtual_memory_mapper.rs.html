@@ -814,8 +814,6 @@
 <a href="#812" id="812">812</a>
 <a href="#813" id="813">813</a>
 <a href="#814" id="814">814</a>
-<a href="#815" id="815">815</a>
-<a href="#816" id="816">816</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This very specific to 64-bit x86 architecture, if this is to be ported to other architectures
 //! this will need to be changed
 
@@ -831,7 +829,7 @@
         },
         physical_page_allocator,
     },
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 <span class="kw">use </span><span class="kw">super</span>::memory_layout::{
@@ -978,27 +976,31 @@
     }
 }
 
-<span class="kw">static </span>KERNEL_VIRTUAL_MEMORY_MANAGER: Mutex&lt;VirtualMemoryMapper&gt; =
-    Mutex::new(VirtualMemoryMapper::boot_vm());
+<span class="kw">static </span>KERNEL_VIRTUAL_MEMORY_MANAGER: OnceLock&lt;Mutex&lt;VirtualMemoryMapper&gt;&gt; = OnceLock::new();
 
 <span class="kw">pub fn </span>init_kernel_vm() {
-    <span class="kw">let </span>new_kernel_manager = VirtualMemoryMapper::new_kernel_vm();
-    <span class="kw">let </span><span class="kw-2">mut </span>manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
-    <span class="kw-2">*</span>manager = new_kernel_manager;
-    <span class="comment">// SAFETY: this is the start VM, so we are sure that we are not inside a process, so its safe to switch
+    <span class="kw">if </span>KERNEL_VIRTUAL_MEMORY_MANAGER.try_get().is_some() {
+        <span class="macro">panic!</span>(<span class="string">"Kernel VM already initialized"</span>);
+    }
+
+    <span class="kw">let </span>manager = KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get_or_init(|| Mutex::new(VirtualMemoryMapper::new_kernel_vm()))
+        .lock();
+
+    <span class="comment">// // SAFETY: this is the start VM, so we are sure that we are not inside a process, so its safe to switch
     </span><span class="kw">unsafe </span>{ manager.switch_to_this() };
 }
 <span class="doccomment">/// # Safety
 /// This must never be called while we are in a process context
 /// and using any process specific memory regions
 </span><span class="kw">pub unsafe fn </span>switch_to_kernel() {
-    KERNEL_VIRTUAL_MEMORY_MANAGER.lock().switch_to_this();
+    KERNEL_VIRTUAL_MEMORY_MANAGER.get().lock().switch_to_this();
 }
 
 <span class="kw">pub fn </span>map_kernel(entry: <span class="kw-2">&amp;</span>VirtualMemoryMapEntry) {
     <span class="comment">// make sure we are only mapping to kernel memory
     </span><span class="macro">assert!</span>(entry.virtual_address &gt;= KERNEL_BASE);
-    KERNEL_VIRTUAL_MEMORY_MANAGER.lock().map(entry);
+    KERNEL_VIRTUAL_MEMORY_MANAGER.get().lock().map(entry);
 }
 
 <span class="doccomment">/// `is_allocated` is used to indicate if the physical pages were allocated by the caller
@@ -1009,13 +1011,17 @@
     <span class="comment">// make sure we are only mapping to kernel memory
     </span><span class="macro">assert!</span>(entry.virtual_address &gt;= KERNEL_BASE);
     KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get()
         .lock()
         .unmap(entry, is_allocated);
 }
 
 <span class="attr">#[allow(dead_code)]
 </span><span class="kw">pub fn </span>is_address_mapped_in_kernel(addr: usize) -&gt; bool {
-    KERNEL_VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr)
+    KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get()
+        .lock()
+        .is_address_mapped(addr)
 }
 
 <span class="kw">pub fn </span>clone_current_vm_as_user() -&gt; VirtualMemoryMapper {
@@ -1038,17 +1044,6 @@
 }
 
 <span class="kw">impl </span>VirtualMemoryMapper {
-    <span class="doccomment">/// Return the VM for the CPU at boot time (only applied to the first CPU and this is setup in `boot.S`)
-    </span><span class="kw">const fn </span>boot_vm() -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{
-            <span class="comment">// use the same address we used in the assembly code
-            // we will change this anyway in `new_kernel_vm`, but at least lets have a valid address
-            // FIXME: this is not good at all, replace this with better init, like `OnceLock` or something
-            </span>page_map_l4: PageDirectoryTablePtr::from_entry(<span class="number">0</span>),
-            is_user: <span class="bool-val">false</span>,
-        }
-    }
-
     <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             page_map_l4: PageDirectoryTablePtr::alloc_new(),
@@ -1112,6 +1107,7 @@
 
     <span class="kw">fn </span>get_current_vm() -&gt; <span class="self">Self </span>{
         <span class="kw">let </span>kernel_vm_addr = KERNEL_VIRTUAL_MEMORY_MANAGER
+            .get()
             .lock()
             .page_map_l4
             .as_physical();
