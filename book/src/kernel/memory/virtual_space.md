@@ -9,7 +9,10 @@ This is useful for reading structures that are in specific location in physical 
 
 Its very simple, it will take memory from the `kernel extra` space, and map it to the physical address.
 
-It can be used by [`allocate_and_map_virtual_space`][allocate_and_map_virtual_space] and [`deallocate_virtual_space`][deallocate_virtual_space], which allow mapping and unmapping of virtual space.
+It can be used by [`VirtualSpace`][virtual_space_struct], which is similar to `Box`, i.e. its a wrapper for a pointer, and it will automatically unmap the memory when it goes out of scope.
 
-Currently its very basic and will return a number pointer, which should be `unsafe` XD, but I'm planning
-to make it a safer API.
+```rust
+let mut vs = unsafe { VirtualSpace::<u32>::new(0x1000).unwrap() };
+*vs = 0x1234;
+assert_eq!(*vs, 0x1234);
+```

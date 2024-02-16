@@ -1,8 +1,7 @@
 [Kernel rust documentation]: {ROOT_PATH}docs/kernel/
 [kernel_memory_layout]: {ROOT_PATH}docs/kernel/memory_management/memory_layout
 [kernel_virtual_space]: {ROOT_PATH}docs/kernel/memory_management/virtual_space
-[allocate_and_map_virtual_space]: {ROOT_PATH}docs/kernel/memory_management/virtual_space/fn.allocate_and_map_virtual_space
-[deallocate_virtual_space]: {ROOT_PATH}docs/kernel/memory_management/virtual_space/fn.deallocate_virtual_space
+[virtual_space_struct]: {ROOT_PATH}docs/kernel/memory_management/virtual_space/struct.VirtualSpace.html
 [get_virtual_for_physical]: {ROOT_PATH}docs/kernel/memory_management/virtual_space/fn.get_virtual_for_physical
 [physical_page_allocator]: {ROOT_PATH}docs/kernel/memory_management/physical_page_allocator
 [virtual_memory_mapper]: {ROOT_PATH}docs/kernel/memory_management/virtual_memory_mapper

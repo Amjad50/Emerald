@@ -44,9 +44,11 @@ pub struct VirtualSpace<T: ?Sized> {
 }
 
 impl<T> VirtualSpace<T> {
+    /// Create a new virtual space for the given `physical_start` on the given type `T`.
+    ///
     /// # Safety
     /// - Must be a valid physical address
-    /// - The memory must be defined by default. if its not, use [`VirtualSpace::new_uninit`] instead
+    /// - The memory must be defined by default. if its not, use [`new_uninit`](Self::new_uninit) instead
     pub unsafe fn new(physical_start: u64) -> Result<Self> {
         let size = core::mem::size_of::<T>();
         let virtual_start = allocate_and_map_virtual_space(physical_start, size)?;
@@ -54,6 +56,9 @@ impl<T> VirtualSpace<T> {
         Ok(Self { size, data })
     }
 
+    /// Create a new virtual space for the given `physical_start` on the given type `T`.
+    /// But will assume that the memory is not initialized, and will return a `MaybeUninit` pointer.
+    ///
     /// # Safety
     /// - Must be a valid physical address
     #[allow(dead_code)]
@@ -67,6 +72,11 @@ impl<T> VirtualSpace<T> {
         })
     }
 
+    /// Create a new virtual space for the given `physical_start` on the given slice type `[T]`.
+    ///
+    /// # Safety
+    /// - Must be a valid physical address
+    /// - The memory must be defined by default. currently, there is no way to create a slice of `MaybeUninit`
     pub unsafe fn new_slice(physical_start: u64, len: usize) -> Result<VirtualSpace<[T]>> {
         let size = core::mem::size_of::<T>() * len;
         let virtual_start = allocate_and_map_virtual_space(physical_start, size)?;
