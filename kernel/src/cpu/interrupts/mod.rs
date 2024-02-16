@@ -1,14 +1,14 @@
 pub mod apic;
 mod handlers;
 
-use crate::sync::spin::mutex::Mutex;
+use crate::sync::{once::OnceLock, spin::mutex::Mutex};
 
 use super::{
     gdt::USER_RING,
     idt::{BasicInterruptHandler, InterruptDescriptorTable, InterruptHandlerWithAllState},
 };
 
-static INTERRUPTS: Mutex<Interrupts> = Mutex::new(Interrupts::empty());
+static INTERRUPTS: OnceLock<Mutex<Interrupts>> = OnceLock::new();
 
 pub(super) mod stack_index {
     pub const FAULTS_STACK: u8 = 0;
@@ -27,13 +27,6 @@ struct Interrupts {
 }
 
 impl Interrupts {
-    const fn empty() -> Self {
-        Self {
-            idt: InterruptDescriptorTable::empty(),
-            last_used_user_interrupt: 0,
-        }
-    }
-
     // only apply init for static context
     fn init(&'static mut self) {
         self.idt.init_default_handlers();
@@ -72,9 +65,21 @@ impl Interrupts {
 }
 
 pub fn init_interrupts() {
-    INTERRUPTS.run_with_mut(|idt| {
-        idt.init();
-    });
+    if INTERRUPTS.try_get().is_some() {
+        panic!("Interrupts already initialized");
+    }
+
+    INTERRUPTS
+        .get_or_init(|| {
+            let interrupts = Interrupts {
+                idt: InterruptDescriptorTable::empty(),
+                last_used_user_interrupt: 0,
+            };
+            Mutex::new(interrupts)
+        })
+        .run_with_mut(|interrupts| {
+            interrupts.init();
+        });
 }
 
 // All Types of interrupt handlers
@@ -84,13 +89,19 @@ pub trait InterruptHandler {
 
 impl InterruptHandler for BasicInterruptHandler {
     fn allocate_and_set_handler(handler: Self) -> u8 {
-        INTERRUPTS.lock().allocate_basic_user_interrupt(handler)
+        INTERRUPTS
+            .get()
+            .lock()
+            .allocate_basic_user_interrupt(handler)
     }
 }
 
 impl InterruptHandler for InterruptHandlerWithAllState {
     fn allocate_and_set_handler(handler: Self) -> u8 {
-        INTERRUPTS.lock().allocate_user_interrupt_all_saved(handler)
+        INTERRUPTS
+            .get()
+            .lock()
+            .allocate_user_interrupt_all_saved(handler)
     }
 }
 
@@ -110,14 +121,14 @@ pub(super) fn allocate_user_interrupt_all_saved(handler: InterruptHandlerWithAll
 }
 
 pub fn create_scheduler_interrupt(handler: InterruptHandlerWithAllState) {
-    let mut interrupts = INTERRUPTS.lock();
+    let mut interrupts = INTERRUPTS.get().lock();
     interrupts.idt.user_defined[SPECIAL_SCHEDULER_INTERRUPT as usize]
         .set_handler_with_number(handler, SPECIAL_SCHEDULER_INTERRUPT + USER_INTERRUPTS_START)
         .set_disable_interrupts(true);
 }
 
 pub fn create_syscall_interrupt(handler: InterruptHandlerWithAllState) {
-    let mut interrupts = INTERRUPTS.lock();
+    let mut interrupts = INTERRUPTS.get().lock();
     interrupts.idt.user_defined[SPECIAL_SYSCALL_INTERRUPT as usize]
         .set_handler_with_number(handler, SPECIAL_SYSCALL_INTERRUPT + USER_INTERRUPTS_START)
         .set_privilege_level(USER_RING)
