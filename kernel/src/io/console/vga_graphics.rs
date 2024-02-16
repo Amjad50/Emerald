@@ -13,7 +13,7 @@ use embedded_graphics::{
     Pixel,
 };
 
-use crate::{memory_management::virtual_space, multiboot2};
+use crate::{memory_management::virtual_space::VirtualSpace, multiboot2};
 
 use super::{VideoConsole, VideoConsoleAttribute};
 
@@ -24,7 +24,7 @@ pub(super) struct VgaGraphics {
     field_pos: (u8, u8, u8),
     mask: (u8, u8, u8),
     byte_per_pixel: u8,
-    memory: &'static mut [u8],
+    memory: VirtualSpace<[u8]>,
 
     pos: Point,
     text_style: MonoTextStyle<'static, Rgb888>,
@@ -46,10 +46,8 @@ impl VgaGraphics {
 
         let physical_addr = framebuffer.addr;
         let memory_size = framebuffer.pitch * framebuffer.height;
-        let memory_addr =
-            virtual_space::allocate_and_map_virtual_space(physical_addr, memory_size as usize)
-                as *mut u8;
-        let memory = unsafe { core::slice::from_raw_parts_mut(memory_addr, memory_size as usize) };
+        let memory =
+            unsafe { VirtualSpace::new_slice(physical_addr, memory_size as usize).unwrap() };
 
         let red_mask = (1 << red_mask_size) - 1;
         let green_mask = (1 << green_mask_size) - 1;

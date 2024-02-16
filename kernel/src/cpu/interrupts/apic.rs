@@ -1,14 +1,11 @@
-use core::{
-    borrow::{Borrow, BorrowMut},
-    mem,
-};
+use core::borrow::{Borrow, BorrowMut};
 
 use alloc::vec::Vec;
 
 use crate::{
     acpi::tables::{self, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
     cpu::{self, idt::InterruptStackFrame64, Cpu, CPUS, MAX_CPUS},
-    memory_management::virtual_space,
+    memory_management::virtual_space::VirtualSpace,
     sync::spin::mutex::Mutex,
 };
 
@@ -20,13 +17,11 @@ use super::{
 const APIC_BAR_ENABLED: u64 = 1 << 11;
 const APIC_BASE_MASK: u64 = 0xFFFF_FFFF_FFFF_F000;
 
-static mut APIC: Mutex<Apic> = Mutex::new(Apic::empty());
+static APIC: Mutex<Apic> = Mutex::new(Apic::empty());
 
 pub fn init(bios_tables: &BiosTables) {
     disable_pic();
-    unsafe {
-        APIC.lock().init(bios_tables);
-    }
+    APIC.lock().init(bios_tables);
 }
 
 fn disable_pic() {
@@ -37,13 +32,11 @@ fn disable_pic() {
 }
 
 pub fn return_from_interrupt() {
-    unsafe {
-        APIC.lock().return_from_interrupt();
-    }
+    APIC.lock().return_from_interrupt();
 }
 
 pub fn assign_io_irq<H: InterruptHandler>(handler: H, interrupt_num: u8, cpu: &Cpu) {
-    unsafe { APIC.lock().assign_io_irq(handler, interrupt_num, cpu) }
+    APIC.lock().assign_io_irq(handler, interrupt_num, cpu)
 }
 
 pub fn assign_io_irq_custom<H: InterruptHandler, F>(
@@ -54,10 +47,8 @@ pub fn assign_io_irq_custom<H: InterruptHandler, F>(
 ) where
     F: FnOnce(IoApicRedirectionBuilder) -> IoApicRedirectionBuilder,
 {
-    unsafe {
-        APIC.lock()
-            .assign_io_irq_custom(handler, interrupt_num, cpu, modify_entry)
-    }
+    APIC.lock()
+        .assign_io_irq_custom(handler, interrupt_num, cpu, modify_entry)
 }
 
 #[repr(C, align(4))]
@@ -279,7 +270,7 @@ struct IoApic {
     id: u8,
     global_irq_base: u32,
     n_entries: u8,
-    mmio: *mut IoApicMmio,
+    mmio: VirtualSpace<IoApicMmio>,
 }
 
 impl IoApic {
@@ -292,12 +283,12 @@ impl IoApic {
         }
     }
 
-    fn read_register(&self, register: u32) -> u32 {
-        unsafe { (*self.mmio).read_register(register) }
+    fn read_register(&mut self, register: u32) -> u32 {
+        self.mmio.read_register(register)
     }
 
-    fn write_register(&self, register: u32, value: u32) {
-        unsafe { (*self.mmio).write_register(register, value) }
+    fn write_register(&mut self, register: u32, value: u32) {
+        self.mmio.write_register(register, value)
     }
 
     fn write_redirect_entry(&mut self, entry: u8, builder: IoApicRedirectionBuilder) {
@@ -310,7 +301,7 @@ impl IoApic {
         );
     }
 
-    fn is_entry_taken(&self, entry: u8) -> bool {
+    fn is_entry_taken(&mut self, entry: u8) -> bool {
         let lo = self.read_register(io_apic::IO_APIC_REDIRECTION_TABLE + entry as u32 * 2);
         lo as u64 & io_apic::RDR_VECTOR_MASK != 0
     }
@@ -327,10 +318,8 @@ impl From<tables::IoApic> for IoApic {
             id: table.io_apic_id,
             global_irq_base: table.global_system_interrupt_base,
             n_entries: 0, // to be filled next
-            mmio: virtual_space::allocate_and_map_virtual_space(
-                table.io_apic_address as u64,
-                mem::size_of::<IoApicMmio>(),
-            ) as *mut IoApicMmio,
+            // Safety: we are sure that the address is valid
+            mmio: unsafe { VirtualSpace::new(table.io_apic_address as u64).unwrap() },
         };
         s.n_entries = (s.read_register(io_apic::IO_APIC_VERSION) >> 16) as u8 + 1;
         s
@@ -338,7 +327,7 @@ impl From<tables::IoApic> for IoApic {
 }
 
 struct Apic {
-    mmio: *mut ApicMmio,
+    mmio: Option<VirtualSpace<ApicMmio>>,
     n_cpus: usize,
     io_apics: Vec<IoApic>,
     source_overrides: Vec<InterruptSourceOverride>,
@@ -349,7 +338,7 @@ impl Apic {
         Self {
             // we should call `init` first, it will cause an exception
             // if referenced and we should catch that.
-            mmio: core::ptr::null_mut(),
+            mmio: None,
             n_cpus: 0,
             io_apics: Vec::new(),
             source_overrides: Vec::new(),
@@ -445,9 +434,8 @@ impl Apic {
         );
         assert!(apic_address != 0, "APIC address is 0, cannot continue");
         assert!(apic_address & 0xF == 0, "APIC address is not aligned");
-        self.mmio =
-            virtual_space::allocate_and_map_virtual_space(apic_address, mem::size_of::<ApicMmio>())
-                as *mut ApicMmio;
+        // Safety: we are sure that the address is valid
+        self.mmio = Some(unsafe { VirtualSpace::new(apic_address).unwrap() });
 
         // reset all interrupts
         self.io_apics.iter_mut().for_each(|io_apic| {
@@ -462,66 +450,80 @@ impl Apic {
         self.return_from_interrupt();
     }
 
-    fn return_from_interrupt(&self) {
-        unsafe {
-            (*self.mmio).end_of_interrupt.write(0);
-        }
+    fn return_from_interrupt(&mut self) {
+        self.mmio.as_mut().unwrap().end_of_interrupt.write(0);
     }
 
     fn initialize_spurious_interrupt(&mut self) {
         let interrupt_num = allocate_basic_user_interrupt(spurious_handler);
-        unsafe {
-            // 1 << 8, to enable spurious interrupts
-            (*self.mmio)
-                .spurious_interrupt_vector
-                .write(SPURIOUS_ENABLE | interrupt_num as u32);
-        }
+        // 1 << 8, to enable spurious interrupts
+        self.mmio
+            .as_mut()
+            .unwrap()
+            .spurious_interrupt_vector
+            .write(SPURIOUS_ENABLE | interrupt_num as u32);
     }
 
     /// disable the Local interrupts 0 and 1
     fn disable_local_interrupts(&mut self) {
-        unsafe {
-            let vector_table = LocalVectorRegisterBuilder::default().with_mask(true);
-            (*self.mmio).lint0_local_vector_table.write(vector_table);
-            (*self.mmio).lint1_local_vector_table.write(vector_table);
-        }
+        let vector_table = LocalVectorRegisterBuilder::default().with_mask(true);
+        self.mmio
+            .as_mut()
+            .unwrap()
+            .lint0_local_vector_table
+            .write(vector_table);
+        self.mmio
+            .as_mut()
+            .unwrap()
+            .lint1_local_vector_table
+            .write(vector_table);
     }
 
     fn initialize_timer(&mut self) {
         let interrupt_num = allocate_user_interrupt_all_saved(super::handlers::apic_timer_handler);
 
-        unsafe {
-            // divide by 1
-            (*self.mmio).timer_divide_configuration.write(0b1011);
-            // just random value, this is based on the CPU clock speed
-            // so its not accurate timing.
-            (*self.mmio).timer_initial_count.write(0x1000000);
-            // periodic mode, not masked, and with the allocated vector number
-            let vector_table = LocalVectorRegisterBuilder::default()
-                .with_periodic_timer(true)
-                .with_mask(false)
-                .with_vector(interrupt_num);
-            (*self.mmio).timer_local_vector_table.write(vector_table);
-        }
+        // divide by 1
+        self.mmio
+            .as_mut()
+            .unwrap()
+            .timer_divide_configuration
+            .write(0b1011);
+        // just random value, this is based on the CPU clock speed
+        // so its not accurate timing.
+        self.mmio
+            .as_mut()
+            .unwrap()
+            .timer_initial_count
+            .write(0x1000000);
+        // periodic mode, not masked, and with the allocated vector number
+        let vector_table = LocalVectorRegisterBuilder::default()
+            .with_periodic_timer(true)
+            .with_mask(false)
+            .with_vector(interrupt_num);
+        self.mmio
+            .as_mut()
+            .unwrap()
+            .timer_local_vector_table
+            .write(vector_table);
     }
 
     fn setup_error_interrupt(&mut self) {
         // clear the error status and write 0 to it
-        unsafe {
-            // 1- clear the error status
-            (*self.mmio).error_status.write(0);
-            // 2- write 0 to it (yes, we have to do this twice)
-            (*self.mmio).error_status.write(0);
-        }
+        // 1- clear the error status
+        self.mmio.as_mut().unwrap().error_status.write(0);
+        // 2- write 0 to it (yes, we have to do this twice)
+        self.mmio.as_mut().unwrap().error_status.write(0);
 
         let interrupt_num = allocate_basic_user_interrupt(error_interrupt_handler);
-        unsafe {
-            // not masked, and with the allocated vector number
-            let vector_table = LocalVectorRegisterBuilder::default()
-                .with_mask(false)
-                .with_vector(interrupt_num);
-            (*self.mmio).error_local_vector_table.write(vector_table);
-        }
+        // not masked, and with the allocated vector number
+        let vector_table = LocalVectorRegisterBuilder::default()
+            .with_mask(false)
+            .with_vector(interrupt_num);
+        self.mmio
+            .as_mut()
+            .unwrap()
+            .error_local_vector_table
+            .write(vector_table);
     }
 
     fn assign_io_irq<H: InterruptHandler>(&mut self, handler: H, irq_num: u8, cpu: &Cpu) {
@@ -588,11 +590,9 @@ extern "x86-interrupt" fn spurious_handler(_frame: InterruptStackFrame64) {
 }
 
 extern "x86-interrupt" fn error_interrupt_handler(_frame: InterruptStackFrame64) {
-    let error_status = unsafe { (*APIC.lock().mmio).error_status.read() };
+    let error_status = APIC.lock().mmio.as_mut().unwrap().error_status.read();
     println!("APIC error: {:#X}", error_status);
     // clear the error
-    unsafe {
-        (*APIC.lock().mmio).error_status.write(0);
-    }
+    APIC.lock().mmio.as_mut().unwrap().error_status.write(0);
     return_from_interrupt();
 }
