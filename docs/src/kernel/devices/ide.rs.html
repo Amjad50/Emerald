@@ -1009,6 +1009,14 @@
 <a href="#1007" id="1007">1007</a>
 <a href="#1008" id="1008">1008</a>
 <a href="#1009" id="1009">1009</a>
+<a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     fmt, hint, mem,
     ptr::{addr_of, addr_of_mut},
@@ -1208,12 +1216,18 @@
         }
     }
 
-    <span class="kw">pub fn </span>wait_until_can_command(<span class="kw-2">&amp;</span><span class="self">self</span>) {
+    <span class="kw">pub fn </span>wait_until_can_command(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), u8&gt; {
+        <span class="self">self</span>.wait_until_free();
+
         <span class="kw">let </span><span class="kw-2">mut </span>status = <span class="self">self</span>.read_status();
         <span class="kw">while </span>status &amp; (ata::STATUS_BUSY | ata::STATUS_DATA_REQUEST) != <span class="number">0 </span>{
+            <span class="kw">if </span>status &amp; ata::STATUS_ERR != <span class="number">0 </span>{
+                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="self">self</span>.read_error());
+            }
             hint::spin_loop();
             status = <span class="self">self</span>.read_status();
         }
+        <span class="prelude-val">Ok</span>(())
     }
 
     <span class="kw">pub fn </span>read_data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u16 {
@@ -1228,7 +1242,9 @@
         <span class="self">self</span>.read_command_block(ata::STATUS)
     }
 
-    <span class="kw">pub fn </span>read_error(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
+    <span class="doccomment">/// Note that this is only valid if the device is not busy
+    /// and has the `ERROR` status bit set
+    </span><span class="kw">pub fn </span>read_error(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
         <span class="self">self</span>.read_command_block(ata::ERROR)
     }
 
@@ -1340,7 +1356,7 @@
     <span class="kw">pub fn </span>execute(<span class="kw-2">&amp;</span><span class="self">self</span>, io_port: <span class="kw-2">&amp;</span>IdeIo, data: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), u8&gt; {
         <span class="comment">// must be even since we are receiving 16 bit words
         </span><span class="macro">assert!</span>(data.len() % <span class="number">2 </span>== <span class="number">0</span>);
-        io_port.wait_until_can_command();
+        io_port.wait_until_can_command()<span class="question-mark">?</span>;
         <span class="self">self</span>.write(io_port);
 
         io_port.read_data_block(data)
@@ -1440,7 +1456,7 @@
     <span class="kw">pub fn </span>execute(<span class="kw-2">&amp;</span><span class="self">self</span>, io_port: <span class="kw-2">&amp;</span>IdeIo, data: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), u8&gt; {
         <span class="comment">// must be even since we are receiving 16 bit words
         </span><span class="macro">assert!</span>(data.len() % <span class="number">2 </span>== <span class="number">0</span>);
-        io_port.wait_until_can_command();
+        io_port.wait_until_can_command()<span class="question-mark">?</span>;
         <span class="self">self</span>.write_packet_command(io_port);
         io_port.wait_until_free();
 
@@ -1740,7 +1756,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>device_type = IdeDeviceType::Ata;
 
         <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = command.execute(<span class="kw-2">&amp;</span>io, <span class="kw-2">&amp;mut </span>identify_data) {
-            <span class="macro">assert_eq!</span>(err, ata::ERROR_ABORTED);
+            <span class="macro">assert!</span>(err &amp; ata::ERROR_ABORTED != <span class="number">0</span>);
             <span class="kw">let </span>lbalo = io.read_command_block(ata::LBA_LO);
             <span class="kw">let </span>lbamid = io.read_command_block(ata::LBA_MID);
             <span class="kw">let </span>lbahi = io.read_command_block(ata::LBA_HI);
