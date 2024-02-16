@@ -139,12 +139,10 @@
 <a href="#137" id="137">137</a>
 <a href="#138" id="138">138</a>
 <a href="#139" id="139">139</a>
-<a href="#140" id="140">140</a>
-<a href="#141" id="141">141</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A temporary tool to allow for easy printing to the screen.
 //! We are using the VGA text mode buffer to print to the screen.
 
-</span><span class="kw">use crate</span>::{memory_management::virtual_space, multiboot2};
+</span><span class="kw">use crate</span>::{memory_management::virtual_space::VirtualSpace, multiboot2};
 
 <span class="kw">use super</span>::{VideoConsole, VideoConsoleAttribute};
 
@@ -157,7 +155,7 @@
     pitch: usize,
     height: usize,
     width: usize,
-    memory: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8],
+    memory: VirtualSpace&lt;[u8]&gt;,
 }
 
 <span class="kw">impl </span>VgaText {
@@ -168,10 +166,8 @@
         ));
         <span class="kw">let </span>physical_addr = framebuffer.addr;
         <span class="kw">let </span>memory_size = framebuffer.pitch * framebuffer.height;
-        <span class="kw">let </span>memory_addr =
-            virtual_space::allocate_and_map_virtual_space(physical_addr, memory_size <span class="kw">as </span>usize)
-                <span class="kw">as </span><span class="kw-2">*mut </span>u8;
-        <span class="kw">let </span>memory = <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(memory_addr, memory_size <span class="kw">as </span>usize) };
+        <span class="kw">let </span>memory =
+            <span class="kw">unsafe </span>{ VirtualSpace::new_slice(physical_addr, memory_size <span class="kw">as </span>usize).unwrap() };
 
         <span class="self">Self </span>{
             pos: (<span class="number">0</span>, <span class="number">0</span>),

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["allocate_and_map_virtual_space","deallocate_virtual_space","debug_blocks","get_virtual_for_physical"],"static":["VIRTUAL_SPACE_ALLOCATOR"],"struct":["VirtualSpaceAllocator","VirtualSpaceEntry"]};
+window.SIDEBAR_ITEMS = {"enum":["VirtualSpaceError"],"fn":["allocate_and_map_virtual_space","deallocate_virtual_space","debug_blocks"],"static":["VIRTUAL_SPACE_ALLOCATOR"],"struct":["VirtualSpace","VirtualSpaceAllocator","VirtualSpaceEntry"],"type":["Result"]};

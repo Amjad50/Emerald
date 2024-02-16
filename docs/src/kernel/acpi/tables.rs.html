@@ -740,78 +740,19 @@
 <a href="#738" id="738">738</a>
 <a href="#739" id="739">739</a>
 <a href="#740" id="740">740</a>
-<a href="#741" id="741">741</a>
-<a href="#742" id="742">742</a>
-<a href="#743" id="743">743</a>
-<a href="#744" id="744">744</a>
-<a href="#745" id="745">745</a>
-<a href="#746" id="746">746</a>
-<a href="#747" id="747">747</a>
-<a href="#748" id="748">748</a>
-<a href="#749" id="749">749</a>
-<a href="#750" id="750">750</a>
-<a href="#751" id="751">751</a>
-<a href="#752" id="752">752</a>
-<a href="#753" id="753">753</a>
-<a href="#754" id="754">754</a>
-<a href="#755" id="755">755</a>
-<a href="#756" id="756">756</a>
-<a href="#757" id="757">757</a>
-<a href="#758" id="758">758</a>
-<a href="#759" id="759">759</a>
-<a href="#760" id="760">760</a>
-<a href="#761" id="761">761</a>
-<a href="#762" id="762">762</a>
-<a href="#763" id="763">763</a>
-<a href="#764" id="764">764</a>
-<a href="#765" id="765">765</a>
-<a href="#766" id="766">766</a>
-<a href="#767" id="767">767</a>
-<a href="#768" id="768">768</a>
-<a href="#769" id="769">769</a>
-<a href="#770" id="770">770</a>
-<a href="#771" id="771">771</a>
-<a href="#772" id="772">772</a>
-<a href="#773" id="773">773</a>
-<a href="#774" id="774">774</a>
-<a href="#775" id="775">775</a>
-<a href="#776" id="776">776</a>
-<a href="#777" id="777">777</a>
-<a href="#778" id="778">778</a>
-<a href="#779" id="779">779</a>
-<a href="#780" id="780">780</a>
-<a href="#781" id="781">781</a>
-<a href="#782" id="782">782</a>
-<a href="#783" id="783">783</a>
-<a href="#784" id="784">784</a>
-<a href="#785" id="785">785</a>
-<a href="#786" id="786">786</a>
-<a href="#787" id="787">787</a>
-<a href="#788" id="788">788</a>
-<a href="#789" id="789">789</a>
-<a href="#790" id="790">790</a>
-<a href="#791" id="791">791</a>
-<a href="#792" id="792">792</a>
-<a href="#793" id="793">793</a>
-<a href="#794" id="794">794</a>
-<a href="#795" id="795">795</a>
-<a href="#796" id="796">796</a>
-<a href="#797" id="797">797</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     any::Any,
     fmt,
-    mem::{<span class="self">self</span>, size_of, MaybeUninit},
+    mem::{<span class="self">self</span>, MaybeUninit},
     slice,
 };
 
 <span class="kw">use </span>alloc::{boxed::Box, vec::Vec};
+<span class="kw">use </span>byteorder::{ByteOrder, LittleEndian};
 
 <span class="kw">use crate</span>::{
     io::{ByteStr, HexArray},
-    memory_management::{
-        memory_layout::{physical2virtual, virtual2physical, KERNEL_BASE, KERNEL_END},
-        virtual_space,
-    },
+    memory_management::{memory_layout::physical2virtual, virtual_space::VirtualSpace},
     multiboot2::MultiBoot2Info,
     sync::once::OnceLock,
 };
@@ -825,57 +766,28 @@
 ///
 /// Must ensure the `physical_addr` is valid and point to correct DescriptionHeader
 /// Must ensure that the `physical_address` is not used in virtual_space before calling this function
-/// If any address is used, this may panic, and undefined behavior may occur due to aliasing memory referenced by other code
-/// call `deallocate_acpi_mapping` after using any memory in the acpi region
-</span><span class="kw">unsafe fn </span>get_acpi_header_with_len(physical_addr: u64) -&gt; (<span class="kw-2">*const </span>DescriptionHeader, usize) {
-    <span class="kw">if </span>physical_addr &lt; virtual2physical(KERNEL_END) {
-        <span class="macro">assert!</span>(
-            physical_addr + mem::size_of::&lt;DescriptionHeader&gt;() <span class="kw">as </span>u64
-                &lt;= virtual2physical(KERNEL_END)
-        );
+/// We are using `VirtualSpace` on low kernel addresses (i.e. already mapped by the kernel).
+/// Accessing these addresses manually without `VirtualSpace` may lead to undefined behavior due to aliasing memory referenced by other code
+</span><span class="kw">unsafe fn </span>get_acpi_table_bytes(physical_addr: u64) -&gt; (DescriptionHeader, VirtualSpace&lt;[u8]&gt;) {
+    <span class="kw">let </span>header = VirtualSpace::&lt;DescriptionHeader&gt;::new(physical_addr).expect(<span class="string">"Failed to map"</span>);
+    <span class="kw">let </span>len = header.length <span class="kw">as </span>usize;
+    <span class="kw">let </span>header_copy = <span class="kw-2">*</span>header;
+    drop(header);
 
-        <span class="kw">let </span>header_virtual = (physical_addr + KERNEL_BASE <span class="kw">as </span>u64) <span class="kw">as </span><span class="kw-2">*const </span>DescriptionHeader;
-        <span class="kw">let </span>len = (<span class="kw-2">*</span>header_virtual).length <span class="kw">as </span>usize;
-        <span class="macro">assert!</span>(physical_addr + len <span class="kw">as </span>u64 &lt;= virtual2physical(KERNEL_END));
-        (header_virtual, len)
-    } <span class="kw">else </span>{
-        <span class="kw">let </span>header = virtual_space::get_virtual_for_physical(
-            physical_addr <span class="kw">as _</span>,
-            mem::size_of::&lt;DescriptionHeader&gt;() <span class="kw">as _</span>,
-        ) <span class="kw">as </span><span class="kw-2">*const </span>DescriptionHeader;
+    <span class="kw">let </span>data_start_phys = physical_addr + mem::size_of::&lt;DescriptionHeader&gt;() <span class="kw">as </span>u64;
+    <span class="kw">let </span>data_len = len - mem::size_of::&lt;DescriptionHeader&gt;();
 
-        <span class="kw">let </span>len = (<span class="kw-2">*</span>header).length <span class="kw">as </span>usize;
-        <span class="comment">// remove this entry
-        </span>virtual_space::deallocate_virtual_space(
-            header <span class="kw">as _</span>,
-            mem::size_of::&lt;DescriptionHeader&gt;() <span class="kw">as _</span>,
-        );
-        <span class="kw">let </span>header_ptr = virtual_space::get_virtual_for_physical(physical_addr <span class="kw">as _</span>, len <span class="kw">as _</span>)
-            <span class="kw">as </span><span class="kw-2">*const </span>DescriptionHeader;
+    <span class="kw">let </span>header_data =
+        VirtualSpace::&lt;u8&gt;::new_slice(data_start_phys, data_len).expect(<span class="string">"Failed to get slice"</span>);
 
-        <span class="comment">// check sum
-        </span><span class="kw">let </span>struct_slice = slice::from_raw_parts(header_ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, len);
-        <span class="kw">let </span>sum = struct_slice.iter().fold(<span class="number">0u8</span>, |acc, <span class="kw-2">&amp;</span>x| acc.wrapping_add(x));
-        <span class="macro">assert_eq!</span>(sum, <span class="number">0</span>);
+    <span class="comment">// check sum
+    </span><span class="kw">let </span>sum = header_copy
+        .sum()
+        .wrapping_add(header_data.iter().fold(<span class="number">0u8</span>, |acc, <span class="kw-2">&amp;</span>x| acc.wrapping_add(x)));
+    <span class="macro">assert_eq!</span>(sum, <span class="number">0</span>);
 
-        <span class="comment">// after this point, the header is valid and can be used safely
-
-        </span>(header_ptr, len)
-    }
-}
-
-<span class="doccomment">/// # Safety
-///
-/// The data pointed by `addr` will become invalid and must not be used.
-///
-/// This will affect all pages of memory that are touching the address space of `addr` and `size`
-/// Thus, this should only be used when we are sure that we are not holding any references to any data of this space.
-</span><span class="kw">unsafe fn </span>deallocate_acpi_mapping(addr: u64, size: usize) {
-    <span class="kw">if </span>addr &lt; virtual2physical(KERNEL_END) {
-        <span class="macro">assert!</span>(addr + size <span class="kw">as </span>u64 &lt;= virtual2physical(KERNEL_END));
-    } <span class="kw">else </span>{
-        virtual_space::deallocate_virtual_space(addr <span class="kw">as _</span>, size <span class="kw">as _</span>);
-    }
+    <span class="comment">// after this point, the header is valid and can be used safely
+    </span>(header_copy, header_data)
 }
 
 <span class="doccomment">/// Will fill the table from the header data, and zero out remaining bytes if any are left
@@ -883,15 +795,11 @@
 /// # Safety
 /// the pointer must be valid and point to a valid table
 /// Also, `&lt;T&gt;` must be valid when some parts of it is zero
-</span><span class="kw">unsafe fn </span>get_table_from_header&lt;T&gt;(header: <span class="kw-2">*const </span>DescriptionHeader) -&gt; T {
-    <span class="kw">let </span>data_ptr = header.add(<span class="number">1</span>) <span class="kw">as </span><span class="kw-2">*const </span>u8;
-    <span class="kw">let </span>data_len = (<span class="kw-2">*</span>header).length <span class="kw">as </span>usize - size_of::&lt;DescriptionHeader&gt;();
-    <span class="kw">let </span>data_slice = slice::from_raw_parts(data_ptr, data_len);
-
+</span><span class="kw">unsafe fn </span>get_table_from_body&lt;T&gt;(body: <span class="kw-2">&amp;</span>[u8]) -&gt; T {
     <span class="kw">let </span><span class="kw-2">mut </span>our_data_value = MaybeUninit::zeroed();
     <span class="kw">let </span>out_data_slice =
         slice::from_raw_parts_mut(our_data_value.as_mut_ptr() <span class="kw">as </span><span class="kw-2">*mut </span>u8, mem::size_of::&lt;T&gt;());
-    out_data_slice[..data_len].copy_from_slice(data_slice);
+    out_data_slice[..body.len()].copy_from_slice(body);
 
     our_data_value.assume_init()
 }
@@ -1042,26 +950,18 @@
     /// this uses virtual space for the regions that the `rsdt` is inside and all its other children structures
     </span><span class="kw">unsafe fn </span>rdst(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rsdt {
         <span class="comment">// Safety: here we are the first
-        </span><span class="kw">let </span>(header_ptr, len) = get_acpi_header_with_len(<span class="self">self</span>.rsdt_address <span class="kw">as _</span>);
-        <span class="comment">// copy the header as value, for later storing in the struct
-        </span><span class="kw">let </span>header = <span class="kw-2">*</span>header_ptr;
+        </span><span class="kw">let </span>(header, body_bytes) = get_acpi_table_bytes(<span class="self">self</span>.rsdt_address <span class="kw">as _</span>);
 
-        <span class="kw">let </span>entries_len = (len - size_of::&lt;DescriptionHeader&gt;()) / size_of::&lt;u32&gt;();
-        <span class="kw">let </span>entries_ptr = header_ptr.add(<span class="number">1</span>) <span class="kw">as </span><span class="kw-2">*const </span>u32;
-        <span class="comment">// use slice of u8 since we can't use u32 since its not aligned
-        </span><span class="kw">let </span>entries_slice = slice::from_raw_parts(entries_ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, entries_len * <span class="number">4</span>);
         <span class="comment">// we copy the addresses here, we can't sadly use iter to iterate over them since inside `from_physical_ptr` we need to be
-        // sure that we don't own any references to the ACPI memory regions
-        </span><span class="kw">let </span>entries_ptrs = entries_slice
+        // sure that we don't own any references to the ACPI memory regions in the `VirtualSpace`
+        </span><span class="kw">let </span>entries_ptrs = body_bytes
             .chunks(<span class="number">4</span>)
             .map(|a| u32::from_le_bytes(a.try_into().unwrap()))
             .filter(|<span class="kw-2">&amp;</span>a| a != <span class="number">0</span>)
             .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
 
-        <span class="comment">// after this call, the `header` pointer is invalid
-        // remove allocation so that they can be used below in `from_physical_ptr`
-        // Safety: the `header_ptr` is never used after this call
-        </span>deallocate_acpi_mapping(header_ptr <span class="kw">as _</span>, len);
+        <span class="comment">// deallocate the virtual space memory, so we can use it again below if regions overlap
+        </span>drop(body_bytes);
 
         <span class="kw">let </span>entries = entries_ptrs
             .into_iter()
@@ -1123,6 +1023,17 @@
     <span class="kw">pub </span>creator_revision: u32,
 }
 
+<span class="kw">impl </span>DescriptionHeader {
+    <span class="kw">pub fn </span>sum(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
+        <span class="kw">let </span><span class="kw-2">mut </span>sum = <span class="number">0u8</span>;
+        <span class="kw">let </span>ptr = <span class="self">self </span><span class="kw">as </span><span class="kw-2">*const </span><span class="self">Self </span><span class="kw">as </span><span class="kw-2">*const </span>u8;
+        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..mem::size_of::&lt;<span class="self">Self</span>&gt;() {
+            sum = sum.wrapping_add(<span class="kw">unsafe </span>{ ptr.add(i).read() });
+        }
+        sum
+    }
+}
+
 <span class="attr">#[derive(Debug, Clone)]
 </span><span class="kw">pub struct </span>DescriptorTable {
     <span class="kw">pub </span>header: DescriptionHeader,
@@ -1137,34 +1048,21 @@
     /// Thus it must never be called concurrently as well
     </span><span class="kw">pub unsafe fn </span>from_physical_ptr(ptr: u32) -&gt; <span class="self">Self </span>{
         <span class="comment">// Safety: here we are relying on the caller to ensure that the `ptr` is valid and no one is using ACPI memory
-        </span><span class="kw">let </span>(header_ptr, len) = <span class="kw">unsafe </span>{ get_acpi_header_with_len(ptr <span class="kw">as _</span>) };
+        </span><span class="kw">let </span>(header, body_bytes) = <span class="kw">unsafe </span>{ get_acpi_table_bytes(ptr <span class="kw">as _</span>) };
 
-        <span class="comment">// this must not be used as a reference to the header when creating values, as these values use
-        // data present after the header in memory
-        </span><span class="kw">let </span>header_copy = <span class="kw-2">*</span>header_ptr;
-
-        <span class="kw">let </span>body = <span class="kw">match </span><span class="kw-2">&amp;</span>header_copy.signature.<span class="number">0 </span>{
-            <span class="string">b"APIC" </span>=&gt; DescriptorTableBody::Apic(Box::new(Apic::from_header(header_ptr))),
-            <span class="string">b"FACP" </span>=&gt; DescriptorTableBody::Facp(Box::new(get_table_from_header(header_ptr))),
-            <span class="string">b"HPET" </span>=&gt; DescriptorTableBody::Hpet(Box::new(get_table_from_header(header_ptr))),
-            <span class="string">b"DSDT" </span>=&gt; DescriptorTableBody::Dsdt(Box::new(Xsdt::from_header(header_ptr))),
-            <span class="string">b"SSDT" </span>=&gt; DescriptorTableBody::Ssdt(Box::new(Xsdt::from_header(header_ptr))),
-            <span class="string">b"BGRT" </span>=&gt; DescriptorTableBody::Bgrt(Box::new(get_table_from_header(header_ptr))),
-            <span class="string">b"WAET" </span>=&gt; DescriptorTableBody::Waet(Box::new(get_table_from_header(header_ptr))),
-            <span class="string">b"SRAT" </span>=&gt; DescriptorTableBody::Srat(Box::new(Srat::from_header(header_ptr))),
-            <span class="kw">_ </span>=&gt; DescriptorTableBody::Unknown(HexArray(
-                slice::from_raw_parts(header_ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, header_copy.length <span class="kw">as </span>usize)
-                    .to_vec(),
-            )),
+        <span class="kw">let </span>body = <span class="kw">match </span><span class="kw-2">&amp;</span>header.signature.<span class="number">0 </span>{
+            <span class="string">b"APIC" </span>=&gt; DescriptorTableBody::Apic(Box::new(Apic::from_body_bytes(<span class="kw-2">&amp;</span>body_bytes))),
+            <span class="string">b"FACP" </span>=&gt; DescriptorTableBody::Facp(Box::new(get_table_from_body(<span class="kw-2">&amp;</span>body_bytes))),
+            <span class="string">b"HPET" </span>=&gt; DescriptorTableBody::Hpet(Box::new(get_table_from_body(<span class="kw-2">&amp;</span>body_bytes))),
+            <span class="string">b"DSDT" </span>=&gt; DescriptorTableBody::Dsdt(Box::new(Xsdt::from_body_bytes(<span class="kw-2">&amp;</span>body_bytes))),
+            <span class="string">b"SSDT" </span>=&gt; DescriptorTableBody::Ssdt(Box::new(Xsdt::from_body_bytes(<span class="kw-2">&amp;</span>body_bytes))),
+            <span class="string">b"BGRT" </span>=&gt; DescriptorTableBody::Bgrt(Box::new(get_table_from_body(<span class="kw-2">&amp;</span>body_bytes))),
+            <span class="string">b"WAET" </span>=&gt; DescriptorTableBody::Waet(Box::new(get_table_from_body(<span class="kw-2">&amp;</span>body_bytes))),
+            <span class="string">b"SRAT" </span>=&gt; DescriptorTableBody::Srat(Box::new(Srat::from_body_bytes(<span class="kw-2">&amp;</span>body_bytes))),
+            <span class="kw">_ </span>=&gt; DescriptorTableBody::Unknown(HexArray(body_bytes.to_vec())),
         };
-        <span class="comment">// after this point, `header_ref` and `header_ptr` are invalid
-        // Safety: the `header_ptr` is never used after this call
-        </span>deallocate_acpi_mapping(header_ptr <span class="kw">as _</span>, len);
 
-        <span class="self">Self </span>{
-            header: header_copy,
-            body,
-        }
+        <span class="self">Self </span>{ header, body }
     }
 }
 
@@ -1191,29 +1089,26 @@
 <span class="kw">impl </span>Apic {
     <span class="doccomment">/// # Safety
     /// the pointer must be valid and point to a valid table
-    </span><span class="kw">unsafe fn </span>from_header(header: <span class="kw-2">*const </span>DescriptionHeader) -&gt; <span class="self">Self </span>{
+    </span><span class="kw">fn </span>from_body_bytes(body: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>apic = <span class="self">Self </span>{
-            local_apic_address: <span class="number">0</span>,
-            flags: <span class="number">0</span>,
+            local_apic_address: LittleEndian::read_u32(body),
+            flags: LittleEndian::read_u32(<span class="kw-2">&amp;</span>body[<span class="number">4</span>..]),
             interrupt_controller_structs: Vec::new(),
         };
-        <span class="kw">let </span>after_header = header.add(<span class="number">1</span>) <span class="kw">as </span><span class="kw-2">*const </span>u32;
-        apic.local_apic_address = after_header.read_unaligned();
-        apic.flags = after_header.add(<span class="number">1</span>).read_unaligned();
 
-        <span class="kw">let </span><span class="kw-2">mut </span>ptr = after_header.add(<span class="number">2</span>) <span class="kw">as </span><span class="kw-2">*const </span>u8;
-        <span class="kw">let </span><span class="kw-2">mut </span>remaining = (<span class="kw-2">*</span>header).length - size_of::&lt;DescriptionHeader&gt;() <span class="kw">as </span>u32 - <span class="number">8</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>remaining_body = <span class="kw-2">&amp;</span>body[<span class="number">8</span>..];
+        <span class="kw">let </span><span class="kw-2">mut </span>remaining = body.len() - <span class="number">8</span>;
         <span class="kw">while </span>remaining &gt; <span class="number">0 </span>{
-            <span class="kw">let </span>struct_type = <span class="kw-2">*</span>ptr;
-            <span class="kw">let </span>struct_len = <span class="kw-2">*</span>(ptr.add(<span class="number">1</span>));
-            <span class="kw">let </span>struct_bytes = slice::from_raw_parts(ptr.add(<span class="number">2</span>), struct_len <span class="kw">as </span>usize - <span class="number">2</span>);
+            <span class="kw">let </span>struct_type = remaining_body[<span class="number">0</span>];
+            <span class="kw">let </span>struct_len = remaining_body[<span class="number">1</span>];
+            <span class="kw">let </span>struct_bytes = <span class="kw-2">&amp;</span>remaining_body[<span class="number">2</span>..struct_len <span class="kw">as </span>usize];
             apic.interrupt_controller_structs
                 .push(InterruptControllerStruct::from_type_and_bytes(
                     struct_type,
                     struct_bytes,
                 ));
-            ptr = ptr.add(struct_len <span class="kw">as </span>usize);
-            remaining -= struct_len <span class="kw">as </span>u32;
+            remaining -= struct_len <span class="kw">as </span>usize;
+            remaining_body = <span class="kw-2">&amp;</span>remaining_body[struct_len <span class="kw">as </span>usize..];
         }
         apic
     }
@@ -1388,13 +1283,8 @@
 }
 
 <span class="kw">impl </span>Xsdt {
-    <span class="doccomment">/// # Safety
-    /// the pointer must be valid and point to a valid table
-    </span><span class="kw">unsafe fn </span>from_header(header: <span class="kw-2">*const </span>DescriptionHeader) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>dsdt_ptr = header.add(<span class="number">1</span>) <span class="kw">as </span><span class="kw-2">*const </span>u8;
-        <span class="kw">let </span>data_len = (<span class="kw-2">*</span>header).length <span class="kw">as </span>usize - size_of::&lt;DescriptionHeader&gt;();
-        <span class="kw">let </span>data = slice::from_raw_parts(dsdt_ptr, data_len);
-        <span class="kw">let </span>aml_code = parse_aml(data).unwrap();
+    <span class="kw">fn </span>from_body_bytes(body: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="self">Self </span>{
+        <span class="kw">let </span>aml_code = parse_aml(body).unwrap();
         <span class="self">Self </span>{ aml_code }
     }
 }
@@ -1425,31 +1315,27 @@
 }
 
 <span class="kw">impl </span>Srat {
-    <span class="doccomment">/// # Safety
-    /// the pointer must be valid and point to a valid table
-    </span><span class="kw">unsafe fn </span>from_header(header: <span class="kw-2">*const </span>DescriptionHeader) -&gt; <span class="self">Self </span>{
+    <span class="kw">fn </span>from_body_bytes(body: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>srat = <span class="self">Self </span>{
-            reserved1: <span class="number">0</span>,
-            reserved2: <span class="number">0</span>,
+            reserved1: LittleEndian::read_u32(body),
+            reserved2: LittleEndian::read_u64(<span class="kw-2">&amp;</span>body[<span class="number">4</span>..]),
             static_resource_allocation: Vec::new(),
         };
-        <span class="kw">let </span>after_header = header.add(<span class="number">1</span>) <span class="kw">as </span><span class="kw-2">*const </span>u32;
-        srat.reserved1 = after_header.read_unaligned();
-        srat.reserved2 = (after_header.add(<span class="number">1</span>) <span class="kw">as </span><span class="kw-2">*const </span>u64).read_unaligned();
 
-        <span class="kw">let </span><span class="kw-2">mut </span>ptr = after_header.add(<span class="number">3</span>) <span class="kw">as </span><span class="kw-2">*const </span>u8;
-        <span class="kw">let </span><span class="kw-2">mut </span>remaining = (<span class="kw-2">*</span>header).length - size_of::&lt;DescriptionHeader&gt;() <span class="kw">as </span>u32 - <span class="number">12</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>remaining_body = <span class="kw-2">&amp;</span>body[<span class="number">12</span>..];
+
+        <span class="kw">let </span><span class="kw-2">mut </span>remaining = body.len() - <span class="number">12</span>;
         <span class="kw">while </span>remaining &gt; <span class="number">0 </span>{
-            <span class="kw">let </span>struct_type = <span class="kw-2">*</span>ptr;
-            <span class="kw">let </span>struct_len = <span class="kw-2">*</span>(ptr.add(<span class="number">1</span>));
-            <span class="kw">let </span>struct_bytes = slice::from_raw_parts(ptr.add(<span class="number">2</span>), struct_len <span class="kw">as </span>usize - <span class="number">2</span>);
+            <span class="kw">let </span>struct_type = remaining_body[<span class="number">0</span>];
+            <span class="kw">let </span>struct_len = remaining_body[<span class="number">1</span>];
+            <span class="kw">let </span>struct_bytes = <span class="kw-2">&amp;</span>remaining_body[<span class="number">2</span>..struct_len <span class="kw">as </span>usize];
             srat.static_resource_allocation
                 .push(StaticResourceAffinity::from_type_and_bytes(
                     struct_type,
                     struct_bytes,
                 ));
-            ptr = ptr.add(struct_len <span class="kw">as </span>usize);
-            remaining -= struct_len <span class="kw">as </span>u32;
+            remaining -= struct_len <span class="kw">as </span>usize;
+            remaining_body = <span class="kw-2">&amp;</span>remaining_body[struct_len <span class="kw">as </span>usize..];
         }
         srat
     }

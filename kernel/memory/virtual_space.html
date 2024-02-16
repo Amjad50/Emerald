@@ -183,9 +183,13 @@
 <p>Virtual space is a I'm using (not sure what other OSes call), that solves the issue of &quot;I have a physical address of an object, but I don't have virtual space to map it to&quot;.
 This is useful for reading structures that are in specific location in physical memory, such as <code>ACPI</code> tables, <code>PCI</code> configuration space, <code>memory mapped IO</code>, etc.</p>
 <p>Its very simple, it will take memory from the <code>kernel extra</code> space, and map it to the physical address.</p>
-<p>It can be used by <a href="/Emerald/docs/kernel/memory_management/virtual_space/fn.allocate_and_map_virtual_space"><code>allocate_and_map_virtual_space</code></a> and <a href="/Emerald/docs/kernel/memory_management/virtual_space/fn.deallocate_virtual_space"><code>deallocate_virtual_space</code></a>, which allow mapping and unmapping of virtual space.</p>
-<p>Currently its very basic and will return a number pointer, which should be <code>unsafe</code> XD, but I'm planning
-to make it a safer API.</p>
+<p>It can be used by <a href="/Emerald/docs/kernel/memory_management/virtual_space/struct.VirtualSpace.html"><code>VirtualSpace</code></a>, which is similar to <code>Box</code>, i.e. its a wrapper for a pointer, and it will automatically unmap the memory when it goes out of scope.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut vs = unsafe { VirtualSpace::&lt;u32&gt;::new(0x1000).unwrap() };
+*vs = 0x1234;
+assert_eq!(*vs, 0x1234);
+<span class="boring">}</span></code></pre></pre>
 
                     </main>
 

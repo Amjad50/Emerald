@@ -268,7 +268,92 @@
 <a href="#266" id="266">266</a>
 <a href="#267" id="267">267</a>
 <a href="#268" id="268">268</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>alloc::collections::LinkedList;
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem::MaybeUninit, ptr::NonNull};
+
+<span class="kw">use </span>alloc::collections::LinkedList;
 
 <span class="kw">use crate</span>::{
     memory_management::memory_layout::{
@@ -283,29 +368,122 @@
 <span class="kw">static </span>VIRTUAL_SPACE_ALLOCATOR: Mutex&lt;VirtualSpaceAllocator&gt; =
     Mutex::new(VirtualSpaceAllocator::empty());
 
-<span class="kw">pub fn </span>get_virtual_for_physical(physical_start: u64, size: usize) -&gt; usize {
-    <span class="kw">let </span>(aligned_start, size, offset) = align_range(physical_start, size, PAGE_4K);
-
-    <span class="kw">let </span><span class="kw-2">mut </span>allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    <span class="kw">let </span>virtual_addr = allocator.get_virtual_for_physical(aligned_start, size);
-    <span class="comment">// ensure its mapped
-    </span>virtual_memory_mapper::map_kernel(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
-        virtual_address: virtual_addr,
-        physical_address: <span class="prelude-val">Some</span>(aligned_start),
-        size,
-        flags: virtual_memory_mapper::flags::PTE_WRITABLE,
-    });
-    <span class="comment">// to make sure no one else play around with the space while we are mapping it
-    </span>drop(allocator);
-
-    virtual_addr + offset
+<span class="kw">pub enum </span>VirtualSpaceError {
+    OutOfSpace,
+    AlreadyMapped,
+    NotFullRange,
+    EntryNotFound,
 }
 
-<span class="kw">pub fn </span>allocate_and_map_virtual_space(physical_start: u64, size: usize) -&gt; usize {
+<span class="kw">impl </span>fmt::Debug <span class="kw">for </span>VirtualSpaceError {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+        <span class="kw">match </span><span class="self">self </span>{
+            VirtualSpaceError::OutOfSpace =&gt; <span class="macro">write!</span>(f, <span class="string">"Out of space"</span>),
+            VirtualSpaceError::AlreadyMapped =&gt; <span class="macro">write!</span>(f, <span class="string">"Already mapped"</span>),
+            VirtualSpaceError::NotFullRange =&gt; <span class="macro">write!</span>(f, <span class="string">"Not full range"</span>),
+            VirtualSpaceError::EntryNotFound =&gt; <span class="macro">write!</span>(f, <span class="string">"Entry not found"</span>),
+        }
+    }
+}
+
+<span class="kw">type </span><span class="prelude-ty">Result</span>&lt;T&gt; = core::result::Result&lt;T, VirtualSpaceError&gt;;
+
+<span class="doccomment">/// A wrapper over memory that is defined by its `physical address`.
+/// We map this memory in `virtual space`, and return a pointer to it.
+///
+</span><span class="kw">pub struct </span>VirtualSpace&lt;T: <span class="question-mark">?</span>Sized&gt; {
+    size: usize,
+    data: NonNull&lt;T&gt;,
+}
+
+<span class="kw">impl</span>&lt;T&gt; VirtualSpace&lt;T&gt; {
+    <span class="doccomment">/// Create a new virtual space for the given `physical_start` on the given type `T`.
+    ///
+    /// # Safety
+    /// - Must be a valid physical address
+    /// - The memory must be defined by default. if its not, use [`new_uninit`](Self::new_uninit) instead
+    </span><span class="kw">pub unsafe fn </span>new(physical_start: u64) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+        <span class="kw">let </span>size = core::mem::size_of::&lt;T&gt;();
+        <span class="kw">let </span>virtual_start = allocate_and_map_virtual_space(physical_start, size)<span class="question-mark">?</span>;
+        <span class="kw">let </span>data = NonNull::new(virtual_start <span class="kw">as </span><span class="kw-2">*mut </span>T).unwrap();
+        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ size, data })
+    }
+
+    <span class="doccomment">/// Create a new virtual space for the given `physical_start` on the given type `T`.
+    /// But will assume that the memory is not initialized, and will return a `MaybeUninit` pointer.
+    ///
+    /// # Safety
+    /// - Must be a valid physical address
+    </span><span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub unsafe fn </span>new_uninit(physical_start: u64) -&gt; <span class="prelude-ty">Result</span>&lt;VirtualSpace&lt;MaybeUninit&lt;T&gt;&gt;&gt; {
+        <span class="kw">let </span>size = core::mem::size_of::&lt;T&gt;();
+        <span class="kw">let </span>virtual_start = allocate_and_map_virtual_space(physical_start, size)<span class="question-mark">?</span>;
+        <span class="kw">let </span>data = NonNull::new(virtual_start <span class="kw">as </span><span class="kw-2">*mut </span>T).unwrap();
+        <span class="prelude-val">Ok</span>(VirtualSpace {
+            size,
+            data: NonNull::new_unchecked(data.as_ptr() <span class="kw">as </span><span class="kw-2">*mut </span>MaybeUninit&lt;T&gt;),
+        })
+    }
+
+    <span class="doccomment">/// Create a new virtual space for the given `physical_start` on the given slice type `[T]`.
+    ///
+    /// # Safety
+    /// - Must be a valid physical address
+    /// - The memory must be defined by default. currently, there is no way to create a slice of `MaybeUninit`
+    </span><span class="kw">pub unsafe fn </span>new_slice(physical_start: u64, len: usize) -&gt; <span class="prelude-ty">Result</span>&lt;VirtualSpace&lt;[T]&gt;&gt; {
+        <span class="kw">let </span>size = core::mem::size_of::&lt;T&gt;() * len;
+        <span class="kw">let </span>virtual_start = allocate_and_map_virtual_space(physical_start, size)<span class="question-mark">?</span>;
+        <span class="kw">let </span>data = NonNull::new(virtual_start <span class="kw">as </span><span class="kw-2">*mut </span>T).unwrap();
+        <span class="kw">let </span>slice = core::slice::from_raw_parts_mut(data.as_ptr(), len);
+
+        <span class="prelude-val">Ok</span>(VirtualSpace {
+            size,
+            data: NonNull::new_unchecked(slice <span class="kw">as </span><span class="kw-2">*mut </span>[T]),
+        })
+    }
+}
+
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; core::ops::Deref <span class="kw">for </span>VirtualSpace&lt;T&gt; {
+    <span class="kw">type </span>Target = T;
+
+    <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Target {
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.data.as_ref() }
+    }
+}
+
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; core::ops::DerefMut <span class="kw">for </span>VirtualSpace&lt;T&gt; {
+    <span class="kw">fn </span>deref_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Target {
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.data.as_mut() }
+    }
+}
+
+<span class="kw">unsafe impl</span>&lt;T: <span class="question-mark">?</span>Sized + Send&gt; Send <span class="kw">for </span>VirtualSpace&lt;T&gt; {}
+<span class="kw">unsafe impl</span>&lt;T: <span class="question-mark">?</span>Sized + Sync&gt; Sync <span class="kw">for </span>VirtualSpace&lt;T&gt; {}
+
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized&gt; Drop <span class="kw">for </span>VirtualSpace&lt;T&gt; {
+    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="kw">let </span>size = <span class="self">self</span>.size;
+        deallocate_virtual_space(<span class="self">self</span>.data.as_ptr() <span class="kw">as </span><span class="kw-2">*mut </span>u8 <span class="kw">as </span>usize, size).unwrap();
+    }
+}
+
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized + fmt::Debug&gt; fmt::Debug <span class="kw">for </span>VirtualSpace&lt;T&gt; {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+        fmt::Debug::fmt(<span class="kw-2">&amp;**</span><span class="self">self</span>, f)
+    }
+}
+
+<span class="kw">impl</span>&lt;T: <span class="question-mark">?</span>Sized + fmt::Display&gt; fmt::Display <span class="kw">for </span>VirtualSpace&lt;T&gt; {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+        fmt::Display::fmt(<span class="kw-2">&amp;**</span><span class="self">self</span>, f)
+    }
+}
+
+<span class="kw">fn </span>allocate_and_map_virtual_space(physical_start: u64, size: usize) -&gt; <span class="prelude-ty">Result</span>&lt;usize&gt; {
     <span class="kw">let </span>(aligned_start, size, offset) = align_range(physical_start, size, PAGE_4K);
 
     <span class="kw">let </span><span class="kw-2">mut </span>allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    <span class="kw">let </span>virtual_addr = allocator.allocate(aligned_start, size);
+    <span class="kw">let </span>virtual_addr = allocator.allocate(aligned_start, size)<span class="question-mark">?</span>;
 
     virtual_memory_mapper::map_kernel(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
@@ -316,15 +494,14 @@
     <span class="comment">// to make sure no one else play around with the space while we are mapping it
     </span>drop(allocator);
 
-    virtual_addr + offset
+    <span class="prelude-val">Ok</span>(virtual_addr + offset)
 }
 
-<span class="attr">#[allow(dead_code)]
-</span><span class="kw">pub fn </span>deallocate_virtual_space(virtual_start: usize, size: usize) {
+<span class="kw">fn </span>deallocate_virtual_space(virtual_start: usize, size: usize) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="kw">let </span>(aligned_start, size, <span class="kw">_</span>) = align_range(virtual_start, size, PAGE_4K);
 
     <span class="kw">let </span><span class="kw-2">mut </span>allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    allocator.deallocate(aligned_start, size);
+    allocator.deallocate(aligned_start, size)<span class="question-mark">?</span>;
     <span class="comment">// unmap it after we deallocate (it will panic if its not valid deallocation)
     </span>virtual_memory_mapper::unmap_kernel(
         <span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
@@ -336,6 +513,8 @@
         <span class="comment">// we did specify our own physical address on allocation, so we must set this to false
         </span><span class="bool-val">false</span>,
     );
+
+    <span class="prelude-val">Ok</span>(())
 }
 
 <span class="kw">pub fn </span>debug_blocks() {
@@ -349,7 +528,8 @@
     size: usize,
 }
 
-<span class="kw">impl </span>VirtualSpaceEntry {
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">impl </span>VirtualSpaceEntry {
     <span class="doccomment">/// Return `None` if its not mapped, or if the `physical_start` is not inside this entry
     </span><span class="kw">fn </span>virtual_for_physical(<span class="kw-2">&amp;</span><span class="self">self</span>, physical_start: u64) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(current_phy_start) = <span class="self">self</span>.physical_start {
@@ -409,29 +589,14 @@
         <span class="prelude-val">None
     </span>}
 
-    <span class="doccomment">/// Checks if we have this range allocated, returns it, otherwise perform an allocation, map it, and return
-    /// the new address
-    </span><span class="kw">fn </span>get_virtual_for_physical(<span class="kw-2">&amp;mut </span><span class="self">self</span>, req_phy_start: u64, req_size: usize) -&gt; usize {
-        <span class="kw">if let </span><span class="prelude-val">Some</span>((entry, is_fully_inside)) = <span class="self">self</span>.get_entry_containing(req_phy_start, req_size) {
-            <span class="kw">if </span>is_fully_inside {
-                <span class="comment">// we already have it, return it
-                // we know its inside, so we can unwrap, it may not be fully, but that's fine
-                </span><span class="kw">let </span>virtual_start = entry.virtual_for_physical(req_phy_start).unwrap();
-                <span class="kw">return </span>virtual_start;
-            }
-            <span class="comment">// we have it, but not fully inside, we need to allocate
-            </span><span class="macro">panic!</span>(<span class="string">"Could not get virtual space for {:016X}..{:016X}, it is not fully inside {:016X}..{:016X}"</span>,
-                req_phy_start, req_phy_start + req_size <span class="kw">as </span>u64, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size <span class="kw">as </span>u64);
-        }
-
-        <span class="comment">// we didn't find it, allocate it
-        </span><span class="self">self</span>.allocate(req_phy_start, req_size)
-    }
-
-    <span class="kw">fn </span>allocate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, phy_start: u64, size: usize) -&gt; usize {
+    <span class="kw">fn </span>allocate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, phy_start: u64, size: usize) -&gt; <span class="prelude-ty">Result</span>&lt;usize&gt; {
         <span class="macro">assert!</span>(size &gt; <span class="number">0</span>);
         <span class="macro">assert!</span>(is_aligned(phy_start, PAGE_4K));
         <span class="macro">assert!</span>(is_aligned(size, PAGE_4K));
+
+        <span class="kw">if </span><span class="self">self</span>.get_entry_containing(phy_start, size).is_some() {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(VirtualSpaceError::AlreadyMapped);
+        }
 
         <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="self">self</span>.entries.cursor_front_mut();
         <span class="comment">// find largest fitting entry and allocate from it
@@ -452,7 +617,7 @@
 
                 <span class="comment">// add the new entry
                 </span>cursor.insert_after(new_entry);
-                <span class="kw">return </span>virtual_address;
+                <span class="kw">return </span><span class="prelude-val">Ok</span>(virtual_address);
             }
             cursor.move_next();
         }
@@ -466,11 +631,11 @@
             });
             <span class="self">self</span>.allocate(phy_start, size)
         } <span class="kw">else </span>{
-            <span class="macro">panic!</span>(<span class="string">"Out of virtual space"</span>);
+            <span class="prelude-val">Err</span>(VirtualSpaceError::OutOfSpace)
         }
     }
 
-    <span class="kw">fn </span>deallocate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, req_virtual_start: usize, req_size: usize) {
+    <span class="kw">fn </span>deallocate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, req_virtual_start: usize, req_size: usize) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="macro">assert!</span>(req_size &gt; <span class="number">0</span>);
         <span class="macro">assert!</span>(is_aligned(req_virtual_start, PAGE_4K));
         <span class="macro">assert!</span>(is_aligned(req_size, PAGE_4K));
@@ -483,8 +648,9 @@
             {
                 <span class="comment">// it must match the whole entry
                 </span><span class="kw">if </span>req_virtual_start != entry.virtual_start || req_size != entry.size {
-                    <span class="macro">panic!</span>(<span class="string">"Requested to deallocate {:016X}..{:016X}, but its partially inside {:016X}..{:016X}, must match exactly"</span>, 
-                        req_virtual_start, req_virtual_start + req_size, entry.virtual_start, entry.virtual_start + entry.size);
+                    <span class="comment">// panic!("Requested to deallocate {:016X}..{:016X}, but its partially inside {:016X}..{:016X}, must match exactly",
+                    //     req_virtual_start, req_virtual_start + req_size, entry.virtual_start, entry.virtual_start + entry.size);
+                    </span><span class="kw">return </span><span class="prelude-val">Err</span>(VirtualSpaceError::NotFullRange);
                 }
 
                 <span class="comment">// found it, deallocate it
@@ -516,11 +682,11 @@
                 }
                 <span class="comment">// add `current` back
                 </span>cursor.insert_after(current);
-                <span class="kw">return</span>;
+                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
             }
             cursor.move_next();
         }
-        <span class="macro">panic!</span>(<span class="string">"Could not find virtual space to deallocate"</span>);
+        <span class="prelude-val">Err</span>(VirtualSpaceError::EntryNotFound)
     }
 
     <span class="kw">fn </span>debug_blocks(<span class="kw-2">&amp;</span><span class="self">self</span>) {

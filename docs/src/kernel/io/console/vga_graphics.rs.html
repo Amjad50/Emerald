@@ -208,8 +208,6 @@
 <a href="#206" id="206">206</a>
 <a href="#207" id="207">207</a>
 <a href="#208" id="208">208</a>
-<a href="#209" id="209">209</a>
-<a href="#210" id="210">210</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Point},
@@ -225,7 +223,7 @@
     Pixel,
 };
 
-<span class="kw">use crate</span>::{memory_management::virtual_space, multiboot2};
+<span class="kw">use crate</span>::{memory_management::virtual_space::VirtualSpace, multiboot2};
 
 <span class="kw">use super</span>::{VideoConsole, VideoConsoleAttribute};
 
@@ -236,7 +234,7 @@
     field_pos: (u8, u8, u8),
     mask: (u8, u8, u8),
     byte_per_pixel: u8,
-    memory: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8],
+    memory: VirtualSpace&lt;[u8]&gt;,
 
     pos: Point,
     text_style: MonoTextStyle&lt;<span class="lifetime">'static</span>, Rgb888&gt;,
@@ -258,10 +256,8 @@
 
         <span class="kw">let </span>physical_addr = framebuffer.addr;
         <span class="kw">let </span>memory_size = framebuffer.pitch * framebuffer.height;
-        <span class="kw">let </span>memory_addr =
-            virtual_space::allocate_and_map_virtual_space(physical_addr, memory_size <span class="kw">as </span>usize)
-                <span class="kw">as </span><span class="kw-2">*mut </span>u8;
-        <span class="kw">let </span>memory = <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(memory_addr, memory_size <span class="kw">as </span>usize) };
+        <span class="kw">let </span>memory =
+            <span class="kw">unsafe </span>{ VirtualSpace::new_slice(physical_addr, memory_size <span class="kw">as </span>usize).unwrap() };
 
         <span class="kw">let </span>red_mask = (<span class="number">1 </span>&lt;&lt; red_mask_size) - <span class="number">1</span>;
         <span class="kw">let </span>green_mask = (<span class="number">1 </span>&lt;&lt; green_mask_size) - <span class="number">1</span>;

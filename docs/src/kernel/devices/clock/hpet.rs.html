@@ -375,15 +375,7 @@
 <a href="#373" id="373">373</a>
 <a href="#374" id="374">374</a>
 <a href="#375" id="375">375</a>
-<a href="#376" id="376">376</a>
-<a href="#377" id="377">377</a>
-<a href="#378" id="378">378</a>
-<a href="#379" id="379">379</a>
-<a href="#380" id="380">380</a>
-<a href="#381" id="381">381</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::mem;
-
-<span class="kw">use </span>alloc::sync::Arc;
+</pre></div><pre class="rust"><code><span class="kw">use </span>alloc::sync::Arc;
 
 <span class="kw">use crate</span>::{
     acpi,
@@ -392,7 +384,7 @@
         idt::{InterruptAllSavedState, InterruptHandlerWithAllState},
         interrupts::apic,
     },
-    memory_management::virtual_space,
+    memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
@@ -607,7 +599,7 @@
 
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">pub struct </span>Hpet {
-    mmio: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>HpetMmio,
+    mmio: VirtualSpace&lt;HpetMmio&gt;,
 }
 
 <span class="kw">impl </span>Hpet {
@@ -617,11 +609,7 @@
 
         disable_pit();
         <span class="macro">assert!</span>(hpet.base_address.address_space_id == <span class="number">0</span>); <span class="comment">// memory space
-        </span><span class="kw">let </span>mmio_virtual_addr = virtual_space::allocate_and_map_virtual_space(
-            hpet.base_address.address <span class="kw">as _</span>,
-            mem::size_of::&lt;HpetMmio&gt;() <span class="kw">as _</span>,
-        );
-        <span class="kw">let </span>mmio = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>(mmio_virtual_addr <span class="kw">as </span><span class="kw-2">*mut </span>HpetMmio) };
+        </span><span class="kw">let </span>mmio = <span class="kw">unsafe </span>{ VirtualSpace::new(hpet.base_address.address).unwrap() };
 
         <span class="comment">// enable the timer
         </span><span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self </span>{ mmio };
