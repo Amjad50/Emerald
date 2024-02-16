@@ -21,6 +21,7 @@ impl Once {
         }
     }
 
+    #[inline(always)]
     fn is_completed(&self) -> bool {
         self.state.load(Ordering::Relaxed) == ONCE_STATE_DONE
     }
