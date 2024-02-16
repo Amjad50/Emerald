@@ -13,7 +13,7 @@ use crate::{
         },
         physical_page_allocator,
     },
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 use super::memory_layout::{
@@ -160,27 +160,31 @@ impl PageDirectoryTablePtr {
     }
 }
 
-static KERNEL_VIRTUAL_MEMORY_MANAGER: Mutex<VirtualMemoryMapper> =
-    Mutex::new(VirtualMemoryMapper::boot_vm());
+static KERNEL_VIRTUAL_MEMORY_MANAGER: OnceLock<Mutex<VirtualMemoryMapper>> = OnceLock::new();
 
 pub fn init_kernel_vm() {
-    let new_kernel_manager = VirtualMemoryMapper::new_kernel_vm();
-    let mut manager = KERNEL_VIRTUAL_MEMORY_MANAGER.lock();
-    *manager = new_kernel_manager;
-    // SAFETY: this is the start VM, so we are sure that we are not inside a process, so its safe to switch
+    if KERNEL_VIRTUAL_MEMORY_MANAGER.try_get().is_some() {
+        panic!("Kernel VM already initialized");
+    }
+
+    let manager = KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get_or_init(|| Mutex::new(VirtualMemoryMapper::new_kernel_vm()))
+        .lock();
+
+    // // SAFETY: this is the start VM, so we are sure that we are not inside a process, so its safe to switch
     unsafe { manager.switch_to_this() };
 }
 /// # Safety
 /// This must never be called while we are in a process context
 /// and using any process specific memory regions
 pub unsafe fn switch_to_kernel() {
-    KERNEL_VIRTUAL_MEMORY_MANAGER.lock().switch_to_this();
+    KERNEL_VIRTUAL_MEMORY_MANAGER.get().lock().switch_to_this();
 }
 
 pub fn map_kernel(entry: &VirtualMemoryMapEntry) {
     // make sure we are only mapping to kernel memory
     assert!(entry.virtual_address >= KERNEL_BASE);
-    KERNEL_VIRTUAL_MEMORY_MANAGER.lock().map(entry);
+    KERNEL_VIRTUAL_MEMORY_MANAGER.get().lock().map(entry);
 }
 
 /// `is_allocated` is used to indicate if the physical pages were allocated by the caller
@@ -191,13 +195,17 @@ pub fn unmap_kernel(entry: &VirtualMemoryMapEntry, is_allocated: bool) {
     // make sure we are only mapping to kernel memory
     assert!(entry.virtual_address >= KERNEL_BASE);
     KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get()
         .lock()
         .unmap(entry, is_allocated);
 }
 
 #[allow(dead_code)]
 pub fn is_address_mapped_in_kernel(addr: usize) -> bool {
-    KERNEL_VIRTUAL_MEMORY_MANAGER.lock().is_address_mapped(addr)
+    KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get()
+        .lock()
+        .is_address_mapped(addr)
 }
 
 pub fn clone_current_vm_as_user() -> VirtualMemoryMapper {
@@ -220,17 +228,6 @@ pub struct VirtualMemoryMapper {
 }
 
 impl VirtualMemoryMapper {
-    /// Return the VM for the CPU at boot time (only applied to the first CPU and this is setup in `boot.S`)
-    const fn boot_vm() -> Self {
-        Self {
-            // use the same address we used in the assembly code
-            // we will change this anyway in `new_kernel_vm`, but at least lets have a valid address
-            // FIXME: this is not good at all, replace this with better init, like `OnceLock` or something
-            page_map_l4: PageDirectoryTablePtr::from_entry(0),
-            is_user: false,
-        }
-    }
-
     fn new() -> Self {
         Self {
             page_map_l4: PageDirectoryTablePtr::alloc_new(),
@@ -294,6 +291,7 @@ impl VirtualMemoryMapper {
 
     fn get_current_vm() -> Self {
         let kernel_vm_addr = KERNEL_VIRTUAL_MEMORY_MANAGER
+            .get()
             .lock()
             .page_map_l4
             .as_physical();

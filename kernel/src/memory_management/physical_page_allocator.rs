@@ -1,3 +1,5 @@
+use core::ptr::NonNull;
+
 use super::memory_layout::{align_down, align_up, is_aligned, PAGE_4K};
 use crate::{
     memory_management::memory_layout::{
@@ -5,19 +7,21 @@ use crate::{
         KERNEL_LINK,
     },
     multiboot2::{MemoryMapType, MultiBoot2Info},
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 struct FreePage {
-    next: *mut FreePage,
+    next: Option<NonNull<FreePage>>,
 }
 
-static mut ALLOCATOR: Mutex<PhysicalPageAllocator> = Mutex::new(PhysicalPageAllocator::empty());
+static ALLOCATOR: OnceLock<Mutex<PhysicalPageAllocator>> = OnceLock::new();
 
 pub fn init(multiboot_info: &MultiBoot2Info) {
-    unsafe {
-        ALLOCATOR.lock().init(multiboot_info);
+    if ALLOCATOR.try_get().is_some() {
+        panic!("PhysicalPageAllocator already initialized");
     }
+
+    ALLOCATOR.get_or_init(|| Mutex::new(PhysicalPageAllocator::new(multiboot_info)));
 }
 
 /// SAFETY: this must be called after `init`
@@ -25,7 +29,7 @@ pub fn init(multiboot_info: &MultiBoot2Info) {
 /// Allocates a 4K page of memory, the returned address is guaranteed to be aligned to 4K, and is mapped into virtual space
 /// Please use `virtual2physical` to get the physical address
 pub unsafe fn alloc() -> *mut u8 {
-    ALLOCATOR.lock().alloc()
+    ALLOCATOR.get().lock().alloc()
 }
 
 /// SAFETY: this must be called after `init`
@@ -46,38 +50,29 @@ pub unsafe fn alloc_zeroed() -> *mut u8 {
 /// - `page` is not in the range of the allocator
 /// - `page` is not aligned to 4K
 pub unsafe fn free(page: *mut u8) {
-    ALLOCATOR.lock().free(page);
+    ALLOCATOR.get().lock().free(page);
 }
 
 pub fn stats() -> (usize, usize) {
-    let allocator = unsafe { ALLOCATOR.lock() };
+    let allocator = ALLOCATOR.get().lock();
     (allocator.free_count, allocator.used_count)
 }
 
 struct PhysicalPageAllocator {
-    low_mem_free_list_head: *mut FreePage,
+    low_mem_free_list_head: Option<NonNull<FreePage>>,
     #[allow(dead_code)]
     // TODO: handle more memory
-    high_mem_start: *mut u8,
-    start: *mut u8,
-    end: *mut u8,
+    high_mem_start: usize,
+    start: usize,
+    end: usize,
     free_count: usize,
     used_count: usize,
 }
 
-impl PhysicalPageAllocator {
-    const fn empty() -> Self {
-        Self {
-            low_mem_free_list_head: core::ptr::null_mut(),
-            high_mem_start: core::ptr::null_mut(),
-            start: core::ptr::null_mut(),
-            end: core::ptr::null_mut(),
-            free_count: 0,
-            used_count: 0,
-        }
-    }
+unsafe impl Send for PhysicalPageAllocator {}
 
-    fn init(&mut self, multiboot_info: &MultiBoot2Info) {
+impl PhysicalPageAllocator {
+    fn new(multiboot_info: &MultiBoot2Info) -> Self {
         const PHYSICAL_KERNEL_START: u64 = virtual2physical(KERNEL_LINK);
         // get the end of the kernel, align, and add 5 PAGES of alignment as well
         // because the multiboot info might be stored there by grub
@@ -104,6 +99,15 @@ impl PhysicalPageAllocator {
             physical_kernel_end = multiboot_end;
         }
 
+        let mut s = Self {
+            low_mem_free_list_head: None,
+            high_mem_start: 0,
+            start: 0,
+            end: 0,
+            free_count: 0,
+            used_count: 0,
+        };
+
         for memory in multiboot_info.memory_maps().unwrap() {
             // skip all the memory before the kernel, it could be used by the bootloader
             // its generally not a lot, just 1 MB, so its fine to skip it
@@ -122,32 +126,33 @@ impl PhysicalPageAllocator {
             {
                 start_physical = physical_kernel_end;
                 end_physical = align_down(memory.base_addr + memory.length, PAGE_4K);
-                self.start = physical2virtual(physical_kernel_end) as _;
+                s.start = physical2virtual(physical_kernel_end);
             } else {
                 assert!(memory.base_addr >= physical_kernel_end);
 
                 start_physical = align_up(memory.base_addr, PAGE_4K);
                 end_physical = align_down(memory.base_addr + memory.length, PAGE_4K);
             }
-            let mut high_mem_start = core::ptr::null_mut();
-            let end_virtual = if end_physical >= virtual2physical(KERNEL_END) as _ {
-                high_mem_start = KERNEL_END as *mut u8;
-                KERNEL_END as *mut u8
+            let mut high_mem_start = 0;
+            let end_virtual = if end_physical >= virtual2physical(KERNEL_END) {
+                high_mem_start = KERNEL_END;
+                KERNEL_END
             } else {
-                physical2virtual(end_physical) as _
+                physical2virtual(end_physical)
             };
-            let start_virtual = physical2virtual(start_physical) as _;
+            let start_virtual = physical2virtual(start_physical);
 
             if start_virtual < end_virtual {
-                self.end = end_virtual;
+                s.end = end_virtual;
 
-                self.init_range(start_virtual, end_virtual);
-                if !high_mem_start.is_null() {
-                    self.high_mem_start = high_mem_start;
+                s.init_range(start_virtual as _, end_virtual as _);
+                if high_mem_start != 0 {
+                    s.high_mem_start = high_mem_start;
                     break;
                 }
             }
         }
+        s
     }
 
     fn init_range(&mut self, start: *mut u8, end: *mut u8) {
@@ -166,14 +171,14 @@ impl PhysicalPageAllocator {
     ///
     /// Allocates a 4K page of memory
     unsafe fn alloc(&mut self) -> *mut u8 {
-        if self.low_mem_free_list_head.is_null() {
+        let Some(low_mem_free_list_head) = self.low_mem_free_list_head else {
             panic!("out of memory");
-        }
+        };
 
-        let page = self.low_mem_free_list_head;
-        self.low_mem_free_list_head = (*page).next;
+        let page = low_mem_free_list_head;
+        self.low_mem_free_list_head = page.as_ref().next;
 
-        let page = page as *mut u8;
+        let page = page.as_ptr() as *mut u8;
         // fill with random data to catch dangling pointer bugs
         page.write_bytes(1, PAGE_4K);
         self.used_count += 1;
@@ -202,10 +207,11 @@ impl PhysicalPageAllocator {
             panic!("freeing invalid page: {:p}", page);
         }
         // TODO: for now make sure we are not freeing the high memory for now
-        assert!(self.high_mem_start.is_null() || page < self.high_mem_start as _);
+        assert!(self.high_mem_start == 0 || page < self.high_mem_start as _);
+        let mut page = NonNull::new_unchecked(page);
 
-        (*page).next = self.low_mem_free_list_head;
-        self.low_mem_free_list_head = page;
+        page.as_mut().next = self.low_mem_free_list_head;
+        self.low_mem_free_list_head = Some(page);
         self.free_count += 1;
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     acpi::tables::{self, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
     cpu::{self, idt::InterruptStackFrame64, Cpu, CPUS, MAX_CPUS},
     memory_management::virtual_space::VirtualSpace,
-    sync::spin::mutex::Mutex,
+    sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 use super::{
@@ -17,11 +17,15 @@ use super::{
 const APIC_BAR_ENABLED: u64 = 1 << 11;
 const APIC_BASE_MASK: u64 = 0xFFFF_FFFF_FFFF_F000;
 
-static APIC: Mutex<Apic> = Mutex::new(Apic::empty());
+static APIC: OnceLock<Mutex<Apic>> = OnceLock::new();
 
 pub fn init(bios_tables: &BiosTables) {
+    if APIC.try_get().is_some() {
+        panic!("APIC already initialized");
+    }
+
     disable_pic();
-    APIC.lock().init(bios_tables);
+    APIC.get_or_init(|| Mutex::new(Apic::new(bios_tables)));
 }
 
 fn disable_pic() {
@@ -32,11 +36,11 @@ fn disable_pic() {
 }
 
 pub fn return_from_interrupt() {
-    APIC.lock().return_from_interrupt();
+    APIC.get().lock().return_from_interrupt();
 }
 
 pub fn assign_io_irq<H: InterruptHandler>(handler: H, interrupt_num: u8, cpu: &Cpu) {
-    APIC.lock().assign_io_irq(handler, interrupt_num, cpu)
+    APIC.get().lock().assign_io_irq(handler, interrupt_num, cpu)
 }
 
 pub fn assign_io_irq_custom<H: InterruptHandler, F>(
@@ -47,7 +51,8 @@ pub fn assign_io_irq_custom<H: InterruptHandler, F>(
 ) where
     F: FnOnce(IoApicRedirectionBuilder) -> IoApicRedirectionBuilder,
 {
-    APIC.lock()
+    APIC.get()
+        .lock()
         .assign_io_irq_custom(handler, interrupt_num, cpu, modify_entry)
 }
 
@@ -327,25 +332,14 @@ impl From<tables::IoApic> for IoApic {
 }
 
 struct Apic {
-    mmio: Option<VirtualSpace<ApicMmio>>,
+    mmio: VirtualSpace<ApicMmio>,
     n_cpus: usize,
     io_apics: Vec<IoApic>,
     source_overrides: Vec<InterruptSourceOverride>,
 }
 
 impl Apic {
-    const fn empty() -> Self {
-        Self {
-            // we should call `init` first, it will cause an exception
-            // if referenced and we should catch that.
-            mmio: None,
-            n_cpus: 0,
-            io_apics: Vec::new(),
-            source_overrides: Vec::new(),
-        }
-    }
-
-    fn init(&mut self, bios_tables: &BiosTables) {
+    fn new(bios_tables: &BiosTables) -> Self {
         // do we have APIC in this cpu?
         let cpuid = unsafe { cpu::cpuid::cpuid!(cpu::cpuid::FN_FEAT) };
         if cpuid.edx & cpu::cpuid::FEAT_EDX_APIC == 0 {
@@ -379,6 +373,10 @@ impl Apic {
             apic_address = madt_table.local_apic_address as u64;
         }
 
+        let mut n_cpus = 0;
+        let mut io_apics = Vec::new();
+        let mut source_overrides = Vec::new();
+
         for strct in &madt_table.interrupt_controller_structs {
             match strct {
                 InterruptControllerStruct::ProcessorLocalApic(s) => {
@@ -386,7 +384,7 @@ impl Apic {
                         // this is a disabled processor
                         continue;
                     }
-                    if self.n_cpus >= MAX_CPUS {
+                    if n_cpus >= MAX_CPUS {
                         println!(
                             "WARNING: too many CPUs, have {MAX_CPUS} already, ignoring the rest"
                         );
@@ -394,16 +392,16 @@ impl Apic {
                         // initialize the CPUs
                         // SAFETY: this is safe
                         unsafe {
-                            CPUS[self.n_cpus].init(self.n_cpus, s.apic_id);
+                            CPUS[n_cpus].init(n_cpus, s.apic_id);
                         }
-                        self.n_cpus += 1;
+                        n_cpus += 1;
                     }
                 }
                 InterruptControllerStruct::IoApic(s) => {
-                    self.io_apics.push(s.clone().into());
+                    io_apics.push(s.clone().into());
                 }
                 InterruptControllerStruct::InterruptSourceOverride(s) => {
-                    self.source_overrides.push(s.clone());
+                    source_overrides.push(s.clone());
                 }
                 InterruptControllerStruct::NonMaskableInterrupt(_) => todo!(),
                 InterruptControllerStruct::LocalApicNmi(_s) => {
@@ -425,41 +423,49 @@ impl Apic {
         }
 
         assert!(
-            self.n_cpus > 0,
+            n_cpus > 0,
             "no CPUs found in the MADT table, cannot continue"
         );
         assert!(
-            !self.io_apics.is_empty(),
+            !io_apics.is_empty(),
             "no IO APICs found in the MADT table, cannot continue"
         );
         assert!(apic_address != 0, "APIC address is 0, cannot continue");
         assert!(apic_address & 0xF == 0, "APIC address is not aligned");
-        // Safety: we are sure that the address is valid
-        self.mmio = Some(unsafe { VirtualSpace::new(apic_address).unwrap() });
 
         // reset all interrupts
-        self.io_apics.iter_mut().for_each(|io_apic| {
+        io_apics.iter_mut().for_each(|io_apic: &mut IoApic| {
             io_apic.reset_all_interrupts();
         });
 
-        self.initialize_spurious_interrupt();
-        self.disable_local_interrupts();
-        self.initialize_timer();
-        self.setup_error_interrupt();
+        let mut s = Self {
+            // Safety: we are sure that the address is valid
+            mmio: unsafe {
+                VirtualSpace::new(apic_address).expect("Could not map APIC virtual space")
+            },
+            n_cpus,
+            io_apics,
+            source_overrides,
+        };
+
+        s.initialize_spurious_interrupt();
+        s.disable_local_interrupts();
+        s.initialize_timer();
+        s.setup_error_interrupt();
         // ack any pending interrupts
-        self.return_from_interrupt();
+        s.return_from_interrupt();
+
+        s
     }
 
     fn return_from_interrupt(&mut self) {
-        self.mmio.as_mut().unwrap().end_of_interrupt.write(0);
+        self.mmio.end_of_interrupt.write(0);
     }
 
     fn initialize_spurious_interrupt(&mut self) {
         let interrupt_num = allocate_basic_user_interrupt(spurious_handler);
         // 1 << 8, to enable spurious interrupts
         self.mmio
-            .as_mut()
-            .unwrap()
             .spurious_interrupt_vector
             .write(SPURIOUS_ENABLE | interrupt_num as u32);
     }
@@ -467,63 +473,39 @@ impl Apic {
     /// disable the Local interrupts 0 and 1
     fn disable_local_interrupts(&mut self) {
         let vector_table = LocalVectorRegisterBuilder::default().with_mask(true);
-        self.mmio
-            .as_mut()
-            .unwrap()
-            .lint0_local_vector_table
-            .write(vector_table);
-        self.mmio
-            .as_mut()
-            .unwrap()
-            .lint1_local_vector_table
-            .write(vector_table);
+        self.mmio.lint0_local_vector_table.write(vector_table);
+        self.mmio.lint1_local_vector_table.write(vector_table);
     }
 
     fn initialize_timer(&mut self) {
         let interrupt_num = allocate_user_interrupt_all_saved(super::handlers::apic_timer_handler);
 
         // divide by 1
-        self.mmio
-            .as_mut()
-            .unwrap()
-            .timer_divide_configuration
-            .write(0b1011);
+        self.mmio.timer_divide_configuration.write(0b1011);
         // just random value, this is based on the CPU clock speed
         // so its not accurate timing.
-        self.mmio
-            .as_mut()
-            .unwrap()
-            .timer_initial_count
-            .write(0x1000000);
+        self.mmio.timer_initial_count.write(0x1000000);
         // periodic mode, not masked, and with the allocated vector number
         let vector_table = LocalVectorRegisterBuilder::default()
             .with_periodic_timer(true)
             .with_mask(false)
             .with_vector(interrupt_num);
-        self.mmio
-            .as_mut()
-            .unwrap()
-            .timer_local_vector_table
-            .write(vector_table);
+        self.mmio.timer_local_vector_table.write(vector_table);
     }
 
     fn setup_error_interrupt(&mut self) {
         // clear the error status and write 0 to it
         // 1- clear the error status
-        self.mmio.as_mut().unwrap().error_status.write(0);
+        self.mmio.error_status.write(0);
         // 2- write 0 to it (yes, we have to do this twice)
-        self.mmio.as_mut().unwrap().error_status.write(0);
+        self.mmio.error_status.write(0);
 
         let interrupt_num = allocate_basic_user_interrupt(error_interrupt_handler);
         // not masked, and with the allocated vector number
         let vector_table = LocalVectorRegisterBuilder::default()
             .with_mask(false)
             .with_vector(interrupt_num);
-        self.mmio
-            .as_mut()
-            .unwrap()
-            .error_local_vector_table
-            .write(vector_table);
+        self.mmio.error_local_vector_table.write(vector_table);
     }
 
     fn assign_io_irq<H: InterruptHandler>(&mut self, handler: H, irq_num: u8, cpu: &Cpu) {
@@ -590,9 +572,9 @@ extern "x86-interrupt" fn spurious_handler(_frame: InterruptStackFrame64) {
 }
 
 extern "x86-interrupt" fn error_interrupt_handler(_frame: InterruptStackFrame64) {
-    let error_status = APIC.lock().mmio.as_mut().unwrap().error_status.read();
+    let error_status = APIC.get().lock().mmio.error_status.read();
     println!("APIC error: {:#X}", error_status);
     // clear the error
-    APIC.lock().mmio.as_mut().unwrap().error_status.write(0);
+    APIC.get().lock().mmio.error_status.write(0);
     return_from_interrupt();
 }
