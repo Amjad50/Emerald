@@ -1,5 +1,3 @@
-use core::mem;
-
 use alloc::sync::Arc;
 
 use crate::{
@@ -9,7 +7,7 @@ use crate::{
         idt::{InterruptAllSavedState, InterruptHandlerWithAllState},
         interrupts::apic,
     },
-    memory_management::virtual_space,
+    memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
@@ -224,7 +222,7 @@ struct HpetMmio {
 
 #[derive(Debug)]
 pub struct Hpet {
-    mmio: &'static mut HpetMmio,
+    mmio: VirtualSpace<HpetMmio>,
 }
 
 impl Hpet {
@@ -234,11 +232,7 @@ impl Hpet {
 
         disable_pit();
         assert!(hpet.base_address.address_space_id == 0); // memory space
-        let mmio_virtual_addr = virtual_space::allocate_and_map_virtual_space(
-            hpet.base_address.address as _,
-            mem::size_of::<HpetMmio>() as _,
-        );
-        let mmio = unsafe { &mut *(mmio_virtual_addr as *mut HpetMmio) };
+        let mmio = unsafe { VirtualSpace::new(hpet.base_address.address).unwrap() };
 
         // enable the timer
         let mut s = Self { mmio };

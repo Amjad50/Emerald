@@ -1,3 +1,5 @@
+use core::{fmt, mem::MaybeUninit, ptr::NonNull};
+
 use alloc::collections::LinkedList;
 
 use crate::{
@@ -13,12 +15,113 @@ use super::virtual_memory_mapper::{self, VirtualMemoryMapEntry};
 static VIRTUAL_SPACE_ALLOCATOR: Mutex<VirtualSpaceAllocator> =
     Mutex::new(VirtualSpaceAllocator::empty());
 
-pub fn get_virtual_for_physical(physical_start: u64, size: usize) -> usize {
+pub enum VirtualSpaceError {
+    OutOfSpace,
+    AlreadyMapped,
+    NotFullRange,
+    EntryNotFound,
+}
+
+impl fmt::Debug for VirtualSpaceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VirtualSpaceError::OutOfSpace => write!(f, "Out of space"),
+            VirtualSpaceError::AlreadyMapped => write!(f, "Already mapped"),
+            VirtualSpaceError::NotFullRange => write!(f, "Not full range"),
+            VirtualSpaceError::EntryNotFound => write!(f, "Entry not found"),
+        }
+    }
+}
+
+type Result<T> = core::result::Result<T, VirtualSpaceError>;
+
+/// A wrapper over memory that is defined by its `physical address`.
+/// We map this memory in `virtual space`, and return a pointer to it.
+///
+pub struct VirtualSpace<T: ?Sized> {
+    size: usize,
+    data: NonNull<T>,
+}
+
+impl<T> VirtualSpace<T> {
+    /// # Safety
+    /// - Must be a valid physical address
+    /// - The memory must be defined by default. if its not, use [`VirtualSpace::new_uninit`] instead
+    pub unsafe fn new(physical_start: u64) -> Result<Self> {
+        let size = core::mem::size_of::<T>();
+        let virtual_start = allocate_and_map_virtual_space(physical_start, size)?;
+        let data = NonNull::new(virtual_start as *mut T).unwrap();
+        Ok(Self { size, data })
+    }
+
+    /// # Safety
+    /// - Must be a valid physical address
+    #[allow(dead_code)]
+    pub unsafe fn new_uninit(physical_start: u64) -> Result<VirtualSpace<MaybeUninit<T>>> {
+        let size = core::mem::size_of::<T>();
+        let virtual_start = allocate_and_map_virtual_space(physical_start, size)?;
+        let data = NonNull::new(virtual_start as *mut T).unwrap();
+        Ok(VirtualSpace {
+            size,
+            data: NonNull::new_unchecked(data.as_ptr() as *mut MaybeUninit<T>),
+        })
+    }
+
+    pub unsafe fn new_slice(physical_start: u64, len: usize) -> Result<VirtualSpace<[T]>> {
+        let size = core::mem::size_of::<T>() * len;
+        let virtual_start = allocate_and_map_virtual_space(physical_start, size)?;
+        let data = NonNull::new(virtual_start as *mut T).unwrap();
+        let slice = core::slice::from_raw_parts_mut(data.as_ptr(), len);
+
+        Ok(VirtualSpace {
+            size,
+            data: NonNull::new_unchecked(slice as *mut [T]),
+        })
+    }
+}
+
+impl<T: ?Sized> core::ops::Deref for VirtualSpace<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.data.as_ref() }
+    }
+}
+
+impl<T: ?Sized> core::ops::DerefMut for VirtualSpace<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.data.as_mut() }
+    }
+}
+
+unsafe impl<T: ?Sized + Send> Send for VirtualSpace<T> {}
+unsafe impl<T: ?Sized + Sync> Sync for VirtualSpace<T> {}
+
+impl<T: ?Sized> Drop for VirtualSpace<T> {
+    fn drop(&mut self) {
+        let size = self.size;
+        deallocate_virtual_space(self.data.as_ptr() as *mut u8 as usize, size).unwrap();
+    }
+}
+
+impl<T: ?Sized + fmt::Debug> fmt::Debug for VirtualSpace<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
+impl<T: ?Sized + fmt::Display> fmt::Display for VirtualSpace<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&**self, f)
+    }
+}
+
+fn allocate_and_map_virtual_space(physical_start: u64, size: usize) -> Result<usize> {
     let (aligned_start, size, offset) = align_range(physical_start, size, PAGE_4K);
 
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    let virtual_addr = allocator.get_virtual_for_physical(aligned_start, size);
-    // ensure its mapped
+    let virtual_addr = allocator.allocate(aligned_start, size)?;
+
     virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
         virtual_address: virtual_addr,
         physical_address: Some(aligned_start),
@@ -28,33 +131,14 @@ pub fn get_virtual_for_physical(physical_start: u64, size: usize) -> usize {
     // to make sure no one else play around with the space while we are mapping it
     drop(allocator);
 
-    virtual_addr + offset
+    Ok(virtual_addr + offset)
 }
 
-pub fn allocate_and_map_virtual_space(physical_start: u64, size: usize) -> usize {
-    let (aligned_start, size, offset) = align_range(physical_start, size, PAGE_4K);
-
-    let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    let virtual_addr = allocator.allocate(aligned_start, size);
-
-    virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
-        virtual_address: virtual_addr,
-        physical_address: Some(aligned_start),
-        size,
-        flags: virtual_memory_mapper::flags::PTE_WRITABLE,
-    });
-    // to make sure no one else play around with the space while we are mapping it
-    drop(allocator);
-
-    virtual_addr + offset
-}
-
-#[allow(dead_code)]
-pub fn deallocate_virtual_space(virtual_start: usize, size: usize) {
+fn deallocate_virtual_space(virtual_start: usize, size: usize) -> Result<()> {
     let (aligned_start, size, _) = align_range(virtual_start, size, PAGE_4K);
 
     let mut allocator = VIRTUAL_SPACE_ALLOCATOR.lock();
-    allocator.deallocate(aligned_start, size);
+    allocator.deallocate(aligned_start, size)?;
     // unmap it after we deallocate (it will panic if its not valid deallocation)
     virtual_memory_mapper::unmap_kernel(
         &VirtualMemoryMapEntry {
@@ -66,6 +150,8 @@ pub fn deallocate_virtual_space(virtual_start: usize, size: usize) {
         // we did specify our own physical address on allocation, so we must set this to false
         false,
     );
+
+    Ok(())
 }
 
 pub fn debug_blocks() {
@@ -79,6 +165,7 @@ struct VirtualSpaceEntry {
     size: usize,
 }
 
+#[allow(dead_code)]
 impl VirtualSpaceEntry {
     /// Return `None` if its not mapped, or if the `physical_start` is not inside this entry
     fn virtual_for_physical(&self, physical_start: u64) -> Option<usize> {
@@ -139,29 +226,14 @@ impl VirtualSpaceAllocator {
         None
     }
 
-    /// Checks if we have this range allocated, returns it, otherwise perform an allocation, map it, and return
-    /// the new address
-    fn get_virtual_for_physical(&mut self, req_phy_start: u64, req_size: usize) -> usize {
-        if let Some((entry, is_fully_inside)) = self.get_entry_containing(req_phy_start, req_size) {
-            if is_fully_inside {
-                // we already have it, return it
-                // we know its inside, so we can unwrap, it may not be fully, but that's fine
-                let virtual_start = entry.virtual_for_physical(req_phy_start).unwrap();
-                return virtual_start;
-            }
-            // we have it, but not fully inside, we need to allocate
-            panic!("Could not get virtual space for {:016X}..{:016X}, it is not fully inside {:016X}..{:016X}",
-                req_phy_start, req_phy_start + req_size as u64, entry.physical_start.unwrap(), entry.physical_start.unwrap() + entry.size as u64);
-        }
-
-        // we didn't find it, allocate it
-        self.allocate(req_phy_start, req_size)
-    }
-
-    fn allocate(&mut self, phy_start: u64, size: usize) -> usize {
+    fn allocate(&mut self, phy_start: u64, size: usize) -> Result<usize> {
         assert!(size > 0);
         assert!(is_aligned(phy_start, PAGE_4K));
         assert!(is_aligned(size, PAGE_4K));
+
+        if self.get_entry_containing(phy_start, size).is_some() {
+            return Err(VirtualSpaceError::AlreadyMapped);
+        }
 
         let mut cursor = self.entries.cursor_front_mut();
         // find largest fitting entry and allocate from it
@@ -182,7 +254,7 @@ impl VirtualSpaceAllocator {
 
                 // add the new entry
                 cursor.insert_after(new_entry);
-                return virtual_address;
+                return Ok(virtual_address);
             }
             cursor.move_next();
         }
@@ -196,11 +268,11 @@ impl VirtualSpaceAllocator {
             });
             self.allocate(phy_start, size)
         } else {
-            panic!("Out of virtual space");
+            Err(VirtualSpaceError::OutOfSpace)
         }
     }
 
-    fn deallocate(&mut self, req_virtual_start: usize, req_size: usize) {
+    fn deallocate(&mut self, req_virtual_start: usize, req_size: usize) -> Result<()> {
         assert!(req_size > 0);
         assert!(is_aligned(req_virtual_start, PAGE_4K));
         assert!(is_aligned(req_size, PAGE_4K));
@@ -213,8 +285,9 @@ impl VirtualSpaceAllocator {
             {
                 // it must match the whole entry
                 if req_virtual_start != entry.virtual_start || req_size != entry.size {
-                    panic!("Requested to deallocate {:016X}..{:016X}, but its partially inside {:016X}..{:016X}, must match exactly", 
-                        req_virtual_start, req_virtual_start + req_size, entry.virtual_start, entry.virtual_start + entry.size);
+                    // panic!("Requested to deallocate {:016X}..{:016X}, but its partially inside {:016X}..{:016X}, must match exactly",
+                    //     req_virtual_start, req_virtual_start + req_size, entry.virtual_start, entry.virtual_start + entry.size);
+                    return Err(VirtualSpaceError::NotFullRange);
                 }
 
                 // found it, deallocate it
@@ -246,11 +319,11 @@ impl VirtualSpaceAllocator {
                 }
                 // add `current` back
                 cursor.insert_after(current);
-                return;
+                return Ok(());
             }
             cursor.move_next();
         }
-        panic!("Could not find virtual space to deallocate");
+        Err(VirtualSpaceError::EntryNotFound)
     }
 
     fn debug_blocks(&self) {

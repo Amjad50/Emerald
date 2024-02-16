@@ -1,7 +1,7 @@
 //! A temporary tool to allow for easy printing to the screen.
 //! We are using the VGA text mode buffer to print to the screen.
 
-use crate::{memory_management::virtual_space, multiboot2};
+use crate::{memory_management::virtual_space::VirtualSpace, multiboot2};
 
 use super::{VideoConsole, VideoConsoleAttribute};
 
@@ -14,7 +14,7 @@ pub(super) struct VgaText {
     pitch: usize,
     height: usize,
     width: usize,
-    memory: &'static mut [u8],
+    memory: VirtualSpace<[u8]>,
 }
 
 impl VgaText {
@@ -25,10 +25,8 @@ impl VgaText {
         ));
         let physical_addr = framebuffer.addr;
         let memory_size = framebuffer.pitch * framebuffer.height;
-        let memory_addr =
-            virtual_space::allocate_and_map_virtual_space(physical_addr, memory_size as usize)
-                as *mut u8;
-        let memory = unsafe { core::slice::from_raw_parts_mut(memory_addr, memory_size as usize) };
+        let memory =
+            unsafe { VirtualSpace::new_slice(physical_addr, memory_size as usize).unwrap() };
 
         Self {
             pos: (0, 0),

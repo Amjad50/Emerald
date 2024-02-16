@@ -104,6 +104,7 @@ version = "0.1.0"
 name = "kernel"
 version = "0.1.0"
 dependencies = [
+ "byteorder",
  "embedded-graphics",
  "emerald_kernel_user_link",
  "increasing_heap_allocator",

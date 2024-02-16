@@ -1,18 +1,16 @@
 use core::{
     any::Any,
     fmt,
-    mem::{self, size_of, MaybeUninit},
+    mem::{self, MaybeUninit},
     slice,
 };
 
 use alloc::{boxed::Box, vec::Vec};
+use byteorder::{ByteOrder, LittleEndian};
 
 use crate::{
     io::{ByteStr, HexArray},
-    memory_management::{
-        memory_layout::{physical2virtual, virtual2physical, KERNEL_BASE, KERNEL_END},
-        virtual_space,
-    },
+    memory_management::{memory_layout::physical2virtual, virtual_space::VirtualSpace},
     multiboot2::MultiBoot2Info,
     sync::once::OnceLock,
 };
@@ -26,57 +24,28 @@ const BIOS_RO_MEM_END: u64 = 0x000FFFFF;
 ///
 /// Must ensure the `physical_addr` is valid and point to correct DescriptionHeader
 /// Must ensure that the `physical_address` is not used in virtual_space before calling this function
-/// If any address is used, this may panic, and undefined behavior may occur due to aliasing memory referenced by other code
-/// call `deallocate_acpi_mapping` after using any memory in the acpi region
-unsafe fn get_acpi_header_with_len(physical_addr: u64) -> (*const DescriptionHeader, usize) {
-    if physical_addr < virtual2physical(KERNEL_END) {
-        assert!(
-            physical_addr + mem::size_of::<DescriptionHeader>() as u64
-                <= virtual2physical(KERNEL_END)
-        );
+/// We are using `VirtualSpace` on low kernel addresses (i.e. already mapped by the kernel).
+/// Accessing these addresses manually without `VirtualSpace` may lead to undefined behavior due to aliasing memory referenced by other code
+unsafe fn get_acpi_table_bytes(physical_addr: u64) -> (DescriptionHeader, VirtualSpace<[u8]>) {
+    let header = VirtualSpace::<DescriptionHeader>::new(physical_addr).expect("Failed to map");
+    let len = header.length as usize;
+    let header_copy = *header;
+    drop(header);
 
-        let header_virtual = (physical_addr + KERNEL_BASE as u64) as *const DescriptionHeader;
-        let len = (*header_virtual).length as usize;
-        assert!(physical_addr + len as u64 <= virtual2physical(KERNEL_END));
-        (header_virtual, len)
-    } else {
-        let header = virtual_space::get_virtual_for_physical(
-            physical_addr as _,
-            mem::size_of::<DescriptionHeader>() as _,
-        ) as *const DescriptionHeader;
+    let data_start_phys = physical_addr + mem::size_of::<DescriptionHeader>() as u64;
+    let data_len = len - mem::size_of::<DescriptionHeader>();
 
-        let len = (*header).length as usize;
-        // remove this entry
-        virtual_space::deallocate_virtual_space(
-            header as _,
-            mem::size_of::<DescriptionHeader>() as _,
-        );
-        let header_ptr = virtual_space::get_virtual_for_physical(physical_addr as _, len as _)
-            as *const DescriptionHeader;
+    let header_data =
+        VirtualSpace::<u8>::new_slice(data_start_phys, data_len).expect("Failed to get slice");
 
-        // check sum
-        let struct_slice = slice::from_raw_parts(header_ptr as *const u8, len);
-        let sum = struct_slice.iter().fold(0u8, |acc, &x| acc.wrapping_add(x));
-        assert_eq!(sum, 0);
+    // check sum
+    let sum = header_copy
+        .sum()
+        .wrapping_add(header_data.iter().fold(0u8, |acc, &x| acc.wrapping_add(x)));
+    assert_eq!(sum, 0);
 
-        // after this point, the header is valid and can be used safely
-
-        (header_ptr, len)
-    }
-}
-
-/// # Safety
-///
-/// The data pointed by `addr` will become invalid and must not be used.
-///
-/// This will affect all pages of memory that are touching the address space of `addr` and `size`
-/// Thus, this should only be used when we are sure that we are not holding any references to any data of this space.
-unsafe fn deallocate_acpi_mapping(addr: u64, size: usize) {
-    if addr < virtual2physical(KERNEL_END) {
-        assert!(addr + size as u64 <= virtual2physical(KERNEL_END));
-    } else {
-        virtual_space::deallocate_virtual_space(addr as _, size as _);
-    }
+    // after this point, the header is valid and can be used safely
+    (header_copy, header_data)
 }
 
 /// Will fill the table from the header data, and zero out remaining bytes if any are left
@@ -84,15 +53,11 @@ unsafe fn deallocate_acpi_mapping(addr: u64, size: usize) {
 /// # Safety
 /// the pointer must be valid and point to a valid table
 /// Also, `<T>` must be valid when some parts of it is zero
-unsafe fn get_table_from_header<T>(header: *const DescriptionHeader) -> T {
-    let data_ptr = header.add(1) as *const u8;
-    let data_len = (*header).length as usize - size_of::<DescriptionHeader>();
-    let data_slice = slice::from_raw_parts(data_ptr, data_len);
-
+unsafe fn get_table_from_body<T>(body: &[u8]) -> T {
     let mut our_data_value = MaybeUninit::zeroed();
     let out_data_slice =
         slice::from_raw_parts_mut(our_data_value.as_mut_ptr() as *mut u8, mem::size_of::<T>());
-    out_data_slice[..data_len].copy_from_slice(data_slice);
+    out_data_slice[..body.len()].copy_from_slice(body);
 
     our_data_value.assume_init()
 }
@@ -243,26 +208,18 @@ impl Rsdp {
     /// this uses virtual space for the regions that the `rsdt` is inside and all its other children structures
     unsafe fn rdst(&self) -> Rsdt {
         // Safety: here we are the first
-        let (header_ptr, len) = get_acpi_header_with_len(self.rsdt_address as _);
-        // copy the header as value, for later storing in the struct
-        let header = *header_ptr;
+        let (header, body_bytes) = get_acpi_table_bytes(self.rsdt_address as _);
 
-        let entries_len = (len - size_of::<DescriptionHeader>()) / size_of::<u32>();
-        let entries_ptr = header_ptr.add(1) as *const u32;
-        // use slice of u8 since we can't use u32 since its not aligned
-        let entries_slice = slice::from_raw_parts(entries_ptr as *const u8, entries_len * 4);
         // we copy the addresses here, we can't sadly use iter to iterate over them since inside `from_physical_ptr` we need to be
-        // sure that we don't own any references to the ACPI memory regions
-        let entries_ptrs = entries_slice
+        // sure that we don't own any references to the ACPI memory regions in the `VirtualSpace`
+        let entries_ptrs = body_bytes
             .chunks(4)
             .map(|a| u32::from_le_bytes(a.try_into().unwrap()))
             .filter(|&a| a != 0)
             .collect::<Vec<_>>();
 
-        // after this call, the `header` pointer is invalid
-        // remove allocation so that they can be used below in `from_physical_ptr`
-        // Safety: the `header_ptr` is never used after this call
-        deallocate_acpi_mapping(header_ptr as _, len);
+        // deallocate the virtual space memory, so we can use it again below if regions overlap
+        drop(body_bytes);
 
         let entries = entries_ptrs
             .into_iter()
@@ -324,6 +281,17 @@ pub struct DescriptionHeader {
     pub creator_revision: u32,
 }
 
+impl DescriptionHeader {
+    pub fn sum(&self) -> u8 {
+        let mut sum = 0u8;
+        let ptr = self as *const Self as *const u8;
+        for i in 0..mem::size_of::<Self>() {
+            sum = sum.wrapping_add(unsafe { ptr.add(i).read() });
+        }
+        sum
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DescriptorTable {
     pub header: DescriptionHeader,
@@ -338,34 +306,21 @@ impl DescriptorTable {
     /// Thus it must never be called concurrently as well
     pub unsafe fn from_physical_ptr(ptr: u32) -> Self {
         // Safety: here we are relying on the caller to ensure that the `ptr` is valid and no one is using ACPI memory
-        let (header_ptr, len) = unsafe { get_acpi_header_with_len(ptr as _) };
+        let (header, body_bytes) = unsafe { get_acpi_table_bytes(ptr as _) };
 
-        // this must not be used as a reference to the header when creating values, as these values use
-        // data present after the header in memory
-        let header_copy = *header_ptr;
-
-        let body = match &header_copy.signature.0 {
-            b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_header(header_ptr))),
-            b"FACP" => DescriptorTableBody::Facp(Box::new(get_table_from_header(header_ptr))),
-            b"HPET" => DescriptorTableBody::Hpet(Box::new(get_table_from_header(header_ptr))),
-            b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Xsdt::from_header(header_ptr))),
-            b"SSDT" => DescriptorTableBody::Ssdt(Box::new(Xsdt::from_header(header_ptr))),
-            b"BGRT" => DescriptorTableBody::Bgrt(Box::new(get_table_from_header(header_ptr))),
-            b"WAET" => DescriptorTableBody::Waet(Box::new(get_table_from_header(header_ptr))),
-            b"SRAT" => DescriptorTableBody::Srat(Box::new(Srat::from_header(header_ptr))),
-            _ => DescriptorTableBody::Unknown(HexArray(
-                slice::from_raw_parts(header_ptr as *const u8, header_copy.length as usize)
-                    .to_vec(),
-            )),
+        let body = match &header.signature.0 {
+            b"APIC" => DescriptorTableBody::Apic(Box::new(Apic::from_body_bytes(&body_bytes))),
+            b"FACP" => DescriptorTableBody::Facp(Box::new(get_table_from_body(&body_bytes))),
+            b"HPET" => DescriptorTableBody::Hpet(Box::new(get_table_from_body(&body_bytes))),
+            b"DSDT" => DescriptorTableBody::Dsdt(Box::new(Xsdt::from_body_bytes(&body_bytes))),
+            b"SSDT" => DescriptorTableBody::Ssdt(Box::new(Xsdt::from_body_bytes(&body_bytes))),
+            b"BGRT" => DescriptorTableBody::Bgrt(Box::new(get_table_from_body(&body_bytes))),
+            b"WAET" => DescriptorTableBody::Waet(Box::new(get_table_from_body(&body_bytes))),
+            b"SRAT" => DescriptorTableBody::Srat(Box::new(Srat::from_body_bytes(&body_bytes))),
+            _ => DescriptorTableBody::Unknown(HexArray(body_bytes.to_vec())),
         };
-        // after this point, `header_ref` and `header_ptr` are invalid
-        // Safety: the `header_ptr` is never used after this call
-        deallocate_acpi_mapping(header_ptr as _, len);
 
-        Self {
-            header: header_copy,
-            body,
-        }
+        Self { header, body }
     }
 }
 
@@ -392,29 +347,26 @@ pub struct Apic {
 impl Apic {
     /// # Safety
     /// the pointer must be valid and point to a valid table
-    unsafe fn from_header(header: *const DescriptionHeader) -> Self {
+    fn from_body_bytes(body: &[u8]) -> Self {
         let mut apic = Self {
-            local_apic_address: 0,
-            flags: 0,
+            local_apic_address: LittleEndian::read_u32(body),
+            flags: LittleEndian::read_u32(&body[4..]),
             interrupt_controller_structs: Vec::new(),
         };
-        let after_header = header.add(1) as *const u32;
-        apic.local_apic_address = after_header.read_unaligned();
-        apic.flags = after_header.add(1).read_unaligned();
 
-        let mut ptr = after_header.add(2) as *const u8;
-        let mut remaining = (*header).length - size_of::<DescriptionHeader>() as u32 - 8;
+        let mut remaining_body = &body[8..];
+        let mut remaining = body.len() - 8;
         while remaining > 0 {
-            let struct_type = *ptr;
-            let struct_len = *(ptr.add(1));
-            let struct_bytes = slice::from_raw_parts(ptr.add(2), struct_len as usize - 2);
+            let struct_type = remaining_body[0];
+            let struct_len = remaining_body[1];
+            let struct_bytes = &remaining_body[2..struct_len as usize];
             apic.interrupt_controller_structs
                 .push(InterruptControllerStruct::from_type_and_bytes(
                     struct_type,
                     struct_bytes,
                 ));
-            ptr = ptr.add(struct_len as usize);
-            remaining -= struct_len as u32;
+            remaining -= struct_len as usize;
+            remaining_body = &remaining_body[struct_len as usize..];
         }
         apic
     }
@@ -589,13 +541,8 @@ pub struct Xsdt {
 }
 
 impl Xsdt {
-    /// # Safety
-    /// the pointer must be valid and point to a valid table
-    unsafe fn from_header(header: *const DescriptionHeader) -> Self {
-        let dsdt_ptr = header.add(1) as *const u8;
-        let data_len = (*header).length as usize - size_of::<DescriptionHeader>();
-        let data = slice::from_raw_parts(dsdt_ptr, data_len);
-        let aml_code = parse_aml(data).unwrap();
+    fn from_body_bytes(body: &[u8]) -> Self {
+        let aml_code = parse_aml(body).unwrap();
         Self { aml_code }
     }
 }
@@ -626,31 +573,27 @@ pub struct Srat {
 }
 
 impl Srat {
-    /// # Safety
-    /// the pointer must be valid and point to a valid table
-    unsafe fn from_header(header: *const DescriptionHeader) -> Self {
+    fn from_body_bytes(body: &[u8]) -> Self {
         let mut srat = Self {
-            reserved1: 0,
-            reserved2: 0,
+            reserved1: LittleEndian::read_u32(body),
+            reserved2: LittleEndian::read_u64(&body[4..]),
             static_resource_allocation: Vec::new(),
         };
-        let after_header = header.add(1) as *const u32;
-        srat.reserved1 = after_header.read_unaligned();
-        srat.reserved2 = (after_header.add(1) as *const u64).read_unaligned();
 
-        let mut ptr = after_header.add(3) as *const u8;
-        let mut remaining = (*header).length - size_of::<DescriptionHeader>() as u32 - 12;
+        let mut remaining_body = &body[12..];
+
+        let mut remaining = body.len() - 12;
         while remaining > 0 {
-            let struct_type = *ptr;
-            let struct_len = *(ptr.add(1));
-            let struct_bytes = slice::from_raw_parts(ptr.add(2), struct_len as usize - 2);
+            let struct_type = remaining_body[0];
+            let struct_len = remaining_body[1];
+            let struct_bytes = &remaining_body[2..struct_len as usize];
             srat.static_resource_allocation
                 .push(StaticResourceAffinity::from_type_and_bytes(
                     struct_type,
                     struct_bytes,
                 ));
-            ptr = ptr.add(struct_len as usize);
-            remaining -= struct_len as u32;
+            remaining -= struct_len as usize;
+            remaining_body = &remaining_body[struct_len as usize..];
         }
         srat
     }
