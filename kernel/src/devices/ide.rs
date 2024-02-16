@@ -197,12 +197,18 @@ impl IdeIo {
         }
     }
 
-    pub fn wait_until_can_command(&self) {
+    pub fn wait_until_can_command(&self) -> Result<(), u8> {
+        self.wait_until_free();
+
         let mut status = self.read_status();
         while status & (ata::STATUS_BUSY | ata::STATUS_DATA_REQUEST) != 0 {
+            if status & ata::STATUS_ERR != 0 {
+                return Err(self.read_error());
+            }
             hint::spin_loop();
             status = self.read_status();
         }
+        Ok(())
     }
 
     pub fn read_data(&self) -> u16 {
@@ -217,6 +223,8 @@ impl IdeIo {
         self.read_command_block(ata::STATUS)
     }
 
+    /// Note that this is only valid if the device is not busy
+    /// and has the `ERROR` status bit set
     pub fn read_error(&self) -> u8 {
         self.read_command_block(ata::ERROR)
     }
@@ -329,7 +337,7 @@ impl AtaCommand {
     pub fn execute(&self, io_port: &IdeIo, data: &mut [u8]) -> Result<(), u8> {
         // must be even since we are receiving 16 bit words
         assert!(data.len() % 2 == 0);
-        io_port.wait_until_can_command();
+        io_port.wait_until_can_command()?;
         self.write(io_port);
 
         io_port.read_data_block(data)
@@ -429,7 +437,7 @@ impl AtapiPacketCommand {
     pub fn execute(&self, io_port: &IdeIo, data: &mut [u8]) -> Result<(), u8> {
         // must be even since we are receiving 16 bit words
         assert!(data.len() % 2 == 0);
-        io_port.wait_until_can_command();
+        io_port.wait_until_can_command()?;
         self.write_packet_command(io_port);
         io_port.wait_until_free();
 
@@ -729,7 +737,7 @@ impl IdeDeviceImpl {
         let mut device_type = IdeDeviceType::Ata;
 
         if let Err(err) = command.execute(&io, &mut identify_data) {
-            assert_eq!(err, ata::ERROR_ABORTED);
+            assert!(err & ata::ERROR_ABORTED != 0);
             let lbalo = io.read_command_block(ata::LBA_LO);
             let lbamid = io.read_command_block(ata::LBA_MID);
             let lbahi = io.read_command_block(ata::LBA_HI);
