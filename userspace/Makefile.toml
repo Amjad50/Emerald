@@ -2,8 +2,10 @@
 RUSTC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/bin/rustc"
 RUSTDOC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/rustdoc"
 USER_OUTDIR = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/x86_64-unknown-emerald/${PROFILE}"
+CARGO_MAKE_CARGO_PROFILE = { source = "${PROFILE}", default_value = "debug", mapping = {"debug" = "dev", "release" = "release" } }
 
-CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = ["init", "shell"]
+
+CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = ["init", "shell", "graphics"]
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 CARGO_MAKE_WORKSPACE_EMULATION = true
 # BUG in cargo-make, it uses `cargo` to get metadata about `rustc`, and it uses the system toolchain
@@ -41,4 +43,4 @@ workspace = false
 dependencies = ["build_member"]
 condition= {files_modified = {input=["${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}"], output=["${FILESYSTEM_PATH}/${CARGO_MAKE_PROJECT_NAME}"]}}
 command = "cp"
-args = ["-r", "${USER_OUTDIR}/echo", "${USER_OUTDIR}/cat", "${USER_OUTDIR}/ls", "${USER_OUTDIR}/xxd", "${FILESYSTEM_PATH}/"]
+args = ["-r", "${USER_OUTDIR}/echo", "${USER_OUTDIR}/cat", "${USER_OUTDIR}/ls", "${USER_OUTDIR}/xxd", "${USER_OUTDIR}/graphics", "${FILESYSTEM_PATH}/"]
