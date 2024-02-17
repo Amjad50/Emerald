@@ -62,7 +62,10 @@ fn create_video_console(framebuffer: Option<multiboot2::Framebuffer>) -> Box<dyn
     match framebuffer {
         Some(framebuffer) => match framebuffer.color_info {
             FramebufferColorInfo::Indexed { .. } => todo!(),
-            FramebufferColorInfo::Rgb { .. } => Box::new(VgaGraphics::new(framebuffer)),
+            FramebufferColorInfo::Rgb { .. } => {
+                // assumes we have already initialized the vga display
+                Box::new(VgaGraphics::new())
+            }
             FramebufferColorInfo::EgaText => Box::new(VgaText::new(framebuffer)),
         },
         None => panic!("No framebuffer provided"),
