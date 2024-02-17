@@ -58,7 +58,7 @@ impl VgaGraphics {
         let fb_info = self.vga.framebuffer_info();
         let width = fb_info.width as i32;
         let height = fb_info.height as i32;
-        if self.pos.x >= width {
+        if self.pos.x + self.text_style.font.character_size.width as i32 >= width {
             self.pos.x = 0;
             self.pos.y += self.text_style.line_height() as i32;
         }
