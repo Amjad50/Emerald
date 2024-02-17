@@ -10,6 +10,7 @@ use crate::{
     devices::clock::ClockTime,
     executable::{elf, load_elf_to_vm},
     fs,
+    graphics::vga,
     memory_management::{
         memory_layout::{align_down, align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
         virtual_memory_mapper::{
@@ -278,6 +279,10 @@ impl Process {
     pub fn exit(&mut self, exit_code: i32) {
         self.state = ProcessState::Exited;
         self.exit_code = exit_code;
+        // release the vga if we have it
+        if let Some(vga) = vga::controller() {
+            vga.release(self.id);
+        }
     }
 
     pub fn add_child_exit(&mut self, pid: u64, exit_code: i32) {

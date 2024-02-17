@@ -4,6 +4,7 @@ use alloc::{borrow::Cow, string::String, vec::Vec};
 use kernel_user_link::{
     clock::ClockType,
     file::{BlockingMode, DirEntry, FileMeta},
+    graphics::{BlitCommand, FrameBufferInfo, GraphicsCommand},
     process::SpawnFileMapping,
     sys_arg,
     syscalls::{
@@ -14,10 +15,11 @@ use kernel_user_link::{
 };
 
 use crate::{
-    cpu::idt::InterruptAllSavedState,
+    cpu::{self, idt::InterruptAllSavedState},
     devices::{self, clock},
     executable::elf::Elf,
     fs::{self, path::Path, FileSystemError},
+    graphics,
     memory_management::memory_layout::{is_aligned, PAGE_4K},
     process::{scheduler, Process},
 };
@@ -46,6 +48,7 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_get_file_meta, // kernel_user_link::syscalls::SYS_GET_FILE_META
     sys_sleep,         // kernel_user_link::syscalls::SYS_SLEEP
     sys_get_time,      // kernel_user_link::syscalls::SYS_GET_TIME
+    sys_graphics,      // kernel_user_link::syscalls::SYS_GRAPHICS
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -660,6 +663,73 @@ fn sys_get_time(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     // Safety: we checked that the pointer is valid
     unsafe {
         *time_ptr = time;
+    }
+
+    SyscallResult::Ok(0)
+}
+
+fn sys_graphics(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (command_id, extra, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => u64),
+        sys_arg!(1, all_state.rest => *mut u8)
+    };
+
+    let command = GraphicsCommand::from_u64(command_id)
+        .ok_or(to_arg_err!(0, SyscallArgError::GeneralInvalid))?;
+
+    let pid = cpu::cpu().process_id;
+
+    match command {
+        GraphicsCommand::TakeOwnership => {
+            if !graphics::vga::controller()
+                .ok_or(SyscallError::GraphicsNotAvailable)?
+                .take_ownership(pid)
+            {
+                return Err(SyscallError::GraphicsAlreadyTaken);
+            }
+        }
+        GraphicsCommand::ReleaseOwnership => {
+            if !graphics::vga::controller()
+                .ok_or(SyscallError::GraphicsNotAvailable)?
+                .release(pid)
+            {
+                return Err(SyscallError::GraphicsNotOwned);
+            }
+        }
+        GraphicsCommand::GetFrameBufferInfo => {
+            let info = *graphics::vga::controller()
+                .ok_or(SyscallError::GraphicsNotAvailable)?
+                .framebuffer_info();
+            let info_ptr =
+                ptr_as_mut::<FrameBufferInfo>(extra).map_err(|err| to_arg_err!(1, err))?;
+            // Safety: we checked that the pointer is valid
+            unsafe {
+                *info_ptr = info;
+            }
+        }
+        GraphicsCommand::Blit => {
+            let blit = ptr_as_ref::<BlitCommand>(extra).map_err(|err| to_arg_err!(1, err))?;
+            // Safety: we checked that the pointer is valid
+            let blit = unsafe { *blit };
+
+            let buffer_len = blit.src_framebuffer_info.memory_size();
+            let buffer = sys_arg_to_slice(blit.memory, buffer_len)
+                .map_err(|_| SyscallError::InvalidGraphicsBuffer)?;
+
+            graphics::vga::controller()
+                .ok_or(SyscallError::GraphicsNotAvailable)?
+                .lock_process(pid)
+                .ok_or(SyscallError::GraphicsNotOwned)?
+                .blit(
+                    buffer,
+                    &blit.src_framebuffer_info,
+                    blit.src,
+                    blit.dst,
+                    blit.size.0,
+                    blit.size.1,
+                );
+        }
+        c => panic!("invalid graphics command {c:?}"),
     }
 
     SyscallResult::Ok(0)
