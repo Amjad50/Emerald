@@ -375,6 +375,11 @@
 <a href="#373" id="373">373</a>
 <a href="#374" id="374">374</a>
 <a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>alloc::sync::Arc;
 
 <span class="kw">use crate</span>::{
@@ -621,7 +626,7 @@
         <span class="macro">assert!</span>(config.is_periodic_capable); <span class="comment">// must be periodic capable
         </span><span class="macro">assert!</span>(config.is_64bit_capable); <span class="comment">// must be 64-bit capable
 
-        </span>config.is_interrupt_level_trigerred = <span class="bool-val">true</span>;
+        </span>config.is_interrupt_level_trigerred = <span class="bool-val">false</span>;
         config.interrupt_enabled = <span class="bool-val">true</span>;
         config.is_periodic = <span class="bool-val">true</span>; <span class="comment">// periodic
         </span>config.force_32bit_mode = <span class="bool-val">false</span>; <span class="comment">// don't force 32-bit mode
@@ -642,7 +647,7 @@
             timer0_handler <span class="kw">as </span>InterruptHandlerWithAllState,
             interrupt_route,
             cpu::cpu(),
-            |entry| entry.with_trigger_mode_level(<span class="bool-val">true</span>),
+            |entry| entry.with_trigger_mode_level(<span class="bool-val">false</span>),
         );
 
         s.set_enabled(<span class="bool-val">false</span>);
@@ -743,10 +748,15 @@
 <span class="kw">extern </span><span class="string">"cdecl" </span><span class="kw">fn </span>timer0_handler(_all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) {
     <span class="kw">let </span><span class="kw-2">mut </span>clock = HPET_CLOCK.get().as_ref().lock();
 
-    <span class="kw">let </span>interrupt = clock.status_interrupts_iter().next().unwrap();
-
-    <span class="comment">// clear the interrupt (must for level triggered interrupts)
-    </span>clock.ack_interrupt(interrupt);
+    <span class="comment">// if we are level triggered, we must clear the interrupt bit
+    </span><span class="kw">if </span>clock.mmio.timers[<span class="number">0</span>].config().is_interrupt_level_trigerred {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(interrupt) = clock.status_interrupts_iter().next() {
+            <span class="comment">// clear the interrupt (must for level triggered interrupts)
+            </span>clock.ack_interrupt(interrupt);
+        } <span class="kw">else </span>{
+            <span class="macro">println!</span>(<span class="string">"[WARN] Looks like we are getting PIT interrupt instead of HPET"</span>);
+        }
+    }
 
     apic::return_from_interrupt();
 }
