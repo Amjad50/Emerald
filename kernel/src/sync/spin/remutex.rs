@@ -57,7 +57,6 @@ where
     }
 }
 
-#[allow(dead_code)]
 impl<T> ReMutex<T> {
     pub const fn new(data: T) -> Self {
         Self {
@@ -125,6 +124,10 @@ impl<T> ReMutex<T> {
         } else {
             None
         }
+    }
+
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.data
     }
 }
 
