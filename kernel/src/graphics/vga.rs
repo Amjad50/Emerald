@@ -5,6 +5,7 @@ use embedded_graphics::{
     geometry::{self, OriginDimensions},
     pixelcolor::Rgb888,
 };
+pub use kernel_user_link::graphics::FrameBufferInfo;
 
 use crate::{
     memory_management::virtual_space::VirtualSpace,
@@ -104,41 +105,32 @@ impl VgaDisplayController {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct FrameBufferInfo {
-    pub pitch: usize,
-    pub height: usize,
-    pub width: usize,
-    pub field_pos: (u8, u8, u8),
-    pub mask: (u8, u8, u8),
-    pub byte_per_pixel: u8,
+// extra custom functionality
+trait FrameBufferDraw {
+    fn read_pixel(&self, memory: &[u8], pos: (usize, usize)) -> Option<Pixel>;
+    fn write_pixel(&self, memory: &mut [u8], pos: (usize, usize), color: Pixel) -> Option<()>;
 }
 
-impl FrameBufferInfo {
-    fn get_arr_pos(&self, pos: (usize, usize)) -> usize {
-        pos.0 * self.byte_per_pixel as usize + pos.1 * self.pitch
-    }
-
-    fn read_pixel(&self, memory: &[u8], pos: (usize, usize)) -> Pixel {
-        let i = self.get_arr_pos(pos);
-        let pixel_mem = &memory[i..i + self.byte_per_pixel as usize];
-        Pixel {
+impl FrameBufferDraw for FrameBufferInfo {
+    fn read_pixel(&self, memory: &[u8], pos: (usize, usize)) -> Option<Pixel> {
+        let pixel_mem = self.pixel_mem(memory, pos)?;
+        Some(Pixel {
             r: pixel_mem[self.field_pos.0 as usize],
             g: pixel_mem[self.field_pos.1 as usize],
             b: pixel_mem[self.field_pos.2 as usize],
-        }
+        })
     }
 
-    fn write_pixel(&self, memory: &mut [u8], pos: (usize, usize), color: Pixel) {
-        let i = self.get_arr_pos(pos);
-        let pixel_mem = &mut memory[i..i + self.byte_per_pixel as usize];
-
+    fn write_pixel(&self, memory: &mut [u8], pos: (usize, usize), color: Pixel) -> Option<()> {
+        let pixel_mem = self.pixel_mem_mut(memory, pos)?;
         let r = color.r & self.mask.0;
         let g = color.g & self.mask.1;
         let b = color.b & self.mask.2;
         pixel_mem[self.field_pos.0 as usize] = r;
         pixel_mem[self.field_pos.1 as usize] = g;
         pixel_mem[self.field_pos.2 as usize] = b;
+
+        Some(())
     }
 }
 
@@ -250,8 +242,8 @@ impl VgaDisplay {
         };
 
         for y in 0..height {
-            let src_i = self.fb_info.get_arr_pos((src_x, src_y + y));
-            let dest_i = self.fb_info.get_arr_pos((dest_x, dest_y + y));
+            let src_i = self.fb_info.get_arr_pos((src_x, src_y + y)).unwrap();
+            let dest_i = self.fb_info.get_arr_pos((dest_x, dest_y + y)).unwrap();
 
             copy_handler(src_i, dest_i, &mut self.memory);
         }
@@ -299,8 +291,10 @@ impl VgaDisplay {
         let chunk_size = width * self.fb_info.byte_per_pixel as usize;
 
         for y in 0..height {
-            let src_i = src_framebuffer_info.get_arr_pos((src_x, src_y + y));
-            let dest_i = self.fb_info.get_arr_pos((dest_x, dest_y + y));
+            let src_i = src_framebuffer_info
+                .get_arr_pos((src_x, src_y + y))
+                .unwrap();
+            let dest_i = self.fb_info.get_arr_pos((dest_x, dest_y + y)).unwrap();
 
             let src_line = &src_buffer[src_i..src_i + chunk_size];
             let dest_line = &mut self.memory[dest_i..dest_i + chunk_size];
@@ -327,9 +321,12 @@ impl VgaDisplay {
 
         for y in 0..height {
             for x in 0..width {
-                let src_pixel = src_framebuffer_info.read_pixel(src_buffer, (src_x + x, src_y + y));
+                let src_pixel = src_framebuffer_info
+                    .read_pixel(src_buffer, (src_x + x, src_y + y))
+                    .unwrap();
                 self.fb_info
-                    .write_pixel(&mut self.memory, (dest_x + x, dest_y + y), src_pixel);
+                    .write_pixel(&mut self.memory, (dest_x + x, dest_y + y), src_pixel)
+                    .unwrap();
             }
         }
     }
@@ -350,7 +347,7 @@ impl VgaDisplay {
         }
 
         let line_chunk_size = width * self.fb_info.byte_per_pixel as usize;
-        let first_line_start = self.fb_info.get_arr_pos((dest_x, dest_y));
+        let first_line_start = self.fb_info.get_arr_pos((dest_x, dest_y)).unwrap();
         let first_line_end = first_line_start + line_chunk_size;
         let first_line = &mut self.memory[first_line_start..first_line_end];
 
@@ -361,12 +358,12 @@ impl VgaDisplay {
 
         // take from the end of the first line, i.e. `before` will have the first line
         // and `after` will have the rest of the memory
-        let second_line_start = self.fb_info.get_arr_pos((0, dest_y + 1));
+        let second_line_start = self.fb_info.get_arr_pos((0, dest_y + 1)).unwrap();
         let (before, after) = self.memory.split_at_mut(second_line_start);
         let first_line = &before[first_line_start..first_line_end];
 
         for y in 1..height {
-            let dest_i = self.fb_info.get_arr_pos((dest_x, y - 1));
+            let dest_i = self.fb_info.get_arr_pos((dest_x, y - 1)).unwrap();
             let dest_line = &mut after[dest_i..dest_i + line_chunk_size];
             dest_line.copy_from_slice(first_line);
         }
@@ -393,6 +390,14 @@ impl DrawTarget for VgaDisplay {
         area: &embedded_graphics::primitives::Rectangle,
         color: Self::Color,
     ) -> Result<(), Self::Error> {
+        if area.top_left.x < 0
+            || area.top_left.y < 0
+            || area.bottom_right().unwrap().x >= self.fb_info.width as i32
+            || area.bottom_right().unwrap().y >= self.fb_info.height as i32
+        {
+            return Err(());
+        }
+
         let (x, y) = (area.top_left.x as usize, area.top_left.y as usize);
         let (width, height) = (area.size.width as usize, area.size.height as usize);
         self.clear_rect(x, y, width, height, color.into());
