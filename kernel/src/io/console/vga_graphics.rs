@@ -54,7 +54,7 @@ impl VgaGraphics {
         self.pos.y -= lines as i32;
     }
 
-    fn fix_after_advance(&mut self) {
+    fn fix_after_advance(&mut self, vga: &mut vga::VgaDisplay) {
         let fb_info = self.vga.framebuffer_info();
         let width = fb_info.width as i32;
         let height = fb_info.height as i32;
@@ -63,16 +63,14 @@ impl VgaGraphics {
             self.pos.y += self.text_style.line_height() as i32;
         }
         if self.pos.y + self.text_style.line_height() as i32 >= height {
-            if let Some(mut vga) = self.vga.lock_kernel() {
-                // scroll up
-                self.scroll(self.text_style.line_height() as usize, &mut vga);
+            // scroll up
+            self.scroll(self.text_style.line_height() as usize, vga);
 
-                // clear line
-                self.clear_current_text_line(&mut vga);
-            }
+            // clear line
+            self.clear_current_text_line(vga);
 
             // just to make sure we are not out of bounds by more than 1 line
-            self.fix_after_advance();
+            self.fix_after_advance(vga);
         }
     }
 }
@@ -85,6 +83,11 @@ impl VideoConsole for VgaGraphics {
     }
 
     fn write_byte(&mut self, c: u8) {
+        let Some(mut vga) = self.vga.lock_kernel() else {
+            // don't change anything if we can't lock the VGA
+            return;
+        };
+
         if c == b'\n' {
             self.pos = Point::new(0, self.pos.y + self.text_style.line_height() as i32);
         } else {
@@ -93,16 +96,11 @@ impl VideoConsole for VgaGraphics {
 
             let style = self.text_style;
 
-            if let Some(mut vga) = self.vga.lock_kernel() {
-                self.pos = style
-                    .draw_string(str, self.pos, Baseline::Bottom, &mut *vga)
-                    .unwrap();
-            } else {
-                // nothing changed, so no need to check for scroll
-                return;
-            }
+            self.pos = style
+                .draw_string(str, self.pos, Baseline::Bottom, &mut *vga)
+                .unwrap();
         }
-        self.fix_after_advance();
+        self.fix_after_advance(&mut vga);
     }
 
     fn set_attrib(&mut self, attrib: VideoConsoleAttribute) {
