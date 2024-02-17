@@ -39,6 +39,10 @@ pub fn return_from_interrupt() {
     APIC.get().lock().return_from_interrupt();
 }
 
+pub fn is_irq_assigned(irq_num: u8) -> bool {
+    APIC.get().lock().is_irq_assigned(irq_num)
+}
+
 pub fn assign_io_irq<H: InterruptHandler>(handler: H, interrupt_num: u8, cpu: &Cpu) {
     APIC.get().lock().assign_io_irq(handler, interrupt_num, cpu)
 }
@@ -508,6 +512,35 @@ impl Apic {
         self.mmio.error_local_vector_table.write(vector_table);
     }
 
+    fn get_irq_ioapic_entry(&mut self, irq_num: u8) -> Option<(u8, &mut IoApic)> {
+        // if we have override mapping for this interrupt, use it.
+        let int_override = self
+            .source_overrides
+            .iter()
+            .find(|int_override| int_override.source == irq_num);
+        let mut interrupt_num = irq_num as u32;
+        if let Some(int_override) = int_override {
+            interrupt_num = int_override.global_system_interrupt;
+        }
+        self.io_apics
+            .iter_mut()
+            .find(|io_apic| {
+                io_apic.global_irq_base <= interrupt_num
+                    && interrupt_num < io_apic.global_irq_base + io_apic.n_entries as u32
+            })
+            .map(|io_apic| {
+                let entry_in_ioapic = interrupt_num - io_apic.global_irq_base;
+                (entry_in_ioapic as u8, io_apic)
+            })
+    }
+
+    fn is_irq_assigned(&mut self, irq_num: u8) -> bool {
+        let (entry_in_ioapic, io_apic) = self
+            .get_irq_ioapic_entry(irq_num)
+            .expect("Could not find IO APIC for the interrupt");
+        io_apic.is_entry_taken(entry_in_ioapic as u8)
+    }
+
     fn assign_io_irq<H: InterruptHandler>(&mut self, handler: H, irq_num: u8, cpu: &Cpu) {
         self.assign_io_irq_custom(handler, irq_num, cpu, |b| b)
     }
@@ -524,29 +557,17 @@ impl Apic {
         assert!(cpu.id < self.n_cpus, "CPU ID is out of range");
         assert!(irq_num < 24, "interrupt number is out of range");
 
-        // if we have override mapping for this interrupt, use it.
-        let int_override = self
-            .source_overrides
-            .iter()
-            .find(|int_override| int_override.source == irq_num);
-        let mut interrupt_num = irq_num as u32;
-        if let Some(int_override) = int_override {
-            interrupt_num = int_override.global_system_interrupt;
-        }
-        let io_apic = self
-            .io_apics
-            .iter_mut()
-            .find(|io_apic| {
-                io_apic.global_irq_base <= interrupt_num
-                    && interrupt_num < io_apic.global_irq_base + io_apic.n_entries as u32
-            })
+        let (entry_in_ioapic, io_apic) = self
+            .get_irq_ioapic_entry(irq_num)
             .expect("Could not find IO APIC for the interrupt");
-
-        // the location of where we want to
-        let entry_in_ioapic = interrupt_num - io_apic.global_irq_base;
+        // TODO: this is added for catching bugs early, probably we should return `Result`
+        // using `is_irq_assigned`.
+        assert!(
+            !io_apic.is_entry_taken(entry_in_ioapic as u8),
+            "entry is already taken"
+        );
 
         let vector_num = allocate_user_interrupt(handler);
-
         let b = IoApicRedirectionBuilder::default()
             .with_vector(vector_num)
             .with_delivery_mode(0) // fixed
@@ -556,12 +577,7 @@ impl Apic {
             .with_destination(DestinationType::Physical(cpu.apic_id));
 
         let b = modify_entry(b);
-        // TODO: this is added for catching bugs early, later will replace
-        // it with a better solution.
-        assert!(
-            !io_apic.is_entry_taken(entry_in_ioapic as u8),
-            "entry is already taken"
-        );
+
         io_apic.write_redirect_entry(entry_in_ioapic as u8, b);
     }
 }

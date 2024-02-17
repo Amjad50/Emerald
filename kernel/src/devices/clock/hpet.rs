@@ -249,12 +249,32 @@ impl Hpet {
         config.is_periodic = true; // periodic
         config.force_32bit_mode = false; // don't force 32-bit mode
         config.interrupt_via_fsb = false; // don't use FSB
-        let interrupt_route = config
-            .interrupt_route_capabilities
-            .enabled_rounts()
-            .next()
-            .unwrap();
-        config.interrupt_route = interrupt_route;
+        let available_routes = config.interrupt_route_capabilities.enabled_rounts();
+
+        let mut first_available_route = None;
+        let mut above_15_route = None;
+        // check if we have available routes that are higher than 15, which
+        // is the range of legacy ISA interrupts.
+        // if we have any above those, its best to use them
+        // otherwise, we will use the first available route
+        for route in available_routes {
+            if first_available_route.is_none() && !apic::is_irq_assigned(route) {
+                // we can use this route
+                first_available_route = Some(route);
+            }
+            if above_15_route.is_none() && route > 15 {
+                above_15_route = Some(route);
+            }
+            if first_available_route.is_some() && above_15_route.is_some() {
+                break;
+            }
+        }
+
+        let choosen_route = above_15_route
+            .or(first_available_route)
+            .expect("No available HPET route");
+
+        config.interrupt_route = choosen_route;
         config.timer_set_value = true; // write the timer value
         timer.set_config(config);
         timer.write_comparator_value(ONE_SECOND_IN_FEMTOSECONDS / clock_period);
@@ -263,7 +283,7 @@ impl Hpet {
         // setup ioapic
         apic::assign_io_irq_custom(
             timer0_handler as InterruptHandlerWithAllState,
-            interrupt_route,
+            choosen_route,
             cpu::cpu(),
             |entry| entry.with_trigger_mode_level(false),
         );
