@@ -4,10 +4,10 @@ use std::thread::sleep;
 
 use embedded_graphics::{
     draw_target::DrawTarget,
-    geometry::{Dimensions, OriginDimensions, Point},
+    geometry::{Dimensions, OriginDimensions, Point, Size},
     mono_font::{ascii::FONT_9X15, MonoTextStyle},
     pixelcolor::{Rgb888, RgbColor},
-    primitives::{Circle, Primitive, PrimitiveStyle},
+    primitives::{Circle, Primitive, PrimitiveStyle, Rectangle},
     text::{Baseline, Text},
     transform::Transform,
     Drawable,
@@ -35,6 +35,7 @@ impl<T: RgbColor> From<T> for Pixel {
 struct Graphics {
     framebuffer: Box<[u8]>,
     framebuffer_info: FrameBufferInfo,
+    last_changed_rect: Option<(usize, usize, usize, usize)>,
 }
 
 impl Graphics {
@@ -46,6 +47,7 @@ impl Graphics {
         Self {
             framebuffer: memory,
             framebuffer_info: info,
+            last_changed_rect: Some((0, 0, info.width as usize, info.height as usize)),
         }
     }
 
@@ -81,6 +83,14 @@ impl Graphics {
             return Some(());
         }
 
+        if let Some((x, y, w, h)) = self.last_changed_rect {
+            let (min_x, min_y) = (dest_x.min(x), dest_y.min(y));
+            let (max_x, max_y) = ((dest_x + width).max(x + w), (dest_y + height).max(y + h));
+            self.last_changed_rect = Some((min_x, min_y, max_x - min_x, max_y - min_y));
+        } else {
+            self.last_changed_rect = Some((dest_x, dest_y, width, height));
+        }
+
         let line_chunk_size = width * self.framebuffer_info.byte_per_pixel as usize;
         let first_line_start = self.framebuffer_info.get_arr_pos((dest_x, dest_y)).unwrap();
         let first_line_end = first_line_start + line_chunk_size;
@@ -108,13 +118,40 @@ impl Graphics {
         Some(())
     }
 
-    pub fn present(&self) {
+    pub fn last_changed_rect(&self) -> Option<(usize, usize, usize, usize)> {
+        self.last_changed_rect
+    }
+
+    pub fn clear_changed(&mut self) {
+        self.last_changed_rect = None;
+    }
+
+    pub fn merge_clear_rect(&mut self, rect: Option<(usize, usize, usize, usize)>) {
+        if let Some((x, y, w, h)) = self.last_changed_rect {
+            if let Some((dest_x, dest_y, width, height)) = rect {
+                let (min_x, min_y) = (dest_x.min(x), dest_y.min(y));
+                let (max_x, max_y) = ((dest_x + width).max(x + w), (dest_y + height).max(y + h));
+                self.last_changed_rect = Some((min_x, min_y, max_x - min_x, max_y - min_y));
+            }
+        } else {
+            self.last_changed_rect = rect;
+        }
+    }
+
+    pub fn present_changed(&mut self) {
+        let Some((dest_x, dest_y, width, height)) = self.last_changed_rect else {
+            return;
+        };
+
+        let changed_xy = (dest_x, dest_y);
+        self.clear_changed();
+
         emerald_std::graphics::blit(&BlitCommand {
             memory: &self.framebuffer,
             src_framebuffer_info: self.framebuffer_info,
-            src: (0, 0),
-            dst: (0, 0),
-            size: (self.framebuffer_info.width, self.framebuffer_info.height),
+            src: changed_xy,
+            dst: changed_xy,
+            size: (width, height),
         })
         .unwrap();
     }
@@ -135,12 +172,54 @@ impl DrawTarget for Graphics {
     where
         I: IntoIterator<Item = embedded_graphics::prelude::Pixel<Self::Color>>,
     {
+        let (mut min_x, mut min_y, mut max_x, mut max_y) =
+            if let Some((x, y, w, h)) = self.last_changed_rect {
+                let (min_x, min_y) = (x, y);
+                let (max_x, max_y) = (x + w, y + h);
+
+                (min_x, min_y, max_x, max_y)
+            } else {
+                (
+                    self.framebuffer_info.width,
+                    self.framebuffer_info.height,
+                    0,
+                    0,
+                )
+            };
+
         for pixel in pixels {
             let pos = pixel.0;
+
+            if pos.x < 0
+                || pos.y < 0
+                || pos.x >= self.framebuffer_info.width as i32
+                || pos.y >= self.framebuffer_info.height as i32
+            {
+                continue;
+            }
+
+            let pos_x = pos.x as usize;
+            let pos_y = pos.y as usize;
+
+            if pos_x < min_x {
+                min_x = pos_x;
+            }
+            if pos_y < min_y {
+                min_y = pos_y;
+            }
+            if pos_x > max_x {
+                max_x = pos_x;
+            }
+            if pos_y > max_y {
+                max_y = pos_y;
+            }
+
             let color = pixel.1.into();
             self.write_pixel((pos.x as usize, pos.y as usize), color)
                 .ok_or(())?;
         }
+
+        self.last_changed_rect = Some((min_x, min_y, max_x - min_x, max_y - min_y));
         Ok(())
     }
 
@@ -177,8 +256,8 @@ impl DrawTarget for Graphics {
 }
 
 impl OriginDimensions for Graphics {
-    fn size(&self) -> embedded_graphics::geometry::Size {
-        embedded_graphics::geometry::Size::new(
+    fn size(&self) -> Size {
+        Size::new(
             self.framebuffer_info.width as u32,
             self.framebuffer_info.height as u32,
         )
@@ -196,10 +275,10 @@ fn main() {
     let style = MonoTextStyle::new(&FONT_9X15, Rgb888::WHITE);
     let mut fps_text = "FPS: 0".to_string();
 
+    graphics.clear(Rgb888::BLACK).ok();
+    let mut changed_rect = graphics.last_changed_rect();
     loop {
         let time = std::time::SystemTime::now();
-
-        graphics.clear(Rgb888::BLACK).unwrap();
 
         // update
         {
@@ -219,12 +298,25 @@ fn main() {
             }
         }
         // render
+        let previous_changed_rect = changed_rect;
         {
+            // only draw the changed part
+            if let Some((x, y, w, h)) = changed_rect {
+                let rect = Rectangle {
+                    top_left: Point::new(x as i32, y as i32),
+                    size: Size::new(w as u32, h as u32),
+                };
+                graphics.fill_solid(&rect, Rgb888::BLACK).ok();
+            }
+            graphics.clear_changed();
             circle.draw(&mut graphics).ok();
             let text = Text::with_baseline(&fps_text, Point::new(0, 0), style, Baseline::Top);
             text.draw(&mut graphics).ok();
         }
-        graphics.present();
+        // take the changes before presenting, as it will be cleared after presenting
+        changed_rect = graphics.last_changed_rect();
+        graphics.merge_clear_rect(previous_changed_rect);
+        graphics.present_changed();
         let remaining =
             std::time::Duration::from_millis(1000 / 60).checked_sub(time.elapsed().unwrap());
         if let Some(remaining) = remaining {
