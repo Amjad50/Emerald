@@ -380,6 +380,26 @@
 <a href="#378" id="378">378</a>
 <a href="#379" id="379">379</a>
 <a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>alloc::sync::Arc;
 
 <span class="kw">use crate</span>::{
@@ -631,12 +651,32 @@
         config.is_periodic = <span class="bool-val">true</span>; <span class="comment">// periodic
         </span>config.force_32bit_mode = <span class="bool-val">false</span>; <span class="comment">// don't force 32-bit mode
         </span>config.interrupt_via_fsb = <span class="bool-val">false</span>; <span class="comment">// don't use FSB
-        </span><span class="kw">let </span>interrupt_route = config
-            .interrupt_route_capabilities
-            .enabled_rounts()
-            .next()
-            .unwrap();
-        config.interrupt_route = interrupt_route;
+        </span><span class="kw">let </span>available_routes = config.interrupt_route_capabilities.enabled_rounts();
+
+        <span class="kw">let </span><span class="kw-2">mut </span>first_available_route = <span class="prelude-val">None</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>above_15_route = <span class="prelude-val">None</span>;
+        <span class="comment">// check if we have available routes that are higher than 15, which
+        // is the range of legacy ISA interrupts.
+        // if we have any above those, its best to use them
+        // otherwise, we will use the first available route
+        </span><span class="kw">for </span>route <span class="kw">in </span>available_routes {
+            <span class="kw">if </span>first_available_route.is_none() &amp;&amp; !apic::is_irq_assigned(route) {
+                <span class="comment">// we can use this route
+                </span>first_available_route = <span class="prelude-val">Some</span>(route);
+            }
+            <span class="kw">if </span>above_15_route.is_none() &amp;&amp; route &gt; <span class="number">15 </span>{
+                above_15_route = <span class="prelude-val">Some</span>(route);
+            }
+            <span class="kw">if </span>first_available_route.is_some() &amp;&amp; above_15_route.is_some() {
+                <span class="kw">break</span>;
+            }
+        }
+
+        <span class="kw">let </span>choosen_route = above_15_route
+            .or(first_available_route)
+            .expect(<span class="string">"No available HPET route"</span>);
+
+        config.interrupt_route = choosen_route;
         config.timer_set_value = <span class="bool-val">true</span>; <span class="comment">// write the timer value
         </span>timer.set_config(config);
         timer.write_comparator_value(ONE_SECOND_IN_FEMTOSECONDS / clock_period);
@@ -645,7 +685,7 @@
         <span class="comment">// setup ioapic
         </span>apic::assign_io_irq_custom(
             timer0_handler <span class="kw">as </span>InterruptHandlerWithAllState,
-            interrupt_route,
+            choosen_route,
             cpu::cpu(),
             |entry| entry.with_trigger_mode_level(<span class="bool-val">false</span>),
         );

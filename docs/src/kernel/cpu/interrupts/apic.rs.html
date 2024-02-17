@@ -580,6 +580,22 @@
 <a href="#578" id="578">578</a>
 <a href="#579" id="579">579</a>
 <a href="#580" id="580">580</a>
+<a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
+<a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a>
+<a href="#589" id="589">589</a>
+<a href="#590" id="590">590</a>
+<a href="#591" id="591">591</a>
+<a href="#592" id="592">592</a>
+<a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::borrow::{Borrow, BorrowMut};
 
 <span class="kw">use </span>alloc::vec::Vec;
@@ -619,6 +635,10 @@
 
 <span class="kw">pub fn </span>return_from_interrupt() {
     APIC.get().lock().return_from_interrupt();
+}
+
+<span class="kw">pub fn </span>is_irq_assigned(irq_num: u8) -&gt; bool {
+    APIC.get().lock().is_irq_assigned(irq_num)
 }
 
 <span class="kw">pub fn </span>assign_io_irq&lt;H: InterruptHandler&gt;(handler: H, interrupt_num: u8, cpu: <span class="kw-2">&amp;</span>Cpu) {
@@ -1090,6 +1110,35 @@
         <span class="self">self</span>.mmio.error_local_vector_table.write(vector_table);
     }
 
+    <span class="kw">fn </span>get_irq_ioapic_entry(<span class="kw-2">&amp;mut </span><span class="self">self</span>, irq_num: u8) -&gt; <span class="prelude-ty">Option</span>&lt;(u8, <span class="kw-2">&amp;mut </span>IoApic)&gt; {
+        <span class="comment">// if we have override mapping for this interrupt, use it.
+        </span><span class="kw">let </span>int_override = <span class="self">self
+            </span>.source_overrides
+            .iter()
+            .find(|int_override| int_override.source == irq_num);
+        <span class="kw">let </span><span class="kw-2">mut </span>interrupt_num = irq_num <span class="kw">as </span>u32;
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(int_override) = int_override {
+            interrupt_num = int_override.global_system_interrupt;
+        }
+        <span class="self">self</span>.io_apics
+            .iter_mut()
+            .find(|io_apic| {
+                io_apic.global_irq_base &lt;= interrupt_num
+                    &amp;&amp; interrupt_num &lt; io_apic.global_irq_base + io_apic.n_entries <span class="kw">as </span>u32
+            })
+            .map(|io_apic| {
+                <span class="kw">let </span>entry_in_ioapic = interrupt_num - io_apic.global_irq_base;
+                (entry_in_ioapic <span class="kw">as </span>u8, io_apic)
+            })
+    }
+
+    <span class="kw">fn </span>is_irq_assigned(<span class="kw-2">&amp;mut </span><span class="self">self</span>, irq_num: u8) -&gt; bool {
+        <span class="kw">let </span>(entry_in_ioapic, io_apic) = <span class="self">self
+            </span>.get_irq_ioapic_entry(irq_num)
+            .expect(<span class="string">"Could not find IO APIC for the interrupt"</span>);
+        io_apic.is_entry_taken(entry_in_ioapic <span class="kw">as </span>u8)
+    }
+
     <span class="kw">fn </span>assign_io_irq&lt;H: InterruptHandler&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, handler: H, irq_num: u8, cpu: <span class="kw-2">&amp;</span>Cpu) {
         <span class="self">self</span>.assign_io_irq_custom(handler, irq_num, cpu, |b| b)
     }
@@ -1106,29 +1155,17 @@
         <span class="macro">assert!</span>(cpu.id &lt; <span class="self">self</span>.n_cpus, <span class="string">"CPU ID is out of range"</span>);
         <span class="macro">assert!</span>(irq_num &lt; <span class="number">24</span>, <span class="string">"interrupt number is out of range"</span>);
 
-        <span class="comment">// if we have override mapping for this interrupt, use it.
-        </span><span class="kw">let </span>int_override = <span class="self">self
-            </span>.source_overrides
-            .iter()
-            .find(|int_override| int_override.source == irq_num);
-        <span class="kw">let </span><span class="kw-2">mut </span>interrupt_num = irq_num <span class="kw">as </span>u32;
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(int_override) = int_override {
-            interrupt_num = int_override.global_system_interrupt;
-        }
-        <span class="kw">let </span>io_apic = <span class="self">self
-            </span>.io_apics
-            .iter_mut()
-            .find(|io_apic| {
-                io_apic.global_irq_base &lt;= interrupt_num
-                    &amp;&amp; interrupt_num &lt; io_apic.global_irq_base + io_apic.n_entries <span class="kw">as </span>u32
-            })
+        <span class="kw">let </span>(entry_in_ioapic, io_apic) = <span class="self">self
+            </span>.get_irq_ioapic_entry(irq_num)
             .expect(<span class="string">"Could not find IO APIC for the interrupt"</span>);
-
-        <span class="comment">// the location of where we want to
-        </span><span class="kw">let </span>entry_in_ioapic = interrupt_num - io_apic.global_irq_base;
+        <span class="comment">// TODO: this is added for catching bugs early, probably we should return `Result`
+        // using `is_irq_assigned`.
+        </span><span class="macro">assert!</span>(
+            !io_apic.is_entry_taken(entry_in_ioapic <span class="kw">as </span>u8),
+            <span class="string">"entry is already taken"
+        </span>);
 
         <span class="kw">let </span>vector_num = allocate_user_interrupt(handler);
-
         <span class="kw">let </span>b = IoApicRedirectionBuilder::default()
             .with_vector(vector_num)
             .with_delivery_mode(<span class="number">0</span>) <span class="comment">// fixed
@@ -1138,12 +1175,7 @@
             </span>.with_destination(DestinationType::Physical(cpu.apic_id));
 
         <span class="kw">let </span>b = modify_entry(b);
-        <span class="comment">// TODO: this is added for catching bugs early, later will replace
-        // it with a better solution.
-        </span><span class="macro">assert!</span>(
-            !io_apic.is_entry_taken(entry_in_ioapic <span class="kw">as </span>u8),
-            <span class="string">"entry is already taken"
-        </span>);
+
         io_apic.write_redirect_entry(entry_in_ioapic <span class="kw">as </span>u8, b);
     }
 }
