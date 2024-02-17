@@ -14,6 +14,38 @@ use embedded_graphics::{
 };
 use emerald_std::graphics::{BlitCommand, FrameBufferInfo};
 
+struct MovingAverage<const N: usize> {
+    values: [f64; N],
+    current_index: usize,
+    filled: usize,
+    sum: f64,
+}
+
+impl<const N: usize> MovingAverage<N> {
+    fn new() -> Self {
+        Self {
+            values: [0.0; N],
+            current_index: 0,
+            filled: 0,
+            sum: 0.0,
+        }
+    }
+
+    fn add(&mut self, value: f64) {
+        self.sum -= self.values[self.current_index];
+        self.sum += value;
+        self.values[self.current_index] = value;
+        self.current_index = (self.current_index + 1) % self.values.len();
+        if self.filled < self.values.len() {
+            self.filled += 1;
+        }
+    }
+
+    fn average(&self) -> f64 {
+        self.sum / self.filled as f64
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Pixel {
@@ -273,6 +305,7 @@ fn main() {
 
     // Create a new character style
     let style = MonoTextStyle::new(&FONT_9X15, Rgb888::WHITE);
+    let mut fps_average = MovingAverage::<100>::new();
     let mut fps_text = "FPS: 0".to_string();
 
     graphics.clear(Rgb888::BLACK).ok();
@@ -323,6 +356,7 @@ fn main() {
             sleep(remaining);
         }
         let fps = 1.0 / time.elapsed().unwrap().as_secs_f64();
-        fps_text = format!("FPS: {:.2}", fps);
+        fps_average.add(fps);
+        fps_text = format!("FPS: {:.2}", fps_average.average());
     }
 }
