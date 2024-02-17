@@ -95,6 +95,18 @@ fn check_ptr(arg: *const u8, len: usize) -> Result<(), SyscallArgError> {
     Ok(())
 }
 
+#[inline]
+fn ptr_as_mut<T>(ptr: *mut u8) -> Result<*mut T, SyscallArgError> {
+    check_ptr(ptr as *const u8, mem::size_of::<T>())?;
+    Ok(ptr as *mut T)
+}
+
+#[inline]
+fn ptr_as_ref<T>(ptr: *const u8) -> Result<*const T, SyscallArgError> {
+    check_ptr(ptr as *const u8, mem::size_of::<T>())?;
+    Ok(ptr as *const T)
+}
+
 // expects null terminated string
 fn sys_arg_to_str<'a>(arg: *const u8) -> Result<&'a str, SyscallArgError> {
     check_ptr(arg, 1)?;
@@ -135,8 +147,7 @@ fn sys_arg_to_mut_slice<'a, T: Sized>(
 
 /// Allocates space for the strings and copies them
 fn sys_arg_to_str_array(array_ptr: *const u8) -> Result<Vec<String>, SyscallArgError> {
-    check_ptr(array_ptr, 8)?;
-    let array_ptr = array_ptr as *const *const u8;
+    let array_ptr = ptr_as_ref::<*const u8>(array_ptr)?;
 
     let mut array = Vec::new();
     let mut i = 0;
@@ -407,8 +418,8 @@ fn sys_create_pipe(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(0, all_state.rest => *mut usize),
         sys_arg!(1, all_state.rest => *mut usize),
     };
-    check_ptr(read_fd_ptr as *const u8, 8).map_err(|err| to_arg_err!(0, err))?;
-    check_ptr(write_fd_ptr as *const u8, 8).map_err(|err| to_arg_err!(1, err))?;
+    let read_fd_ptr = ptr_as_mut(read_fd_ptr as *mut u8).map_err(|err| to_arg_err!(0, err))?;
+    let write_fd_ptr = ptr_as_mut(write_fd_ptr as *mut u8).map_err(|err| to_arg_err!(1, err))?;
 
     let (read_file, write_file) = devices::pipe::create_pipe_pair();
     let (read_fd, write_fd) = with_current_process(|process| {
@@ -461,12 +472,7 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(0, all_state.rest => sys_arg_to_path(*const u8)),
         sys_arg!(1, all_state.rest => *mut u8),
     };
-    check_ptr(
-        stat_ptr as *const u8,
-        mem::size_of::<kernel_user_link::file::FileStat>(),
-    )
-    .map_err(|err| to_arg_err!(1, err))?;
-    let stat_ptr = stat_ptr as *mut kernel_user_link::file::FileStat;
+    let stat_ptr = ptr_as_mut(stat_ptr).map_err(|err| to_arg_err!(1, err))?;
 
     let absolute_path = path_to_proc_absolute_path(path);
     let (_, inode) = fs::open_inode(absolute_path)?;
@@ -582,7 +588,7 @@ fn sys_get_file_meta(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         sys_arg!(1, all_state.rest => u64),
         sys_arg!(2, all_state.rest => *mut u64),
     };
-    check_ptr(meta_data_ptr as *const u8, 8).map_err(|err| to_arg_err!(2, err))?;
+    let meta_data_ptr = ptr_as_mut(meta_data_ptr as *mut u8).map_err(|err| to_arg_err!(2, err))?;
 
     let meta_op = FileMeta::try_from((meta_id, 0))
         .ok()
@@ -639,14 +645,10 @@ fn sys_sleep(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 fn sys_get_time(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let (time_type, time_ptr, ..) = verify_args! {
         sys_arg!(0, all_state.rest => u64),
-        sys_arg!(1, all_state.rest => *mut u64),
+        sys_arg!(1, all_state.rest => *mut u8),
     };
-    check_ptr(
-        time_ptr as *const u8,
-        mem::size_of::<kernel_user_link::clock::ClockTime>(),
-    )
-    .map_err(|err| to_arg_err!(1, err))?;
-    let time_ptr = time_ptr as *mut kernel_user_link::clock::ClockTime;
+    let time_ptr: *mut kernel_user_link::clock::ClockTime =
+        ptr_as_mut(time_ptr).map_err(|err| to_arg_err!(1, err))?;
 
     let time_type = ClockType::try_from(time_type)
         .map_err(|_| to_arg_err!(0, SyscallArgError::GeneralInvalid))?;
