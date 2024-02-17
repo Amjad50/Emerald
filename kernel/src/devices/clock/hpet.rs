@@ -244,7 +244,7 @@ impl Hpet {
         assert!(config.is_periodic_capable); // must be periodic capable
         assert!(config.is_64bit_capable); // must be 64-bit capable
 
-        config.is_interrupt_level_trigerred = true;
+        config.is_interrupt_level_trigerred = false;
         config.interrupt_enabled = true;
         config.is_periodic = true; // periodic
         config.force_32bit_mode = false; // don't force 32-bit mode
@@ -265,7 +265,7 @@ impl Hpet {
             timer0_handler as InterruptHandlerWithAllState,
             interrupt_route,
             cpu::cpu(),
-            |entry| entry.with_trigger_mode_level(true),
+            |entry| entry.with_trigger_mode_level(false),
         );
 
         s.set_enabled(false);
@@ -366,10 +366,15 @@ impl ClockDevice for Mutex<Hpet> {
 extern "cdecl" fn timer0_handler(_all_state: &mut InterruptAllSavedState) {
     let mut clock = HPET_CLOCK.get().as_ref().lock();
 
-    let interrupt = clock.status_interrupts_iter().next().unwrap();
-
-    // clear the interrupt (must for level triggered interrupts)
-    clock.ack_interrupt(interrupt);
+    // if we are level triggered, we must clear the interrupt bit
+    if clock.mmio.timers[0].config().is_interrupt_level_trigerred {
+        if let Some(interrupt) = clock.status_interrupts_iter().next() {
+            // clear the interrupt (must for level triggered interrupts)
+            clock.ack_interrupt(interrupt);
+        } else {
+            println!("[WARN] Looks like we are getting PIT interrupt instead of HPET");
+        }
+    }
 
     apic::return_from_interrupt();
 }
