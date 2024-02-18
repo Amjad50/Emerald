@@ -77,7 +77,7 @@ pub fn get_framebuffer_info() -> Result<FrameBufferInfo, SyscallError> {
     unsafe { Ok(info.assume_init()) }
 }
 
-pub fn blit(command: &BlitCommand) -> Result<(), SyscallError> {
+pub fn blit(command: &BlitCommand<'_>) -> Result<(), SyscallError> {
     if !command.is_buffer_valid() {
         return Err(SyscallError::InvalidGraphicsBuffer);
     }
