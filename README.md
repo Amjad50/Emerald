@@ -8,8 +8,8 @@
 
 **Emerald** is an OS written in [Rust] from scratch.
 
-The plan is to learn everything about the kernel and low level details, so I'm not using any libraries, even though
-there are a lot of good libraries that do everything I'm doing (ex. handling GDT/IDT/etc...).
+The plan is to learn everything about the kernel and low level details, so I'm implementing as much as
+possible without using any libraries.
 But maybe I'll add those just to make the code smaller and better to work with.
 
 ## Running
