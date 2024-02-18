@@ -47,3 +47,4 @@ these pointers/values to the correct types.
 | `get_file_meta` | `file_index: usize, meta_id: u64, meta_data: *mut u64` | `()` | Gets the file meta |
 | `sleep` | `seconds: u64, nanos: u64` | `()` | Sleeps for a duration |
 | `get_time` | `clock_type: ClockType, time: *mut ClockTime` | `()` | Gets the time based on the `clock_type`, see [Clocks](../clocks/index.md) |
+| `graphics` | `command: GraphicsCommand, extra: *mut ()` | `()` | Graphics operations, see [Graphics:VGA](../graphics/vga.md#graphics-command) |

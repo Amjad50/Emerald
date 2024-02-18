@@ -6,7 +6,7 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 19;
+pub const NUM_SYSCALLS: usize = 20;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
@@ -29,6 +29,7 @@ mod numbers {
     pub const SYS_GET_FILE_META: u64 = 16;
     pub const SYS_SLEEP: u64 = 17;
     pub const SYS_GET_TIME: u64 = 18;
+    pub const SYS_GRAPHICS: u64 = 19;
 }
 pub use numbers::*;
 
@@ -242,6 +243,10 @@ pub enum SyscallError {
     IsNotDirectory = 13,
     IsDirectory = 14,
     BufferTooSmall = 15,
+    GraphicsNotAvailable = 16,
+    GraphicsAlreadyTaken = 17,
+    GraphicsNotOwned = 18,
+    InvalidGraphicsBuffer = 19,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -330,6 +335,10 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::IsNotDirectory => 13 << 56,
                 SyscallError::IsDirectory => 14 << 56,
                 SyscallError::BufferTooSmall => 15 << 56,
+                SyscallError::GraphicsNotAvailable => 16 << 56,
+                SyscallError::GraphicsAlreadyTaken => 17 << 56,
+                SyscallError::GraphicsNotOwned => 18 << 56,
+                SyscallError::InvalidGraphicsBuffer => 19 << 56,
                 SyscallError::InvalidError => panic!("Should never be used"),
             };
 
@@ -383,6 +392,10 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             13 => SyscallError::IsNotDirectory,
             14 => SyscallError::IsDirectory,
             15 => SyscallError::BufferTooSmall,
+            16 => SyscallError::GraphicsNotAvailable,
+            17 => SyscallError::GraphicsAlreadyTaken,
+            18 => SyscallError::GraphicsNotOwned,
+            19 => SyscallError::InvalidGraphicsBuffer,
             _ => SyscallError::InvalidError,
         };
         SyscallResult::Err(err)
