@@ -140,77 +140,8 @@
 <a href="#138" id="138">138</a>
 <a href="#139" id="139">139</a>
 <a href="#140" id="140">140</a>
-<a href="#141" id="141">141</a>
-<a href="#142" id="142">142</a>
-<a href="#143" id="143">143</a>
-<a href="#144" id="144">144</a>
-<a href="#145" id="145">145</a>
-<a href="#146" id="146">146</a>
-<a href="#147" id="147">147</a>
-<a href="#148" id="148">148</a>
-<a href="#149" id="149">149</a>
-<a href="#150" id="150">150</a>
-<a href="#151" id="151">151</a>
-<a href="#152" id="152">152</a>
-<a href="#153" id="153">153</a>
-<a href="#154" id="154">154</a>
-<a href="#155" id="155">155</a>
-<a href="#156" id="156">156</a>
-<a href="#157" id="157">157</a>
-<a href="#158" id="158">158</a>
-<a href="#159" id="159">159</a>
-<a href="#160" id="160">160</a>
-<a href="#161" id="161">161</a>
-<a href="#162" id="162">162</a>
-<a href="#163" id="163">163</a>
-<a href="#164" id="164">164</a>
-<a href="#165" id="165">165</a>
-<a href="#166" id="166">166</a>
-<a href="#167" id="167">167</a>
-<a href="#168" id="168">168</a>
-<a href="#169" id="169">169</a>
-<a href="#170" id="170">170</a>
-<a href="#171" id="171">171</a>
-<a href="#172" id="172">172</a>
-<a href="#173" id="173">173</a>
-<a href="#174" id="174">174</a>
-<a href="#175" id="175">175</a>
-<a href="#176" id="176">176</a>
-<a href="#177" id="177">177</a>
-<a href="#178" id="178">178</a>
-<a href="#179" id="179">179</a>
-<a href="#180" id="180">180</a>
-<a href="#181" id="181">181</a>
-<a href="#182" id="182">182</a>
-<a href="#183" id="183">183</a>
-<a href="#184" id="184">184</a>
-<a href="#185" id="185">185</a>
-<a href="#186" id="186">186</a>
-<a href="#187" id="187">187</a>
-<a href="#188" id="188">188</a>
-<a href="#189" id="189">189</a>
-<a href="#190" id="190">190</a>
-<a href="#191" id="191">191</a>
-<a href="#192" id="192">192</a>
-<a href="#193" id="193">193</a>
-<a href="#194" id="194">194</a>
-<a href="#195" id="195">195</a>
-<a href="#196" id="196">196</a>
-<a href="#197" id="197">197</a>
-<a href="#198" id="198">198</a>
-<a href="#199" id="199">199</a>
-<a href="#200" id="200">200</a>
-<a href="#201" id="201">201</a>
-<a href="#202" id="202">202</a>
-<a href="#203" id="203">203</a>
-<a href="#204" id="204">204</a>
-<a href="#205" id="205">205</a>
-<a href="#206" id="206">206</a>
-<a href="#207" id="207">207</a>
-<a href="#208" id="208">208</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>embedded_graphics::{
-    draw_target::DrawTarget,
-    geometry::{OriginDimensions, Point},
+    geometry::Point,
     mono_font::{
         ascii::{FONT_9X15, FONT_9X15_BOLD},
         MonoTextStyle,
@@ -220,152 +151,85 @@
         renderer::{CharacterStyle, TextRenderer},
         Baseline,
     },
-    Pixel,
 };
 
-<span class="kw">use crate</span>::{memory_management::virtual_space::VirtualSpace, multiboot2};
+<span class="kw">use </span><span class="kw">crate</span>::graphics::{<span class="self">self</span>, vga, Pixel};
 
 <span class="kw">use super</span>::{VideoConsole, VideoConsoleAttribute};
 
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>VgaGraphics {
-    pitch: usize,
-    height: usize,
-    width: usize,
-    field_pos: (u8, u8, u8),
-    mask: (u8, u8, u8),
-    byte_per_pixel: u8,
-    memory: VirtualSpace&lt;[u8]&gt;,
-
     pos: Point,
     text_style: MonoTextStyle&lt;<span class="lifetime">'static</span>, Rgb888&gt;,
+    vga: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>vga::VgaDisplayController,
 }
 
 <span class="kw">impl </span>VgaGraphics {
-    <span class="kw">pub fn </span>new(framebuffer: multiboot2::Framebuffer) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>multiboot2::FramebufferColorInfo::Rgb {
-            red_field_position,
-            red_mask_size,
-            green_field_position,
-            green_mask_size,
-            blue_field_position,
-            blue_mask_size,
-        } = framebuffer.color_info
-        <span class="kw">else </span>{
-            <span class="macro">panic!</span>(<span class="string">"Only RGB framebuffer is supported"</span>);
-        };
-
-        <span class="kw">let </span>physical_addr = framebuffer.addr;
-        <span class="kw">let </span>memory_size = framebuffer.pitch * framebuffer.height;
-        <span class="kw">let </span>memory =
-            <span class="kw">unsafe </span>{ VirtualSpace::new_slice(physical_addr, memory_size <span class="kw">as </span>usize).unwrap() };
-
-        <span class="kw">let </span>red_mask = (<span class="number">1 </span>&lt;&lt; red_mask_size) - <span class="number">1</span>;
-        <span class="kw">let </span>green_mask = (<span class="number">1 </span>&lt;&lt; green_mask_size) - <span class="number">1</span>;
-        <span class="kw">let </span>blue_mask = (<span class="number">1 </span>&lt;&lt; blue_mask_size) - <span class="number">1</span>;
+    <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
-            pitch: framebuffer.pitch <span class="kw">as </span>usize,
-            height: framebuffer.height <span class="kw">as </span>usize,
-            width: framebuffer.width <span class="kw">as </span>usize,
-            field_pos: (
-                red_field_position <span class="kw">as </span>u8 / <span class="number">8</span>,
-                green_field_position <span class="kw">as </span>u8 / <span class="number">8</span>,
-                blue_field_position <span class="kw">as </span>u8 / <span class="number">8</span>,
-            ),
-            mask: (red_mask <span class="kw">as </span>u8, green_mask <span class="kw">as </span>u8, blue_mask <span class="kw">as </span>u8),
-            byte_per_pixel: (framebuffer.bpp + <span class="number">7</span>) / <span class="number">8</span>,
-            memory,
             pos: Point::new(<span class="number">0</span>, <span class="number">0</span>),
             text_style: MonoTextStyle::new(<span class="kw-2">&amp;</span>FONT_9X15, Rgb888::WHITE),
+            vga: graphics::vga::controller().expect(<span class="string">"We should have a VGA controller by now!"</span>),
         }
     }
 
-    <span class="kw">fn </span>get_arr_pos(<span class="kw-2">&amp;</span><span class="self">self</span>, pos: (usize, usize)) -&gt; usize {
-        pos.<span class="number">0 </span>* <span class="self">self</span>.byte_per_pixel <span class="kw">as </span>usize + pos.<span class="number">1 </span>* <span class="self">self</span>.pitch
+    <span class="kw">pub fn </span>clear_current_text_line(<span class="kw-2">&amp;mut </span><span class="self">self</span>, vga: <span class="kw-2">&amp;mut </span>vga::VgaDisplay) {
+        <span class="kw">let </span>fb_info = <span class="self">self</span>.vga.framebuffer_info();
+        vga.clear_rect(
+            <span class="number">0</span>,
+            <span class="self">self</span>.pos.y <span class="kw">as </span>usize,
+            fb_info.width,
+            <span class="self">self</span>.text_style.line_height() <span class="kw">as </span>usize,
+            Pixel { r: <span class="number">0</span>, g: <span class="number">0</span>, b: <span class="number">0 </span>},
+        );
     }
 
-    <span class="kw">pub fn </span>put_pixel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, x: usize, y: usize, color: Rgb888) {
-        <span class="kw">let </span>i = <span class="self">self</span>.get_arr_pos((x, y));
-        <span class="kw">let </span>pixel_mem = <span class="kw-2">&amp;mut </span><span class="self">self</span>.memory[i..i + <span class="self">self</span>.byte_per_pixel <span class="kw">as </span>usize];
-
-        <span class="kw">let </span>r = color.r() &amp; <span class="self">self</span>.mask.<span class="number">0</span>;
-        <span class="kw">let </span>g = color.g() &amp; <span class="self">self</span>.mask.<span class="number">1</span>;
-        <span class="kw">let </span>b = color.b() &amp; <span class="self">self</span>.mask.<span class="number">2</span>;
-        pixel_mem[<span class="self">self</span>.field_pos.<span class="number">0 </span><span class="kw">as </span>usize] = r;
-        pixel_mem[<span class="self">self</span>.field_pos.<span class="number">1 </span><span class="kw">as </span>usize] = g;
-        pixel_mem[<span class="self">self</span>.field_pos.<span class="number">2 </span><span class="kw">as </span>usize] = b;
-    }
-
-    <span class="kw">pub fn </span>clear(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="self">self</span>.memory.fill(<span class="number">0</span>);
-    }
-
-    <span class="kw">pub fn </span>clear_current_text_line(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="kw">let </span>start = <span class="self">self</span>.get_arr_pos((<span class="number">0</span>, <span class="self">self</span>.pos.y <span class="kw">as </span>usize));
-        <span class="kw">let </span>line_chunk_size = <span class="self">self</span>.pitch * <span class="self">self</span>.text_style.line_height() <span class="kw">as </span>usize;
-        <span class="self">self</span>.memory[start..start + line_chunk_size].fill(<span class="number">0</span>);
-    }
-
-    <span class="kw">fn </span>scroll(<span class="kw-2">&amp;mut </span><span class="self">self</span>, lines: usize) {
-        <span class="kw">let </span>chunk_size = <span class="self">self</span>.pitch * lines;
-
+    <span class="kw">fn </span>scroll(<span class="kw-2">&amp;mut </span><span class="self">self</span>, lines: usize, vga: <span class="kw-2">&amp;mut </span>vga::VgaDisplay) {
+        <span class="kw">let </span>fb_info = <span class="self">self</span>.vga.framebuffer_info();
+        <span class="kw">let </span>height = fb_info.height;
+        <span class="kw">let </span>width = fb_info.width;
         <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
-        <span class="kw">while </span>i &lt; <span class="self">self</span>.height - lines * <span class="number">2 </span>{
-            <span class="comment">// copy chunks of height (lines) each time
-            </span><span class="kw">let </span>copy_to_start = <span class="self">self</span>.get_arr_pos((<span class="number">0</span>, i));
-            <span class="kw">let </span>copy_from_start = <span class="self">self</span>.get_arr_pos((<span class="number">0</span>, i + lines));
-            <span class="kw">let </span>(before, after) = <span class="self">self</span>.memory.split_at_mut(copy_from_start);
+        <span class="kw">while </span>i &lt; height - lines * <span class="number">2 </span>{
+            vga.blit_inner_ranges((<span class="number">0</span>, i + lines), (<span class="number">0</span>, i), width, lines);
 
-            before[copy_to_start..copy_to_start + chunk_size].copy_from_slice(<span class="kw-2">&amp;</span>after[..chunk_size]);
             i += lines;
         }
         <span class="self">self</span>.pos.y -= lines <span class="kw">as </span>i32;
     }
 
-    <span class="kw">fn </span>fix_after_advance(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="kw">if </span><span class="self">self</span>.pos.x &gt;= <span class="self">self</span>.width <span class="kw">as </span>i32 {
+    <span class="kw">fn </span>fix_after_advance(<span class="kw-2">&amp;mut </span><span class="self">self</span>, vga: <span class="kw-2">&amp;mut </span>vga::VgaDisplay) {
+        <span class="kw">let </span>fb_info = <span class="self">self</span>.vga.framebuffer_info();
+        <span class="kw">let </span>width = fb_info.width <span class="kw">as </span>i32;
+        <span class="kw">let </span>height = fb_info.height <span class="kw">as </span>i32;
+        <span class="kw">if </span><span class="self">self</span>.pos.x + <span class="self">self</span>.text_style.font.character_size.width <span class="kw">as </span>i32 &gt;= width {
             <span class="self">self</span>.pos.x = <span class="number">0</span>;
             <span class="self">self</span>.pos.y += <span class="self">self</span>.text_style.line_height() <span class="kw">as </span>i32;
         }
-        <span class="kw">if </span><span class="self">self</span>.pos.y + <span class="self">self</span>.text_style.line_height() <span class="kw">as </span>i32 &gt;= <span class="self">self</span>.height <span class="kw">as </span>i32 {
+        <span class="kw">if </span><span class="self">self</span>.pos.y + <span class="self">self</span>.text_style.line_height() <span class="kw">as </span>i32 &gt;= height {
             <span class="comment">// scroll up
-            </span><span class="self">self</span>.scroll(<span class="self">self</span>.text_style.line_height() <span class="kw">as </span>usize);
+            </span><span class="self">self</span>.scroll(<span class="self">self</span>.text_style.line_height() <span class="kw">as </span>usize, vga);
 
             <span class="comment">// clear line
-            </span><span class="self">self</span>.clear_current_text_line();
+            </span><span class="self">self</span>.clear_current_text_line(vga);
+
             <span class="comment">// just to make sure we are not out of bounds by more than 1 line
-            </span><span class="self">self</span>.fix_after_advance();
+            </span><span class="self">self</span>.fix_after_advance(vga);
         }
-    }
-}
-
-<span class="kw">impl </span>DrawTarget <span class="kw">for </span>VgaGraphics {
-    <span class="kw">type </span>Color = Rgb888;
-
-    <span class="kw">type </span>Error = ();
-
-    <span class="kw">fn </span>draw_iter&lt;I&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, pixels: I) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt;
-    <span class="kw">where
-        </span>I: IntoIterator&lt;Item = embedded_graphics::prelude::Pixel&lt;<span class="self">Self</span>::Color&gt;&gt;,
-    {
-        <span class="kw">for </span>Pixel(pos, color) <span class="kw">in </span>pixels {
-            <span class="self">self</span>.put_pixel(pos.x <span class="kw">as </span>usize, pos.y <span class="kw">as </span>usize, color);
-        }
-        <span class="prelude-val">Ok</span>(())
-    }
-}
-
-<span class="kw">impl </span>OriginDimensions <span class="kw">for </span>VgaGraphics {
-    <span class="kw">fn </span>size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; embedded_graphics::geometry::Size {
-        embedded_graphics::geometry::Size::new(<span class="self">self</span>.width <span class="kw">as </span>u32, <span class="self">self</span>.height <span class="kw">as </span>u32)
     }
 }
 
 <span class="kw">impl </span>VideoConsole <span class="kw">for </span>VgaGraphics {
     <span class="kw">fn </span>init(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="self">self</span>.clear();
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>vga) = <span class="self">self</span>.vga.lock_kernel() {
+            vga.clear();
+        }
     }
 
     <span class="kw">fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: u8) {
+        <span class="kw">let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>vga) = <span class="self">self</span>.vga.lock_kernel() <span class="kw">else </span>{
+            <span class="comment">// don't change anything if we can't lock the VGA
+            </span><span class="kw">return</span>;
+        };
+
         <span class="kw">if </span>c == <span class="string">b'\n' </span>{
             <span class="self">self</span>.pos = Point::new(<span class="number">0</span>, <span class="self">self</span>.pos.y + <span class="self">self</span>.text_style.line_height() <span class="kw">as </span>i32);
         } <span class="kw">else </span>{
@@ -375,10 +239,10 @@
             <span class="kw">let </span>style = <span class="self">self</span>.text_style;
 
             <span class="self">self</span>.pos = style
-                .draw_string(str, <span class="self">self</span>.pos, Baseline::Bottom, <span class="self">self</span>)
+                .draw_string(str, <span class="self">self</span>.pos, Baseline::Bottom, <span class="kw-2">&amp;mut *</span>vga)
                 .unwrap();
         }
-        <span class="self">self</span>.fix_after_advance();
+        <span class="self">self</span>.fix_after_advance(<span class="kw-2">&amp;mut </span>vga);
     }
 
     <span class="kw">fn </span>set_attrib(<span class="kw-2">&amp;mut </span><span class="self">self</span>, attrib: VideoConsoleAttribute) {

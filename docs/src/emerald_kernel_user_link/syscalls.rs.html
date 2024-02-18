@@ -390,6 +390,19 @@
 <a href="#388" id="388">388</a>
 <a href="#389" id="389">389</a>
 <a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>types_conversions;
 
 <span class="doccomment">/// must be one of user interrupts, i.e. 0x20+
@@ -398,7 +411,7 @@
 /// user-kernel
 </span><span class="kw">pub const </span>SYSCALL_INTERRUPT_NUMBER: u8 = <span class="number">0xFE</span>;
 
-<span class="kw">pub const </span>NUM_SYSCALLS: usize = <span class="number">19</span>;
+<span class="kw">pub const </span>NUM_SYSCALLS: usize = <span class="number">20</span>;
 
 <span class="kw">mod </span>numbers {
     <span class="kw">pub const </span>SYS_OPEN: u64 = <span class="number">0</span>;
@@ -421,6 +434,7 @@
     <span class="kw">pub const </span>SYS_GET_FILE_META: u64 = <span class="number">16</span>;
     <span class="kw">pub const </span>SYS_SLEEP: u64 = <span class="number">17</span>;
     <span class="kw">pub const </span>SYS_GET_TIME: u64 = <span class="number">18</span>;
+    <span class="kw">pub const </span>SYS_GRAPHICS: u64 = <span class="number">19</span>;
 }
 <span class="kw">pub use </span>numbers::<span class="kw-2">*</span>;
 
@@ -634,6 +648,10 @@
     IsNotDirectory = <span class="number">13</span>,
     IsDirectory = <span class="number">14</span>,
     BufferTooSmall = <span class="number">15</span>,
+    GraphicsNotAvailable = <span class="number">16</span>,
+    GraphicsAlreadyTaken = <span class="number">17</span>,
+    GraphicsNotOwned = <span class="number">18</span>,
+    InvalidGraphicsBuffer = <span class="number">19</span>,
     InvalidArgument(
         <span class="prelude-ty">Option</span>&lt;SyscallArgError&gt;,
         <span class="prelude-ty">Option</span>&lt;SyscallArgError&gt;,
@@ -722,6 +740,10 @@
                 SyscallError::IsNotDirectory =&gt; <span class="number">13 </span>&lt;&lt; <span class="number">56</span>,
                 SyscallError::IsDirectory =&gt; <span class="number">14 </span>&lt;&lt; <span class="number">56</span>,
                 SyscallError::BufferTooSmall =&gt; <span class="number">15 </span>&lt;&lt; <span class="number">56</span>,
+                SyscallError::GraphicsNotAvailable =&gt; <span class="number">16 </span>&lt;&lt; <span class="number">56</span>,
+                SyscallError::GraphicsAlreadyTaken =&gt; <span class="number">17 </span>&lt;&lt; <span class="number">56</span>,
+                SyscallError::GraphicsNotOwned =&gt; <span class="number">18 </span>&lt;&lt; <span class="number">56</span>,
+                SyscallError::InvalidGraphicsBuffer =&gt; <span class="number">19 </span>&lt;&lt; <span class="number">56</span>,
                 SyscallError::InvalidError =&gt; <span class="macro">panic!</span>(<span class="string">"Should never be used"</span>),
             };
 
@@ -775,6 +797,10 @@
             <span class="number">13 </span>=&gt; SyscallError::IsNotDirectory,
             <span class="number">14 </span>=&gt; SyscallError::IsDirectory,
             <span class="number">15 </span>=&gt; SyscallError::BufferTooSmall,
+            <span class="number">16 </span>=&gt; SyscallError::GraphicsNotAvailable,
+            <span class="number">17 </span>=&gt; SyscallError::GraphicsAlreadyTaken,
+            <span class="number">18 </span>=&gt; SyscallError::GraphicsNotOwned,
+            <span class="number">19 </span>=&gt; SyscallError::InvalidGraphicsBuffer,
             <span class="kw">_ </span>=&gt; SyscallError::InvalidError,
         };
         SyscallResult::Err(err)

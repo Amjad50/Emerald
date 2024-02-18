@@ -41,3 +41,5 @@
 [rtc]: {ROOT_PATH}docs/kernel/devices/clock/rtc
 [tsc]: {ROOT_PATH}docs/kernel/devices/clock/tsc
 [clocks]: {ROOT_PATH}docs/kernel/devices/clock
+[vga]: {ROOT_PATH}docs/kernel/graphics/vga
+[framebufferinfo]: {ROOT_PATH}docs/kernel/graphics/vga/struct.FrameBufferInfo.html

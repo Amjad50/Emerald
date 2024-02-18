@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["FD_STDERR","FD_STDIN","FD_STDOUT"],"macro":["call_syscall","sys_arg","to_arg_err","verify_args"],"mod":["clock","file","process","syscalls"]};
+window.SIDEBAR_ITEMS = {"constant":["FD_STDERR","FD_STDIN","FD_STDOUT"],"macro":["call_syscall","sys_arg","to_arg_err","verify_args"],"mod":["clock","file","graphics","process","syscalls"]};

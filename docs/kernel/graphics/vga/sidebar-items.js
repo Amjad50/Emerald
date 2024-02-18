@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["controller","init"],"static":["VGA_DISPLAY_CONTROLLER"],"struct":["FrameBufferInfo","VgaDisplay","VgaDisplayController"],"trait":["FrameBufferDraw"]};

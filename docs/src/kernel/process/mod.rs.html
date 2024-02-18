@@ -437,6 +437,11 @@
 <a href="#435" id="435">435</a>
 <a href="#436" id="436">436</a>
 <a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>scheduler;
 <span class="kw">mod </span>syscalls;
 
@@ -449,6 +454,7 @@
     devices::clock::ClockTime,
     executable::{elf, load_elf_to_vm},
     fs,
+    graphics::vga,
     memory_management::{
         memory_layout::{align_down, align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
         virtual_memory_mapper::{
@@ -717,6 +723,10 @@
     <span class="kw">pub fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, exit_code: i32) {
         <span class="self">self</span>.state = ProcessState::Exited;
         <span class="self">self</span>.exit_code = exit_code;
+        <span class="comment">// release the vga if we have it
+        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(vga) = vga::controller() {
+            vga.release(<span class="self">self</span>.id);
+        }
     }
 
     <span class="kw">pub fn </span>add_child_exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, pid: u64, exit_code: i32) {

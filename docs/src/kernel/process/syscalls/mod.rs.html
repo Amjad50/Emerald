@@ -677,12 +677,85 @@
 <a href="#675" id="675">675</a>
 <a href="#676" id="676">676</a>
 <a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
+<a href="#680" id="680">680</a>
+<a href="#681" id="681">681</a>
+<a href="#682" id="682">682</a>
+<a href="#683" id="683">683</a>
+<a href="#684" id="684">684</a>
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a>
+<a href="#687" id="687">687</a>
+<a href="#688" id="688">688</a>
+<a href="#689" id="689">689</a>
+<a href="#690" id="690">690</a>
+<a href="#691" id="691">691</a>
+<a href="#692" id="692">692</a>
+<a href="#693" id="693">693</a>
+<a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
+<a href="#712" id="712">712</a>
+<a href="#713" id="713">713</a>
+<a href="#714" id="714">714</a>
+<a href="#715" id="715">715</a>
+<a href="#716" id="716">716</a>
+<a href="#717" id="717">717</a>
+<a href="#718" id="718">718</a>
+<a href="#719" id="719">719</a>
+<a href="#720" id="720">720</a>
+<a href="#721" id="721">721</a>
+<a href="#722" id="722">722</a>
+<a href="#723" id="723">723</a>
+<a href="#724" id="724">724</a>
+<a href="#725" id="725">725</a>
+<a href="#726" id="726">726</a>
+<a href="#727" id="727">727</a>
+<a href="#728" id="728">728</a>
+<a href="#729" id="729">729</a>
+<a href="#730" id="730">730</a>
+<a href="#731" id="731">731</a>
+<a href="#732" id="732">732</a>
+<a href="#733" id="733">733</a>
+<a href="#734" id="734">734</a>
+<a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
+<a href="#737" id="737">737</a>
+<a href="#738" id="738">738</a>
+<a href="#739" id="739">739</a>
+<a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{ffi::CStr, mem};
 
 <span class="kw">use </span>alloc::{borrow::Cow, string::String, vec::Vec};
 <span class="kw">use </span>kernel_user_link::{
     clock::ClockType,
     file::{BlockingMode, DirEntry, FileMeta},
+    graphics::{BlitCommand, FrameBufferInfo, GraphicsCommand},
     process::SpawnFileMapping,
     sys_arg,
     syscalls::{
@@ -693,10 +766,11 @@
 };
 
 <span class="kw">use crate</span>::{
-    cpu::idt::InterruptAllSavedState,
+    cpu::{<span class="self">self</span>, idt::InterruptAllSavedState},
     devices::{<span class="self">self</span>, clock},
     executable::elf::Elf,
     fs::{<span class="self">self</span>, path::Path, FileSystemError},
+    graphics,
     memory_management::memory_layout::{is_aligned, PAGE_4K},
     process::{scheduler, Process},
 };
@@ -725,6 +799,7 @@
     </span>sys_get_file_meta, <span class="comment">// kernel_user_link::syscalls::SYS_GET_FILE_META
     </span>sys_sleep,         <span class="comment">// kernel_user_link::syscalls::SYS_SLEEP
     </span>sys_get_time,      <span class="comment">// kernel_user_link::syscalls::SYS_GET_TIME
+    </span>sys_graphics,      <span class="comment">// kernel_user_link::syscalls::SYS_GRAPHICS
 </span>];
 
 <span class="kw">impl </span>From&lt;FileSystemError&gt; <span class="kw">for </span>SyscallError {
@@ -774,6 +849,18 @@
     <span class="prelude-val">Ok</span>(())
 }
 
+<span class="attr">#[inline]
+</span><span class="kw">fn </span>ptr_as_mut&lt;T&gt;(ptr: <span class="kw-2">*mut </span>u8) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">*mut </span>T, SyscallArgError&gt; {
+    check_ptr(ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, mem::size_of::&lt;T&gt;())<span class="question-mark">?</span>;
+    <span class="prelude-val">Ok</span>(ptr <span class="kw">as </span><span class="kw-2">*mut </span>T)
+}
+
+<span class="attr">#[inline]
+</span><span class="kw">fn </span>ptr_as_ref&lt;T&gt;(ptr: <span class="kw-2">*const </span>u8) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">*const </span>T, SyscallArgError&gt; {
+    check_ptr(ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, mem::size_of::&lt;T&gt;())<span class="question-mark">?</span>;
+    <span class="prelude-val">Ok</span>(ptr <span class="kw">as </span><span class="kw-2">*const </span>T)
+}
+
 <span class="comment">// expects null terminated string
 </span><span class="kw">fn </span>sys_arg_to_str&lt;<span class="lifetime">'a</span>&gt;(arg: <span class="kw-2">*const </span>u8) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, SyscallArgError&gt; {
     check_ptr(arg, <span class="number">1</span>)<span class="question-mark">?</span>;
@@ -814,8 +901,7 @@
 
 <span class="doccomment">/// Allocates space for the strings and copies them
 </span><span class="kw">fn </span>sys_arg_to_str_array(array_ptr: <span class="kw-2">*const </span>u8) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;String&gt;, SyscallArgError&gt; {
-    check_ptr(array_ptr, <span class="number">8</span>)<span class="question-mark">?</span>;
-    <span class="kw">let </span>array_ptr = array_ptr <span class="kw">as </span><span class="kw-2">*const *const </span>u8;
+    <span class="kw">let </span>array_ptr = ptr_as_ref::&lt;<span class="kw-2">*const </span>u8&gt;(array_ptr)<span class="question-mark">?</span>;
 
     <span class="kw">let </span><span class="kw-2">mut </span>array = Vec::new();
     <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
@@ -1086,8 +1172,8 @@
         <span class="macro">sys_arg!</span>(<span class="number">0</span>, all_state.rest =&gt; <span class="kw-2">*mut </span>usize),
         <span class="macro">sys_arg!</span>(<span class="number">1</span>, all_state.rest =&gt; <span class="kw-2">*mut </span>usize),
     };
-    check_ptr(read_fd_ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, <span class="number">8</span>).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">0</span>, err))<span class="question-mark">?</span>;
-    check_ptr(write_fd_ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, <span class="number">8</span>).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
+    <span class="kw">let </span>read_fd_ptr = ptr_as_mut(read_fd_ptr <span class="kw">as </span><span class="kw-2">*mut </span>u8).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">0</span>, err))<span class="question-mark">?</span>;
+    <span class="kw">let </span>write_fd_ptr = ptr_as_mut(write_fd_ptr <span class="kw">as </span><span class="kw-2">*mut </span>u8).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>(read_file, write_file) = devices::pipe::create_pipe_pair();
     <span class="kw">let </span>(read_fd, write_fd) = with_current_process(|process| {
@@ -1140,12 +1226,7 @@
         <span class="macro">sys_arg!</span>(<span class="number">0</span>, all_state.rest =&gt; sys_arg_to_path(<span class="kw-2">*const </span>u8)),
         <span class="macro">sys_arg!</span>(<span class="number">1</span>, all_state.rest =&gt; <span class="kw-2">*mut </span>u8),
     };
-    check_ptr(
-        stat_ptr <span class="kw">as </span><span class="kw-2">*const </span>u8,
-        mem::size_of::&lt;kernel_user_link::file::FileStat&gt;(),
-    )
-    .map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
-    <span class="kw">let </span>stat_ptr = stat_ptr <span class="kw">as </span><span class="kw-2">*mut </span>kernel_user_link::file::FileStat;
+    <span class="kw">let </span>stat_ptr = ptr_as_mut(stat_ptr).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>absolute_path = path_to_proc_absolute_path(path);
     <span class="kw">let </span>(<span class="kw">_</span>, inode) = fs::open_inode(absolute_path)<span class="question-mark">?</span>;
@@ -1261,7 +1342,7 @@
         <span class="macro">sys_arg!</span>(<span class="number">1</span>, all_state.rest =&gt; u64),
         <span class="macro">sys_arg!</span>(<span class="number">2</span>, all_state.rest =&gt; <span class="kw-2">*mut </span>u64),
     };
-    check_ptr(meta_data_ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, <span class="number">8</span>).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">2</span>, err))<span class="question-mark">?</span>;
+    <span class="kw">let </span>meta_data_ptr = ptr_as_mut(meta_data_ptr <span class="kw">as </span><span class="kw-2">*mut </span>u8).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">2</span>, err))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>meta_op = FileMeta::try_from((meta_id, <span class="number">0</span>))
         .ok()
@@ -1318,14 +1399,10 @@
 <span class="kw">fn </span>sys_get_time(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) -&gt; SyscallResult {
     <span class="kw">let </span>(time_type, time_ptr, ..) = <span class="macro">verify_args! </span>{
         <span class="macro">sys_arg!</span>(<span class="number">0</span>, all_state.rest =&gt; u64),
-        <span class="macro">sys_arg!</span>(<span class="number">1</span>, all_state.rest =&gt; <span class="kw-2">*mut </span>u64),
+        <span class="macro">sys_arg!</span>(<span class="number">1</span>, all_state.rest =&gt; <span class="kw-2">*mut </span>u8),
     };
-    check_ptr(
-        time_ptr <span class="kw">as </span><span class="kw-2">*const </span>u8,
-        mem::size_of::&lt;kernel_user_link::clock::ClockTime&gt;(),
-    )
-    .map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
-    <span class="kw">let </span>time_ptr = time_ptr <span class="kw">as </span><span class="kw-2">*mut </span>kernel_user_link::clock::ClockTime;
+    <span class="kw">let </span>time_ptr: <span class="kw-2">*mut </span>kernel_user_link::clock::ClockTime =
+        ptr_as_mut(time_ptr).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>time_type = ClockType::try_from(time_type)
         .map_err(|<span class="kw">_</span>| <span class="macro">to_arg_err!</span>(<span class="number">0</span>, SyscallArgError::GeneralInvalid))<span class="question-mark">?</span>;
@@ -1337,6 +1414,73 @@
     <span class="comment">// Safety: we checked that the pointer is valid
     </span><span class="kw">unsafe </span>{
         <span class="kw-2">*</span>time_ptr = time;
+    }
+
+    SyscallResult::Ok(<span class="number">0</span>)
+}
+
+<span class="kw">fn </span>sys_graphics(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) -&gt; SyscallResult {
+    <span class="kw">let </span>(command_id, extra, ..) = <span class="macro">verify_args! </span>{
+        <span class="macro">sys_arg!</span>(<span class="number">0</span>, all_state.rest =&gt; u64),
+        <span class="macro">sys_arg!</span>(<span class="number">1</span>, all_state.rest =&gt; <span class="kw-2">*mut </span>u8)
+    };
+
+    <span class="kw">let </span>command = GraphicsCommand::from_u64(command_id)
+        .ok_or(<span class="macro">to_arg_err!</span>(<span class="number">0</span>, SyscallArgError::GeneralInvalid))<span class="question-mark">?</span>;
+
+    <span class="kw">let </span>pid = cpu::cpu().process_id;
+
+    <span class="kw">match </span>command {
+        GraphicsCommand::TakeOwnership =&gt; {
+            <span class="kw">if </span>!graphics::vga::controller()
+                .ok_or(SyscallError::GraphicsNotAvailable)<span class="question-mark">?
+                </span>.take_ownership(pid)
+            {
+                <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::GraphicsAlreadyTaken);
+            }
+        }
+        GraphicsCommand::ReleaseOwnership =&gt; {
+            <span class="kw">if </span>!graphics::vga::controller()
+                .ok_or(SyscallError::GraphicsNotAvailable)<span class="question-mark">?
+                </span>.release(pid)
+            {
+                <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::GraphicsNotOwned);
+            }
+        }
+        GraphicsCommand::GetFrameBufferInfo =&gt; {
+            <span class="kw">let </span>info = <span class="kw-2">*</span>graphics::vga::controller()
+                .ok_or(SyscallError::GraphicsNotAvailable)<span class="question-mark">?
+                </span>.framebuffer_info();
+            <span class="kw">let </span>info_ptr =
+                ptr_as_mut::&lt;FrameBufferInfo&gt;(extra).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
+            <span class="comment">// Safety: we checked that the pointer is valid
+            </span><span class="kw">unsafe </span>{
+                <span class="kw-2">*</span>info_ptr = info;
+            }
+        }
+        GraphicsCommand::Blit =&gt; {
+            <span class="kw">let </span>blit = ptr_as_ref::&lt;BlitCommand&gt;(extra).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
+            <span class="comment">// Safety: we checked that the pointer is valid
+            </span><span class="kw">let </span>blit = <span class="kw">unsafe </span>{ <span class="kw-2">*</span>blit };
+
+            <span class="kw">let </span>buffer_len = blit.src_framebuffer_info.memory_size();
+            <span class="kw">let </span>buffer = sys_arg_to_slice(blit.memory, buffer_len)
+                .map_err(|<span class="kw">_</span>| SyscallError::InvalidGraphicsBuffer)<span class="question-mark">?</span>;
+
+            graphics::vga::controller()
+                .ok_or(SyscallError::GraphicsNotAvailable)<span class="question-mark">?
+                </span>.lock_process(pid)
+                .ok_or(SyscallError::GraphicsNotOwned)<span class="question-mark">?
+                </span>.blit(
+                    buffer,
+                    <span class="kw-2">&amp;</span>blit.src_framebuffer_info,
+                    blit.src,
+                    blit.dst,
+                    blit.size.<span class="number">0</span>,
+                    blit.size.<span class="number">1</span>,
+                );
+        }
+        c =&gt; <span class="macro">panic!</span>(<span class="string">"invalid graphics command {c:?}"</span>),
     }
 
     SyscallResult::Ok(<span class="number">0</span>)
