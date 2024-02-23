@@ -12,13 +12,13 @@ use crate::{
     devices::{self, Device},
     fs::FileSystemError,
     multiboot2::{self, FramebufferColorInfo},
-    sync::spin::{mutex::Mutex, remutex::ReMutex},
+    sync::spin::remutex::ReMutex,
 };
 
 use self::{vga_graphics::VgaGraphics, vga_text::VgaText};
 
 use super::{
-    keyboard::{self, Keyboard},
+    keyboard::{self, KeyboardReader},
     uart::{Uart, UartPort},
 };
 
@@ -288,7 +288,7 @@ impl Console for EarlyConsole {
 pub(super) struct LateConsole {
     uart: Uart,
     video_console: Box<dyn VideoConsole>,
-    keyboard: Arc<Mutex<Keyboard>>,
+    keyboard: KeyboardReader,
     console_cmd_buffer: Option<String>,
     current_attrib: VideoConsoleAttribute,
 }
@@ -299,7 +299,7 @@ impl LateConsole {
         let mut s = Self {
             uart,
             video_console,
-            keyboard: keyboard::get_keyboard(),
+            keyboard: keyboard::get_keyboard_reader(),
             console_cmd_buffer: None,
             current_attrib: Default::default(),
         };
@@ -421,7 +421,6 @@ impl Console for LateConsole {
 
     fn read(&mut self, dst: &mut [u8]) -> usize {
         let mut i = 0;
-        let mut keyboard = self.keyboard.lock();
 
         // for some reason, uart returns \r instead of \n when pressing <enter>
         // so we have to convert it to \n
@@ -435,9 +434,10 @@ impl Console for LateConsole {
         while i < dst.len() {
             // try to read from keyboard
             // if we can't read from keyboard, try to read from uart
-            if let Some(c) = keyboard
-                .get_next_char()
-                .and_then(|c| c.virtual_char)
+            if let Some(c) = self
+                .keyboard
+                .recv()
+                .and_then(|c| if c.pressed { c.virtual_char } else { None })
                 .or_else(read_uart)
             {
                 dst[i] = c;

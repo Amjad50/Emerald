@@ -1,23 +1,30 @@
-use core::fmt;
+use core::{
+    fmt,
+    sync::atomic::{AtomicU8, Ordering},
+};
 
 use alloc::sync::Arc;
+use blinkcast::alloc::{Receiver as BlinkcastReceiver, Sender as BlinkcastSender};
 
 use crate::{
-    collections::ring::RingBuffer,
     cpu::{
         self,
         idt::{BasicInterruptHandler, InterruptStackFrame64},
         interrupts::apic,
     },
-    sync::{once::OnceLock, spin::mutex::Mutex},
+    sync::once::OnceLock,
 };
 
-static KEYBOARD: OnceLock<Arc<Mutex<Keyboard>>> = OnceLock::new();
+static KEYBOARD: OnceLock<Arc<Keyboard>> = OnceLock::new();
+
+/// Number of key events that can be buffered before being overwritten
+/// We are expecting interested readers to be fast, so we don't need a very large buffer
+const KEYBOARD_BUFFER_SIZE: usize = 256;
 
 pub fn init_keyboard() {
     let keyboard = Keyboard::empty();
 
-    let device = Arc::new(Mutex::new(keyboard));
+    let device = Arc::new(keyboard);
     KEYBOARD
         .set(device)
         .unwrap_or_else(|_| panic!("keyboard already initialized"));
@@ -30,8 +37,12 @@ pub fn init_keyboard() {
     )
 }
 
-pub fn get_keyboard() -> Arc<Mutex<Keyboard>> {
+pub fn get_keyboard() -> Arc<Keyboard> {
     KEYBOARD.get().clone()
+}
+
+pub fn get_keyboard_reader() -> KeyboardReader {
+    get_keyboard().get_reader()
 }
 
 // PS/2 keyboard interrupt
@@ -340,17 +351,22 @@ mod status {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Key {
+    pub pressed: bool,
     pub virtual_char: Option<u8>,
     pub key_type: KeyType,
 }
 
+impl Key {
+    // pub fn virtual_key
+}
+
+pub type KeyboardReader = BlinkcastReceiver<Key>;
+
 // A mini keyboard driver/mapper
 pub struct Keyboard {
-    active_modifiers: u8,
-    active_toggles: u8,
-    // use a small buffer, there is no need to have long buffer,
-    // its bad, since user input may be saved for later
-    input_ring: RingBuffer<Key, 8>,
+    active_modifiers: AtomicU8,
+    active_toggles: AtomicU8,
+    input_ring: BlinkcastSender<Key>,
 }
 
 impl fmt::Debug for Keyboard {
@@ -362,9 +378,9 @@ impl fmt::Debug for Keyboard {
 impl Keyboard {
     pub fn empty() -> Self {
         Self {
-            active_modifiers: 0,
-            active_toggles: 0,
-            input_ring: RingBuffer::empty(),
+            active_modifiers: AtomicU8::new(0),
+            active_toggles: AtomicU8::new(0),
+            input_ring: BlinkcastSender::new(KEYBOARD_BUFFER_SIZE),
         }
     }
 
@@ -378,13 +394,13 @@ impl Keyboard {
 
     pub fn modifiers(&self) -> u8 {
         // remove the saved toggles (this is used for safe-keeping which toggle are we still pressing)
-        let modifiers_only = self.active_modifiers
+        let modifiers_only = self.active_modifiers.load(Ordering::Relaxed)
             & !(modifier::CAPS_LOCK | modifier::NUM_LOCK | modifier::SCROLL_LOCK);
 
-        modifiers_only | self.active_toggles
+        modifiers_only | self.active_toggles.load(Ordering::Relaxed)
     }
 
-    fn try_read_char(&mut self) -> Option<Key> {
+    fn try_read_char(&self) -> Option<Key> {
         if self.read_status() & status::DATA_READY == 0 {
             return None;
         }
@@ -394,9 +410,11 @@ impl Keyboard {
         if data == 0xE0 {
             // this is an extended key
             let data = self.read_data();
+            let pressed = data & KEY_PRESSED == 0;
             let key = (data | 0x80).try_into().ok()?;
 
             return Some(Key {
+                pressed,
                 virtual_char: None,
                 key_type: key,
             });
@@ -406,48 +424,52 @@ impl Keyboard {
         let data = data & !KEY_PRESSED; // strip the pressed bit
         if let Some(modifier_key) = get_modifier(data) {
             if pressed {
-                self.active_modifiers |= modifier_key;
+                self.active_modifiers
+                    .fetch_or(modifier_key, Ordering::Relaxed);
             } else {
-                self.active_modifiers &= !modifier_key;
+                self.active_modifiers
+                    .fetch_and(!modifier_key, Ordering::Relaxed);
             }
         } else if let Some(toggle_key) = get_toggle(data) {
             // keep a copy in the modifier so that we only toggle on a press
-            let should_toggle = pressed && self.active_modifiers & toggle_key == 0;
+            let should_toggle =
+                pressed && self.active_modifiers.load(Ordering::Relaxed) & toggle_key == 0;
             if should_toggle {
-                self.active_toggles ^= toggle_key;
+                self.active_toggles.fetch_xor(toggle_key, Ordering::Relaxed);
             }
 
             // add to the modifier
             if pressed {
-                self.active_modifiers |= toggle_key;
+                self.active_modifiers
+                    .fetch_or(toggle_key, Ordering::Relaxed);
             } else {
-                self.active_modifiers &= !toggle_key;
+                self.active_modifiers
+                    .fetch_and(!toggle_key, Ordering::Relaxed);
             }
         } else {
             // this is a normal key
-            if pressed {
-                let key_type: KeyType = data.try_into().ok()?;
-                let virtual_char = key_type.virtual_key(self.modifiers() & modifier::SHIFT != 0);
+            let key_type: KeyType = data.try_into().ok()?;
+            let virtual_char = key_type.virtual_key(self.modifiers() & modifier::SHIFT != 0);
 
-                return Some(Key {
-                    virtual_char,
-                    key_type,
-                });
-            }
+            return Some(Key {
+                pressed,
+                virtual_char,
+                key_type,
+            });
         }
         None
     }
 
-    pub fn get_next_char(&mut self) -> Option<Key> {
-        self.input_ring.pop().or_else(|| self.try_read_char())
+    pub fn get_reader(&self) -> KeyboardReader {
+        self.input_ring.new_receiver()
     }
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame64) {
-    let mut keyboard = KEYBOARD.get().lock();
+    let keyboard = KEYBOARD.get();
     // fill in the buffer, and replace if filled
     if let Some(key) = keyboard.try_read_char() {
-        keyboard.input_ring.push_replace(key);
+        keyboard.input_ring.send(key);
     }
 
     apic::return_from_interrupt();
