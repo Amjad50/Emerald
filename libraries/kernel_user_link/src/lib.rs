@@ -3,6 +3,7 @@
 pub mod clock;
 pub mod file;
 pub mod graphics;
+pub mod keyboard;
 pub mod process;
 pub mod syscalls;
 

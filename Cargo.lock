@@ -91,10 +91,17 @@ dependencies = [
 
 [[package]]
 name = "emerald_kernel_user_link"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-core",
+]
+
+[[package]]
+name = "emerald_keyboard"
+version = "0.1.0"
+dependencies = [
+ "emerald_kernel_user_link",
 ]
 
 [[package]]
@@ -361,6 +368,7 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "colored",
+ "emerald_keyboard",
 ]
 
 [[package]]

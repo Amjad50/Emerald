@@ -1,0 +1,9 @@
+[package]
+name = "emerald_keyboard"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+kernel_user_link = { version="0.2.5", path = "../kernel_user_link", package = "emerald_kernel_user_link" }
