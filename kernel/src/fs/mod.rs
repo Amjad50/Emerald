@@ -356,7 +356,9 @@ pub enum FileSystemError {
     InvalidData,
     ReadNotSupported,
     WriteNotSupported,
+    OperationNotSupported,
     EndOfFile,
+    BufferNotLargeEnough(usize),
 }
 
 fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
@@ -489,6 +491,7 @@ pub enum FilesystemNode {
     Directory(Directory),
 }
 
+#[allow(dead_code)]
 impl File {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
         Self::open_blocking(path, BlockingMode::None)

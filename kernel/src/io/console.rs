@@ -437,7 +437,7 @@ impl Console for LateConsole {
             if let Some(c) = self
                 .keyboard
                 .recv()
-                .and_then(|c| if c.pressed { c.virtual_char } else { None })
+                .and_then(|c| if c.pressed { c.virtual_char() } else { None })
                 .or_else(read_uart)
             {
                 dst[i] = c;

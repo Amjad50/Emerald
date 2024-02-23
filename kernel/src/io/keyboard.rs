@@ -309,11 +309,9 @@ mod modifier {
     pub const NUM_LOCK: u8 = 1 << 4;
     pub const SCROLL_LOCK: u8 = 1 << 5;
     pub const EXTENDED: u8 = 1 << 6;
-}
 
-#[allow(dead_code)]
-const fn is_modifier(key: u8) -> bool {
-    key == modifier::SHIFT || key == modifier::CTRL || key == modifier::ALT
+    // a way to compress the `bytes` value
+    pub const PRESSED: u8 = 1 << 7;
 }
 
 const fn get_modifier(key: u8) -> Option<u8> {
@@ -352,12 +350,43 @@ mod status {
 #[derive(Debug, Clone, Copy)]
 pub struct Key {
     pub pressed: bool,
-    pub virtual_char: Option<u8>,
+    pub modifiers: u8,
     pub key_type: KeyType,
 }
 
 impl Key {
-    // pub fn virtual_key
+    pub const BYTES_SIZE: usize = 2;
+
+    /// # Safety
+    /// The `bytes` must be a valid representation of a `Key`
+    /// that has been created by `as_bytes`
+    #[allow(dead_code)]
+    pub unsafe fn from_bytes(bytes: [u8; Self::BYTES_SIZE]) -> Self {
+        let pressed = bytes[0] & modifier::PRESSED == 0;
+        let modifiers = bytes[0] & !modifier::PRESSED;
+        // Safety: we know that the `bytes` is a valid representation of `KeyType`
+        //         responsability of the caller to ensure that
+        let key_type = core::mem::transmute(bytes[1]);
+
+        Self {
+            pressed,
+            modifiers,
+            key_type,
+        }
+    }
+
+    pub fn as_bytes(&self) -> [u8; 2] {
+        let mut bytes = [0; 2];
+        bytes[0] = (self.modifiers & !modifier::PRESSED)
+            | if self.pressed { modifier::PRESSED } else { 0 };
+        bytes[1] = self.key_type as u8;
+        bytes
+    }
+
+    pub fn virtual_char(&self) -> Option<u8> {
+        let shifted = self.modifiers & modifier::SHIFT != 0;
+        self.key_type.virtual_key(shifted)
+    }
 }
 
 pub type KeyboardReader = BlinkcastReceiver<Key>;
@@ -415,7 +444,7 @@ impl Keyboard {
 
             return Some(Key {
                 pressed,
-                virtual_char: None,
+                modifiers: self.modifiers(),
                 key_type: key,
             });
         }
@@ -446,18 +475,15 @@ impl Keyboard {
                 self.active_modifiers
                     .fetch_and(!toggle_key, Ordering::Relaxed);
             }
-        } else {
-            // this is a normal key
-            let key_type: KeyType = data.try_into().ok()?;
-            let virtual_char = key_type.virtual_key(self.modifiers() & modifier::SHIFT != 0);
-
-            return Some(Key {
-                pressed,
-                virtual_char,
-                key_type,
-            });
         }
-        None
+        // this is a normal key
+        let key_type: KeyType = data.try_into().ok()?;
+
+        Some(Key {
+            pressed,
+            modifiers: self.modifiers(),
+            key_type,
+        })
     }
 
     pub fn get_reader(&self) -> KeyboardReader {
