@@ -69,11 +69,12 @@ dependencies = [
 
 [[package]]
 name = "emerald_std"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "compiler_builtins",
  "emerald_kernel_user_link",
  "increasing_heap_allocator",
+ "libm",
  "rustc-std-workspace-alloc",
  "rustc-std-workspace-core",
 ]
@@ -123,6 +124,15 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+
+[[package]]
+name = "libm"
+version = "0.2.8"
+source = "git+https://github.com/Amjad50/libm?branch=compiling_libm_for_std#9ded10304060e82d5cb71fcf8ae99a9538802c65"
+dependencies = [
+ "compiler_builtins",
+ "rustc-std-workspace-core",
+]
 
 [[package]]
 name = "micromath"
