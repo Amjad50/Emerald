@@ -41,6 +41,13 @@ pub trait Device: Sync + Send + fmt::Debug {
     fn clone_device(&self) -> Result<(), FileSystemError> {
         Ok(())
     }
+    /// Open the device.
+    /// This tells the device manager that when opening a file with this device name, it should
+    /// instead use the device returned by this function.
+    /// if `None`, it will just use the device directly.
+    fn try_create(&self) -> Option<Result<Arc<dyn Device>, FileSystemError>> {
+        None
+    }
 }
 
 impl FileSystem for RwLock<Devices> {
