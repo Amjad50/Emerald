@@ -43,4 +43,10 @@ workspace = false
 dependencies = ["build_member"]
 condition= {files_modified = {input=["${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}"], output=["${FILESYSTEM_PATH}/${CARGO_MAKE_PROJECT_NAME}"]}}
 command = "cp"
-args = ["-r", "${USER_OUTDIR}/echo", "${USER_OUTDIR}/cat", "${USER_OUTDIR}/ls", "${USER_OUTDIR}/xxd", "${USER_OUTDIR}/graphics", "${FILESYSTEM_PATH}/"]
+args = ["-r", "${USER_OUTDIR}/echo",
+              "${USER_OUTDIR}/cat",
+              "${USER_OUTDIR}/ls",
+              "${USER_OUTDIR}/xxd",
+              "${USER_OUTDIR}/keyboard",
+              "${USER_OUTDIR}/graphics",
+              "${FILESYSTEM_PATH}/"]
