@@ -8,7 +8,7 @@ use crate::{
 };
 
 use self::{
-    keyboard_mouse::KeyboardDeviceCreator,
+    keyboard_mouse::{KeyboardDeviceCreator, MouseDeviceCreator},
     pci::{PciDeviceConfig, PciDevicePropeIterator},
 };
 
@@ -143,4 +143,5 @@ pub fn probe_pci_driver(pci_device: &PciDeviceConfig) -> bool {
 pub fn init_legacy_devices() {
     keyboard_mouse::init_device();
     register_device(Arc::new(KeyboardDeviceCreator));
+    register_device(Arc::new(MouseDeviceCreator));
 }

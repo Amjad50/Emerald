@@ -14,7 +14,7 @@ use crate::{
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
-pub use kernel_user_link::keyboard::Key;
+pub use kernel_user_link::{keyboard::Key, mouse::MouseEvent};
 
 use self::{
     keyboard::{Keyboard, KEYBOARD_INT_NUM},
@@ -56,7 +56,6 @@ pub fn get_keyboard_reader() -> KeyboardReader {
     KEYBOARD_MOUSE.get().get_keyboard_reader()
 }
 
-#[allow(dead_code)]
 pub fn get_mouse_reader() -> MouseReader {
     KEYBOARD_MOUSE.get().get_mouse_reader()
 }
@@ -184,6 +183,65 @@ impl Device for KeyboardDevice {
                 let key_bytes = key.as_bytes();
                 buf[i..i + Key::BYTES_SIZE].copy_from_slice(&key_bytes);
                 i += Key::BYTES_SIZE;
+            } else {
+                break;
+            }
+        }
+
+        Ok(i as u64)
+    }
+}
+
+#[derive(Debug)]
+pub struct MouseDeviceCreator;
+
+impl Device for MouseDeviceCreator {
+    fn name(&self) -> &str {
+        "mouse"
+    }
+
+    fn clone_device(&self) -> Result<(), crate::fs::FileSystemError> {
+        Err(crate::fs::FileSystemError::OperationNotSupported)
+    }
+
+    fn try_create(&self) -> Option<Result<Arc<dyn Device>, crate::fs::FileSystemError>> {
+        Some(Ok(Arc::new(MouseDevice {
+            reader: Mutex::new(get_mouse_reader()),
+        })))
+    }
+}
+
+pub struct MouseDevice {
+    reader: Mutex<MouseReader>,
+}
+
+impl fmt::Debug for MouseDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MouseDevice")
+    }
+}
+
+impl Device for MouseDevice {
+    fn name(&self) -> &str {
+        "mouse_instance"
+    }
+
+    fn read(&self, _offset: u64, buf: &mut [u8]) -> Result<u64, crate::fs::FileSystemError> {
+        if buf.len() < MouseEvent::BYTES_SIZE {
+            return Err(crate::fs::FileSystemError::BufferNotLargeEnough(
+                MouseEvent::BYTES_SIZE,
+            ));
+        }
+
+        let mut reader = self.reader.lock();
+
+        let mut i = 0;
+
+        while i + MouseEvent::BYTES_SIZE <= buf.len() {
+            if let Some(mouse_event) = reader.recv() {
+                let event_bytes = mouse_event.as_bytes();
+                buf[i..i + MouseEvent::BYTES_SIZE].copy_from_slice(&event_bytes);
+                i += MouseEvent::BYTES_SIZE;
             } else {
                 break;
             }

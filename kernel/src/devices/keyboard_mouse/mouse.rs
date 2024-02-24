@@ -1,6 +1,7 @@
 use super::ps2::Ps2;
 
 use blinkcast::alloc::{Receiver as BlinkcastReceiver, Sender as BlinkcastSender};
+use kernel_user_link::mouse::{MouseEvent, ScrollType};
 
 #[allow(dead_code)]
 pub mod scaling {
@@ -35,15 +36,6 @@ mod commands {
     pub const MOUSE_STATUS_REQUEST: u8 = 0xE9;
 }
 
-#[allow(dead_code)]
-pub mod buttons {
-    pub const LEFT: u8 = 1 << 0;
-    pub const RIGHT: u8 = 1 << 1;
-    pub const MIDDLE: u8 = 1 << 2;
-    pub const FOURTH: u8 = 1 << 3;
-    pub const FIFTH: u8 = 1 << 4;
-}
-
 mod packet {
     pub const Y_OVERFLOW: u8 = 1 << 7;
     pub const X_OVERFLOW: u8 = 1 << 6;
@@ -58,23 +50,6 @@ const MOUSE_BUFFER_SIZE: usize = 1024;
 pub const MOUSE_INT_NUM: u8 = 12;
 
 pub type MouseReader = BlinkcastReceiver<MouseEvent>;
-
-#[derive(Debug, Clone, Copy)]
-pub enum ScrollType {
-    VerticalUp,
-    VerticalDown,
-    HorizontalRight,
-    HorizontalNegative,
-    None,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct MouseEvent {
-    pub x: i16,
-    pub y: i16,
-    pub scroll_type: ScrollType,
-    pub buttons: u8,
-}
 
 pub struct Mouse {
     ps2: Ps2,
