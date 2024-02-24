@@ -1,3 +1,5 @@
+pub const MOUSE_PATH: &str = "/devices/mouse";
+
 pub mod buttons {
     pub const LEFT: u8 = 1 << 0;
     pub const RIGHT: u8 = 1 << 1;
