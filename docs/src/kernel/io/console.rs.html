@@ -492,6 +492,7 @@
 <a href="#490" id="490">490</a>
 <a href="#491" id="491">491</a>
 <a href="#492" id="492">492</a>
+<a href="#493" id="493">493</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>vga_graphics;
 <span class="kw">mod </span>vga_text;
 
@@ -503,7 +504,11 @@
 <span class="kw">use </span>alloc::{boxed::Box, string::String, sync::Arc};
 
 <span class="kw">use crate</span>::{
-    devices::{<span class="self">self</span>, Device},
+    devices::{
+        <span class="self">self</span>,
+        keyboard::{<span class="self">self</span>, KeyboardReader},
+        Device,
+    },
     fs::FileSystemError,
     multiboot2::{<span class="self">self</span>, FramebufferColorInfo},
     sync::spin::remutex::ReMutex,
@@ -511,10 +516,7 @@
 
 <span class="kw">use </span><span class="self">self</span>::{vga_graphics::VgaGraphics, vga_text::VgaText};
 
-<span class="kw">use super</span>::{
-    keyboard::{<span class="self">self</span>, KeyboardReader},
-    uart::{Uart, UartPort},
-};
+<span class="kw">use </span><span class="kw">super</span>::uart::{Uart, UartPort};
 
 <span class="comment">// SAFETY: the console is only used inside a lock or mutex
 </span><span class="kw">static </span><span class="kw-2">mut </span>CONSOLE: ConsoleController = ConsoleController::empty_early();

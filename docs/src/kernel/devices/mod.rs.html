@@ -146,14 +146,12 @@
 <a href="#144" id="144">144</a>
 <a href="#145" id="145">145</a>
 <a href="#146" id="146">146</a>
-<a href="#147" id="147">147</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 
 <span class="kw">use crate</span>::{
     fs::{<span class="self">self</span>, path::Path, FileAttributes, FileSystem, FileSystemError, INode},
-    io,
     sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
@@ -291,7 +289,7 @@
 
 <span class="doccomment">/// Devices such as PS/2 keyboard, mouse, serial ports, etc.
 </span><span class="kw">pub fn </span>init_legacy_devices() {
-    io::keyboard::init_keyboard();
+    keyboard::init_keyboard();
     register_device(Arc::new(KeyboardDeviceCreator));
 }
 </code></pre></div></section></main></body></html>
