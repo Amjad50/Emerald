@@ -7,8 +7,8 @@
 [virtual_memory_mapper]: {ROOT_PATH}docs/kernel/memory_management/virtual_memory_mapper
 [ide_device]: {ROOT_PATH}docs/kernel/devices/ide
 [ide_read_sync]: {ROOT_PATH}docs/kernel/devices/ide/struct.IdeDevice.html#method.read_sync
-[keyboard]: {ROOT_PATH}docs/kernel/io/keyboard
-[keyboard_get_reader]: {ROOT_PATH}docs/kernel/io/keyboard/struct.Keyboard.html#method.get_reader
+[keyboard]: {ROOT_PATH}docs/kernel/devices/keyboard
+[keyboard_get_reader]: {ROOT_PATH}docs/kernel/devices/keyboard/struct.Keyboard.html#method.get_reader
 [uart]: {ROOT_PATH}docs/kernel/io/uart
 [console]: {ROOT_PATH}docs/kernel/io/console
 [kernel_filesystem]: {ROOT_PATH}docs/kernel/fs
@@ -43,4 +43,3 @@
 [clocks]: {ROOT_PATH}docs/kernel/devices/clock
 [vga]: {ROOT_PATH}docs/kernel/graphics/vga
 [framebufferinfo]: {ROOT_PATH}docs/kernel/graphics/vga/struct.FrameBufferInfo.html
-[keyboard_device]: {ROOT_PATH}docs/kernel/devices/keyboard

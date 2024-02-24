@@ -4,7 +4,6 @@ use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 
 use crate::{
     fs::{self, path::Path, FileAttributes, FileSystem, FileSystemError, INode},
-    io,
     sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
@@ -142,6 +141,6 @@ pub fn probe_pci_driver(pci_device: &PciDeviceConfig) -> bool {
 
 /// Devices such as PS/2 keyboard, mouse, serial ports, etc.
 pub fn init_legacy_devices() {
-    io::keyboard::init_keyboard();
+    keyboard::init_keyboard();
     register_device(Arc::new(KeyboardDeviceCreator));
 }

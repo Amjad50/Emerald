@@ -9,7 +9,11 @@ use core::{
 use alloc::{boxed::Box, string::String, sync::Arc};
 
 use crate::{
-    devices::{self, Device},
+    devices::{
+        self,
+        keyboard::{self, KeyboardReader},
+        Device,
+    },
     fs::FileSystemError,
     multiboot2::{self, FramebufferColorInfo},
     sync::spin::remutex::ReMutex,
@@ -17,10 +21,7 @@ use crate::{
 
 use self::{vga_graphics::VgaGraphics, vga_text::VgaText};
 
-use super::{
-    keyboard::{self, KeyboardReader},
-    uart::{Uart, UartPort},
-};
+use super::uart::{Uart, UartPort};
 
 // SAFETY: the console is only used inside a lock or mutex
 static mut CONSOLE: ConsoleController = ConsoleController::empty_early();

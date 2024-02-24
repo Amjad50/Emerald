@@ -15,7 +15,6 @@
     - [Virtual Devices](./kernel/virtual_devices/index.md)
         - [Console](./kernel/virtual_devices/console.md)
         - [Pipe](./kernel/virtual_devices/pipe.md)
-        - [Keyboard](./kernel/virtual_devices/keyboard.md)
     - [Filesystem](./kernel/filesystem/index.md)
         - [FAT](./kernel/filesystem/fat.md)
     - [Processor](./kernel/processor/index.md)

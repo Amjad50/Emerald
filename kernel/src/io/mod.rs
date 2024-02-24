@@ -1,7 +1,6 @@
 use core::{fmt, sync::atomic::AtomicBool};
 
 pub mod console;
-pub mod keyboard;
 mod uart;
 
 static PRINT_ERR: AtomicBool = AtomicBool::new(false);
