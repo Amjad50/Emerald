@@ -25,5 +25,10 @@ path = "src/shell.rs"
 name = "xxd"
 path = "src/xxd.rs"
 
+[[bin]]
+name = "keyboard"
+path = "src/keyboard.rs"
+
 [dependencies]
 colored = "2.1.0"
+emerald_keyboard = { path = "../../libraries/keyboard"}

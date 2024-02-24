@@ -14,7 +14,7 @@ categories = ["os"]
 
 [dependencies]
 increasing_heap_allocator = { version="0.1.3", path = "../increasing_heap_allocator" }
-kernel_user_link = { version="0.2.4", path = "../kernel_user_link", package = "emerald_kernel_user_link" }
+kernel_user_link = { version="0.2.5", path = "../kernel_user_link", package = "emerald_kernel_user_link" }
 # for now, waiting for the PR https://github.com/rust-lang/libm/pull/290 to be merged
 libm = { version = "0.2.8", git = "https://github.com/Amjad50/libm", branch = "compiling_libm_for_std" }
 

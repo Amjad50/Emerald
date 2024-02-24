@@ -191,6 +191,14 @@ impl INode {
             },
         }
     }
+
+    pub fn try_open_device(&mut self) -> Result<(), FileSystemError> {
+        if let Some(device) = self.device.take() {
+            self.device = Some(device.try_create().unwrap_or(Ok(device))?);
+        }
+
+        Ok(())
+    }
 }
 
 impl Drop for INode {
@@ -348,7 +356,9 @@ pub enum FileSystemError {
     InvalidData,
     ReadNotSupported,
     WriteNotSupported,
+    OperationNotSupported,
     EndOfFile,
+    BufferNotLargeEnough(usize),
 }
 
 fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
@@ -436,12 +446,14 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
         }
     }
 
-    for entry in filesystem.open_dir(parent)? {
+    for mut entry in filesystem.open_dir(parent)? {
         if entry.name() == filename {
             // if this is a file, return error if we requst a directory (using "/")
             if !entry.is_dir() && opening_dir {
                 return Err(FileSystemError::IsNotDirectory);
             }
+            // if this is a device, open it
+            entry.try_open_device()?;
             return Ok((filesystem, entry));
         }
     }
@@ -479,6 +491,7 @@ pub enum FilesystemNode {
     Directory(Directory),
 }
 
+#[allow(dead_code)]
 impl File {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
         Self::open_blocking(path, BlockingMode::None)
