@@ -29,6 +29,10 @@ path = "src/xxd.rs"
 name = "keyboard"
 path = "src/keyboard.rs"
 
+[[bin]]
+name = "mouse"
+path = "src/mouse.rs"
+
 [dependencies]
 colored = "2.1.0"
 emerald_runtime = { path = "../../libraries/emerald_runtime"}

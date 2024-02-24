@@ -48,5 +48,6 @@ args = ["-r", "${USER_OUTDIR}/echo",
               "${USER_OUTDIR}/ls",
               "${USER_OUTDIR}/xxd",
               "${USER_OUTDIR}/keyboard",
+              "${USER_OUTDIR}/mouse",
               "${USER_OUTDIR}/graphics",
               "${FILESYSTEM_PATH}/"]
