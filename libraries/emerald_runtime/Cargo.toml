@@ -1,13 +1,13 @@
 [package]
-name = "emerald_keyboard"
+name = "emerald_runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
 authors = ["Amjad Alsharafi"]
 license = "MIT"
 repository = "https://github.com/Amjad50/Emerald"
-description = "userspace keyboard events reader for Emerald OS"
-keywords = ["userspace", "keyboard", "os"]
+description = "userspace runtime structures and helpers for Emerald OS (unlike `emerald_std` this uses `rust std`)"
+keywords = ["userspace", "os"]
 categories = ["os"]
 
 [dependencies]

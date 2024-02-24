@@ -98,7 +98,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "emerald_keyboard"
+name = "emerald_runtime"
 version = "0.1.0"
 dependencies = [
  "emerald_kernel_user_link",
@@ -368,7 +368,7 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "colored",
- "emerald_keyboard",
+ "emerald_runtime",
 ]
 
 [[package]]

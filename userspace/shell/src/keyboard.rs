@@ -1,5 +1,5 @@
 use colored::Colorize;
-use emerald_keyboard::{KeyType, Keyboard};
+use emerald_runtime::keyboard::{KeyType, Keyboard};
 
 fn main() {
     println!("Keyboard debugging tool. Press {} to exit:", "ESC".blue());

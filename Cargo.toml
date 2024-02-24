@@ -4,7 +4,7 @@ default-members = ["kernel"]
 members = [
     "kernel",
     "libraries/kernel_user_link", "libraries/increasing_heap_allocator", "libraries/emerald_std",
-    "libraries/keyboard",
+    "libraries/emerald_runtime",
     "userspace/init", "userspace/shell", "userspace/graphics", 
 ]
 
