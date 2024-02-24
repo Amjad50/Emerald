@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["KEYBOARD_PATH"],"enum":["KeyType"],"mod":["modifier"],"struct":["Key"]};

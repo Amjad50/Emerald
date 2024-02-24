@@ -506,13 +506,13 @@
     devices::{<span class="self">self</span>, Device},
     fs::FileSystemError,
     multiboot2::{<span class="self">self</span>, FramebufferColorInfo},
-    sync::spin::{mutex::Mutex, remutex::ReMutex},
+    sync::spin::remutex::ReMutex,
 };
 
 <span class="kw">use </span><span class="self">self</span>::{vga_graphics::VgaGraphics, vga_text::VgaText};
 
 <span class="kw">use super</span>::{
-    keyboard::{<span class="self">self</span>, Keyboard},
+    keyboard::{<span class="self">self</span>, KeyboardReader},
     uart::{Uart, UartPort},
 };
 
@@ -782,7 +782,7 @@
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>LateConsole {
     uart: Uart,
     video_console: Box&lt;<span class="kw">dyn </span>VideoConsole&gt;,
-    keyboard: Arc&lt;Mutex&lt;Keyboard&gt;&gt;,
+    keyboard: KeyboardReader,
     console_cmd_buffer: <span class="prelude-ty">Option</span>&lt;String&gt;,
     current_attrib: VideoConsoleAttribute,
 }
@@ -793,7 +793,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self </span>{
             uart,
             video_console,
-            keyboard: keyboard::get_keyboard(),
+            keyboard: keyboard::get_keyboard_reader(),
             console_cmd_buffer: <span class="prelude-val">None</span>,
             current_attrib: Default::default(),
         };
@@ -915,7 +915,6 @@
 
     <span class="kw">fn </span>read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
         <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>keyboard = <span class="self">self</span>.keyboard.lock();
 
         <span class="comment">// for some reason, uart returns \r instead of \n when pressing &lt;enter&gt;
         // so we have to convert it to \n
@@ -929,9 +928,10 @@
         <span class="kw">while </span>i &lt; dst.len() {
             <span class="comment">// try to read from keyboard
             // if we can't read from keyboard, try to read from uart
-            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(c) = keyboard
-                .get_next_char()
-                .and_then(|c| c.virtual_char)
+            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(c) = <span class="self">self
+                </span>.keyboard
+                .recv()
+                .and_then(|c| <span class="kw">if </span>c.pressed { c.virtual_char() } <span class="kw">else </span>{ <span class="prelude-val">None </span>})
                 .or_else(read_uart)
             {
                 dst[i] = c;

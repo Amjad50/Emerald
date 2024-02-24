@@ -1,1 +1,1 @@
-window.ALL_CRATES = ["az","byteorder","embedded_graphics","embedded_graphics_core","emerald_kernel_user_link","float_cmp","increasing_heap_allocator","kernel","micromath","num_traits"];
+window.ALL_CRATES = ["az","blinkcast","byteorder","embedded_graphics","embedded_graphics_core","emerald_kernel_user_link","float_cmp","increasing_heap_allocator","kernel","micromath","num_traits"];

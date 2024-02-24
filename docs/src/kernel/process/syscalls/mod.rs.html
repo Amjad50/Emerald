@@ -749,6 +749,8 @@
 <a href="#747" id="747">747</a>
 <a href="#748" id="748">748</a>
 <a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{ffi::CStr, mem};
 
 <span class="kw">use </span>alloc::{borrow::Cow, string::String, vec::Vec};
@@ -813,10 +815,12 @@
             FileSystemError::IsNotDirectory =&gt; SyscallError::IsNotDirectory,
             FileSystemError::IsDirectory =&gt; SyscallError::IsDirectory,
             FileSystemError::DeviceNotFound =&gt; <span class="macro">todo!</span>(),
+            FileSystemError::BufferNotLargeEnough(<span class="kw">_</span>) =&gt; SyscallError::BufferTooSmall,
             FileSystemError::DiskReadError { .. }
             | FileSystemError::InvalidOffset
             | FileSystemError::FatError(<span class="kw">_</span>)
             | FileSystemError::InvalidData
+            | FileSystemError::OperationNotSupported
             | FileSystemError::MustBeAbsolute   <span class="comment">// should not happen from user mode
             </span>| FileSystemError::PartitionTableNotFound =&gt; <span class="macro">panic!</span>(<span class="string">"should not happen?"</span>),
         }

@@ -804,6 +804,19 @@
 <a href="#802" id="802">802</a>
 <a href="#803" id="803">803</a>
 <a href="#804" id="804">804</a>
+<a href="#805" id="805">805</a>
+<a href="#806" id="806">806</a>
+<a href="#807" id="807">807</a>
+<a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
+<a href="#817" id="817">817</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::ops;
 
 <span class="kw">use </span>alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
@@ -997,6 +1010,14 @@
             },
         }
     }
+
+    <span class="kw">pub fn </span>try_open_device(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(device) = <span class="self">self</span>.device.take() {
+            <span class="self">self</span>.device = <span class="prelude-val">Some</span>(device.try_create().unwrap_or(<span class="prelude-val">Ok</span>(device))<span class="question-mark">?</span>);
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
 }
 
 <span class="kw">impl </span>Drop <span class="kw">for </span>INode {
@@ -1154,7 +1175,9 @@
     </span>InvalidData,
     ReadNotSupported,
     WriteNotSupported,
+    OperationNotSupported,
     EndOfFile,
+    BufferNotLargeEnough(usize),
 }
 
 <span class="kw">fn </span>get_mapping(path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="kw-2">&amp;</span>Path, Arc&lt;<span class="kw">dyn </span>FileSystem&gt;), FileSystemError&gt; {
@@ -1242,12 +1265,14 @@
         }
     }
 
-    <span class="kw">for </span>entry <span class="kw">in </span>filesystem.open_dir(parent)<span class="question-mark">? </span>{
+    <span class="kw">for </span><span class="kw-2">mut </span>entry <span class="kw">in </span>filesystem.open_dir(parent)<span class="question-mark">? </span>{
         <span class="kw">if </span>entry.name() == filename {
             <span class="comment">// if this is a file, return error if we requst a directory (using "/")
             </span><span class="kw">if </span>!entry.is_dir() &amp;&amp; opening_dir {
                 <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::IsNotDirectory);
             }
+            <span class="comment">// if this is a device, open it
+            </span>entry.try_open_device()<span class="question-mark">?</span>;
             <span class="kw">return </span><span class="prelude-val">Ok</span>((filesystem, entry));
         }
     }
@@ -1285,7 +1310,8 @@
     Directory(Directory),
 }
 
-<span class="kw">impl </span>File {
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">impl </span>File {
     <span class="kw">pub fn </span>open&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FileSystemError&gt; {
         <span class="self">Self</span>::open_blocking(path, BlockingMode::None)
     }

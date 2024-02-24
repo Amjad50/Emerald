@@ -75,6 +75,7 @@
 <a href="#73" id="73">73</a>
 <a href="#74" id="74">74</a>
 <a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::mem::MaybeUninit;
 
 <span class="doccomment">/// A fixed size ring buffer
@@ -141,7 +142,8 @@
     }
 }
 
-<span class="kw">impl</span>&lt;T: Copy, <span class="kw">const </span>N: usize&gt; RingBuffer&lt;T, N&gt; {
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">impl</span>&lt;T: Copy, <span class="kw">const </span>N: usize&gt; RingBuffer&lt;T, N&gt; {
     <span class="kw">pub const fn </span>empty() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             buffer: [MaybeUninit::&lt;T&gt;::uninit(); N],
