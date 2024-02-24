@@ -8,13 +8,13 @@ use crate::{
 };
 
 use self::{
-    keyboard::KeyboardDeviceCreator,
+    keyboard_mouse::KeyboardDeviceCreator,
     pci::{PciDeviceConfig, PciDevicePropeIterator},
 };
 
 pub mod clock;
 pub mod ide;
-pub mod keyboard;
+pub mod keyboard_mouse;
 pub mod pci;
 pub mod pipe;
 
@@ -141,6 +141,6 @@ pub fn probe_pci_driver(pci_device: &PciDeviceConfig) -> bool {
 
 /// Devices such as PS/2 keyboard, mouse, serial ports, etc.
 pub fn init_legacy_devices() {
-    keyboard::init_keyboard();
+    keyboard_mouse::init_device();
     register_device(Arc::new(KeyboardDeviceCreator));
 }

@@ -11,7 +11,7 @@ use alloc::{boxed::Box, string::String, sync::Arc};
 use crate::{
     devices::{
         self,
-        keyboard::{self, KeyboardReader},
+        keyboard_mouse::{self, KeyboardReader},
         Device,
     },
     fs::FileSystemError,
@@ -300,7 +300,7 @@ impl LateConsole {
         let mut s = Self {
             uart,
             video_console,
-            keyboard: keyboard::get_keyboard_reader(),
+            keyboard: keyboard_mouse::get_keyboard_reader(),
             console_cmd_buffer: None,
             current_attrib: Default::default(),
         };
