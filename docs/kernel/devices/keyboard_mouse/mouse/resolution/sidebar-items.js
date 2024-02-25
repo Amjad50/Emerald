@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PIXEL_PER_MM_1","PIXEL_PER_MM_2","PIXEL_PER_MM_4","PIXEL_PER_MM_8"]};

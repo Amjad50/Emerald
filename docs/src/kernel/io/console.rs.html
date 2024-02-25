@@ -506,7 +506,7 @@
 <span class="kw">use crate</span>::{
     devices::{
         <span class="self">self</span>,
-        keyboard::{<span class="self">self</span>, KeyboardReader},
+        keyboard_mouse::{<span class="self">self</span>, KeyboardReader},
         Device,
     },
     fs::FileSystemError,
@@ -795,7 +795,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self </span>{
             uart,
             video_console,
-            keyboard: keyboard::get_keyboard_reader(),
+            keyboard: keyboard_mouse::get_keyboard_reader(),
             console_cmd_buffer: <span class="prelude-val">None</span>,
             current_attrib: Default::default(),
         };

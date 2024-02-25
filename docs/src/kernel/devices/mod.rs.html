@@ -146,6 +146,7 @@
 <a href="#144" id="144">144</a>
 <a href="#145" id="145">145</a>
 <a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
@@ -156,13 +157,13 @@
 };
 
 <span class="kw">use </span><span class="self">self</span>::{
-    keyboard::KeyboardDeviceCreator,
+    keyboard_mouse::{KeyboardDeviceCreator, MouseDeviceCreator},
     pci::{PciDeviceConfig, PciDevicePropeIterator},
 };
 
 <span class="kw">pub mod </span>clock;
 <span class="kw">pub mod </span>ide;
-<span class="kw">pub mod </span>keyboard;
+<span class="kw">pub mod </span>keyboard_mouse;
 <span class="kw">pub mod </span>pci;
 <span class="kw">pub mod </span>pipe;
 
@@ -289,7 +290,8 @@
 
 <span class="doccomment">/// Devices such as PS/2 keyboard, mouse, serial ports, etc.
 </span><span class="kw">pub fn </span>init_legacy_devices() {
-    keyboard::init_keyboard();
+    keyboard_mouse::init_device();
     register_device(Arc::new(KeyboardDeviceCreator));
+    register_device(Arc::new(MouseDeviceCreator));
 }
 </code></pre></div></section></main></body></html>

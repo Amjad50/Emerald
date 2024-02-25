@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MOUSE_BUFFER_SIZE","MOUSE_INT_NUM"],"mod":["commands","packet","resolution","scaling"],"struct":["Mouse"],"type":["MouseReader"]};

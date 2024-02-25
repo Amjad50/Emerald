@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PER_SEC_10","PER_SEC_100","PER_SEC_20","PER_SEC_200","PER_SEC_40","PER_SEC_60","PER_SEC_80"]};

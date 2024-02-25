@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["KEYBOARD_BUFFER_SIZE","KEYBOARD_INT_NUM","KEY_PRESSED"],"fn":["get_modifier","get_toggle","key_type_from_device"],"struct":["Keyboard"],"type":["KeyboardReader"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_keyboard_reader","get_mouse_reader","init_device","poll_events","ps2_interrupt_handler"],"mod":["keyboard","mouse","ps2"],"static":["KEYBOARD_MOUSE"],"struct":["Key","KeyboardDevice","KeyboardDeviceCreator","KeyboardMouse","MouseDevice","MouseDeviceCreator","MouseEvent"]};
