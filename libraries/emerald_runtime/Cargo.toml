@@ -1,0 +1,14 @@
+[package]
+name = "emerald_runtime"
+version = "0.1.1"
+edition = "2021"
+readme = "README.md"
+authors = ["Amjad Alsharafi"]
+license = "MIT"
+repository = "https://github.com/Amjad50/Emerald"
+description = "userspace runtime structures and helpers for Emerald OS (unlike `emerald_std` this uses `rust std`)"
+keywords = ["userspace", "os"]
+categories = ["os"]
+
+[dependencies]
+kernel_user_link = { version="0.2.6", path = "../kernel_user_link", package = "emerald_kernel_user_link" }

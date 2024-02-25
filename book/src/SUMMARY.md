@@ -11,6 +11,7 @@
     - [Drivers/Devices](./kernel/drivers/index.md)
         - [IDE](./kernel/drivers/ide.md)
         - [Keyboard](./kernel/drivers/keyboard.md)
+        - [Mouse](./kernel/drivers/mouse.md)
         - [UART](./kernel/drivers/uart.md)
     - [Virtual Devices](./kernel/virtual_devices/index.md)
         - [Console](./kernel/virtual_devices/console.md)

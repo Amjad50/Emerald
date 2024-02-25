@@ -35,7 +35,6 @@ impl Keyboard {
             if let Some(key) = self.get_key_event() {
                 return key;
             }
-            // core::hint::spin_loop();
             sleep(std::time::Duration::from_millis(10));
         }
     }
