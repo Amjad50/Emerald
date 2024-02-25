@@ -4,7 +4,8 @@
 
 > This is implemented in [`keyboard`][keyboard]
 
-The keyboard driver is simple, and uses the legacy PS/2 interface at `0x60` and `0x64` ports.
+The keyboard driver is simple, and uses the legacy PS/2 interface at `0x60` and `0x64` ports,
+its implemented alongside the [mouse](./mouse.md) driver in the same file.
 
 The driver provide events broadcasts to all listeners using [`blinkcast`]. These listeners
 are mostly processes reading from the `/devices/keyboard` file (see [keyboard reader](#keyboard-reader)).
@@ -29,8 +30,8 @@ There are 2 types of modifiers:
 - Held modifiers: `SHIFT`, `CTRL`, `ALT`
 - Toggled modifiers: `CAPSLOCK`, `NUMLOCK`, `SCROLLLOCK`
 
-# Keyboard reader
-The keyboard driver provide a way to get a [`blinkcast`] reader using [`get_reader`][keyboard_get_reader], 
+## Keyboard reader
+The keyboard driver provide a way to get a [`blinkcast`] reader using [`get_keyboard_reader`][get_keyboard_reader], 
 where the user can read keyboard events without blocking anytime they want.
 
 The [console](../virtual_devices/console.md) and userspace processes use this reader to read keyboard events.
@@ -41,12 +42,12 @@ A process can open a file descriptor to this device and read from it to get keyb
 
 The file descriptor will hold a [`blinkcast`] reader to the keyboard driver, then each process can read events without blocking.
 
-The user can open the file and read the content, but since we are performing some encoding, its better to use the library [`emerald_keyboard`] which provide easy way to read the events.
+The user can open the file and read the content, but since we are performing some encoding, its better to use the library [`emerald_runtime`] which provide easy way to read the events.
 
 Example:
     
 ```rust,no_run,no_compile
-use emerald_keyboard::Keyboard;
+use emerald_runtime::keyboard::Keyboard;
 
 let mut keyboard = Keyboard::new();
 
@@ -63,4 +64,4 @@ for key in keyboard.iter_keys() {
 [`blinkcast`]: https://crates.io/crates/blinkcast
 [`Key::virtual_key`]: https://docs.rs/emerald_kernel_user_link/0.2.5/emerald_kernel_user_link/keyboard/struct.Key.html#method.virtual_char
 [`modifier`]: https://docs.rs/emerald_kernel_user_link/0.2.5/emerald_kernel_user_link/keyboard/modifier
-[`emerald_keyboard`]: https://crates.io/crates/emerald_keyboard
+[`emerald_runtime`]: https://crates.io/crates/emerald_runtime
