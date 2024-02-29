@@ -665,6 +665,14 @@ impl File {
         self.is_terminal = is_terminal;
     }
 
+    pub fn size(&self) -> u64 {
+        self.inode.size()
+    }
+
+    pub fn current_position(&self) -> u64 {
+        self.position
+    }
+
     /// This is a move verbose method than `Clone::clone`, as I want it to be
     /// more explicit to the user that this is not a normal `clone` operation.
     pub fn clone_inherit(&self) -> Self {

@@ -151,3 +151,36 @@ impl TryFrom<(u64, u64)> for FileMeta {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum SeekWhence {
+    Start = 0,
+    Current = 1,
+    End = 2,
+}
+
+impl TryFrom<u64> for SeekWhence {
+    type Error = ();
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(SeekWhence::Start),
+            1 => Ok(SeekWhence::Current),
+            2 => Ok(SeekWhence::End),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SeekFrom {
+    pub offset: i64,
+    pub whence: SeekWhence,
+}
+
+impl SeekFrom {
+    pub fn new(offset: i64, whence: SeekWhence) -> Self {
+        Self { offset, whence }
+    }
+}
