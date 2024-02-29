@@ -90,6 +90,8 @@ impl VideoConsole for VgaGraphics {
 
         if c == b'\n' {
             self.pos = Point::new(0, self.pos.y + self.text_style.line_height() as i32);
+        } else if c == b'\r' {
+            self.pos.x = 0;
         } else {
             let mut dst = [0; 4];
             let str = (c as char).encode_utf8(&mut dst);
