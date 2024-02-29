@@ -9,3 +9,6 @@ members = [
 ]
 
 exclude = ["extern"]
+
+[patch.crates-io]
+jpeg-decoder = { git = "https://github.com/Amjad50/jpeg-decoder", branch = "master" }

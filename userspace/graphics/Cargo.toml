@@ -3,8 +3,20 @@ name = "graphics"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "graphics"
+path = "src/main.rs"
+
+[[bin]]
+name = "video"
+path = "src/video.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 emerald_std = { version = "0.2.6", path = "../../libraries/emerald_std" }
+emerald_runtime = { version = "0.1.1", path = "../../libraries/emerald_runtime" }
 embedded-graphics = "0.8"
+
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+image = { version = "0.24", default-features = false, features = ["jpeg"] }
