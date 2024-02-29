@@ -12,6 +12,7 @@ use embedded_graphics::{
     transform::Transform,
     Drawable,
 };
+use emerald_runtime::keyboard::Keyboard;
 use emerald_std::graphics::{BlitCommand, FrameBufferInfo};
 
 struct MovingAverage<const N: usize> {
@@ -310,11 +311,28 @@ fn main() {
 
     graphics.clear(Rgb888::BLACK).ok();
     let mut changed_rect = graphics.last_changed_rect();
+
+    let mut keyboard = Keyboard::new();
+
     loop {
         let time = std::time::SystemTime::now();
 
         // update
         {
+            for key in keyboard.iter_keys() {
+                if !key.pressed {
+                    continue;
+                }
+                match key.key_type {
+                    emerald_runtime::keyboard::KeyType::Escape => {
+                        graphics.clear(Rgb888::BLACK).ok();
+                        graphics.present_changed();
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                }
+            }
+
             // move the circle
             circle.translate_mut(v);
 
