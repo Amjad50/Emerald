@@ -6,7 +6,7 @@ mod types_conversions;
 /// user-kernel
 pub const SYSCALL_INTERRUPT_NUMBER: u8 = 0xFE;
 
-pub const NUM_SYSCALLS: usize = 20;
+pub const NUM_SYSCALLS: usize = 21;
 
 mod numbers {
     pub const SYS_OPEN: u64 = 0;
@@ -30,6 +30,7 @@ mod numbers {
     pub const SYS_SLEEP: u64 = 17;
     pub const SYS_GET_TIME: u64 = 18;
     pub const SYS_GRAPHICS: u64 = 19;
+    pub const SYS_SEEK: u64 = 20;
 }
 pub use numbers::*;
 
@@ -247,6 +248,7 @@ pub enum SyscallError {
     GraphicsAlreadyTaken = 17,
     GraphicsNotOwned = 18,
     InvalidGraphicsBuffer = 19,
+    InvalidOffset = 20,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -339,6 +341,7 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::GraphicsAlreadyTaken => 17 << 56,
                 SyscallError::GraphicsNotOwned => 18 << 56,
                 SyscallError::InvalidGraphicsBuffer => 19 << 56,
+                SyscallError::InvalidOffset => 20 << 56,
                 SyscallError::InvalidError => panic!("Should never be used"),
             };
 
@@ -396,6 +399,7 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             17 => SyscallError::GraphicsAlreadyTaken,
             18 => SyscallError::GraphicsNotOwned,
             19 => SyscallError::InvalidGraphicsBuffer,
+            20 => SyscallError::InvalidOffset,
             _ => SyscallError::InvalidError,
         };
         SyscallResult::Err(err)

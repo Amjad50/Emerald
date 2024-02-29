@@ -1,5 +1,5 @@
 use std::{
-    io::Read,
+    io::{Read, Seek},
     process::{exit, ExitCode},
 };
 
@@ -11,12 +11,13 @@ fn main() -> ExitCode {
     let args = std::env::args().collect::<Vec<_>>();
 
     if args.len() < 2 {
-        println!("Usage: {} [-l <n>] [file]", args[0]);
+        println!("Usage: {} [-l <n>] [-s <n>] [file]", args[0]);
         return ExitCode::FAILURE;
     }
 
     let mut file = None;
     let mut limit = None;
+    let mut skip = None;
 
     let mut iter = args.iter().skip(1);
 
@@ -28,6 +29,15 @@ fn main() -> ExitCode {
             });
             limit = Some(arg.parse::<usize>().unwrap_or_else(|_| {
                 println!("invalid argument for -l");
+                exit(1); // TODO: replace with ExitCode::FAILURE
+            }));
+        } else if arg == "-s" {
+            let arg = iter.next().unwrap_or_else(|| {
+                println!("missing argument for -s");
+                exit(1); // TODO: replace with ExitCode::FAILURE
+            });
+            skip = Some(arg.parse::<usize>().unwrap_or_else(|_| {
+                println!("invalid argument for -s");
                 exit(1); // TODO: replace with ExitCode::FAILURE
             }));
         } else {
@@ -47,6 +57,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    if let Some(skip) = skip {
+        if let Err(e) = file.seek(std::io::SeekFrom::Start(skip as u64)) {
+            println!("[!] error: {}", e);
+            return ExitCode::FAILURE;
+        }
+    }
 
     let mut buf = [0u8; 1024];
     let mut last_16 = [0u8; 16];

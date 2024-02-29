@@ -3,7 +3,7 @@ use core::{ffi::CStr, mem};
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use kernel_user_link::{
     clock::ClockType,
-    file::{BlockingMode, DirEntry, FileMeta},
+    file::{BlockingMode, DirEntry, FileMeta, SeekFrom, SeekWhence},
     graphics::{BlitCommand, FrameBufferInfo, GraphicsCommand},
     process::SpawnFileMapping,
     sys_arg,
@@ -49,6 +49,7 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_sleep,         // kernel_user_link::syscalls::SYS_SLEEP
     sys_get_time,      // kernel_user_link::syscalls::SYS_GET_TIME
     sys_graphics,      // kernel_user_link::syscalls::SYS_GRAPHICS
+    sys_seek,          // kernel_user_link::syscalls::SYS_SEEK
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -735,6 +736,65 @@ fn sys_graphics(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     }
 
     SyscallResult::Ok(0)
+}
+
+fn sys_seek(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (file_index, whence, offset, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => usize),
+        sys_arg!(1, all_state.rest => u64),
+        sys_arg!(2, all_state.rest => i64),
+    };
+    let seek = SeekFrom {
+        whence: whence
+            .try_into()
+            .map_err(|_| to_arg_err!(1, SyscallArgError::GeneralInvalid))?,
+        offset,
+    };
+
+    let new_position = with_current_process(|process| {
+        let file = process
+            .get_fs_node(file_index)
+            .ok_or(SyscallError::InvalidFileIndex)?;
+        let file = file.as_file_mut()?;
+
+        let size = file.size();
+        let current = file.current_position();
+
+        let new_location: u64 = match seek.whence {
+            SeekWhence::Start => seek
+                .offset
+                .try_into()
+                .map_err(|_| SyscallError::InvalidOffset)?,
+            SeekWhence::Current => {
+                let current: i64 = file
+                    .current_position()
+                    .try_into()
+                    .map_err(|_| SyscallError::InvalidOffset)?;
+                current
+                    .checked_add(seek.offset)
+                    .ok_or(SyscallError::InvalidOffset)?
+                    .try_into()
+                    .map_err(|_| SyscallError::InvalidOffset)?
+            }
+            SeekWhence::End => {
+                // TODO: add support for seek more than the file size
+                if seek.offset > 0 {
+                    return Err(SyscallError::InvalidOffset);
+                }
+                let end: i64 = size.try_into().map_err(|_| SyscallError::InvalidOffset)?;
+                end.checked_add(seek.offset)
+                    .ok_or(SyscallError::InvalidOffset)?
+                    .try_into()
+                    .map_err(|_| SyscallError::InvalidOffset)?
+            }
+        };
+
+        file.seek(new_location)?;
+
+        Ok(new_location)
+    })?;
+
+    SyscallResult::Ok(new_position)
 }
 
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {
