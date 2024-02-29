@@ -140,6 +140,8 @@
 <a href="#138" id="138">138</a>
 <a href="#139" id="139">139</a>
 <a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>embedded_graphics::{
     geometry::Point,
     mono_font::{
@@ -232,6 +234,8 @@
 
         <span class="kw">if </span>c == <span class="string">b'\n' </span>{
             <span class="self">self</span>.pos = Point::new(<span class="number">0</span>, <span class="self">self</span>.pos.y + <span class="self">self</span>.text_style.line_height() <span class="kw">as </span>i32);
+        } <span class="kw">else if </span>c == <span class="string">b'\r' </span>{
+            <span class="self">self</span>.pos.x = <span class="number">0</span>;
         } <span class="kw">else </span>{
             <span class="kw">let </span><span class="kw-2">mut </span>dst = [<span class="number">0</span>; <span class="number">4</span>];
             <span class="kw">let </span>str = (c <span class="kw">as </span>char).encode_utf8(<span class="kw-2">&amp;mut </span>dst);
