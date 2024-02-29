@@ -6,6 +6,8 @@ pub use kernel_user_link::file::DirFilename;
 pub use kernel_user_link::file::FileMeta;
 pub use kernel_user_link::file::FileStat;
 pub use kernel_user_link::file::FileType;
+pub use kernel_user_link::file::SeekFrom;
+pub use kernel_user_link::file::SeekWhence;
 pub use kernel_user_link::file::MAX_FILENAME_LEN;
 pub use kernel_user_link::FD_STDERR;
 pub use kernel_user_link::FD_STDIN;
@@ -22,6 +24,7 @@ use kernel_user_link::syscalls::SYS_OPEN;
 use kernel_user_link::syscalls::SYS_OPEN_DIR;
 use kernel_user_link::syscalls::SYS_READ;
 use kernel_user_link::syscalls::SYS_READ_DIR;
+use kernel_user_link::syscalls::SYS_SEEK;
 use kernel_user_link::syscalls::SYS_SET_FILE_META;
 use kernel_user_link::syscalls::SYS_STAT;
 use kernel_user_link::syscalls::SYS_WRITE;
@@ -218,4 +221,17 @@ pub unsafe fn syscall_get_file_meta(fd: usize, meta: &mut FileMeta) -> Result<()
     *meta = FileMeta::try_from((meta_id, meta_data)).unwrap();
 
     Ok(())
+}
+
+/// # Safety
+/// This function assumes that `fd` is a valid file descriptor.
+pub unsafe fn syscall_seek(fd: usize, seek: SeekFrom) -> Result<u64, SyscallError> {
+    unsafe {
+        call_syscall!(
+            SYS_SEEK,
+            fd,                 // fd
+            seek.whence as u64, // whence
+            seek.offset as u64, // offset
+        )
+    }
 }
