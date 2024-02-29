@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_FILENAME_LEN"],"enum":["BlockingMode","FileMeta","FileType"],"fn":["parse_flags"],"struct":["DirEntry","DirFilename","FileStat"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_FILENAME_LEN"],"enum":["BlockingMode","FileMeta","FileType","SeekWhence"],"fn":["parse_flags"],"struct":["DirEntry","DirFilename","FileStat","SeekFrom"]};
