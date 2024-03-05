@@ -4,6 +4,7 @@ mod syscalls;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
+use kernel_user_link::process::ProcessMetadata;
 
 use crate::{
     cpu::{self, gdt},
@@ -145,7 +146,20 @@ impl Process {
     ) -> Result<Self, ProcessError> {
         let id = PROCESS_ID_ALLOCATOR.allocate();
         let mut vm = virtual_memory_mapper::clone_current_vm_as_user();
-        let stack_end = MAX_USER_VIRTUAL_ADDRESS - PAGE_4K;
+
+        let mut process_meta = ProcessMetadata::empty();
+        process_meta.pid = id;
+        let process_meta_addr = MAX_USER_VIRTUAL_ADDRESS - PAGE_4K;
+        vm.map(&VirtualMemoryMapEntry {
+            virtual_address: process_meta_addr,
+            physical_address: None,
+            size: PAGE_4K,
+            flags: virtual_memory_mapper::flags::PTE_USER,
+        });
+        assert!(core::mem::size_of::<ProcessMetadata>() <= PAGE_4K);
+
+        // subtract one page for stack guard
+        let stack_end = process_meta_addr - PAGE_4K;
         let stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
         let stack_start = stack_end - stack_size;
         vm.map(&VirtualMemoryMapEntry {
@@ -162,7 +176,11 @@ impl Process {
 
         // SAFETY: we know that the vm passed is an exact kernel copy of this vm, so its safe to switch to it
         // TODO: maybe it would be best to create the new vm inside this function?
-        let (_min_addr, max_addr) = unsafe { load_elf_to_vm(elf, file, &mut vm)? };
+        let (_min_addr, max_addr) =
+            unsafe { load_elf_to_vm(elf, file, &mut process_meta, &mut vm)? };
+
+        Self::write_process_meta(&mut vm, process_meta_addr, process_meta);
+
         // SAFETY: we know that the vm is never used after this point until scheduling
         unsafe { vm.add_process_specific_mappings() };
 
@@ -432,6 +450,30 @@ impl Process {
         rsp -= 8;
 
         (rsp, argc as u64, argv_array_ptr)
+    }
+
+    fn write_process_meta(
+        vm: &mut VirtualMemoryMapper,
+        process_meta_addr: usize,
+        process_meta: ProcessMetadata,
+    ) {
+        // dealing with vm, so we must disable interrupts
+        cpu::cpu().push_cli();
+        let old_vm = virtual_memory_mapper::get_current_vm();
+
+        // switch temporaily so we can map the elf
+        // SAFETY: this must be called while the current vm and this new vm must share the same
+        //         kernel regions
+        unsafe { vm.switch_to_this() };
+
+        // write the process meta
+        let process_meta_ptr = process_meta_addr as *mut ProcessMetadata;
+        unsafe { process_meta_ptr.write(process_meta) };
+
+        // switch back to the old vm
+        unsafe { old_vm.switch_to_this() };
+        // we can be interrupted again
+        cpu::cpu().pop_cli();
     }
 }
 
