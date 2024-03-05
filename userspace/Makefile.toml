@@ -40,7 +40,6 @@ run_task = {name=["copy_to_fs", "extra_copy_to_fs"], fork=true}
 
 [tasks.extra_copy_to_fs]
 workspace = false
-dependencies = ["build_member"]
 condition= {files_modified = {input=["${USER_OUTDIR}/${CARGO_MAKE_PROJECT_NAME}"], output=["${FILESYSTEM_PATH}/${CARGO_MAKE_PROJECT_NAME}"]}}
 command = "cp"
 args = ["-r", "${USER_OUTDIR}/echo",
