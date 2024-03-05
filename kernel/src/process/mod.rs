@@ -101,7 +101,6 @@ pub enum ProcessState {
     Running,
     Yielded, // Not used now, but should be scheduled next
     Scheduled,
-    Sleeping,
     Exited,
     WaitingForPid(u64),
     WaitingForTime(ClockTime),
@@ -235,6 +234,7 @@ impl Process {
         self.id
     }
 
+    #[allow(dead_code)]
     pub fn parent_id(&self) -> u64 {
         self.parent_id
     }

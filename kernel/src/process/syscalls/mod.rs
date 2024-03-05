@@ -758,7 +758,6 @@ fn sys_seek(all_state: &mut InterruptAllSavedState) -> SyscallResult {
         let file = file.as_file_mut()?;
 
         let size = file.size();
-        let current = file.current_position();
 
         let new_location: u64 = match seek.whence {
             SeekWhence::Start => seek
