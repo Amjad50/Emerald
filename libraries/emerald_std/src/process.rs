@@ -1,6 +1,6 @@
 use core::ffi::{c_char, CStr};
 
-pub use kernel_user_link::process::SpawnFileMapping;
+pub use kernel_user_link::process::{process_metadata, ProcessMetadata, SpawnFileMapping};
 use kernel_user_link::{
     call_syscall,
     syscalls::{SyscallError, SYS_EXIT, SYS_SPAWN, SYS_WAIT_PID},

@@ -1,6 +1,6 @@
-use core::{fmt, mem};
+use core::{ffi::CStr, fmt, mem, ops::Deref};
 
-use alloc::vec::Vec;
+use alloc::{string::String, vec, vec::Vec};
 
 use crate::{fs, memory_management::virtual_memory_mapper};
 
@@ -172,6 +172,30 @@ impl ElfHeader {
             unsafe { self.header.header64.section_header_offset }
         } else {
             unsafe { self.header.header32.section_header_offset as u64 }
+        }
+    }
+
+    fn section_header_entry_size(&self) -> u64 {
+        if self.is_elf64() {
+            unsafe { self.header.header64.section_header_entry_size as u64 }
+        } else {
+            unsafe { self.header.header32.section_header_entry_size as u64 }
+        }
+    }
+
+    fn section_header_entry_count(&self) -> u64 {
+        if self.is_elf64() {
+            unsafe { self.header.header64.section_header_entry_count as u64 }
+        } else {
+            unsafe { self.header.header32.section_header_entry_count as u64 }
+        }
+    }
+
+    fn section_header_string_table_index(&self) -> u64 {
+        if self.is_elf64() {
+            unsafe { self.header.header64.section_header_string_table_index as u64 }
+        } else {
+            unsafe { self.header.header32.section_header_string_table_index as u64 }
         }
     }
 
@@ -388,10 +412,287 @@ impl fmt::Debug for ElfProgram {
     }
 }
 
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug)]
+pub enum ElfSectionType {
+    /// Unused
+    Null,
+    /// Program data
+    ProgramBits,
+    /// Symbol table
+    SymbolTable,
+    /// String table
+    StringTable,
+    /// Relocation entries with addends
+    Rela,
+    /// Symbol hash table
+    Hash,
+    /// Dynamic linking information
+    Dynamic,
+    /// Note section
+    Note,
+    /// Uninitialized space
+    NoBits,
+    /// Relocation entries, no addends
+    Rel,
+    /// Reserved
+    Shlib,
+    /// Dynamic loader symbol table
+    DynamicSymbols,
+    /// Array of constructors
+    InitArray,
+    /// Array of destructors
+    FiniArray,
+    /// Array of pre-constructors
+    PreInitArray,
+    /// Section group
+    Group,
+    /// Extended section indices
+    ExtendedSymbolTableIndices,
+    /// Number of defined types
+    Num,
+    /// Start OS-specific
+    Other(u32),
+}
+
+impl ElfSectionType {
+    pub fn from_u32(ty: u32) -> Self {
+        match ty {
+            0 => Self::Null,
+            1 => Self::ProgramBits,
+            2 => Self::SymbolTable,
+            3 => Self::StringTable,
+            4 => Self::Rela,
+            5 => Self::Hash,
+            6 => Self::Dynamic,
+            7 => Self::Note,
+            8 => Self::NoBits,
+            9 => Self::Rel,
+            10 => Self::Shlib,
+            11 => Self::DynamicSymbols,
+            14 => Self::InitArray,
+            15 => Self::FiniArray,
+            16 => Self::PreInitArray,
+            17 => Self::Group,
+            18 => Self::ExtendedSymbolTableIndices,
+            19 => Self::Num,
+            0x60000000..=0x6fffffff => Self::Other(ty),
+            _ => Self::Null,
+        }
+    }
+}
+
+#[repr(C, packed)]
+#[derive(Copy, Clone, Debug)]
+pub struct ElfSection32 {
+    /// Section name (string tbl index)
+    name: u32,
+    /// Section type
+    ty: u32,
+    /// Section flags
+    flags: u32,
+    /// Address in memory image
+    address: u32,
+    /// Offset in file
+    offset: u32,
+    /// Size of section
+    size: u32,
+    /// Link to other section
+    link: u32,
+    /// Misc info
+    info: u32,
+    /// Alignment
+    alignment: u32,
+    /// Entry size if section holds table (such as symbol table)
+    entry_size: u32,
+}
+
+#[repr(C, packed)]
+#[derive(Copy, Clone, Debug)]
+pub struct ElfSection64 {
+    /// Section name (string tbl index)
+    name: u32,
+    /// Section type
+    ty: u32,
+    /// Section flags
+    flags: u64,
+    /// Address in memory image
+    address: u64,
+    /// Offset in file
+    offset: u64,
+    /// Size of section
+    size: u64,
+    /// Link to other section
+    link: u32,
+    /// Misc info
+    info: u32,
+    /// Alignment
+    alignment: u64,
+    /// Entry size if section holds table (such as symbol table)
+    entry_size: u64,
+}
+
+#[derive(Clone, Copy)]
+pub enum ElfSectionInner {
+    Section32(ElfSection32),
+    Section64(ElfSection64),
+}
+
+impl ElfSectionInner {
+    pub fn load(
+        file: &mut fs::File,
+        is_elf64: bool,
+        entry_size: u64,
+    ) -> Result<Self, ElfLoadError> {
+        if is_elf64 {
+            if entry_size != mem::size_of::<ElfSection64>() as u64 {
+                return Err(ElfLoadError::InvalidElfOrNotSupported);
+            }
+            let mut header_bytes = [0u8; mem::size_of::<ElfSection64>()];
+            if file.read(&mut header_bytes)? != header_bytes.len() as u64 {
+                return Err(ElfLoadError::UnexpectedEndOfFile);
+            }
+            let section = unsafe { *(header_bytes.as_ptr() as *const ElfSection64) };
+            Ok(Self::Section64(section))
+        } else {
+            if entry_size != mem::size_of::<ElfSection32>() as u64 {
+                return Err(ElfLoadError::InvalidElfOrNotSupported);
+            }
+            let mut header_bytes = [0u8; mem::size_of::<ElfSection32>()];
+            if file.read(&mut header_bytes)? != header_bytes.len() as u64 {
+                return Err(ElfLoadError::UnexpectedEndOfFile);
+            }
+            let section = unsafe { *(header_bytes.as_ptr() as *const ElfSection32) };
+            Ok(Self::Section32(section))
+        }
+    }
+
+    pub fn name_index(&self) -> u32 {
+        match self {
+            Self::Section32(s) => s.name,
+            Self::Section64(s) => s.name,
+        }
+    }
+
+    pub fn ty(&self) -> ElfSectionType {
+        let ty_u32 = match self {
+            Self::Section32(s) => s.ty,
+            Self::Section64(s) => s.ty,
+        };
+
+        ElfSectionType::from_u32(ty_u32)
+    }
+
+    pub fn flags(&self) -> u64 {
+        match self {
+            Self::Section32(s) => s.flags as u64,
+            Self::Section64(s) => s.flags,
+        }
+    }
+
+    pub fn offset(&self) -> u64 {
+        match self {
+            Self::Section32(s) => s.offset as u64,
+            Self::Section64(s) => s.offset,
+        }
+    }
+
+    pub fn address(&self) -> u64 {
+        match self {
+            Self::Section32(s) => s.address as u64,
+            Self::Section64(s) => s.address,
+        }
+    }
+
+    pub fn size(&self) -> u64 {
+        match self {
+            Self::Section32(s) => s.size as u64,
+            Self::Section64(s) => s.size,
+        }
+    }
+
+    pub fn link(&self) -> u64 {
+        match self {
+            Self::Section32(s) => s.link as u64,
+            Self::Section64(s) => s.link as u64,
+        }
+    }
+
+    pub fn info(&self) -> u64 {
+        match self {
+            Self::Section32(s) => s.info as u64,
+            Self::Section64(s) => s.info as u64,
+        }
+    }
+
+    pub fn alignment(&self) -> u64 {
+        match self {
+            Self::Section32(s) => s.alignment as u64,
+            Self::Section64(s) => s.alignment,
+        }
+    }
+
+    pub fn entry_size(&self) -> u64 {
+        match self {
+            Self::Section32(s) => s.entry_size as u64,
+            Self::Section64(s) => s.entry_size,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ElfSection {
+    name: String,
+    inner: ElfSectionInner,
+}
+
+impl ElfSection {
+    pub fn new(inner: ElfSectionInner, string_table: &[u8]) -> Self {
+        let name_index = inner.name_index();
+        let name = String::from(
+            CStr::from_bytes_until_nul(&string_table[name_index as usize..])
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        );
+        Self { name, inner }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl fmt::Debug for ElfSection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ElfSection")
+            .field("name", &self.name)
+            .field("type", &self.inner.ty())
+            .field("flags", &self.inner.flags())
+            .field("offset", &self.inner.offset())
+            .field("address", &self.inner.address())
+            .field("size", &self.inner.size())
+            .field("link", &self.inner.link())
+            .field("info", &self.inner.info())
+            .field("alignment", &self.inner.alignment())
+            .field("entry_size", &self.inner.entry_size())
+            .finish()
+    }
+}
+
+impl Deref for ElfSection {
+    type Target = ElfSectionInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
 #[derive(Debug)]
 pub struct Elf {
     header: ElfHeader,
-    prg_headers: Vec<ElfProgram>,
+    program_headers: Vec<ElfProgram>,
+    sections: Vec<ElfSection>,
 }
 
 impl Elf {
@@ -401,7 +702,7 @@ impl Elf {
         if file.read(&mut header)? != header.len() as u64 {
             return Err(ElfLoadError::UnexpectedEndOfFile);
         }
-        let header = unsafe { &*(header.as_ptr() as *const ElfHeader) };
+        let header = unsafe { *(header.as_ptr() as *const ElfHeader) };
 
         if &header.base.magic != consts::ELF_MAGIC {
             return Err(ElfLoadError::InvalidMagic);
@@ -418,9 +719,30 @@ impl Elf {
             program_headers.push(program);
         }
 
+        let string_table_index = header.section_header_string_table_index() as usize;
+        assert!(string_table_index < header.section_header_entry_count() as usize);
+        let string_table_position = header.section_header_offset()
+            + header.section_header_entry_size() * string_table_index as u64;
+        file.seek(string_table_position)?;
+        let string_table_section =
+            ElfSectionInner::load(file, header.is_elf64(), header.section_header_entry_size())?;
+        let mut string_table = vec![0u8; string_table_section.size() as usize];
+        file.seek(string_table_section.offset())?;
+        file.read(&mut string_table)?;
+
+        file.seek(header.section_header_offset())?;
+        let mut sections = Vec::with_capacity(header.section_header_entry_count() as usize);
+        for _ in 0..header.section_header_entry_count() {
+            let section_inner =
+                ElfSectionInner::load(file, header.is_elf64(), header.section_header_entry_size())?;
+            let section = ElfSection::new(section_inner, &string_table);
+            sections.push(section);
+        }
+
         Ok(Self {
-            header: *header,
-            prg_headers: program_headers,
+            header,
+            program_headers,
+            sections,
         })
     }
 
@@ -429,6 +751,10 @@ impl Elf {
     }
 
     pub fn program_headers(&self) -> &[ElfProgram] {
-        &self.prg_headers
+        &self.program_headers
+    }
+
+    pub fn sections(&self) -> &[ElfSection] {
+        &self.sections
     }
 }
