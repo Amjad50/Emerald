@@ -61,6 +61,9 @@ jobs:
         with:
           path: extern/rust/build/host/stage2
           key: ${{ steps.cache-os-rust-restore.outputs.cache-primary-key }}
+      - name: Build toolchain dist
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
+        run: cargo make toolchain_dist
       - name: Upload kernel artifact
         if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
@@ -75,4 +78,10 @@ jobs:
           name: filesystem_programs
           path: filesystem
           overwrite: true
-
+      - name: Upload toolchain artifact
+        if: github.ref == 'refs/heads/master' && (steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true')
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain
+          path: ./extern/rust/build/dist/(rustc-1*linux|rust-std|rustfmt)*.xz
+          overwrite: true
