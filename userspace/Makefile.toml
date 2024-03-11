@@ -1,8 +1,9 @@
 [env]
-RUSTC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/bin/rustc"
-RUSTDOC = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/rustdoc"
 USER_OUTDIR = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/x86_64-unknown-emerald/${PROFILE}"
 CARGO_MAKE_CARGO_PROFILE = { source = "${PROFILE}", default_value = "debug", mapping = {"debug" = "dev", "release" = "release" } }
+USE_INSTALLED_TOOLCHAIN = { value = "false", condition = { env_not_set = ["USE_INSTALLED_TOOLCHAIN"] } }
+RUSTC = { source = "${USE_INSTALLED_TOOLCHAIN}", default_value = "false", mapping = {"false" = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/bin/rustc", "true" = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/bin/rustc" } }
+RUSTDOC = { source = "${USE_INSTALLED_TOOLCHAIN}", default_value = "false", mapping = {"false" = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/rust/build/host/stage2/bin/rustdoc", "true" = "${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/../extern/toolchain/bin/rustdoc" } }
 
 
 CARGO_MAKE_CRATE_WORKSPACE_MEMBERS = ["init", "shell", "graphics"]
@@ -16,6 +17,7 @@ CARGO_BUILD_TARGET = "x86_64-unknown-linux-gnu"
 # copy found in the root makefile
 [tasks.toolchain]
 workspace = false
+condition = { env_false = ["USE_INSTALLED_TOOLCHAIN"] }
 command = "cargo-make"
 args = ["make", "--makefile", "Makefile.toolchain.toml", "build_user_toolchain"]
 
