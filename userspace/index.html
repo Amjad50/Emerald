@@ -181,15 +181,34 @@
 <h2 id="building-custom-userspace-programs"><a class="header" href="#building-custom-userspace-programs">Building custom userspace programs</a></h2>
 <p>Since we are using <a href="./rust_std.html"><code>Rust STD</code></a>, you can build (hopefully)
 a lot of rust projects that don't have any dependencies on <code>libc</code>, <code>linux</code> or <code>windows</code> specific libraries.</p>
-<p>This can be done by:</p>
+<h3 id="getting-the-toolchain"><a class="header" href="#getting-the-toolchain">Getting the toolchain</a></h3>
+<p>First, you need to get the toolchain, and you can do that by either:</p>
 <ul>
-<li>You can build our toolchain with the command: <code>cargo make toolchain</code> in <a href="https://github.com/Amjad50/Emerald">the root of the project</a>.
-Which will install a toolchain in <code>./extern/toolchain</code>, which you can then link to your <code>rustup</code> toolchain with <code>rustup toolchain link emerald ./extern/toolchain</code>.</li>
-<li>Build the project with the toolchain
-<pre><code class="language-txt">cargo +emerald build --target x86_64-unknown-emerald
-</code></pre>
-</li>
+<li><a href="#using-the-prebuilt-toolchain">Using the prebuilt toolchain</a></li>
+<li><a href="#building-the-toolchain">Building the toolchain</a></li>
 </ul>
+<h4 id="using-the-prebuilt-toolchain"><a class="header" href="#using-the-prebuilt-toolchain">Using the prebuilt toolchain</a></h4>
+<p>We distribute a prebuilt toolchain in:</p>
+<ul>
+<li><a href="https://nightly.link/Amjad50/Emerald/workflows/ci/master/toolchain.zip">toolchain.zip</a>
+Where you can install with</li>
+</ul>
+<pre><code class="language-sh">sh tools/install_zipped_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
+</code></pre>
+<p>This will install the toolchain into <code>extern/toolchain</code> and link it to <code>rustup</code> as <code>emerald</code>.</p>
+<p>Then, when using our <code>cargo make</code> to build our programs, you need to provide the environment <code>USE_INSTALLED_TOOLCHAIN=true</code>.</p>
+<pre><code>USE_INSTALLED_TOOLCHAIN=true cargo make filesystem
+</code></pre>
+<h4 id="building-the-toolchain"><a class="header" href="#building-the-toolchain">Building the toolchain</a></h4>
+<p>You can build our toolchain with the command</p>
+<pre><code class="language-sh">cargo make toolchain
+</code></pre>
+<p>in <a href="https://github.com/Amjad50/Emerald">the root of the project</a>.</p>
+<p>Which will install a toolchain in <code>./extern/toolchain</code>, which you can then link to your <code>rustup</code> toolchain with <code>rustup toolchain link emerald ./extern/toolchain</code>.</p>
+<h3 id="building-the-userspace-programs"><a class="header" href="#building-the-userspace-programs">Building the userspace programs</a></h3>
+<p>Then, you can build your project with the toolchain</p>
+<pre><code class="language-sh">cargo +emerald build --target x86_64-unknown-emerald
+</code></pre>
 <blockquote>
 <p><a href="https://github.com/Amjad50/Emerald/issues">Please open an issue</a> if you have any problems building your project,
 or if you want to add a new feature to the toolchain. </p>

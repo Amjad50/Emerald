@@ -216,15 +216,33 @@ to the kernel as a disk.</p>
 <p>Build kernel iso:</p>
 <pre><code class="language-sh">cargo make kernel_iso
 </code></pre>
-<p>Build userspace programs into <a href="https://github.com/Amjad50/Emerald/tree/master/filesystem"><code>filesystem</code></a> directory (used by <code>qemu</code>):</p>
+<h3 id="building-userspace-programs"><a class="header" href="#building-userspace-programs">Building userspace programs</a></h3>
+<p>This builds userspace programs into <a href="filesystem"><code>filesystem</code></a> directory (used by qemu):</p>
+<p>The userspace programs are built using a custom <code>rust</code> toolchain (See more info <a href="https://amjad.alsharafi.dev/Emerald/userspace/rust_std.html">here</a>)</p>
+<p>Anyway, there are 2 options to build our userspace programs and in general any other program.</p>
+<h4 id="using-the-prebuilt-toolchain"><a class="header" href="#using-the-prebuilt-toolchain">Using the prebuilt toolchain</a></h4>
+<p>We distribute a prebuilt toolchain in:</p>
+<ul>
+<li><a href="https://nightly.link/Amjad50/Emerald/workflows/ci/master/toolchain.zip">toolchain.zip</a>
+Where you can install with</li>
+</ul>
+<pre><code class="language-sh">sh tools/install_zipped_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
+</code></pre>
+<p>This will install the toolchain into <code>extern/toolchain</code> and link it to <code>rustup</code> as <code>emerald</code>.</p>
+<p>Then, when using our <code>cargo make</code> to build our programs, you need to provide the environment <code>USE_INSTALLED_TOOLCHAIN=true</code>.</p>
+<pre><code>USE_INSTALLED_TOOLCHAIN=true cargo make filesystem
+</code></pre>
+<h4 id="building-the-toolchain"><a class="header" href="#building-the-toolchain">Building the toolchain</a></h4>
+<p>The default behavior if you didn't specify the <code>USE_INSTALLED_TOOLCHAIN=true</code> flag, is to build the toolchain
+from source if it hasn't been built before.</p>
 <blockquote>
 <p>Note: this will build the <code>rust</code> toolchain if it hasn't been built before (might take some time)</p>
 </blockquote>
 <pre><code class="language-sh">cargo make filesystem
 </code></pre>
-<p>(optional) Install the toolchain into <a href="https://github.com/Amjad50/Emerald/tree/master/extern/toolchain"><code>extern/toolchain</code></a> directory:</p>
+<p>(optional) If you want to build and install from source into <a href="extern/toolchain"><code>extern/toolchain</code></a> directory:</p>
 <blockquote>
-<p>You can then use <code>rustup toolchain link ...</code> to link to this folder (See more in <a href="./userspace/index.html">userspace</a>)</p>
+<p>You can then use <code>rustup toolchain link ...</code> to link to this folder</p>
 </blockquote>
 <pre><code class="language-sh">cargo make toolchain
 </code></pre>
