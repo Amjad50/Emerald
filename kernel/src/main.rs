@@ -23,10 +23,9 @@ mod graphics;
 mod io;
 mod memory_management;
 mod multiboot2;
+mod panic_handler;
 mod process;
 mod sync;
-
-use core::hint;
 
 use alloc::vec::Vec;
 use cpu::{
@@ -146,16 +145,4 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
 
     // this will never return
     scheduler::schedule()
-}
-
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    unsafe { cpu::clear_interrupts() };
-    println!("{info}");
-    loop {
-        unsafe {
-            cpu::halt();
-        }
-        hint::spin_loop();
-    }
 }

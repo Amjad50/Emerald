@@ -22,6 +22,12 @@ SECTIONS {
         *(.rodata .rodata.*)
     } : kernel_ro
 
+    . = ALIGN(8);
+    PROVIDE(__eh_frame = .);
+    .eh_frame : {
+        KEEP (*(.eh_frame)) *(.eh_frame.*)
+    } : kernel_ro
+
     /* Adjust the address for the data segment to the next page */
     . = ALIGN(4K);
 
@@ -43,15 +49,12 @@ SECTIONS {
     } : kernel_rw
 
     PROVIDE(end = .);
-
-    /DISCARD/ :
-    {
-        *(.eh_frame .eh_frame*)
-    }
 }
 
 multiboot_load_addr = load_addr;
 multiboot_load_end = load_addr + (data_end - begin);
 multiboot_bss_end = load_addr + (end - begin);
 multiboot_entry_addr = load_addr + (entry - begin);
+__executable_start = load_addr;
+__etext = text_end;
 
