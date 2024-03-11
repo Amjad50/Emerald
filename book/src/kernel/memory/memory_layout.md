@@ -62,9 +62,11 @@ This is of course not safe, as we don't do extra checks for that value.
 
 But anyway, the other parts of the userspace are as follows:
 ```txt
-FFFF_FF7F_FFFF_E000 .. XXXX_XXXX_XXXX_XXXX - Stack. From the top and grows down
-XXXX_XXXX_XXXX_XXXX .. YYYY_YYYY_YYYY_YYYY - Heap. From the end of the ELF and grows up
-YYYY_YYYY_YYYY_YYYY .. ZZZZ_ZZZZ_ZZZZ_ZZZZ - ELF file
+XXXX_XXXX_XXXX_XXXX .. YYYY_YYYY_YYYY_YYYY - ELF file
+YYYY_YYYY_YYYY_YYYY .. ZZZZ_ZZZZ_ZZZZ_ZZZZ - Heap. From the end of the ELF and grows up
+ZZZZ_ZZZZ_ZZZZ_ZZZZ .. FFFF_FF7F_FFFF_D000 - Stack. From the top and grows down
+FFFF_FF7F_FFFF_D000 .. FFFF_FF7F_FFFF_E000 - Stack guard page. *not mapped, just for reference*
+FFFF_FF7F_FFFF_E000 .. FFFF_FF7F_FFFF_F000 - Process Metadata structure
 ```
 
 A lot of symbols XD. But in general, the stack is at the top of the user space, and the elf file is at the bottom,

@@ -34,6 +34,7 @@ Process creation (structure creation) is as follows:
 - Maps the stack region.
 - Loads argv into the stack (check [argv structure](#argv-structure) for more information).
 - Load `ELF` regions into memory.
+- Load the `Process Metadata` structure (check [Process Metadata](#process-metadata-structure) for more information).
 - Add process-specific kernel memory regions, like the kernel stack (**this must be done after loading the ELF, and last modification to the VM manually, because we can't switch to this VM after this point unless its by the scheduler, see the comments `process/mod.rs::allocate_process` for more details**)
 - Add data about the heap, with size `0` and max size `1GB`, i.e. no memory allocated yet.
 - Default `context` is created, everything is `0`, except for:
@@ -65,6 +66,17 @@ The `argv` structure in the stack is as follows:
 | ....              |   <- this is where `rsp` will be set to, when the process is created
 +-------------------+
 ```
+
+### Process Metadata Structure
+
+> Structure definition at [`ProcessMetadata`](https://docs.rs/emerald_kernel_user_link/latest/emerald_kernel_user_link/process/struct.ProcessMetadata.html).
+
+This structure is placed in a static location in userspace memory (see [user memory layout](../memory/memory_layout.md#user-layout)), and is used to store information about the process, such as:
+- process id.
+- image base address.
+- image size.
+- program header offset (even though it can probably be obtained by reading the image header).
+- `eh_frame` address and size, this is used to implement unwinding.
 
 ## Process Exit
 
