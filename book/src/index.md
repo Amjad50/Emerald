@@ -48,13 +48,37 @@ Build kernel iso:
 ```sh
 cargo make kernel_iso
 ```
-Build userspace programs into [`filesystem`](https://github.com/Amjad50/Emerald/tree/master/filesystem) directory (used by `qemu`):
+
+### Building userspace programs
+This builds userspace programs into [`filesystem`](filesystem) directory (used by qemu):
+
+The userspace programs are built using a custom `rust` toolchain (See more info [here](https://amjad.alsharafi.dev/Emerald/userspace/rust_std.html))
+
+Anyway, there are 2 options to build our userspace programs and in general any other program.
+
+#### Using the prebuilt toolchain
+We distribute a prebuilt toolchain in:
+- [toolchain.zip](https://nightly.link/Amjad50/Emerald/workflows/ci/master/toolchain.zip)
+Where you can install with
+```sh
+sh tools/install_zipped_toolchain_and_link.sh <path_to_toolchain.zip>
+```
+This will install the toolchain into `extern/toolchain` and link it to `rustup` as `emerald`.
+
+Then, when using our `cargo make` to build our programs, you need to provide the environment `USE_INSTALLED_TOOLCHAIN=true`.
+```
+USE_INSTALLED_TOOLCHAIN=true cargo make filesystem
+```
+
+#### Building the toolchain
+The default behavior if you didn't specify the `USE_INSTALLED_TOOLCHAIN=true` flag, is to build the toolchain
+from source if it hasn't been built before.
 > Note: this will build the `rust` toolchain if it hasn't been built before (might take some time)
 ```sh
 cargo make filesystem
 ```
-(optional) Install the toolchain into [`extern/toolchain`](https://github.com/Amjad50/Emerald/tree/master/extern/toolchain) directory:
-> You can then use `rustup toolchain link ...` to link to this folder (See more in [userspace](./userspace/index.md))
+(optional) If you want to build and install from source into [`extern/toolchain`](extern/toolchain) directory:
+> You can then use `rustup toolchain link ...` to link to this folder
 ```sh
 cargo make toolchain
 ```
