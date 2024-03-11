@@ -21,7 +21,14 @@ args = ["x.py", "build", "-i", "--stage", "2", "rustfmt", "library/std"]
 
 [tasks.install_user_toolchain]
 workspace = false
-dependencies = ["build_user_toolchain"]
+dependencies = ["copy_config_toml"]
 cwd = "../extern/rust"
 command = "python"
 args = ["x.py", "install", "rustfmt", "rustc", "library/std"]
+
+[tasks.dist_user_toolchain]
+workspace = false
+dependencies = ["copy_config_toml"]
+cwd = "../extern/rust"
+command = "python"
+args = ["x.py", "dist", "rustfmt", "rustc", "library/std"]

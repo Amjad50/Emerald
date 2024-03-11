@@ -13,6 +13,12 @@ cwd = "userspace"
 command = "cargo-make"
 args = ["make", "--makefile", "Makefile.toolchain.toml", "install_user_toolchain"]
 
+[tasks.toolchain_dist]
+workspace = false
+cwd = "userspace"
+command = "cargo-make"
+args = ["make", "--makefile", "Makefile.toolchain.toml", "dist_user_toolchain"]
+
 [tasks.filesystem]
 workspace = false
 cwd = "userspace"
