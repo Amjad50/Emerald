@@ -61,7 +61,37 @@
 <a href="#59" id="59">59</a>
 <a href="#60" id="60">60</a>
 <a href="#61" id="61">61</a>
-</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{cpu, fs, memory_management::virtual_memory_mapper};
+<a href="#62" id="62">62</a>
+<a href="#63" id="63">63</a>
+<a href="#64" id="64">64</a>
+<a href="#65" id="65">65</a>
+<a href="#66" id="66">66</a>
+<a href="#67" id="67">67</a>
+<a href="#68" id="68">68</a>
+<a href="#69" id="69">69</a>
+<a href="#70" id="70">70</a>
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a>
+<a href="#73" id="73">73</a>
+<a href="#74" id="74">74</a>
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
+<a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
+<a href="#85" id="85">85</a>
+<a href="#86" id="86">86</a>
+<a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>kernel_user_link::process::ProcessMetadata;
+
+<span class="kw">use crate</span>::{cpu, fs, memory_management::virtual_memory_mapper};
 
 <span class="kw">pub mod </span>elf;
 
@@ -71,6 +101,7 @@
 </span><span class="kw">pub unsafe fn </span>load_elf_to_vm(
     elf: <span class="kw-2">&amp;</span>elf::Elf,
     file: <span class="kw-2">&amp;mut </span>fs::File,
+    process_meta: <span class="kw-2">&amp;mut </span>ProcessMetadata,
     vm: <span class="kw-2">&amp;mut </span>virtual_memory_mapper::VirtualMemoryMapper,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;(usize, usize), fs::FileSystemError&gt; {
     <span class="comment">// we can't be interrupted and load another process vm in the middle of this work
@@ -84,35 +115,60 @@
 
     <span class="kw">let </span><span class="kw-2">mut </span>min_address = usize::MAX;
     <span class="kw">let </span><span class="kw-2">mut </span>max_address = <span class="number">0</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>phdr_address = <span class="number">0</span>;
 
     <span class="kw">for </span>segment <span class="kw">in </span>elf.program_headers() {
-        <span class="kw">if let </span>elf::ElfProgramType::Load = segment.ty() {
-            <span class="kw">let </span>segment_virtual = segment.virtual_address();
-            <span class="macro">assert!</span>(segment_virtual == segment.physical_address());
+        <span class="kw">match </span>segment.ty() {
+            elf::ElfProgramType::Load =&gt; {
+                <span class="kw">let </span>segment_virtual = segment.virtual_address();
+                <span class="macro">assert!</span>(segment_virtual == segment.physical_address());
 
-            <span class="kw">let </span><span class="kw-2">mut </span>flags = elf::to_virtual_memory_flags(segment.flags());
-            flags |= virtual_memory_mapper::flags::PTE_USER;
-            <span class="kw">let </span>entry = virtual_memory_mapper::VirtualMemoryMapEntry {
-                virtual_address: segment_virtual <span class="kw">as </span>usize,
-                physical_address: <span class="prelude-val">None</span>,
-                size: segment.mem_size() <span class="kw">as </span>usize,
-                flags,
-            };
-            min_address = min_address.min(entry.virtual_address);
-            max_address = max_address.max(entry.virtual_address + entry.size);
-            <span class="macro">eprintln!</span>(<span class="string">"Mapping segment: {:x?}"</span>, entry);
-            vm.map(<span class="kw-2">&amp;</span>entry);
+                <span class="kw">let </span><span class="kw-2">mut </span>flags = elf::to_virtual_memory_flags(segment.flags());
+                flags |= virtual_memory_mapper::flags::PTE_USER;
+                <span class="kw">let </span>entry = virtual_memory_mapper::VirtualMemoryMapEntry {
+                    virtual_address: segment_virtual <span class="kw">as </span>usize,
+                    physical_address: <span class="prelude-val">None</span>,
+                    size: segment.mem_size() <span class="kw">as </span>usize,
+                    flags,
+                };
+                min_address = min_address.min(entry.virtual_address);
+                max_address = max_address.max(entry.virtual_address + entry.size);
+                <span class="macro">eprintln!</span>(<span class="string">"Mapping segment: {:x?}"</span>, entry);
+                vm.map(<span class="kw-2">&amp;</span>entry);
 
-            <span class="comment">// read the file into the memory
-            </span>file.seek(segment.offset())<span class="question-mark">?</span>;
+                <span class="comment">// read the file into the memory
+                </span>file.seek(segment.offset())<span class="question-mark">?</span>;
 
-            <span class="kw">let </span>ptr = segment_virtual <span class="kw">as </span><span class="kw-2">*mut </span>u8;
-            <span class="kw">let </span>slice =
-                <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(ptr, segment.file_size() <span class="kw">as </span>usize) };
+                <span class="kw">let </span>ptr = segment_virtual <span class="kw">as </span><span class="kw-2">*mut </span>u8;
+                <span class="kw">let </span>slice =
+                    <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(ptr, segment.file_size() <span class="kw">as </span>usize) };
 
-            <span class="comment">// read the whole segment
-            </span><span class="macro">assert_eq!</span>(file.read(slice)<span class="question-mark">?</span>, segment.file_size());
+                <span class="comment">// read the whole segment
+                </span><span class="macro">assert_eq!</span>(file.read(slice)<span class="question-mark">?</span>, segment.file_size());
+            }
+            elf::ElfProgramType::ProgramHeader =&gt; {
+                phdr_address = segment.virtual_address() <span class="kw">as </span>usize;
+            }
+            <span class="kw">_ </span>=&gt; {}
         }
+    }
+
+    <span class="kw">for </span>section <span class="kw">in </span>elf.sections() {
+        <span class="kw">if </span>section.name() == <span class="string">".eh_frame" </span>{
+            process_meta.eh_frame_adress = section.address() <span class="kw">as </span>usize;
+            process_meta.eh_frame_size = section.size() <span class="kw">as </span>usize;
+        }
+    }
+
+    process_meta.image_base = min_address;
+    process_meta.image_size = max_address - min_address;
+    <span class="macro">assert!</span>(phdr_address &gt;= min_address &amp;&amp; phdr_address &lt; max_address);
+    process_meta.program_headers_offset = phdr_address - min_address;
+
+    <span class="comment">// reset if we got an invalid eh_frame, its optional
+    </span><span class="kw">if </span>process_meta.eh_frame_adress &lt; min_address || process_meta.eh_frame_adress &gt;= max_address {
+        process_meta.eh_frame_adress = <span class="number">0</span>;
+        process_meta.eh_frame_size = <span class="number">0</span>;
     }
 
     <span class="comment">// switch back to the old vm

@@ -464,9 +464,11 @@ FFFF_FF80_0000_1000..FFFF_FF80_0000_9000          process kernel stack (8 * 4KB 
 <p>Not much to talk about here, as this will depend on the process itself and where to load the ELF file, currently we load at the address specified in the ELF file.
 This is of course not safe, as we don't do extra checks for that value.</p>
 <p>But anyway, the other parts of the userspace are as follows:</p>
-<pre><code class="language-txt">FFFF_FF7F_FFFF_E000 .. XXXX_XXXX_XXXX_XXXX - Stack. From the top and grows down
-XXXX_XXXX_XXXX_XXXX .. YYYY_YYYY_YYYY_YYYY - Heap. From the end of the ELF and grows up
-YYYY_YYYY_YYYY_YYYY .. ZZZZ_ZZZZ_ZZZZ_ZZZZ - ELF file
+<pre><code class="language-txt">XXXX_XXXX_XXXX_XXXX .. YYYY_YYYY_YYYY_YYYY - ELF file
+YYYY_YYYY_YYYY_YYYY .. ZZZZ_ZZZZ_ZZZZ_ZZZZ - Heap. From the end of the ELF and grows up
+ZZZZ_ZZZZ_ZZZZ_ZZZZ .. FFFF_FF7F_FFFF_D000 - Stack. From the top and grows down
+FFFF_FF7F_FFFF_D000 .. FFFF_FF7F_FFFF_E000 - Stack guard page. *not mapped, just for reference*
+FFFF_FF7F_FFFF_E000 .. FFFF_FF7F_FFFF_F000 - Process Metadata structure
 </code></pre>
 <p>A lot of symbols XD. But in general, the stack is at the top of the user space, and the elf file is at the bottom,
 and the heap is in the middle starts after the elf file.</p>
@@ -1023,6 +1025,7 @@ is considered invalid and doesn't represent the current state of the process.</l
 <li>Maps the stack region.</li>
 <li>Loads argv into the stack (check <a href="kernel/processes/index.html#argv-structure">argv structure</a> for more information).</li>
 <li>Load <code>ELF</code> regions into memory.</li>
+<li>Load the <code>Process Metadata</code> structure (check <a href="kernel/processes/index.html#process-metadata-structure">Process Metadata</a> for more information).</li>
 <li>Add process-specific kernel memory regions, like the kernel stack (<strong>this must be done after loading the ELF, and last modification to the VM manually, because we can't switch to this VM after this point unless its by the scheduler, see the comments <code>process/mod.rs::allocate_process</code> for more details</strong>)</li>
 <li>Add data about the heap, with size <code>0</code> and max size <code>1GB</code>, i.e. no memory allocated yet.</li>
 <li>Default <code>context</code> is created, everything is <code>0</code>, except for:
@@ -1055,6 +1058,18 @@ is considered invalid and doesn't represent the current state of the process.</l
 | ....              |   &lt;- this is where `rsp` will be set to, when the process is created
 +-------------------+
 </code></pre>
+<h3 id="process-metadata-structure"><a class="header" href="#process-metadata-structure">Process Metadata Structure</a></h3>
+<blockquote>
+<p>Structure definition at <a href="https://docs.rs/emerald_kernel_user_link/latest/emerald_kernel_user_link/process/struct.ProcessMetadata.html"><code>ProcessMetadata</code></a>.</p>
+</blockquote>
+<p>This structure is placed in a static location in userspace memory (see <a href="kernel/processes/../memory/memory_layout.html#user-layout">user memory layout</a>), and is used to store information about the process, such as:</p>
+<ul>
+<li>process id.</li>
+<li>image base address.</li>
+<li>image size.</li>
+<li>program header offset (even though it can probably be obtained by reading the image header).</li>
+<li><code>eh_frame</code> address and size, this is used to implement unwinding.</li>
+</ul>
 <h2 id="process-exit"><a class="header" href="#process-exit">Process Exit</a></h2>
 <p>When the syscall <code>exit</code> is called, the process is marked as <code>Exited</code>, and the exit code is set.</p>
 <p>The <code>Exited</code> process will be removed from the <code>scheduler</code>'s list, at the next <code>schedule</code> call, see <a href="kernel/processes/./scheduler.html">scheduler</a> for more information.</p>

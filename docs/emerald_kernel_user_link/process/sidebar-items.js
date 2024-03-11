@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["SpawnFileMapping"]};
+window.SIDEBAR_ITEMS = {"fn":["process_metadata"],"struct":["ProcessMetadata","SpawnFileMapping"]};

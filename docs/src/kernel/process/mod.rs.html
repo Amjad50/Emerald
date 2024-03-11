@@ -442,12 +442,55 @@
 <a href="#440" id="440">440</a>
 <a href="#441" id="441">441</a>
 <a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
+<a href="#454" id="454">454</a>
+<a href="#455" id="455">455</a>
+<a href="#456" id="456">456</a>
+<a href="#457" id="457">457</a>
+<a href="#458" id="458">458</a>
+<a href="#459" id="459">459</a>
+<a href="#460" id="460">460</a>
+<a href="#461" id="461">461</a>
+<a href="#462" id="462">462</a>
+<a href="#463" id="463">463</a>
+<a href="#464" id="464">464</a>
+<a href="#465" id="465">465</a>
+<a href="#466" id="466">466</a>
+<a href="#467" id="467">467</a>
+<a href="#468" id="468">468</a>
+<a href="#469" id="469">469</a>
+<a href="#470" id="470">470</a>
+<a href="#471" id="471">471</a>
+<a href="#472" id="472">472</a>
+<a href="#473" id="473">473</a>
+<a href="#474" id="474">474</a>
+<a href="#475" id="475">475</a>
+<a href="#476" id="476">476</a>
+<a href="#477" id="477">477</a>
+<a href="#478" id="478">478</a>
+<a href="#479" id="479">479</a>
+<a href="#480" id="480">480</a>
+<a href="#481" id="481">481</a>
+<a href="#482" id="482">482</a>
+<a href="#483" id="483">483</a>
+<a href="#484" id="484">484</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>scheduler;
 <span class="kw">mod </span>syscalls;
 
 <span class="kw">use </span>core::sync::atomic::{AtomicU64, Ordering};
 
 <span class="kw">use </span>alloc::{collections::BTreeMap, string::String, vec::Vec};
+<span class="kw">use </span>kernel_user_link::process::ProcessMetadata;
 
 <span class="kw">use crate</span>::{
     cpu::{<span class="self">self</span>, gdt},
@@ -544,7 +587,6 @@
     Running,
     Yielded, <span class="comment">// Not used now, but should be scheduled next
     </span>Scheduled,
-    Sleeping,
     Exited,
     WaitingForPid(u64),
     WaitingForTime(ClockTime),
@@ -589,7 +631,20 @@
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, ProcessError&gt; {
         <span class="kw">let </span>id = PROCESS_ID_ALLOCATOR.allocate();
         <span class="kw">let </span><span class="kw-2">mut </span>vm = virtual_memory_mapper::clone_current_vm_as_user();
-        <span class="kw">let </span>stack_end = MAX_USER_VIRTUAL_ADDRESS - PAGE_4K;
+
+        <span class="kw">let </span><span class="kw-2">mut </span>process_meta = ProcessMetadata::empty();
+        process_meta.pid = id;
+        <span class="kw">let </span>process_meta_addr = MAX_USER_VIRTUAL_ADDRESS - PAGE_4K;
+        vm.map(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
+            virtual_address: process_meta_addr,
+            physical_address: <span class="prelude-val">None</span>,
+            size: PAGE_4K,
+            flags: virtual_memory_mapper::flags::PTE_USER,
+        });
+        <span class="macro">assert!</span>(core::mem::size_of::&lt;ProcessMetadata&gt;() &lt;= PAGE_4K);
+
+        <span class="comment">// subtract one page for stack guard
+        </span><span class="kw">let </span>stack_end = process_meta_addr - PAGE_4K;
         <span class="kw">let </span>stack_size = INITIAL_STACK_SIZE_PAGES * PAGE_4K;
         <span class="kw">let </span>stack_start = stack_end - stack_size;
         vm.map(<span class="kw-2">&amp;</span>VirtualMemoryMapEntry {
@@ -606,7 +661,11 @@
 
         <span class="comment">// SAFETY: we know that the vm passed is an exact kernel copy of this vm, so its safe to switch to it
         // TODO: maybe it would be best to create the new vm inside this function?
-        </span><span class="kw">let </span>(_min_addr, max_addr) = <span class="kw">unsafe </span>{ load_elf_to_vm(elf, file, <span class="kw-2">&amp;mut </span>vm)<span class="question-mark">? </span>};
+        </span><span class="kw">let </span>(_min_addr, max_addr) =
+            <span class="kw">unsafe </span>{ load_elf_to_vm(elf, file, <span class="kw-2">&amp;mut </span>process_meta, <span class="kw-2">&amp;mut </span>vm)<span class="question-mark">? </span>};
+
+        <span class="self">Self</span>::write_process_meta(<span class="kw-2">&amp;mut </span>vm, process_meta_addr, process_meta);
+
         <span class="comment">// SAFETY: we know that the vm is never used after this point until scheduling
         </span><span class="kw">unsafe </span>{ vm.add_process_specific_mappings() };
 
@@ -661,7 +720,8 @@
         <span class="self">self</span>.id
     }
 
-    <span class="kw">pub fn </span>parent_id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+    <span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub fn </span>parent_id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
         <span class="self">self</span>.parent_id
     }
 
@@ -876,6 +936,30 @@
         </span>rsp -= <span class="number">8</span>;
 
         (rsp, argc <span class="kw">as </span>u64, argv_array_ptr)
+    }
+
+    <span class="kw">fn </span>write_process_meta(
+        vm: <span class="kw-2">&amp;mut </span>VirtualMemoryMapper,
+        process_meta_addr: usize,
+        process_meta: ProcessMetadata,
+    ) {
+        <span class="comment">// dealing with vm, so we must disable interrupts
+        </span>cpu::cpu().push_cli();
+        <span class="kw">let </span>old_vm = virtual_memory_mapper::get_current_vm();
+
+        <span class="comment">// switch temporaily so we can map the elf
+        // SAFETY: this must be called while the current vm and this new vm must share the same
+        //         kernel regions
+        </span><span class="kw">unsafe </span>{ vm.switch_to_this() };
+
+        <span class="comment">// write the process meta
+        </span><span class="kw">let </span>process_meta_ptr = process_meta_addr <span class="kw">as </span><span class="kw-2">*mut </span>ProcessMetadata;
+        <span class="kw">unsafe </span>{ process_meta_ptr.write(process_meta) };
+
+        <span class="comment">// switch back to the old vm
+        </span><span class="kw">unsafe </span>{ old_vm.switch_to_this() };
+        <span class="comment">// we can be interrupted again
+        </span>cpu::cpu().pop_cli();
     }
 }
 

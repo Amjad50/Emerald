@@ -220,9 +220,11 @@ FFFF_FF80_0000_1000..FFFF_FF80_0000_9000          process kernel stack (8 * 4KB 
 <p>Not much to talk about here, as this will depend on the process itself and where to load the ELF file, currently we load at the address specified in the ELF file.
 This is of course not safe, as we don't do extra checks for that value.</p>
 <p>But anyway, the other parts of the userspace are as follows:</p>
-<pre><code class="language-txt">FFFF_FF7F_FFFF_E000 .. XXXX_XXXX_XXXX_XXXX - Stack. From the top and grows down
-XXXX_XXXX_XXXX_XXXX .. YYYY_YYYY_YYYY_YYYY - Heap. From the end of the ELF and grows up
-YYYY_YYYY_YYYY_YYYY .. ZZZZ_ZZZZ_ZZZZ_ZZZZ - ELF file
+<pre><code class="language-txt">XXXX_XXXX_XXXX_XXXX .. YYYY_YYYY_YYYY_YYYY - ELF file
+YYYY_YYYY_YYYY_YYYY .. ZZZZ_ZZZZ_ZZZZ_ZZZZ - Heap. From the end of the ELF and grows up
+ZZZZ_ZZZZ_ZZZZ_ZZZZ .. FFFF_FF7F_FFFF_D000 - Stack. From the top and grows down
+FFFF_FF7F_FFFF_D000 .. FFFF_FF7F_FFFF_E000 - Stack guard page. *not mapped, just for reference*
+FFFF_FF7F_FFFF_E000 .. FFFF_FF7F_FFFF_F000 - Process Metadata structure
 </code></pre>
 <p>A lot of symbols XD. But in general, the stack is at the top of the user space, and the elf file is at the bottom,
 and the heap is in the middle starts after the elf file.</p>
