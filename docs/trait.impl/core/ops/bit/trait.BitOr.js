@@ -1,3 +1,4 @@
 (function() {var implementors = {
-"kernel":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/ops/bit/trait.BitOr.html\" title=\"trait core::ops::bit::BitOr\">BitOr</a> for <a class=\"struct\" href=\"kernel/fs/struct.FileAttributes.html\" title=\"struct kernel::fs::FileAttributes\">FileAttributes</a>"]]
+"kernel":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/ops/bit/trait.BitOr.html\" title=\"trait core::ops::bit::BitOr\">BitOr</a> for <a class=\"struct\" href=\"kernel/fs/struct.FileAttributes.html\" title=\"struct kernel::fs::FileAttributes\">FileAttributes</a>"]],
+"unwinding":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/ops/bit/trait.BitOr.html\" title=\"trait core::ops::bit::BitOr\">BitOr</a> for <a class=\"struct\" href=\"unwinding/abi/struct.UnwindAction.html\" title=\"struct unwinding::abi::UnwindAction\">UnwindAction</a>"]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
