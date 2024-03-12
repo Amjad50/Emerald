@@ -1136,7 +1136,7 @@
         <span class="kw">let </span>(entry_in_ioapic, io_apic) = <span class="self">self
             </span>.get_irq_ioapic_entry(irq_num)
             .expect(<span class="string">"Could not find IO APIC for the interrupt"</span>);
-        io_apic.is_entry_taken(entry_in_ioapic <span class="kw">as </span>u8)
+        io_apic.is_entry_taken(entry_in_ioapic)
     }
 
     <span class="kw">fn </span>assign_io_irq&lt;H: InterruptHandler&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, handler: H, irq_num: u8, cpu: <span class="kw-2">&amp;</span>Cpu) {
@@ -1161,7 +1161,7 @@
         <span class="comment">// TODO: this is added for catching bugs early, probably we should return `Result`
         // using `is_irq_assigned`.
         </span><span class="macro">assert!</span>(
-            !io_apic.is_entry_taken(entry_in_ioapic <span class="kw">as </span>u8),
+            !io_apic.is_entry_taken(entry_in_ioapic),
             <span class="string">"entry is already taken"
         </span>);
 
@@ -1176,7 +1176,7 @@
 
         <span class="kw">let </span>b = modify_entry(b);
 
-        io_apic.write_redirect_entry(entry_in_ioapic <span class="kw">as </span>u8, b);
+        io_apic.write_redirect_entry(entry_in_ioapic, b);
     }
 }
 

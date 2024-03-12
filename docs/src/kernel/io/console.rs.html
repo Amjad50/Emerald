@@ -493,6 +493,7 @@
 <a href="#491" id="491">491</a>
 <a href="#492" id="492">492</a>
 <a href="#493" id="493">493</a>
+<a href="#494" id="494">494</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>vga_graphics;
 <span class="kw">mod </span>vga_text;
 
@@ -646,7 +647,8 @@
     <span class="kw">fn </span>read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize;
 }
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">enum </span>ConsoleController {
+<span class="attr">#[allow(clippy::large_enum_variant)]
+</span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">enum </span>ConsoleController {
     Early(ReMutex&lt;RefCell&lt;EarlyConsole&gt;&gt;),
     Late(Arc&lt;ReMutex&lt;RefCell&lt;LateConsole&gt;&gt;&gt;),
 }

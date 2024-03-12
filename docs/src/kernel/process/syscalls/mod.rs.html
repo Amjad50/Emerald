@@ -921,7 +921,7 @@
 
 <span class="attr">#[inline]
 </span><span class="kw">fn </span>ptr_as_ref&lt;T&gt;(ptr: <span class="kw-2">*const </span>u8) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">*const </span>T, SyscallArgError&gt; {
-    check_ptr(ptr <span class="kw">as </span><span class="kw-2">*const </span>u8, mem::size_of::&lt;T&gt;())<span class="question-mark">?</span>;
+    check_ptr(ptr, mem::size_of::&lt;T&gt;())<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(ptr <span class="kw">as </span><span class="kw-2">*const </span>T)
 }
 
