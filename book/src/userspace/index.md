@@ -19,7 +19,7 @@ We distribute a prebuilt toolchain in:
 - [toolchain.zip](https://nightly.link/Amjad50/Emerald/workflows/ci/master/toolchain.zip)
 Where you can install with
 ```sh
-sh tools/install_zipped_toolchain_and_link.sh <path_to_toolchain.zip>
+sh tools/install_toolchain_and_link.sh <path_to_toolchain.zip>
 ```
 This will install the toolchain into `extern/toolchain` and link it to `rustup` as `emerald`.
 

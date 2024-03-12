@@ -100,10 +100,10 @@ jobs:
       - uses: actions/download-artifact@v4
         id: download-toolchain
         with:
-          path: /tmp
+          path: /tmp/toolchain
           name: toolchain
       - name: install toolchain
-        run: sh tools/install_zipped_toolchain_and_link.sh ${{ steps.download-toolchain.outputs.download-path }}
+        run: sh tools/install_toolchain_and_link.sh ${{ steps.download-toolchain.outputs.download-path }}
       - run: cargo make filesystem
         env: 
           USE_INSTALLED_TOOLCHAIN: true
