@@ -151,6 +151,7 @@ trait Console: Write {
     fn read(&mut self, dst: &mut [u8]) -> usize;
 }
 
+#[allow(clippy::large_enum_variant)]
 pub(super) enum ConsoleController {
     Early(ReMutex<RefCell<EarlyConsole>>),
     Late(Arc<ReMutex<RefCell<LateConsole>>>),

@@ -102,8 +102,8 @@ impl Mouse {
     pub fn handle_mouse_data(&self) {
         let mut data = [0; 4];
         let read_len = if self.has_extra_byte { 4 } else { 3 };
-        for i in 0..read_len {
-            data[i] = self.ps2.read_data();
+        for d in data.iter_mut().take(read_len) {
+            *d = self.ps2.read_data();
         }
 
         if data[0] & packet::X_OVERFLOW != 0 || data[0] & packet::Y_OVERFLOW != 0 {

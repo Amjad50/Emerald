@@ -24,6 +24,7 @@ jobs:
           toolchain: nightly-2024-01-04
           components: rust-src
       - uses: davidB/rust-cargo-make@v1
+      - run: cargo make kernel_check
       - run: cargo make kernel_iso
       - name: Upload kernel artifact
         if: github.ref == 'refs/heads/master'

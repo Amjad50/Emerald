@@ -538,7 +538,7 @@ impl Apic {
         let (entry_in_ioapic, io_apic) = self
             .get_irq_ioapic_entry(irq_num)
             .expect("Could not find IO APIC for the interrupt");
-        io_apic.is_entry_taken(entry_in_ioapic as u8)
+        io_apic.is_entry_taken(entry_in_ioapic)
     }
 
     fn assign_io_irq<H: InterruptHandler>(&mut self, handler: H, irq_num: u8, cpu: &Cpu) {
@@ -563,7 +563,7 @@ impl Apic {
         // TODO: this is added for catching bugs early, probably we should return `Result`
         // using `is_irq_assigned`.
         assert!(
-            !io_apic.is_entry_taken(entry_in_ioapic as u8),
+            !io_apic.is_entry_taken(entry_in_ioapic),
             "entry is already taken"
         );
 
@@ -578,7 +578,7 @@ impl Apic {
 
         let b = modify_entry(b);
 
-        io_apic.write_redirect_entry(entry_in_ioapic as u8, b);
+        io_apic.write_redirect_entry(entry_in_ioapic, b);
     }
 }
 

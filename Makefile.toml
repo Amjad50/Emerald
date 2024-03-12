@@ -31,6 +31,11 @@ workspace = false
 env = { CARGO_MAKE_WORKSPACE_INCLUDE_MEMBERS=["kernel"] }
 run_task = { name="iso", fork=true }
 
+[tasks.kernel_check]
+workspace = false
+env = { CARGO_MAKE_WORKSPACE_INCLUDE_MEMBERS=["kernel"] }
+run_task = { name="clippy_fmt_check", fork=true }
+
 [tasks.run_iso]
 workspace = false
 dependencies = ["kernel_iso", "filesystem"]

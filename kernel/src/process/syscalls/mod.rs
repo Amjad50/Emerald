@@ -109,7 +109,7 @@ fn ptr_as_mut<T>(ptr: *mut u8) -> Result<*mut T, SyscallArgError> {
 
 #[inline]
 fn ptr_as_ref<T>(ptr: *const u8) -> Result<*const T, SyscallArgError> {
-    check_ptr(ptr as *const u8, mem::size_of::<T>())?;
+    check_ptr(ptr, mem::size_of::<T>())?;
     Ok(ptr as *const T)
 }
 

@@ -3,6 +3,19 @@ KERNEL_PATH = "${CARGO_MAKE_CRATE_CUSTOM_TRIPLE_TARGET_DIRECTORY}/${PROFILE}/ker
 GRUB_CFG_PATH = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/kernel/grub.cfg"
 GRUB_PATH = "${CARGO_MAKE_CRATE_TARGET_DIRECTORY}/${PROFILE}/grub"
 
+[tasks.fmt_check]
+private = true
+command = "cargo"
+args = ["fmt", "--all", "--", "--check"]
+
+[tasks.clippy_check]
+private = true
+command = "cargo"
+args = ["clippy", "--all-features", "--", "-D", "warnings"]
+
+[tasks.clippy_fmt_check]
+dependencies = ["fmt_check", "clippy_check"]
+
 [tasks.build]
 command = "cargo"
 condition= {files_modified = {input=["${CARGO_MAKE_WORKING_DIRECTORY}/src/**/*", "${CARGO_MAKE_WORKING_DIRECTORY}/Cargo.toml"], output=["${KERNEL_PATH}"]}}

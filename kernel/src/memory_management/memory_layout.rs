@@ -92,7 +92,7 @@ pub fn stack_guard_page_ptr() -> usize {
 pub trait AlignMem: Sized {
     fn align_up(self, alignment: usize) -> Self;
     fn align_down(self, alignment: usize) -> Self;
-    fn is_aligned(self, alignment: usize) -> bool;
+    fn is_aligned(&self, alignment: usize) -> bool;
     fn align_range(self, size: usize, alignment: usize) -> (Self, usize, usize);
 }
 
@@ -110,7 +110,7 @@ macro_rules! impl_align_mem {
             }
 
             #[inline(always)]
-            fn is_aligned(self, alignment: usize) -> bool {
+            fn is_aligned(&self, alignment: usize) -> bool {
                 (self & ((alignment as $t) - 1)) == 0
             }
 
