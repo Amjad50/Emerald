@@ -48,38 +48,48 @@ jobs:
         with:
           files: 'extern/rust'
       
-      - name: Test if artifact is available
-        if: steps.rust-changes.outputs.any_changed == 'false'
-        id: download-artifact
-        uses: LIT-Protocol/artifact-exists-action@v0
+      - name: Restore cached rust build
+        id: cache-os-rust-restore
+        if: steps.rust-changes.outputs.any_changed != 'true'
+        uses: actions/cache/restore@v4
         with:
-          name: toolchain
-
+          key: rust-build-toolchain
+          path: /tmp/dist # not important
+          lookup-only: true
+  
       # run after this if something changed, otherwise skip all
       - uses: actions-rs/toolchain@v1
-        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
         with:
           toolchain: nightly-2024-01-04
           components: rust-src
       - name: Get cargo-make
-        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
         uses: davidB/rust-cargo-make@v1
       
       # Fetch only top level submodules without recursive
       # building the toolchain will automatically fetch the children of `rust`
       # 100 so that we can get at least a single `upstream` commit, for llvm-ci cache to work
       - name: submodule fetch bare
-        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
         run: git submodule update --init --depth 100
       - run: cargo make toolchain_dist
-        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
       - name: Copy dist to tmp
-        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
         run: |
           mkdir -p /tmp/dist
           cp ./extern/rust/build/dist/rustc-1*linux*.xz ./extern/rust/build/dist/rust-std*.xz ./extern/rust/build/dist/rustfmt*.xz /tmp/dist
+      
+      - name: Save cache toolchain
+        id: cache-os-rust-save
+        uses: actions/cache/save@v4
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
+        with:
+          path: /tmp/dist
+          key: ${{ steps.cache-os-rust-restore.outputs.cache-primary-key }}
       - name: Upload toolchain artifact
-        if: github.ref == 'refs/heads/master' && (steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false')
+        if: github.ref == 'refs/heads/master' && (steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: toolchain
@@ -97,13 +107,15 @@ jobs:
           toolchain: nightly-2024-01-04
           components: rust-src
       - uses: davidB/rust-cargo-make@v1
-      - uses: actions/download-artifact@v4
-        id: download-toolchain
+      - name: Restore cached rust build
+        id: cache-os-rust-restore
+        uses: actions/cache/restore@v4
         with:
-          path: /tmp/toolchain
-          name: toolchain
+          path: /tmp/toolchain  # location doesn't matter, will be ignored
+          key: rust-build-toolchain
+          fail-on-cache-miss: true
       - name: install toolchain
-        run: sh tools/install_toolchain_and_link.sh ${{ steps.download-toolchain.outputs.download-path }}
+        run: sh tools/install_toolchain_and_link.sh /tmp/toolchain
       - run: cargo make filesystem
         env: 
           USE_INSTALLED_TOOLCHAIN: true
