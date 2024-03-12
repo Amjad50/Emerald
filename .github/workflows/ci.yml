@@ -10,60 +10,21 @@ on:
 name: OS Build checks
 
 jobs:
-  build:
-    name: Build
+  kernel:
+    name: Kernel
     runs-on: ubuntu-latest
     steps:
-      # Install dependencies
-      - run: >
+      - name: Install dependencies
+        run: >
           sudo apt update -y &&
           sudo apt install -y xorriso mtools grub-pc-bin qemu-system-x86
+      - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly-2024-01-04
           components: rust-src
-      # install cargo-make
       - uses: davidB/rust-cargo-make@v1
-      # Checkout the repository without submodules, we will do it manually
-      - uses: actions/checkout@v2
-        with:
-          submodules: 'false'
-      # Fetch only top level submodules without recursive
-      # building the toolchain will automatically fetch the children of `rust`
-      # 100 so that we can get at least a single `upstream` commit, for llvm-ci cache to work
-      - name: submodule fetch bare
-        run: git submodule update --init --depth 100
-      # Check if `rust` submodule has changed, i.e. need to rebuild the toolchain
-      - name: Get changed files in `rust` submodule
-        id: rust-changes
-        uses: tj-actions/changed-files@v42
-        with:
-          files: 'extern/rust/**'
-      - name: Build kernel
-        run: cargo make kernel_iso
-      - name: Restore cached rust build
-        id: cache-os-rust-restore
-        if: steps.rust-changes.outputs.any_changed != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: extern/rust/build/host/stage2
-          key: ${{ runner.os }}-rust-build-toolchain
-      # Build the toolchain if it has changed
-      - name: Build filesystem programs
-        env:
-          # make sure we have cache entry and no changes in the rust submodule
-          NO_TOOLCHAIN_BUILD: ${{ steps.cache-os-rust-restore.outputs.cache-hit == 'true' && steps.rust-changes.outputs.any_changed != 'true' }}
-        run: cargo make filesystem
-      - name: Save cache rust build
-        id: cache-os-rust-save
-        uses: actions/cache/save@v4
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
-        with:
-          path: extern/rust/build/host/stage2
-          key: ${{ steps.cache-os-rust-restore.outputs.cache-primary-key }}
-      - name: Build toolchain dist
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
-        run: cargo make toolchain_dist
+      - run: cargo make kernel_iso
       - name: Upload kernel artifact
         if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
@@ -71,6 +32,75 @@ jobs:
           name: kernel
           path: target/debug/kernel.iso
           overwrite: true
+
+  toolchain:
+    name: Toolchain
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository without submodules, we will do it manually
+      - uses: actions/checkout@v2
+        with:
+          submodules: 'false'
+      - name: Get changed files in `rust` submodule
+        id: rust-changes
+        uses: tj-actions/changed-files@v42
+        with:
+          files: 'extern/rust'
+      
+      - name: Test if artifact is available
+        if: steps.rust-changes.outputs.any_changed == 'false'
+        id: download-artifact
+        uses: LIT-Protocol/artifact-exists-action@v0
+        with:
+          name: toolchain
+
+      # run after this if something changed, otherwise skip all
+      - uses: actions-rs/toolchain@v1
+        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        with:
+          toolchain: nightly-2024-01-04
+          components: rust-src
+      - name: Get cargo-make
+        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        uses: davidB/rust-cargo-make@v1
+      
+      # Fetch only top level submodules without recursive
+      # building the toolchain will automatically fetch the children of `rust`
+      # 100 so that we can get at least a single `upstream` commit, for llvm-ci cache to work
+      - name: submodule fetch bare
+        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        run: git submodule update --init --depth 100
+      - run: cargo make toolchain_dist
+        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+      - name: Upload toolchain artifact
+        if: github.ref == 'refs/heads/master' && (steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false')
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain
+          path: ./extern/rust/build/dist/(rustc-1*linux|rust-std|rustfmt)*.xz
+          overwrite: true
+
+  filesystem:
+    name: Filesystem
+    needs: toolchain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2024-01-04
+          components: rust-src
+      - uses: davidB/rust-cargo-make@v1
+      - uses: actions/download-artifact@v4
+        id: download-toolchain
+        with:
+          path: /tmp
+          name: toolchain
+      - name: install toolchain
+        run: sh tools/install_zipped_toolchain_and_link.sh ${{ steps.download-toolchain.outputs.download-path }}
+      - run: cargo make filesystem
+        env: 
+          USE_INSTALLED_TOOLCHAIN: true
       - name: Upload filesystem artifact
         if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
@@ -78,10 +108,4 @@ jobs:
           name: filesystem_programs
           path: filesystem
           overwrite: true
-      - name: Upload toolchain artifact
-        if: github.ref == 'refs/heads/master' && (steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true')
-        uses: actions/upload-artifact@v4
-        with:
-          name: toolchain
-          path: ./extern/rust/build/dist/(rustc-1*linux|rust-std|rustfmt)*.xz
-          overwrite: true
+
