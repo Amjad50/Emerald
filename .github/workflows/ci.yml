@@ -73,12 +73,17 @@ jobs:
         run: git submodule update --init --depth 100
       - run: cargo make toolchain_dist
         if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+      - name: Copy dist to tmp
+        if: steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false'
+        run: |
+          mkdir -p /tmp/dist
+          cp ./extern/rust/build/dist/rustc-1*linux*.xz ./extern/rust/build/dist/rust-std*.xz ./extern/rust/build/dist/rustfmt*.xz /tmp/dist
       - name: Upload toolchain artifact
         if: github.ref == 'refs/heads/master' && (steps.rust-changes.outputs.any_changed == 'true' || steps.download-artifact.outputs.exists == 'false')
         uses: actions/upload-artifact@v4
         with:
           name: toolchain
-          path: ./extern/rust/build/dist/(rustc-1*linux|rust-std|rustfmt)*.xz
+          path: /tmp/dist
           overwrite: true
 
   filesystem:
