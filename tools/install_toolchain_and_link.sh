@@ -41,7 +41,7 @@ echo "installing from $temp_dir"
 
 
 # install the toolchain
-sh $DIR/install_toolchain.sh $prefix $temp_dir/*.xz
+bash $DIR/install_toolchain.sh $prefix $temp_dir/*.xz
 
 # link the toolchain
 rustup toolchain link emerald $prefix
