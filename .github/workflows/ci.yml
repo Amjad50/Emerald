@@ -25,13 +25,13 @@ jobs:
           components: rust-src, rustfmt, clippy
       - uses: davidB/rust-cargo-make@v1
       - run: cargo make kernel_check
-      - run: cargo make kernel_iso
+      - run: cargo make --profile=release kernel_iso
       - name: Upload kernel artifact
         if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: kernel
-          path: target/debug/kernel.iso
+          path: target/release/kernel.iso
           overwrite: true
 
   toolchain:
@@ -115,7 +115,7 @@ jobs:
           fail-on-cache-miss: true
       - name: install toolchain
         run: bash tools/install_toolchain_and_link.sh /tmp/dist
-      - run: cargo make filesystem
+      - run: cargo make --profile=release filesystem
         env: 
           USE_INSTALLED_TOOLCHAIN: true
       - name: Upload filesystem artifact
