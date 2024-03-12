@@ -227,7 +227,7 @@ to the kernel as a disk.</p>
 <li><a href="https://nightly.link/Amjad50/Emerald/workflows/ci/master/toolchain.zip">toolchain.zip</a>
 Where you can install with</li>
 </ul>
-<pre><code class="language-sh">sh tools/install_zipped_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
+<pre><code class="language-sh">sh tools/install_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
 </code></pre>
 <p>This will install the toolchain into <code>extern/toolchain</code> and link it to <code>rustup</code> as <code>emerald</code>.</p>
 <p>Then, when using our <code>cargo make</code> to build our programs, you need to provide the environment <code>USE_INSTALLED_TOOLCHAIN=true</code>.</p>
@@ -1347,7 +1347,7 @@ a lot of rust projects that don't have any dependencies on <code>libc</code>, <c
 <li><a href="https://nightly.link/Amjad50/Emerald/workflows/ci/master/toolchain.zip">toolchain.zip</a>
 Where you can install with</li>
 </ul>
-<pre><code class="language-sh">sh tools/install_zipped_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
+<pre><code class="language-sh">sh tools/install_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
 </code></pre>
 <p>This will install the toolchain into <code>extern/toolchain</code> and link it to <code>rustup</code> as <code>emerald</code>.</p>
 <p>Then, when using our <code>cargo make</code> to build our programs, you need to provide the environment <code>USE_INSTALLED_TOOLCHAIN=true</code>.</p>
