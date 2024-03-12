@@ -1,5 +1,4 @@
 [toolchain]
-# a testing toolchain, if you want to get the toolchain installed
-# use `cargo make toolchain`, which will install it in `extern/toolchain`, you can
-# then use `rustup toolchain link <name> ./extern/toolchain` to link it to rustup
-path = "../extern/rust/build/host/stage2"
+# Make sure you have built the toolchain or downloaded prebuilt one
+# check README.md or the book (https://amjad.alsharafi.dev/Emerald/userspace/index.html) for more details
+path = "../extern/toolchain"
