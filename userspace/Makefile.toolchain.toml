@@ -31,4 +31,4 @@ workspace = false
 dependencies = ["copy_config_toml"]
 cwd = "../extern/rust"
 command = "python"
-args = ["x.py", "dist", "rustfmt", "rustc", "library/std"]
+args = ["x.py", "dist", "rustfmt", "rustc", "rust-std"]
