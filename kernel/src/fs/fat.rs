@@ -62,8 +62,8 @@ pub fn load_fat_filesystem(
         })?;
 
     // SAFETY: This is a valid allocated memory
-    let boot_sector = unsafe { &*(sectors.as_ptr() as *const FatBootSectorRaw) };
-    let boot_sector = FatBootSector::new(*boot_sector, size_in_sectors)?;
+    let boot_sector = unsafe { sectors.as_ptr().cast::<FatBootSectorRaw>().read() };
+    let boot_sector = FatBootSector::new(boot_sector, size_in_sectors)?;
 
     FatFilesystem::new(start_lba, size_in_sectors, boot_sector, device)
 }
@@ -424,23 +424,17 @@ impl DirectoryIterator<'_> {
                 if next_sector_index % self.filesystem.boot_sector.sectors_per_cluster() as u32 == 0
                 {
                     // get next cluster
-                    let next_cluster = self.filesystem.read_fat_entry(self.current_cluster);
+                    let next_cluster = self.filesystem.next_cluster(self.current_cluster);
                     match next_cluster {
-                        FatEntry::Next(cluster) => {
+                        Ok(Some(cluster)) => {
                             self.current_cluster = cluster;
                             next_sector_index =
                                 cluster * self.filesystem.boot_sector.sectors_per_cluster() as u32;
                         }
-                        FatEntry::EndOfChain => {
+                        Ok(None) => {
                             return Ok(false);
                         }
-                        FatEntry::Bad => {
-                            return Err(FileSystemError::FileNotFound);
-                        }
-                        FatEntry::Reserved => {
-                            return Err(FileSystemError::FileNotFound);
-                        }
-                        FatEntry::Free => {
+                        Err(_e) => {
                             return Err(FileSystemError::FileNotFound);
                         }
                     }
@@ -459,11 +453,11 @@ impl DirectoryIterator<'_> {
         let entry_end = entry_start + DIRECTORY_ENTRY_SIZE as usize;
         if entry_end > self.current_sector.len() {
             // we need to read the next sector
-            if self.next_sector()? {
-                return self.get_next_entry();
+            return if self.next_sector()? {
+                self.get_next_entry()
             } else {
-                return Err(FileSystemError::FileNotFound);
-            }
+                Err(FileSystemError::FileNotFound)
+            };
         }
         let entry = &self.current_sector[entry_start..entry_end];
         self.entry_index_in_sector += 1;
@@ -683,6 +677,16 @@ impl FatFilesystem {
         FatEntry::from_u32(self.fat_type(), entry)
     }
 
+    fn next_cluster(&self, cluster: u32) -> Result<Option<u32>, FileSystemError> {
+        match self.read_fat_entry(cluster) {
+            FatEntry::Next(next_cluster) => Ok(Some(next_cluster)),
+            FatEntry::EndOfChain => Ok(None),
+            FatEntry::Bad => Err(FatError::UnexpectedFatEntry.into()),
+            FatEntry::Reserved => Err(FatError::UnexpectedFatEntry.into()),
+            FatEntry::Free => Err(FatError::UnexpectedFatEntry.into()),
+        }
+    }
+
     fn open_root_dir(&self) -> Result<Directory, FileSystemError> {
         match self.fat_type() {
             FatType::Fat12 | FatType::Fat16 => Ok(Directory::RootFat12_16 {
@@ -814,13 +818,9 @@ impl FatFilesystem {
         let mut cluster = inode.start_cluster as u32;
         let cluster_index = position / self.boot_sector.bytes_per_cluster();
         for _ in 0..cluster_index {
-            cluster = match self.read_fat_entry(cluster) {
-                FatEntry::Next(next_cluster) => next_cluster,
-                FatEntry::EndOfChain => return Err(FatError::UnexpectedFatEntry.into()),
-                FatEntry::Bad => return Err(FatError::UnexpectedFatEntry.into()),
-                FatEntry::Reserved => return Err(FatError::UnexpectedFatEntry.into()),
-                FatEntry::Free => return Err(FatError::UnexpectedFatEntry.into()),
-            };
+            cluster = self
+                .next_cluster(cluster)?
+                .ok_or(FatError::UnexpectedFatEntry)?;
         }
 
         let mut read = 0;
@@ -843,12 +843,9 @@ impl FatFilesystem {
             position_in_cluster += to_read as u32;
             if position_in_cluster >= self.boot_sector.bytes_per_cluster() {
                 position_in_cluster = 0;
-                cluster = match self.read_fat_entry(cluster) {
-                    FatEntry::Next(next_cluster) => next_cluster,
-                    FatEntry::EndOfChain => break,
-                    FatEntry::Bad => return Err(FatError::UnexpectedFatEntry.into()),
-                    FatEntry::Reserved => return Err(FatError::UnexpectedFatEntry.into()),
-                    FatEntry::Free => return Err(FatError::UnexpectedFatEntry.into()),
+                cluster = match self.next_cluster(cluster)? {
+                    Some(next_cluster) => next_cluster,
+                    None => break,
                 };
             }
         }
