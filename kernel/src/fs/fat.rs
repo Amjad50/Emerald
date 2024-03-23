@@ -351,6 +351,115 @@ mod attrs {
     pub const LONG_NAME: u8 = READ_ONLY | HIDDEN | SYSTEM | VOLUME_ID;
 }
 
+enum DirectoryEntryState {
+    Free,
+    FreeAndLast,
+    Used,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+struct DirectoryEntryNormal {
+    short_name: [u8; 11],
+    attributes: u8,
+    _nt_reserved: u8,
+    creation_time_tenths_of_seconds: u8,
+    creation_time: u16,
+    creation_date: u16,
+    last_access_date: u16,
+    first_cluster_hi: u16,
+    last_modification_time: u16,
+    last_modification_date: u16,
+    first_cluster_lo: u16,
+    file_size: u32,
+}
+
+impl DirectoryEntryNormal {
+    pub fn attributes(&self) -> u8 {
+        self.attributes
+    }
+}
+
+#[derive(Debug, Clone)]
+#[repr(C, packed)]
+struct DirectoryEntryLong {
+    sequence_number: u8,
+    name1: [u16; 5],
+    attributes: u8,
+    long_name_type: u8,
+    checksum: u8,
+    name2: [u16; 6],
+    _zero: u16,
+    name3: [u16; 2],
+}
+
+impl DirectoryEntryLong {
+    pub fn name(&self) -> String {
+        let name1 = unsafe { &core::ptr::addr_of!(self.name1).read_unaligned() };
+        let name2 = unsafe { &core::ptr::addr_of!(self.name2).read_unaligned() };
+        let name3 = unsafe { &core::ptr::addr_of!(self.name3).read_unaligned() };
+
+        // construct an iterator and fill the string part
+        let name_iter = name1
+            .iter()
+            .chain(name2)
+            .chain(name3)
+            .cloned()
+            .take_while(|c| c != &0);
+
+        let mut name_part = String::with_capacity(13);
+        char::decode_utf16(name_iter)
+            .map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER))
+            .for_each(|c| name_part.push(c));
+
+        name_part
+    }
+}
+
+enum DirectoryEntry {
+    Normal(DirectoryEntryNormal),
+    Long(DirectoryEntryLong),
+}
+
+impl DirectoryEntry {
+    pub fn from_raw(raw: &[u8]) -> DirectoryEntry {
+        assert!(raw.len() == DIRECTORY_ENTRY_SIZE as usize);
+        let normal = unsafe { raw.as_ptr().cast::<DirectoryEntryNormal>().read() };
+        let attributes = normal.attributes;
+        if attributes & attrs::LONG_NAME == attrs::LONG_NAME {
+            DirectoryEntry::Long(unsafe { raw.as_ptr().cast::<DirectoryEntryLong>().read() })
+        } else {
+            DirectoryEntry::Normal(normal)
+        }
+    }
+
+    pub fn state(&self) -> DirectoryEntryState {
+        let first_byte = match self {
+            DirectoryEntry::Normal(entry) => entry.short_name[0],
+            DirectoryEntry::Long(entry) => entry.sequence_number,
+        };
+        match first_byte {
+            0x00 => DirectoryEntryState::FreeAndLast,
+            0xE5 => DirectoryEntryState::Free,
+            _ => DirectoryEntryState::Used,
+        }
+    }
+
+    pub fn as_normal(&self) -> &DirectoryEntryNormal {
+        match self {
+            DirectoryEntry::Normal(entry) => entry,
+            _ => panic!("expected normal entry"),
+        }
+    }
+
+    pub fn as_long(&self) -> &DirectoryEntryLong {
+        match self {
+            DirectoryEntry::Long(entry) => entry,
+            _ => panic!("expected long entry"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Directory {
     RootFat12_16 {
@@ -450,7 +559,7 @@ impl DirectoryIterator<'_> {
         Ok(true)
     }
 
-    fn get_next_entry(&mut self) -> Result<&[u8], FileSystemError> {
+    fn get_next_entry(&mut self) -> Result<DirectoryEntry, FileSystemError> {
         let entry_start = self.entry_index_in_sector as usize * DIRECTORY_ENTRY_SIZE as usize;
         let entry_end = entry_start + DIRECTORY_ENTRY_SIZE as usize;
         if entry_end > self.current_sector.len() {
@@ -465,7 +574,7 @@ impl DirectoryIterator<'_> {
         self.entry_index_in_sector += 1;
 
         assert!(entry.len() == DIRECTORY_ENTRY_SIZE as usize);
-        Ok(entry)
+        Ok(DirectoryEntry::from_raw(entry))
     }
 }
 
@@ -476,53 +585,37 @@ impl Iterator for DirectoryIterator<'_> {
         let mut entry = self.get_next_entry().ok()?;
 
         loop {
-            match entry[0] {
-                0x00 => {
-                    // this is free and all others are free too, so stop
+            match entry.state() {
+                DirectoryEntryState::FreeAndLast => {
                     return None;
                 }
-                0xE5 => {
-                    // this is free, get next one
+                DirectoryEntryState::Free => {
                     entry = self.get_next_entry().ok()?;
                 }
                 _ => break,
             }
         }
-        let mut attributes = entry[11];
 
-        let name = if attributes & attrs::LONG_NAME == attrs::LONG_NAME {
+        let name = if let DirectoryEntry::Long(ref long_entry) = entry {
+            let mut long_entry = long_entry.clone();
             // long file name
             // this should be the last
-            assert!(entry[0] & 0x40 == 0x40);
-            let number_of_entries = entry[0] & 0x3F;
+            assert!(long_entry.sequence_number & 0x40 == 0x40);
+            let number_of_entries = long_entry.sequence_number & 0x3F;
             let mut long_name_enteries = Vec::with_capacity(number_of_entries as usize);
             // skip all long file name entries
-            for _ in 0..number_of_entries {
-                // get the multiple parts
-                let name1 = &entry[1..11];
-                let name2 = &entry[14..26];
-                let name3 = &entry[28..32];
-
-                // construct an iterator and fill the string part
-                let name_iter = name1
-                    .chunks(2)
-                    .chain(name2.chunks(2))
-                    .chain(name3.chunks(2))
-                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                    .take_while(|c| c != &0);
-
-                let mut name_part = String::with_capacity(13);
-                char::decode_utf16(name_iter)
-                    .map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER))
-                    .for_each(|c| name_part.push(c));
+            for i in 0..number_of_entries {
+                let name_part = long_entry.name();
 
                 // add to the entries
                 long_name_enteries.push(name_part);
 
                 // next entry
                 entry = self.get_next_entry().ok()?;
+                if i + 1 < number_of_entries {
+                    long_entry = entry.as_long().clone();
+                }
             }
-            attributes = entry[11];
             let mut name = String::new();
             long_name_enteries
                 .into_iter()
@@ -531,9 +624,11 @@ impl Iterator for DirectoryIterator<'_> {
             name
         } else {
             // short file name
-            let base_name = &entry[0..8];
+            let normal_entry = entry.as_normal();
+            let short_name = &normal_entry.short_name;
+            let base_name = &short_name[..8];
             let base_name_end = 8 - base_name.iter().rev().position(|&c| c != 0x20).unwrap();
-            let extension = &entry[8..11];
+            let extension = &short_name[8..11];
 
             let mut name = String::with_capacity(13);
             let mut i = 0;
@@ -553,24 +648,15 @@ impl Iterator for DirectoryIterator<'_> {
             name
         };
 
-        let cluster_hi = unsafe {
-            let ptr = entry.as_ptr().add(20) as *const u16;
-            u16::from_le(*(ptr)) as u32
-        };
-        let cluster_lo = unsafe {
-            let ptr = entry.as_ptr().add(26) as *const u16;
-            u16::from_le(*(ptr)) as u32
-        };
-        let size = unsafe {
-            let ptr = entry.as_ptr().add(28) as *const u32;
-            u32::from_le(*(ptr))
-        };
-
+        let entry = entry.as_normal();
+        let cluster_hi = entry.first_cluster_hi as u32;
+        let cluster_lo = entry.first_cluster_lo as u32;
+        let size = entry.file_size;
         let start_cluster = (cluster_hi << 16) | cluster_lo;
 
         let inode = Node::new(
             name,
-            file_attribute_from_fat(attributes),
+            file_attribute_from_fat(entry.attributes()),
             start_cluster as u64,
             size as u64,
         );
