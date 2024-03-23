@@ -70,7 +70,7 @@ impl FileSize {
 // `print_parent`: indent more, this will be true if we are printing the parent directory
 fn ls(path: &str, print_parent: bool) -> bool {
     let indent_space = if print_parent { "  " } else { "" };
-    let mut dir = match std::fs::read_dir(path) {
+    let dir = match std::fs::read_dir(path) {
         Ok(d) => d,
         Err(e) => {
             match e.kind() {
@@ -102,9 +102,28 @@ fn ls(path: &str, print_parent: bool) -> bool {
         println!("{}:", path);
     }
 
-    loop {
-        match dir.next() {
-            Some(Ok(entry)) => {
+    let entries = dir.collect::<Result<Vec<_>, _>>();
+
+    match entries {
+        Ok(mut entries) => {
+            if entries.is_empty() {
+                println!("{indent_space}[!] empty directory",);
+                return true;
+            }
+
+            entries.sort_unstable_by(|a, b| {
+                let a_is_dir = a.file_type().unwrap().is_dir();
+                let b_is_dir = b.file_type().unwrap().is_dir();
+                if a_is_dir && !b_is_dir {
+                    return std::cmp::Ordering::Less;
+                }
+                if !a_is_dir && b_is_dir {
+                    return std::cmp::Ordering::Greater;
+                }
+                a.file_name().cmp(&b.file_name())
+            });
+
+            for entry in entries {
                 let filesize = FileSize(entry.metadata().unwrap().len());
                 let is_dir = entry.file_type().unwrap().is_dir();
                 // the empty color doesn't matter
@@ -125,12 +144,13 @@ fn ls(path: &str, print_parent: bool) -> bool {
                 };
                 println!("{indent_space}{filesize_str} {filename}{dir_slash}",);
             }
-            Some(Err(e)) => {
-                println!("{indent_space}[!] error: {}", e);
-            }
-            None => break true,
+        }
+        Err(e) => {
+            println!("{indent_space}[!] error: {}", e);
         }
     }
+
+    true
 }
 
 fn main() -> ExitCode {
