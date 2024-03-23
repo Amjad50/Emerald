@@ -149,10 +149,13 @@
 <a href="#147" id="147">147</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
-<span class="kw">use </span>alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
+<span class="kw">use </span>alloc::{collections::BTreeMap, string::String, sync::Arc};
 
 <span class="kw">use crate</span>::{
-    fs::{<span class="self">self</span>, path::Path, FileAttributes, FileSystem, FileSystemError, INode},
+    fs::{
+        <span class="self">self</span>, DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem, FileSystemError,
+        Node,
+    },
     sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
@@ -203,36 +206,33 @@
 }
 
 <span class="kw">impl </span>FileSystem <span class="kw">for </span>RwLock&lt;Devices&gt; {
-    <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;INode, FileSystemError&gt; {
-        <span class="prelude-val">Ok</span>(INode::new_file(
+    <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt; {
+        <span class="prelude-val">Ok</span>(DirectoryNode::new(
             String::from(<span class="string">"/"</span>),
             FileAttributes::DIRECTORY,
             DEVICES_FILESYSTEM_ROOT_INODE_MAGIC,
-            <span class="number">0</span>,
         ))
     }
 
-    <span class="kw">fn </span>open_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;INode&gt;, FileSystemError&gt; {
-        <span class="kw">if </span>path.is_root() || path.is_empty() {
-            <span class="prelude-val">Ok</span>(<span class="self">self
-                </span>.read()
-                .devices
-                .iter()
-                .map(|(name, device)| {
-                    INode::new_device(name.clone(), FileAttributes::EMPTY, <span class="prelude-val">Some</span>(device.clone()))
-                })
-                .collect())
+    <span class="kw">fn </span>read_dir(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        inode: <span class="kw-2">&amp;</span>DirectoryNode,
+        handler: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(Node) -&gt; DirTreverse,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="macro">assert_eq!</span>(inode.start_cluster(), DEVICES_FILESYSTEM_ROOT_INODE_MAGIC);
+
+        <span class="kw">if </span>inode.name().is_empty() || inode.name() == <span class="string">"/" </span>{
+            <span class="kw">for </span>node <span class="kw">in </span><span class="self">self</span>.read().devices.iter().map(|(name, device)| {
+                FileNode::new_device(name.clone(), FileAttributes::EMPTY, device.clone()).into()
+            }) {
+                <span class="kw">if let </span>DirTreverse::Stop = handler(node) {
+                    <span class="kw">break</span>;
+                }
+            }
+            <span class="prelude-val">Ok</span>(())
         } <span class="kw">else </span>{
             <span class="prelude-val">Err</span>(FileSystemError::FileNotFound)
         }
-    }
-
-    <span class="kw">fn </span>read_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, inode: <span class="kw-2">&amp;</span>INode) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;INode&gt;, FileSystemError&gt; {
-        <span class="kw">if </span>!inode.is_dir() {
-            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::IsNotDirectory);
-        }
-        <span class="macro">assert_eq!</span>(inode.start_cluster(), DEVICES_FILESYSTEM_ROOT_INODE_MAGIC);
-        <span class="self">self</span>.open_dir(Path::new(inode.name()))
     }
 }
 

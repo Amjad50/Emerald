@@ -205,9 +205,21 @@ us behavior similar to a normal terminal in linux.</li>
 <tr><td><code>pwd</code> (internal)</td><td>Print working directory</td></tr>
 <tr><td><code>exit</code> (internal)</td><td>Exit the shell, which will just cause another to come back up</td></tr>
 <tr><td><code>ls</code></td><td>List directory contents</td></tr>
+<tr><td><code>tree</code></td><td>List directory contents recursively</td></tr>
 <tr><td><code>echo</code></td><td>Write arguments to the standard output</td></tr>
 <tr><td><code>cat</code></td><td>Print 1 file on the standard output (no concat yet XD)</td></tr>
 <tr><td><code>xxd</code></td><td>Hexdump utility</td></tr>
+<tr><td><code>keyboard</code></td><td>Keyboard test program</td></tr>
+<tr><td><code>mouse</code></td><td>Mouse test program</td></tr>
+</tbody></table>
+</div>
+<h2 id="graphics"><a class="header" href="#graphics"><code>graphics</code></a></h2>
+<p>Here we have simple graphics programs that will take control of the graphics controller from the kernel and thus
+will look like exiting from shell, upon exiting the program, the shell will come back up.</p>
+<h3 id="list-of-commandsprograms-1"><a class="header" href="#list-of-commandsprograms-1">List of commands/Programs</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>graphics</code></td><td>Simple graphics demo progam, it will display a red ball and it will bounce around the screen</td></tr>
+<tr><td><code>video</code></td><td>Video player, it will take a video in image zip format, that is a zip file with jpg images inside it, check <a href="https://github.com/Amjad50/Emerald/blob/master/tools/video_to_zip.sh"><code>tools/video_to_zip.sh</code></a> for how to convert normal videos to this format. You can specify the fps upon creation (default is <code>30</code>), and specify it as will when running the program.</td></tr>
 </tbody></table>
 </div>
                     </main>

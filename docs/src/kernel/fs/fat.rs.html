@@ -839,50 +839,6 @@
 <a href="#837" id="837">837</a>
 <a href="#838" id="838">838</a>
 <a href="#839" id="839">839</a>
-<a href="#840" id="840">840</a>
-<a href="#841" id="841">841</a>
-<a href="#842" id="842">842</a>
-<a href="#843" id="843">843</a>
-<a href="#844" id="844">844</a>
-<a href="#845" id="845">845</a>
-<a href="#846" id="846">846</a>
-<a href="#847" id="847">847</a>
-<a href="#848" id="848">848</a>
-<a href="#849" id="849">849</a>
-<a href="#850" id="850">850</a>
-<a href="#851" id="851">851</a>
-<a href="#852" id="852">852</a>
-<a href="#853" id="853">853</a>
-<a href="#854" id="854">854</a>
-<a href="#855" id="855">855</a>
-<a href="#856" id="856">856</a>
-<a href="#857" id="857">857</a>
-<a href="#858" id="858">858</a>
-<a href="#859" id="859">859</a>
-<a href="#860" id="860">860</a>
-<a href="#861" id="861">861</a>
-<a href="#862" id="862">862</a>
-<a href="#863" id="863">863</a>
-<a href="#864" id="864">864</a>
-<a href="#865" id="865">865</a>
-<a href="#866" id="866">866</a>
-<a href="#867" id="867">867</a>
-<a href="#868" id="868">868</a>
-<a href="#869" id="869">869</a>
-<a href="#870" id="870">870</a>
-<a href="#871" id="871">871</a>
-<a href="#872" id="872">872</a>
-<a href="#873" id="873">873</a>
-<a href="#874" id="874">874</a>
-<a href="#875" id="875">875</a>
-<a href="#876" id="876">876</a>
-<a href="#877" id="877">877</a>
-<a href="#878" id="878">878</a>
-<a href="#879" id="879">879</a>
-<a href="#880" id="880">880</a>
-<a href="#881" id="881">881</a>
-<a href="#882" id="882">882</a>
-<a href="#883" id="883">883</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem};
 
 <span class="kw">use </span>alloc::{
@@ -899,21 +855,32 @@
 };
 
 <span class="kw">use super</span>::{
-    path::{Component, Path},
-    FileAttributes, FileSystem, FileSystemError, INode,
+    DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem, FileSystemError, Node,
 };
 
 <span class="kw">const </span>DIRECTORY_ENTRY_SIZE: u32 = <span class="number">32</span>;
 
 <span class="kw">fn </span>file_attribute_from_fat(attributes: u8) -&gt; FileAttributes {
-    FileAttributes {
-        read_only: attributes &amp; attrs::READ_ONLY == attrs::READ_ONLY,
-        hidden: attributes &amp; attrs::HIDDEN == attrs::HIDDEN,
-        system: attributes &amp; attrs::SYSTEM == attrs::SYSTEM,
-        volume_label: attributes &amp; attrs::VOLUME_ID == attrs::VOLUME_ID,
-        directory: attributes &amp; attrs::DIRECTORY == attrs::DIRECTORY,
-        archive: attributes &amp; attrs::ARCHIVE == attrs::ARCHIVE,
+    <span class="kw">let </span><span class="kw-2">mut </span>file_attributes = FileAttributes::EMPTY;
+    <span class="kw">if </span>attributes &amp; attrs::READ_ONLY == attrs::READ_ONLY {
+        file_attributes |= FileAttributes::READ_ONLY;
     }
+    <span class="kw">if </span>attributes &amp; attrs::HIDDEN == attrs::HIDDEN {
+        file_attributes |= FileAttributes::HIDDEN;
+    }
+    <span class="kw">if </span>attributes &amp; attrs::SYSTEM == attrs::SYSTEM {
+        file_attributes |= FileAttributes::SYSTEM;
+    }
+    <span class="kw">if </span>attributes &amp; attrs::VOLUME_ID == attrs::VOLUME_ID {
+        file_attributes |= FileAttributes::VOLUME_LABEL;
+    }
+    <span class="kw">if </span>attributes &amp; attrs::DIRECTORY == attrs::DIRECTORY {
+        file_attributes |= FileAttributes::DIRECTORY;
+    }
+    <span class="kw">if </span>attributes &amp; attrs::ARCHIVE == attrs::ARCHIVE {
+        file_attributes |= FileAttributes::ARCHIVE;
+    }
+    file_attributes
 }
 
 <span class="attr">#[derive(Debug)]
@@ -947,8 +914,8 @@
         })<span class="question-mark">?</span>;
 
     <span class="comment">// SAFETY: This is a valid allocated memory
-    </span><span class="kw">let </span>boot_sector = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span>(sectors.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>FatBootSectorRaw) };
-    <span class="kw">let </span>boot_sector = FatBootSector::new(<span class="kw-2">*</span>boot_sector, size_in_sectors)<span class="question-mark">?</span>;
+    </span><span class="kw">let </span>boot_sector = <span class="kw">unsafe </span>{ sectors.as_ptr().cast::&lt;FatBootSectorRaw&gt;().read() };
+    <span class="kw">let </span>boot_sector = FatBootSector::new(boot_sector, size_in_sectors)<span class="question-mark">?</span>;
 
     FatFilesystem::new(start_lba, size_in_sectors, boot_sector, device)
 }
@@ -1232,17 +1199,8 @@
         size_in_sectors: u32,
     },
     Normal {
-        inode: INode,
+        inode: DirectoryNode,
     },
-}
-
-<span class="kw">impl </span>Directory {
-    <span class="kw">pub fn </span>iter&lt;<span class="lifetime">'a</span>&gt;(
-        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
-        filesystem: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>FatFilesystem,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryIterator&lt;<span class="lifetime">'a</span>&gt;, FileSystemError&gt; {
-        DirectoryIterator::new(filesystem, <span class="self">self</span>.clone())
-    }
 }
 
 <span class="kw">pub struct </span>DirectoryIterator&lt;<span class="lifetime">'a</span>&gt; {
@@ -1266,17 +1224,17 @@
             }
             Directory::Normal { <span class="kw-2">ref </span>inode } =&gt; {
                 <span class="kw">if </span><span class="macro">matches!</span>(filesystem.fat_type(), FatType::Fat12 | FatType::Fat16)
-                    &amp;&amp; inode.start_cluster == <span class="number">0
+                    &amp;&amp; inode.start_cluster() == <span class="number">0
                 </span>{
                     <span class="comment">// looks like we got back using `..` to the root, thus, we should use the root directly
                     </span><span class="kw">return </span><span class="self">Self</span>::new(filesystem, filesystem.open_root_dir()<span class="question-mark">?</span>);
                 }
 
-                <span class="kw">let </span>start_sector = filesystem.first_sector_of_cluster(inode.start_cluster <span class="kw">as </span>u32);
+                <span class="kw">let </span>start_sector = filesystem.first_sector_of_cluster(inode.start_cluster() <span class="kw">as </span>u32);
 
                 (
                     start_sector,
-                    inode.start_cluster <span class="kw">as </span>u32,
+                    inode.start_cluster() <span class="kw">as </span>u32,
                     filesystem.read_sectors(start_sector, <span class="number">1</span>)<span class="question-mark">?</span>,
                 )
             }
@@ -1309,23 +1267,17 @@
                 </span><span class="kw">if </span>next_sector_index % <span class="self">self</span>.filesystem.boot_sector.sectors_per_cluster() <span class="kw">as </span>u32 == <span class="number">0
                 </span>{
                     <span class="comment">// get next cluster
-                    </span><span class="kw">let </span>next_cluster = <span class="self">self</span>.filesystem.read_fat_entry(<span class="self">self</span>.current_cluster);
+                    </span><span class="kw">let </span>next_cluster = <span class="self">self</span>.filesystem.next_cluster(<span class="self">self</span>.current_cluster);
                     <span class="kw">match </span>next_cluster {
-                        FatEntry::Next(cluster) =&gt; {
+                        <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(cluster)) =&gt; {
                             <span class="self">self</span>.current_cluster = cluster;
                             next_sector_index =
                                 cluster * <span class="self">self</span>.filesystem.boot_sector.sectors_per_cluster() <span class="kw">as </span>u32;
                         }
-                        FatEntry::EndOfChain =&gt; {
+                        <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {
                             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
                         }
-                        FatEntry::Bad =&gt; {
-                            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::FileNotFound);
-                        }
-                        FatEntry::Reserved =&gt; {
-                            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::FileNotFound);
-                        }
-                        FatEntry::Free =&gt; {
+                        <span class="prelude-val">Err</span>(_e) =&gt; {
                             <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::FileNotFound);
                         }
                     }
@@ -1344,11 +1296,11 @@
         <span class="kw">let </span>entry_end = entry_start + DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize;
         <span class="kw">if </span>entry_end &gt; <span class="self">self</span>.current_sector.len() {
             <span class="comment">// we need to read the next sector
-            </span><span class="kw">if </span><span class="self">self</span>.next_sector()<span class="question-mark">? </span>{
-                <span class="kw">return </span><span class="self">self</span>.get_next_entry();
+            </span><span class="kw">return if </span><span class="self">self</span>.next_sector()<span class="question-mark">? </span>{
+                <span class="self">self</span>.get_next_entry()
             } <span class="kw">else </span>{
-                <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::FileNotFound);
-            }
+                <span class="prelude-val">Err</span>(FileSystemError::FileNotFound)
+            };
         }
         <span class="kw">let </span>entry = <span class="kw-2">&amp;</span><span class="self">self</span>.current_sector[entry_start..entry_end];
         <span class="self">self</span>.entry_index_in_sector += <span class="number">1</span>;
@@ -1359,7 +1311,7 @@
 }
 
 <span class="kw">impl </span>Iterator <span class="kw">for </span>DirectoryIterator&lt;<span class="lifetime">'_</span>&gt; {
-    <span class="kw">type </span>Item = INode;
+    <span class="kw">type </span>Item = Node;
 
     <span class="kw">fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Item&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>entry = <span class="self">self</span>.get_next_entry().ok()<span class="question-mark">?</span>;
@@ -1457,7 +1409,7 @@
 
         <span class="kw">let </span>start_cluster = (cluster_hi &lt;&lt; <span class="number">16</span>) | cluster_lo;
 
-        <span class="kw">let </span>inode = INode::new_file(
+        <span class="kw">let </span>inode = Node::new(
             name,
             file_attribute_from_fat(attributes),
             start_cluster <span class="kw">as </span>u64,
@@ -1568,6 +1520,16 @@
         FatEntry::from_u32(<span class="self">self</span>.fat_type(), entry)
     }
 
+    <span class="kw">fn </span>next_cluster(<span class="kw-2">&amp;</span><span class="self">self</span>, cluster: u32) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;u32&gt;, FileSystemError&gt; {
+        <span class="kw">match </span><span class="self">self</span>.read_fat_entry(cluster) {
+            FatEntry::Next(next_cluster) =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(next_cluster)),
+            FatEntry::EndOfChain =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>),
+            FatEntry::Bad =&gt; <span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
+            FatEntry::Reserved =&gt; <span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
+            FatEntry::Free =&gt; <span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
+        }
+    }
+
     <span class="kw">fn </span>open_root_dir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Directory, FileSystemError&gt; {
         <span class="kw">match </span><span class="self">self</span>.fat_type() {
             FatType::Fat12 | FatType::Fat16 =&gt; <span class="prelude-val">Ok</span>(Directory::RootFat12_16 {
@@ -1577,27 +1539,24 @@
             FatType::Fat32 =&gt; {
                 <span class="kw">let </span>root_cluster =
                     <span class="kw">unsafe </span>{ <span class="self">self</span>.boot_sector.boot_sector.extended.fat32.root_cluster };
-                <span class="kw">let </span>inode = INode::new_file(
+                <span class="kw">let </span>inode = DirectoryNode::new(
                     String::from(<span class="string">"/"</span>),
                     file_attribute_from_fat(attrs::DIRECTORY),
                     root_cluster <span class="kw">as </span>u64,
-                    <span class="number">0</span>,
                 );
                 <span class="prelude-val">Ok</span>(Directory::Normal { inode })
             }
         }
     }
 
-    <span class="kw">fn </span>open_root_dir_inode(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;INode, FileSystemError&gt; {
+    <span class="kw">fn </span>open_root_dir_inode(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt; {
         <span class="kw">match </span><span class="self">self</span>.fat_type() {
             FatType::Fat12 | FatType::Fat16 =&gt; {
                 <span class="comment">// use a special inode for root
-                </span><span class="kw">let </span>inode = INode::new_file(
+                </span><span class="kw">let </span>inode = DirectoryNode::new(
                     String::from(<span class="string">"/"</span>),
                     file_attribute_from_fat(attrs::DIRECTORY),
-                    <span class="self">self</span>.boot_sector.root_dir_start_sector() <span class="kw">as </span>u64,
-                    <span class="self">self</span>.boot_sector.root_dir_sectors() <span class="kw">as </span>u64
-                        * <span class="self">self</span>.boot_sector.bytes_per_sector() <span class="kw">as </span>u64,
+                    <span class="number">0</span>,
                 );
 
                 <span class="prelude-val">Ok</span>(inode)
@@ -1605,64 +1564,25 @@
             FatType::Fat32 =&gt; {
                 <span class="kw">let </span>root_cluster =
                     <span class="kw">unsafe </span>{ <span class="self">self</span>.boot_sector.boot_sector.extended.fat32.root_cluster };
-                <span class="kw">let </span>inode = INode::new_file(
+                <span class="kw">let </span>inode = DirectoryNode::new(
                     String::from(<span class="string">"/"</span>),
                     file_attribute_from_fat(attrs::DIRECTORY),
                     root_cluster <span class="kw">as </span>u64,
-                    <span class="number">0</span>,
                 );
                 <span class="prelude-val">Ok</span>(inode)
             }
         }
     }
 
-    <span class="kw">pub fn </span>open_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryIterator, FileSystemError&gt; {
-        <span class="kw">let </span>root = <span class="self">self</span>.open_root_dir()<span class="question-mark">?</span>;
-        <span class="kw">if </span>path.is_root() || path.is_empty() {
-            <span class="kw">return </span>DirectoryIterator::new(<span class="self">self</span>, root);
-        }
-
-        <span class="kw">let </span><span class="kw-2">mut </span>dir = root;
-        <span class="lifetime">'component_loop</span>: <span class="kw">for </span>component <span class="kw">in </span>path.components() {
-            <span class="kw">let </span>component = <span class="kw">match </span>component {
-                Component::RootDir | Component::CurDir =&gt; {
-                    <span class="kw">continue</span>;
-                }
-                keep @ (Component::ParentDir | Component::Normal(<span class="kw">_</span>)) =&gt; keep.as_str(),
-            };
-            <span class="kw">if </span>component.is_empty() {
-                <span class="kw">continue</span>;
-            }
-            <span class="kw">for </span>entry <span class="kw">in </span>dir.iter(<span class="self">self</span>)<span class="question-mark">? </span>{
-                <span class="kw">if </span>entry.name() == component {
-                    <span class="kw">if </span>!entry.is_dir() {
-                        <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::IsNotDirectory);
-                    }
-                    dir = Directory::Normal { inode: entry };
-                    <span class="kw">continue </span><span class="lifetime">'component_loop</span>;
-                }
-            }
-            <span class="comment">// component not found
-            </span><span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::FileNotFound);
-        }
-        DirectoryIterator::new(<span class="self">self</span>, dir)
-    }
-
-    <span class="kw">pub fn </span>open_dir_inode(<span class="kw-2">&amp;</span><span class="self">self</span>, inode: <span class="kw-2">&amp;</span>INode) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryIterator, FileSystemError&gt; {
-        <span class="kw">if </span>!inode.is_dir() {
-            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::IsNotDirectory);
-        }
-
+    <span class="kw">pub fn </span>open_dir_inode(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        inode: <span class="kw-2">&amp;</span>DirectoryNode,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryIterator, FileSystemError&gt; {
         <span class="kw">let </span>dir = <span class="kw">match </span><span class="self">self</span>.fat_type() {
             FatType::Fat12 | FatType::Fat16 =&gt; {
                 <span class="comment">// try to see if this is the root
                 // this could be 0 if we are back from using `..` to the root
-                </span><span class="kw">if </span>inode.start_cluster() == <span class="number">0
-                    </span>|| inode.start_cluster() == <span class="self">self</span>.boot_sector.root_dir_start_sector() <span class="kw">as </span>u64
-                        &amp;&amp; inode.size()
-                            == <span class="self">self</span>.boot_sector.root_dir_sectors() <span class="kw">as </span>u64
-                                * <span class="self">self</span>.boot_sector.bytes_per_sector() <span class="kw">as </span>u64
-                {
+                </span><span class="kw">if </span>inode.start_cluster() == <span class="number">0 </span>{
                     <span class="self">self</span>.open_root_dir()<span class="question-mark">?
                 </span>} <span class="kw">else </span>{
                     Directory::Normal {
@@ -1670,12 +1590,9 @@
                     }
                 }
             }
-            FatType::Fat32 =&gt; {
-                <span class="macro">assert!</span>(inode.size() == <span class="number">0</span>);
-                Directory::Normal {
-                    inode: inode.clone(),
-                }
-            }
+            FatType::Fat32 =&gt; Directory::Normal {
+                inode: inode.clone(),
+            },
         };
 
         DirectoryIterator::new(<span class="self">self</span>, dir)
@@ -1683,29 +1600,22 @@
 
     <span class="kw">pub fn </span>read_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        inode: <span class="kw-2">&amp;</span>INode,
+        inode: <span class="kw-2">&amp;</span>FileNode,
         position: u32,
         buf: <span class="kw-2">&amp;mut </span>[u8],
     ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, FileSystemError&gt; {
-        <span class="kw">if </span>inode.is_dir() {
-            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::IsDirectory);
-        }
-        <span class="kw">if </span>position &gt;= inode.size <span class="kw">as </span>u32 {
+        <span class="kw">if </span>position &gt;= inode.size() <span class="kw">as </span>u32 {
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
         }
-        <span class="kw">let </span>remaining_file = inode.size <span class="kw">as </span>u32 - position;
+        <span class="kw">let </span>remaining_file = inode.size() <span class="kw">as </span>u32 - position;
         <span class="kw">let </span>max_to_read = (buf.len() <span class="kw">as </span>u32).min(remaining_file);
 
-        <span class="kw">let </span><span class="kw-2">mut </span>cluster = inode.start_cluster <span class="kw">as </span>u32;
+        <span class="kw">let </span><span class="kw-2">mut </span>cluster = inode.start_cluster() <span class="kw">as </span>u32;
         <span class="kw">let </span>cluster_index = position / <span class="self">self</span>.boot_sector.bytes_per_cluster();
         <span class="kw">for _ in </span><span class="number">0</span>..cluster_index {
-            cluster = <span class="kw">match </span><span class="self">self</span>.read_fat_entry(cluster) {
-                FatEntry::Next(next_cluster) =&gt; next_cluster,
-                FatEntry::EndOfChain =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
-                FatEntry::Bad =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
-                FatEntry::Reserved =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
-                FatEntry::Free =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
-            };
+            cluster = <span class="self">self
+                </span>.next_cluster(cluster)<span class="question-mark">?
+                </span>.ok_or(FatError::UnexpectedFatEntry)<span class="question-mark">?</span>;
         }
 
         <span class="kw">let </span><span class="kw-2">mut </span>read = <span class="number">0</span>;
@@ -1728,12 +1638,9 @@
             position_in_cluster += to_read <span class="kw">as </span>u32;
             <span class="kw">if </span>position_in_cluster &gt;= <span class="self">self</span>.boot_sector.bytes_per_cluster() {
                 position_in_cluster = <span class="number">0</span>;
-                cluster = <span class="kw">match </span><span class="self">self</span>.read_fat_entry(cluster) {
-                    FatEntry::Next(next_cluster) =&gt; next_cluster,
-                    FatEntry::EndOfChain =&gt; <span class="kw">break</span>,
-                    FatEntry::Bad =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
-                    FatEntry::Reserved =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
-                    FatEntry::Free =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(FatError::UnexpectedFatEntry.into()),
+                cluster = <span class="kw">match </span><span class="self">self</span>.next_cluster(cluster)<span class="question-mark">? </span>{
+                    <span class="prelude-val">Some</span>(next_cluster) =&gt; next_cluster,
+                    <span class="prelude-val">None </span>=&gt; <span class="kw">break</span>,
                 };
             }
         }
@@ -1745,7 +1652,7 @@
 <span class="kw">impl </span>FileSystem <span class="kw">for </span>Mutex&lt;FatFilesystem&gt; {
     <span class="kw">fn </span>read_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        inode: <span class="kw-2">&amp;</span>INode,
+        inode: <span class="kw-2">&amp;</span>FileNode,
         position: u64,
         buf: <span class="kw-2">&amp;mut </span>[u8],
     ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, FileSystemError&gt; {
@@ -1753,17 +1660,22 @@
         <span class="self">self</span>.lock().read_file(inode, position <span class="kw">as </span>u32, buf)
     }
 
-    <span class="kw">fn </span>open_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;INode&gt;, FileSystemError&gt; {
-        <span class="comment">// TODO: handle `Path` here
-        </span><span class="prelude-val">Ok</span>(<span class="self">self</span>.lock().open_dir(path)<span class="question-mark">?</span>.collect())
-    }
-
-    <span class="kw">fn </span>read_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, inode: <span class="kw-2">&amp;</span>INode) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;INode&gt;, FileSystemError&gt; {
-        <span class="prelude-val">Ok</span>(<span class="self">self</span>.lock().open_dir_inode(inode)<span class="question-mark">?</span>.collect())
-    }
-
-    <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;INode, FileSystemError&gt; {
+    <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt; {
         <span class="self">self</span>.lock().open_root_dir_inode()
+    }
+
+    <span class="kw">fn </span>read_dir(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        inode: <span class="kw-2">&amp;</span>DirectoryNode,
+        handler: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(Node) -&gt; DirTreverse,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="kw">for </span>node <span class="kw">in </span><span class="self">self</span>.lock().open_dir_inode(inode)<span class="question-mark">? </span>{
+            <span class="kw">if let </span>DirTreverse::Stop = handler(node) {
+                <span class="kw">break</span>;
+            }
+        }
+
+        <span class="prelude-val">Ok</span>(())
     }
 }
 </code></pre></div></section></main></body></html>

@@ -147,7 +147,7 @@
 <span class="kw">use </span>kernel_user_link::file::BlockingMode;
 
 <span class="kw">use crate</span>::{
-    fs::{<span class="self">self</span>, FileAttributes, FileSystemError, INode},
+    fs::{<span class="self">self</span>, FileAttributes, FileNode, FileSystemError},
     sync::spin::mutex::Mutex,
 };
 
@@ -174,15 +174,15 @@
         clones: AtomicUsize::new(<span class="number">1</span>),
     });
 
-    <span class="kw">let </span>read_inode = INode::new_device(
+    <span class="kw">let </span>read_inode = FileNode::new_device(
         String::from(<span class="string">"read_pipe"</span>),
         FileAttributes::EMPTY,
-        <span class="prelude-val">Some</span>(read_device),
+        read_device,
     );
-    <span class="kw">let </span>write_inode = INode::new_device(
+    <span class="kw">let </span>write_inode = FileNode::new_device(
         String::from(<span class="string">"write_pipe"</span>),
         FileAttributes::EMPTY,
-        <span class="prelude-val">Some</span>(write_device),
+        write_device,
     );
     <span class="kw">let </span>read_file = fs::File::from_inode(
         read_inode,
