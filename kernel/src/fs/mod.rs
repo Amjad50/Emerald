@@ -20,6 +20,9 @@ mod fat;
 mod mbr;
 pub mod path;
 
+/// This is not used at all, just an indicator in [`Directory::fetch_entries`]
+pub(crate) const ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC: u64 = 0xf11356573E;
+
 static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
     mappings: Vec::new(),
 });
@@ -376,6 +379,22 @@ impl FileSystemMapping {
             .ok_or(FileSystemError::FileNotFound)?;
 
         Ok((stripped_path, filesystem.clone()))
+    }
+
+    fn get_all_matching_mappings<'a, 'p>(
+        &'a mut self,
+        path: &'p Path,
+    ) -> impl Iterator<Item = (&'a Path, Arc<dyn FileSystem>)>
+    where
+        'p: 'a,
+    {
+        self.mappings.iter().filter_map(move |(fs_path, fs)| {
+            let stripped = fs_path.strip_prefix(path).ok()?;
+            if stripped.is_empty() {
+                return None;
+            }
+            Some((stripped, fs.clone()))
+        })
     }
 
     fn mount<P: AsRef<Path>>(&mut self, arg: P, filesystem: Arc<dyn FileSystem>) {
@@ -821,6 +840,24 @@ impl Directory {
                 dir_entries.push(entry);
                 DirTreverse::Continue
             })?;
+            // add entries from the root mappings
+            for (path, _fs) in FILESYSTEM_MAPPING
+                .lock()
+                .get_all_matching_mappings(&self.path)
+            {
+                // only add path with one component
+                if path.components().count() == 1 {
+                    dir_entries.push(
+                        DirectoryNode::new(
+                            path.components().next().unwrap().as_str().into(),
+                            FileAttributes::DIRECTORY,
+                            ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC,
+                        )
+                        .into(),
+                    );
+                }
+            }
+
             self.dir_entries = Some(dir_entries);
         }
 
