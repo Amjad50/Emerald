@@ -839,6 +839,86 @@
 <a href="#837" id="837">837</a>
 <a href="#838" id="838">838</a>
 <a href="#839" id="839">839</a>
+<a href="#840" id="840">840</a>
+<a href="#841" id="841">841</a>
+<a href="#842" id="842">842</a>
+<a href="#843" id="843">843</a>
+<a href="#844" id="844">844</a>
+<a href="#845" id="845">845</a>
+<a href="#846" id="846">846</a>
+<a href="#847" id="847">847</a>
+<a href="#848" id="848">848</a>
+<a href="#849" id="849">849</a>
+<a href="#850" id="850">850</a>
+<a href="#851" id="851">851</a>
+<a href="#852" id="852">852</a>
+<a href="#853" id="853">853</a>
+<a href="#854" id="854">854</a>
+<a href="#855" id="855">855</a>
+<a href="#856" id="856">856</a>
+<a href="#857" id="857">857</a>
+<a href="#858" id="858">858</a>
+<a href="#859" id="859">859</a>
+<a href="#860" id="860">860</a>
+<a href="#861" id="861">861</a>
+<a href="#862" id="862">862</a>
+<a href="#863" id="863">863</a>
+<a href="#864" id="864">864</a>
+<a href="#865" id="865">865</a>
+<a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a>
+<a href="#868" id="868">868</a>
+<a href="#869" id="869">869</a>
+<a href="#870" id="870">870</a>
+<a href="#871" id="871">871</a>
+<a href="#872" id="872">872</a>
+<a href="#873" id="873">873</a>
+<a href="#874" id="874">874</a>
+<a href="#875" id="875">875</a>
+<a href="#876" id="876">876</a>
+<a href="#877" id="877">877</a>
+<a href="#878" id="878">878</a>
+<a href="#879" id="879">879</a>
+<a href="#880" id="880">880</a>
+<a href="#881" id="881">881</a>
+<a href="#882" id="882">882</a>
+<a href="#883" id="883">883</a>
+<a href="#884" id="884">884</a>
+<a href="#885" id="885">885</a>
+<a href="#886" id="886">886</a>
+<a href="#887" id="887">887</a>
+<a href="#888" id="888">888</a>
+<a href="#889" id="889">889</a>
+<a href="#890" id="890">890</a>
+<a href="#891" id="891">891</a>
+<a href="#892" id="892">892</a>
+<a href="#893" id="893">893</a>
+<a href="#894" id="894">894</a>
+<a href="#895" id="895">895</a>
+<a href="#896" id="896">896</a>
+<a href="#897" id="897">897</a>
+<a href="#898" id="898">898</a>
+<a href="#899" id="899">899</a>
+<a href="#900" id="900">900</a>
+<a href="#901" id="901">901</a>
+<a href="#902" id="902">902</a>
+<a href="#903" id="903">903</a>
+<a href="#904" id="904">904</a>
+<a href="#905" id="905">905</a>
+<a href="#906" id="906">906</a>
+<a href="#907" id="907">907</a>
+<a href="#908" id="908">908</a>
+<a href="#909" id="909">909</a>
+<a href="#910" id="910">910</a>
+<a href="#911" id="911">911</a>
+<a href="#912" id="912">912</a>
+<a href="#913" id="913">913</a>
+<a href="#914" id="914">914</a>
+<a href="#915" id="915">915</a>
+<a href="#916" id="916">916</a>
+<a href="#917" id="917">917</a>
+<a href="#918" id="918">918</a>
+<a href="#919" id="919">919</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem};
 
 <span class="kw">use </span>alloc::{
@@ -1192,6 +1272,103 @@
     <span class="kw">pub const </span>LONG_NAME: u8 = READ_ONLY | HIDDEN | SYSTEM | VOLUME_ID;
 }
 
+<span class="kw">enum </span>DirectoryEntryState {
+    Free,
+    FreeAndLast,
+    Used,
+}
+
+<span class="attr">#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+</span><span class="kw">struct </span>DirectoryEntryNormal {
+    short_name: [u8; <span class="number">11</span>],
+    attributes: u8,
+    _nt_reserved: u8,
+    creation_time_tenths_of_seconds: u8,
+    creation_time: u16,
+    creation_date: u16,
+    last_access_date: u16,
+    first_cluster_hi: u16,
+    last_modification_time: u16,
+    last_modification_date: u16,
+    first_cluster_lo: u16,
+    file_size: u32,
+}
+
+<span class="kw">impl </span>DirectoryEntryNormal {
+    <span class="kw">pub fn </span>attributes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
+        <span class="self">self</span>.attributes
+    }
+}
+
+<span class="attr">#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+</span><span class="kw">struct </span>DirectoryEntryLong {
+    sequence_number: u8,
+    name1: [u16; <span class="number">5</span>],
+    attributes: u8,
+    long_name_type: u8,
+    checksum: u8,
+    name2: [u16; <span class="number">6</span>],
+    _zero: u16,
+    name3: [u16; <span class="number">2</span>],
+}
+
+<span class="kw">impl </span>DirectoryEntryLong {
+    <span class="kw">pub fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; String {
+        <span class="kw">let </span>name1 = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;</span><span class="macro">core::ptr::addr_of!</span>(<span class="self">self</span>.name1).read_unaligned() };
+        <span class="kw">let </span>name2 = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;</span><span class="macro">core::ptr::addr_of!</span>(<span class="self">self</span>.name2).read_unaligned() };
+        <span class="kw">let </span>name3 = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;</span><span class="macro">core::ptr::addr_of!</span>(<span class="self">self</span>.name3).read_unaligned() };
+
+        <span class="comment">// construct an iterator and fill the string part
+        </span><span class="kw">let </span>name_iter = name1
+            .iter()
+            .chain(name2)
+            .chain(name3)
+            .cloned()
+            .take_while(|c| c != <span class="kw-2">&amp;</span><span class="number">0</span>);
+
+        <span class="kw">let </span><span class="kw-2">mut </span>name_part = String::with_capacity(<span class="number">13</span>);
+        char::decode_utf16(name_iter)
+            .map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER))
+            .for_each(|c| name_part.push(c));
+
+        name_part
+    }
+}
+
+<span class="kw">union </span>DirectoryEntry {
+    normal: DirectoryEntryNormal,
+    long: DirectoryEntryLong,
+}
+
+<span class="kw">impl </span>DirectoryEntry {
+    <span class="kw">pub fn </span>state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; DirectoryEntryState {
+        <span class="kw">match unsafe </span>{ <span class="self">self</span>.normal.short_name[<span class="number">0</span>] } {
+            <span class="number">0x00 </span>=&gt; DirectoryEntryState::FreeAndLast,
+            <span class="number">0xE5 </span>=&gt; DirectoryEntryState::Free,
+            <span class="kw">_ </span>=&gt; DirectoryEntryState::Used,
+        }
+    }
+
+    <span class="kw">fn </span>attributes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.normal.attributes }
+    }
+
+    <span class="kw">pub fn </span>into_long_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;DirectoryEntryLong&gt; {
+        <span class="kw">if </span><span class="self">self</span>.attributes() &amp; attrs::LONG_NAME == attrs::LONG_NAME {
+            <span class="prelude-val">Some</span>(<span class="kw">unsafe </span>{ <span class="self">self</span>.long })
+        } <span class="kw">else </span>{
+            <span class="prelude-val">None
+        </span>}
+    }
+
+    <span class="kw">pub fn </span>into_normal(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; DirectoryEntryNormal {
+        <span class="macro">assert!</span>(<span class="self">self</span>.attributes() &amp; attrs::LONG_NAME != attrs::LONG_NAME);
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.normal }
+    }
+}
+
 <span class="attr">#[derive(Debug, Clone)]
 </span><span class="kw">enum </span>Directory {
     RootFat12_16 {
@@ -1291,9 +1468,9 @@
         <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
     }
 
-    <span class="kw">fn </span>get_next_entry(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span>[u8], FileSystemError&gt; {
-        <span class="kw">let </span>entry_start = <span class="self">self</span>.entry_index_in_sector <span class="kw">as </span>usize * DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize;
-        <span class="kw">let </span>entry_end = entry_start + DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize;
+    <span class="kw">fn </span>get_next_entry(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span>DirectoryEntry, FileSystemError&gt; {
+        <span class="kw">let </span>entry_start = <span class="self">self</span>.entry_index_in_sector <span class="kw">as </span>usize * mem::size_of::&lt;DirectoryEntry&gt;();
+        <span class="kw">let </span>entry_end = entry_start + mem::size_of::&lt;DirectoryEntry&gt;();
         <span class="kw">if </span>entry_end &gt; <span class="self">self</span>.current_sector.len() {
             <span class="comment">// we need to read the next sector
             </span><span class="kw">return if </span><span class="self">self</span>.next_sector()<span class="question-mark">? </span>{
@@ -1306,7 +1483,13 @@
         <span class="self">self</span>.entry_index_in_sector += <span class="number">1</span>;
 
         <span class="macro">assert!</span>(entry.len() == DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize);
-        <span class="prelude-val">Ok</span>(entry)
+        <span class="prelude-val">Ok</span>(<span class="kw">unsafe </span>{
+            entry
+                .as_ptr()
+                .cast::&lt;DirectoryEntry&gt;()
+                .as_ref()
+                .expect(<span class="string">"valid pointer"</span>)
+        })
     }
 }
 
@@ -1317,53 +1500,38 @@
         <span class="kw">let </span><span class="kw-2">mut </span>entry = <span class="self">self</span>.get_next_entry().ok()<span class="question-mark">?</span>;
 
         <span class="kw">loop </span>{
-            <span class="kw">match </span>entry[<span class="number">0</span>] {
-                <span class="number">0x00 </span>=&gt; {
-                    <span class="comment">// this is free and all others are free too, so stop
-                    </span><span class="kw">return </span><span class="prelude-val">None</span>;
+            <span class="kw">match </span>entry.state() {
+                DirectoryEntryState::FreeAndLast =&gt; {
+                    <span class="kw">return </span><span class="prelude-val">None</span>;
                 }
-                <span class="number">0xE5 </span>=&gt; {
-                    <span class="comment">// this is free, get next one
-                    </span>entry = <span class="self">self</span>.get_next_entry().ok()<span class="question-mark">?</span>;
+                DirectoryEntryState::Free =&gt; {
+                    entry = <span class="self">self</span>.get_next_entry().ok()<span class="question-mark">?</span>;
                 }
                 <span class="kw">_ </span>=&gt; <span class="kw">break</span>,
             }
         }
-        <span class="kw">let </span><span class="kw-2">mut </span>attributes = entry[<span class="number">11</span>];
 
-        <span class="kw">let </span>name = <span class="kw">if </span>attributes &amp; attrs::LONG_NAME == attrs::LONG_NAME {
+        <span class="kw">let </span>name = <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>long_entry) = entry.into_long_name() {
             <span class="comment">// long file name
             // this should be the last
-            </span><span class="macro">assert!</span>(entry[<span class="number">0</span>] &amp; <span class="number">0x40 </span>== <span class="number">0x40</span>);
-            <span class="kw">let </span>number_of_entries = entry[<span class="number">0</span>] &amp; <span class="number">0x3F</span>;
+            </span><span class="macro">assert!</span>(long_entry.sequence_number &amp; <span class="number">0x40 </span>== <span class="number">0x40</span>);
+            <span class="kw">let </span>number_of_entries = long_entry.sequence_number &amp; <span class="number">0x3F</span>;
             <span class="kw">let </span><span class="kw-2">mut </span>long_name_enteries = Vec::with_capacity(number_of_entries <span class="kw">as </span>usize);
             <span class="comment">// skip all long file name entries
-            </span><span class="kw">for _ in </span><span class="number">0</span>..number_of_entries {
+            </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..number_of_entries {
                 <span class="comment">// get the multiple parts
-                </span><span class="kw">let </span>name1 = <span class="kw-2">&amp;</span>entry[<span class="number">1</span>..<span class="number">11</span>];
-                <span class="kw">let </span>name2 = <span class="kw-2">&amp;</span>entry[<span class="number">14</span>..<span class="number">26</span>];
-                <span class="kw">let </span>name3 = <span class="kw-2">&amp;</span>entry[<span class="number">28</span>..<span class="number">32</span>];
 
-                <span class="comment">// construct an iterator and fill the string part
-                </span><span class="kw">let </span>name_iter = name1
-                    .chunks(<span class="number">2</span>)
-                    .chain(name2.chunks(<span class="number">2</span>))
-                    .chain(name3.chunks(<span class="number">2</span>))
-                    .map(|c| u16::from_le_bytes([c[<span class="number">0</span>], c[<span class="number">1</span>]]))
-                    .take_while(|c| c != <span class="kw-2">&amp;</span><span class="number">0</span>);
-
-                <span class="kw">let </span><span class="kw-2">mut </span>name_part = String::with_capacity(<span class="number">13</span>);
-                char::decode_utf16(name_iter)
-                    .map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER))
-                    .for_each(|c| name_part.push(c));
+                </span><span class="kw">let </span>name_part = long_entry.name();
 
                 <span class="comment">// add to the entries
                 </span>long_name_enteries.push(name_part);
 
                 <span class="comment">// next entry
                 </span>entry = <span class="self">self</span>.get_next_entry().ok()<span class="question-mark">?</span>;
+                <span class="kw">if </span>i + <span class="number">1 </span>&lt; number_of_entries {
+                    long_entry = entry.into_long_name().expect(<span class="string">"valid long entry"</span>);
+                }
             }
-            attributes = entry[<span class="number">11</span>];
             <span class="kw">let </span><span class="kw-2">mut </span>name = String::new();
             long_name_enteries
                 .into_iter()
@@ -1372,9 +1540,10 @@
             name
         } <span class="kw">else </span>{
             <span class="comment">// short file name
-            </span><span class="kw">let </span>base_name = <span class="kw-2">&amp;</span>entry[<span class="number">0</span>..<span class="number">8</span>];
+            </span><span class="kw">let </span>short_name = <span class="kw-2">&amp;</span>entry.into_normal().short_name;
+            <span class="kw">let </span>base_name = <span class="kw-2">&amp;</span>short_name[..<span class="number">8</span>];
             <span class="kw">let </span>base_name_end = <span class="number">8 </span>- base_name.iter().rev().position(|<span class="kw-2">&amp;</span>c| c != <span class="number">0x20</span>).unwrap();
-            <span class="kw">let </span>extension = <span class="kw-2">&amp;</span>entry[<span class="number">8</span>..<span class="number">11</span>];
+            <span class="kw">let </span>extension = <span class="kw-2">&amp;</span>short_name[<span class="number">8</span>..<span class="number">11</span>];
 
             <span class="kw">let </span><span class="kw-2">mut </span>name = String::with_capacity(<span class="number">13</span>);
             <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
@@ -1394,24 +1563,15 @@
             name
         };
 
-        <span class="kw">let </span>cluster_hi = <span class="kw">unsafe </span>{
-            <span class="kw">let </span>ptr = entry.as_ptr().add(<span class="number">20</span>) <span class="kw">as </span><span class="kw-2">*const </span>u16;
-            u16::from_le(<span class="kw-2">*</span>(ptr)) <span class="kw">as </span>u32
-        };
-        <span class="kw">let </span>cluster_lo = <span class="kw">unsafe </span>{
-            <span class="kw">let </span>ptr = entry.as_ptr().add(<span class="number">26</span>) <span class="kw">as </span><span class="kw-2">*const </span>u16;
-            u16::from_le(<span class="kw-2">*</span>(ptr)) <span class="kw">as </span>u32
-        };
-        <span class="kw">let </span>size = <span class="kw">unsafe </span>{
-            <span class="kw">let </span>ptr = entry.as_ptr().add(<span class="number">28</span>) <span class="kw">as </span><span class="kw-2">*const </span>u32;
-            u32::from_le(<span class="kw-2">*</span>(ptr))
-        };
-
+        <span class="kw">let </span>entry = entry.into_normal();
+        <span class="kw">let </span>cluster_hi = entry.first_cluster_hi <span class="kw">as </span>u32;
+        <span class="kw">let </span>cluster_lo = entry.first_cluster_lo <span class="kw">as </span>u32;
+        <span class="kw">let </span>size = entry.file_size <span class="kw">as </span>u32;
         <span class="kw">let </span>start_cluster = (cluster_hi &lt;&lt; <span class="number">16</span>) | cluster_lo;
 
         <span class="kw">let </span>inode = Node::new(
             name,
-            file_attribute_from_fat(attributes),
+            file_attribute_from_fat(entry.attributes()),
             start_cluster <span class="kw">as </span>u64,
             size <span class="kw">as </span>u64,
         );
