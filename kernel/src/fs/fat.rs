@@ -20,14 +20,26 @@ use super::{
 const DIRECTORY_ENTRY_SIZE: u32 = 32;
 
 fn file_attribute_from_fat(attributes: u8) -> FileAttributes {
-    FileAttributes {
-        read_only: attributes & attrs::READ_ONLY == attrs::READ_ONLY,
-        hidden: attributes & attrs::HIDDEN == attrs::HIDDEN,
-        system: attributes & attrs::SYSTEM == attrs::SYSTEM,
-        volume_label: attributes & attrs::VOLUME_ID == attrs::VOLUME_ID,
-        directory: attributes & attrs::DIRECTORY == attrs::DIRECTORY,
-        archive: attributes & attrs::ARCHIVE == attrs::ARCHIVE,
+    let mut file_attributes = FileAttributes::EMPTY;
+    if attributes & attrs::READ_ONLY == attrs::READ_ONLY {
+        file_attributes |= FileAttributes::READ_ONLY;
     }
+    if attributes & attrs::HIDDEN == attrs::HIDDEN {
+        file_attributes |= FileAttributes::HIDDEN;
+    }
+    if attributes & attrs::SYSTEM == attrs::SYSTEM {
+        file_attributes |= FileAttributes::SYSTEM;
+    }
+    if attributes & attrs::VOLUME_ID == attrs::VOLUME_ID {
+        file_attributes |= FileAttributes::VOLUME_LABEL;
+    }
+    if attributes & attrs::DIRECTORY == attrs::DIRECTORY {
+        file_attributes |= FileAttributes::DIRECTORY;
+    }
+    if attributes & attrs::ARCHIVE == attrs::ARCHIVE {
+        file_attributes |= FileAttributes::ARCHIVE;
+    }
+    file_attributes
 }
 
 #[derive(Debug)]

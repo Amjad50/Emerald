@@ -33,87 +33,62 @@ pub fn empty_filesystem() -> Arc<EmptyFileSystem> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FileAttributes {
-    pub read_only: bool,
-    pub hidden: bool,
-    pub system: bool,
-    pub volume_label: bool,
-    pub directory: bool,
-    pub archive: bool,
-}
+pub struct FileAttributes(pub u8);
 
 #[allow(dead_code)]
 impl FileAttributes {
-    pub const EMPTY: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: false,
-        volume_label: false,
-        directory: false,
-        archive: false,
-    };
-    pub const READ_ONLY: FileAttributes = FileAttributes {
-        read_only: true,
-        hidden: false,
-        system: false,
-        volume_label: false,
-        directory: false,
-        archive: false,
-    };
-    pub const HIDDEN: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: true,
-        system: false,
-        volume_label: false,
-        directory: false,
-        archive: false,
-    };
-    pub const SYSTEM: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: true,
-        volume_label: false,
-        directory: false,
-        archive: false,
-    };
-    pub const VOLUME_LABEL: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: false,
-        volume_label: true,
-        directory: false,
-        archive: false,
-    };
-    pub const DIRECTORY: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: false,
-        volume_label: false,
-        directory: true,
-        archive: false,
-    };
-    pub const ARCHIVE: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: false,
-        volume_label: false,
-        directory: false,
-        archive: true,
-    };
+    pub const EMPTY: FileAttributes = FileAttributes(0);
+    pub const READ_ONLY: FileAttributes = FileAttributes(0b0000_0001);
+    pub const HIDDEN: FileAttributes = FileAttributes(0b0000_0010);
+    pub const SYSTEM: FileAttributes = FileAttributes(0b0000_0100);
+    pub const VOLUME_LABEL: FileAttributes = FileAttributes(0b0000_1000);
+    pub const DIRECTORY: FileAttributes = FileAttributes(0b0001_0000);
+    pub const ARCHIVE: FileAttributes = FileAttributes(0b0010_0000);
+
+    pub fn read_only(self) -> bool {
+        self.0 & Self::READ_ONLY.0 != 0
+    }
+
+    pub fn hidden(self) -> bool {
+        self.0 & Self::HIDDEN.0 != 0
+    }
+
+    pub fn system(self) -> bool {
+        self.0 & Self::SYSTEM.0 != 0
+    }
+
+    pub fn volume_label(self) -> bool {
+        self.0 & Self::VOLUME_LABEL.0 != 0
+    }
+
+    pub fn directory(self) -> bool {
+        self.0 & Self::DIRECTORY.0 != 0
+    }
+
+    pub fn archive(self) -> bool {
+        self.0 & Self::ARCHIVE.0 != 0
+    }
 }
 
 impl ops::BitOr for FileAttributes {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        Self {
-            read_only: self.read_only | rhs.read_only,
-            hidden: self.hidden | rhs.hidden,
-            system: self.system | rhs.system,
-            volume_label: self.volume_label | rhs.volume_label,
-            directory: self.directory | rhs.directory,
-            archive: self.archive | rhs.archive,
-        }
+        FileAttributes(self.0 | rhs.0)
+    }
+}
+
+impl ops::BitOrAssign for FileAttributes {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl ops::BitAnd for FileAttributes {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        FileAttributes(self.0 & rhs.0)
     }
 }
 
@@ -133,7 +108,7 @@ impl FileNode {
         start_cluster: u64,
         size: u64,
     ) -> Self {
-        assert!(!attributes.directory);
+        assert!(!attributes.directory());
         Self {
             name,
             attributes,
@@ -144,7 +119,7 @@ impl FileNode {
     }
 
     pub fn new_device(name: String, attributes: FileAttributes, device: Arc<dyn Device>) -> Self {
-        assert!(!attributes.directory);
+        assert!(!attributes.directory());
         Self {
             name,
             attributes,
@@ -188,7 +163,7 @@ pub struct DirectoryNode {
 
 impl DirectoryNode {
     pub fn new(name: String, attributes: FileAttributes, start_cluster: u64) -> Self {
-        assert!(attributes.directory);
+        assert!(attributes.directory());
         Self {
             name,
             attributes,
@@ -226,7 +201,7 @@ impl From<DirectoryNode> for Node {
 
 impl Node {
     pub fn new(name: String, attributes: FileAttributes, start_cluster: u64, size: u64) -> Self {
-        if attributes.directory {
+        if attributes.directory() {
             Self::Directory(DirectoryNode::new(name, attributes, start_cluster))
         } else {
             Self::File(FileNode::new_file(name, attributes, start_cluster, size))
