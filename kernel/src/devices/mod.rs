@@ -1,9 +1,9 @@
 use core::fmt;
 
-use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, string::String, sync::Arc};
 
 use crate::{
-    fs::{self, path::Path, FileAttributes, FileSystem, FileSystemError, INode},
+    fs::{self, DirTreverse, FileAttributes, FileSystem, FileSystemError, INode},
     sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
@@ -63,27 +63,28 @@ impl FileSystem for RwLock<Devices> {
         ))
     }
 
-    fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError> {
-        if path.is_root() || path.is_empty() {
-            Ok(self
-                .read()
-                .devices
-                .iter()
-                .map(|(name, device)| {
-                    INode::new_device(name.clone(), FileAttributes::EMPTY, Some(device.clone()))
-                })
-                .collect())
-        } else {
-            Err(FileSystemError::FileNotFound)
-        }
-    }
-
-    fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+    fn read_dir(
+        &self,
+        inode: &INode,
+        handler: &mut dyn FnMut(INode) -> DirTreverse,
+    ) -> Result<(), FileSystemError> {
         if !inode.is_dir() {
             return Err(FileSystemError::IsNotDirectory);
         }
         assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_ROOT_INODE_MAGIC);
-        self.open_dir(Path::new(inode.name()))
+
+        if inode.name().is_empty() || inode.name() == "/" {
+            for node in self.read().devices.iter().map(|(name, device)| {
+                INode::new_device(name.clone(), FileAttributes::EMPTY, Some(device.clone()))
+            }) {
+                if let DirTreverse::Stop = handler(node) {
+                    break;
+                }
+            }
+            Ok(())
+        } else {
+            Err(FileSystemError::FileNotFound)
+        }
     }
 }
 

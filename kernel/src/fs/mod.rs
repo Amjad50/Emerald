@@ -209,11 +209,19 @@ impl Drop for INode {
     }
 }
 
+pub enum DirTreverse {
+    Continue,
+    Stop,
+}
+
 pub trait FileSystem: Send + Sync {
     fn open_root(&self) -> Result<INode, FileSystemError>;
-    // TODO: don't use Vector please, use an iterator somehow
-    fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError>;
-    fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
+    fn read_dir(
+        &self,
+        inode: &INode,
+        handler: &mut dyn FnMut(INode) -> DirTreverse,
+    ) -> Result<(), FileSystemError>;
+
     fn read_file(
         &self,
         inode: &INode,
@@ -251,11 +259,11 @@ impl FileSystem for EmptyFileSystem {
         Err(FileSystemError::FileNotFound)
     }
 
-    fn open_dir(&self, _path: &Path) -> Result<Vec<INode>, FileSystemError> {
-        Err(FileSystemError::FileNotFound)
-    }
-
-    fn read_dir(&self, _inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+    fn read_dir(
+        &self,
+        _inode: &INode,
+        _handler: &mut dyn FnMut(INode) -> DirTreverse,
+    ) -> Result<(), FileSystemError> {
         Err(FileSystemError::FileNotFound)
     }
 }
@@ -446,19 +454,57 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
         }
     }
 
-    for mut entry in filesystem.open_dir(parent)? {
-        if entry.name() == filename {
-            // if this is a file, return error if we requst a directory (using "/")
-            if !entry.is_dir() && opening_dir {
-                return Err(FileSystemError::IsNotDirectory);
+    let full_path = parent.join(filename);
+    let root = filesystem.open_root()?;
+    if full_path.is_empty() || full_path.is_root() {
+        return Ok((filesystem, root));
+    }
+
+    let open_component_inode = |inode: &INode, component: &str| -> Result<INode, FileSystemError> {
+        let mut entry = None;
+        filesystem.read_dir(inode, &mut |inode| {
+            if inode.name() == component {
+                entry = Some(inode);
+                DirTreverse::Stop
+            } else {
+                DirTreverse::Continue
             }
-            // if this is a device, open it
-            entry.try_open_device()?;
-            return Ok((filesystem, entry));
+        })?;
+        entry.ok_or(FileSystemError::FileNotFound)
+    };
+
+    let mut dir = root;
+    for component in parent.components() {
+        let component = match component {
+            Component::RootDir | Component::CurDir => {
+                continue;
+            }
+            keep @ (Component::ParentDir | Component::Normal(_)) => keep.as_str(),
+        };
+        if component.is_empty() {
+            continue;
+        }
+        let entry = open_component_inode(&dir, component)?;
+        if entry.is_dir() {
+            dir = entry;
+        } else {
+            return Err(FileSystemError::IsNotDirectory);
         }
     }
 
-    Err(FileSystemError::FileNotFound)
+    // open the file inside `dir`
+    let mut entry = open_component_inode(&dir, filename)?;
+    if opening_dir {
+        if entry.is_dir() {
+            Ok((filesystem, entry))
+        } else {
+            Err(FileSystemError::IsNotDirectory)
+        }
+    } else {
+        // open the device if it is a device
+        entry.try_open_device()?;
+        Ok((filesystem, entry))
+    }
 }
 
 /// A handle to a file, it has the inode which controls the properties of the node in the filesystem
@@ -716,7 +762,12 @@ impl Directory {
         }
 
         // TODO: read dynamically, not at creation, as we sometimes don't use this (e.g. current_dir in `Process`)
-        let dir_entries = filesystem.read_dir(&inode)?;
+        let mut dir_entries = Vec::new();
+
+        filesystem.read_dir(&inode, &mut |entry| {
+            dir_entries.push(entry);
+            DirTreverse::Continue
+        })?;
 
         Ok(Self {
             path: path.as_ref().into(),

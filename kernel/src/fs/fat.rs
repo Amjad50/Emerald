@@ -13,10 +13,7 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::{
-    path::{Component, Path},
-    FileAttributes, FileSystem, FileSystemError, INode,
-};
+use super::{DirTreverse, FileAttributes, FileSystem, FileSystemError, INode};
 
 const DIRECTORY_ENTRY_SIZE: u32 = 32;
 
@@ -349,15 +346,6 @@ enum Directory {
     Normal {
         inode: INode,
     },
-}
-
-impl Directory {
-    pub fn iter<'a>(
-        &'a self,
-        filesystem: &'a FatFilesystem,
-    ) -> Result<DirectoryIterator<'a>, FileSystemError> {
-        DirectoryIterator::new(filesystem, self.clone())
-    }
 }
 
 pub struct DirectoryIterator<'a> {
@@ -735,38 +723,6 @@ impl FatFilesystem {
         }
     }
 
-    pub fn open_dir(&self, path: &Path) -> Result<DirectoryIterator, FileSystemError> {
-        let root = self.open_root_dir()?;
-        if path.is_root() || path.is_empty() {
-            return DirectoryIterator::new(self, root);
-        }
-
-        let mut dir = root;
-        'component_loop: for component in path.components() {
-            let component = match component {
-                Component::RootDir | Component::CurDir => {
-                    continue;
-                }
-                keep @ (Component::ParentDir | Component::Normal(_)) => keep.as_str(),
-            };
-            if component.is_empty() {
-                continue;
-            }
-            for entry in dir.iter(self)? {
-                if entry.name() == component {
-                    if !entry.is_dir() {
-                        return Err(FileSystemError::IsNotDirectory);
-                    }
-                    dir = Directory::Normal { inode: entry };
-                    continue 'component_loop;
-                }
-            }
-            // component not found
-            return Err(FileSystemError::FileNotFound);
-        }
-        DirectoryIterator::new(self, dir)
-    }
-
     pub fn open_dir_inode(&self, inode: &INode) -> Result<DirectoryIterator, FileSystemError> {
         if !inode.is_dir() {
             return Err(FileSystemError::IsNotDirectory);
@@ -865,16 +821,21 @@ impl FileSystem for Mutex<FatFilesystem> {
         self.lock().read_file(inode, position as u32, buf)
     }
 
-    fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError> {
-        // TODO: handle `Path` here
-        Ok(self.lock().open_dir(path)?.collect())
-    }
-
-    fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError> {
-        Ok(self.lock().open_dir_inode(inode)?.collect())
-    }
-
     fn open_root(&self) -> Result<INode, FileSystemError> {
         self.lock().open_root_dir_inode()
+    }
+
+    fn read_dir(
+        &self,
+        inode: &INode,
+        handler: &mut dyn FnMut(INode) -> DirTreverse,
+    ) -> Result<(), FileSystemError> {
+        for node in self.lock().open_dir_inode(inode)? {
+            if let DirTreverse::Stop = handler(node) {
+                break;
+            }
+        }
+
+        Ok(())
     }
 }
