@@ -20,6 +20,9 @@ mod fat;
 mod mbr;
 pub mod path;
 
+/// This is not used at all, just an indicator in [`Directory::fetch_entries`]
+pub(crate) const ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC: u64 = 0xf11356573e;
+
 static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
     mappings: Vec::new(),
 });
@@ -33,92 +36,67 @@ pub fn empty_filesystem() -> Arc<EmptyFileSystem> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FileAttributes {
-    pub read_only: bool,
-    pub hidden: bool,
-    pub system: bool,
-    pub volume_label: bool,
-    pub directory: bool,
-    pub archive: bool,
-}
+pub struct FileAttributes(pub u8);
 
 #[allow(dead_code)]
 impl FileAttributes {
-    pub const EMPTY: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: false,
-        volume_label: false,
-        directory: false,
-        archive: false,
-    };
-    pub const READ_ONLY: FileAttributes = FileAttributes {
-        read_only: true,
-        hidden: false,
-        system: false,
-        volume_label: false,
-        directory: false,
-        archive: false,
-    };
-    pub const HIDDEN: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: true,
-        system: false,
-        volume_label: false,
-        directory: false,
-        archive: false,
-    };
-    pub const SYSTEM: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: true,
-        volume_label: false,
-        directory: false,
-        archive: false,
-    };
-    pub const VOLUME_LABEL: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: false,
-        volume_label: true,
-        directory: false,
-        archive: false,
-    };
-    pub const DIRECTORY: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: false,
-        volume_label: false,
-        directory: true,
-        archive: false,
-    };
-    pub const ARCHIVE: FileAttributes = FileAttributes {
-        read_only: false,
-        hidden: false,
-        system: false,
-        volume_label: false,
-        directory: false,
-        archive: true,
-    };
+    pub const EMPTY: FileAttributes = FileAttributes(0);
+    pub const READ_ONLY: FileAttributes = FileAttributes(0b0000_0001);
+    pub const HIDDEN: FileAttributes = FileAttributes(0b0000_0010);
+    pub const SYSTEM: FileAttributes = FileAttributes(0b0000_0100);
+    pub const VOLUME_LABEL: FileAttributes = FileAttributes(0b0000_1000);
+    pub const DIRECTORY: FileAttributes = FileAttributes(0b0001_0000);
+    pub const ARCHIVE: FileAttributes = FileAttributes(0b0010_0000);
+
+    pub fn read_only(self) -> bool {
+        self.0 & Self::READ_ONLY.0 != 0
+    }
+
+    pub fn hidden(self) -> bool {
+        self.0 & Self::HIDDEN.0 != 0
+    }
+
+    pub fn system(self) -> bool {
+        self.0 & Self::SYSTEM.0 != 0
+    }
+
+    pub fn volume_label(self) -> bool {
+        self.0 & Self::VOLUME_LABEL.0 != 0
+    }
+
+    pub fn directory(self) -> bool {
+        self.0 & Self::DIRECTORY.0 != 0
+    }
+
+    pub fn archive(self) -> bool {
+        self.0 & Self::ARCHIVE.0 != 0
+    }
 }
 
 impl ops::BitOr for FileAttributes {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        Self {
-            read_only: self.read_only | rhs.read_only,
-            hidden: self.hidden | rhs.hidden,
-            system: self.system | rhs.system,
-            volume_label: self.volume_label | rhs.volume_label,
-            directory: self.directory | rhs.directory,
-            archive: self.archive | rhs.archive,
-        }
+        FileAttributes(self.0 | rhs.0)
+    }
+}
+
+impl ops::BitOrAssign for FileAttributes {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl ops::BitAnd for FileAttributes {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        FileAttributes(self.0 & rhs.0)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct INode {
+pub struct FileNode {
     name: String,
     attributes: FileAttributes,
     start_cluster: u64,
@@ -126,13 +104,14 @@ pub struct INode {
     device: Option<Arc<dyn Device>>,
 }
 
-impl INode {
+impl FileNode {
     pub fn new_file(
         name: String,
         attributes: FileAttributes,
         start_cluster: u64,
         size: u64,
     ) -> Self {
+        assert!(!attributes.directory());
         Self {
             name,
             attributes,
@@ -142,54 +121,23 @@ impl INode {
         }
     }
 
-    pub fn new_device(
-        name: String,
-        attributes: FileAttributes,
-        device: Option<Arc<dyn Device>>,
-    ) -> Self {
+    pub fn new_device(name: String, attributes: FileAttributes, device: Arc<dyn Device>) -> Self {
+        assert!(!attributes.directory());
         Self {
             name,
             attributes,
             start_cluster: DEVICES_FILESYSTEM_CLUSTER_MAGIC,
             size: 0,
-            device,
+            device: Some(device),
         }
-    }
-
-    pub fn is_dir(&self) -> bool {
-        self.attributes.directory
     }
 
     pub fn size(&self) -> u64 {
         self.size
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    #[allow(dead_code)]
-    pub fn attributes(&self) -> FileAttributes {
-        self.attributes
-    }
-
     pub fn start_cluster(&self) -> u64 {
         self.start_cluster
-    }
-
-    pub fn device(&self) -> Option<&Arc<dyn Device>> {
-        self.device.as_ref()
-    }
-
-    pub fn as_file_stat(&self) -> FileStat {
-        FileStat {
-            size: self.size(),
-            file_type: if self.is_dir() {
-                FileType::Directory
-            } else {
-                FileType::File
-            },
-        }
     }
 
     pub fn try_open_device(&mut self) -> Result<(), FileSystemError> {
@@ -201,7 +149,7 @@ impl INode {
     }
 }
 
-impl Drop for INode {
+impl Drop for FileNode {
     fn drop(&mut self) {
         if let Some(device) = self.device.take() {
             device.close().expect("Failed to close device");
@@ -209,21 +157,139 @@ impl Drop for INode {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DirectoryNode {
+    name: String,
+    attributes: FileAttributes,
+    start_cluster: u64,
+}
+
+impl DirectoryNode {
+    pub fn new(name: String, attributes: FileAttributes, start_cluster: u64) -> Self {
+        assert!(attributes.directory());
+        Self {
+            name,
+            attributes,
+            start_cluster,
+        }
+    }
+
+    pub fn start_cluster(&self) -> u64 {
+        self.start_cluster
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+/// A node of the filesystem, it can be anything, a file, a device or a directory
+#[derive(Debug, Clone)]
+pub enum Node {
+    File(FileNode),
+    Directory(DirectoryNode),
+}
+
+impl From<FileNode> for Node {
+    fn from(file: FileNode) -> Self {
+        Self::File(file)
+    }
+}
+
+impl From<DirectoryNode> for Node {
+    fn from(dir: DirectoryNode) -> Self {
+        Self::Directory(dir)
+    }
+}
+
+impl Node {
+    pub fn new(name: String, attributes: FileAttributes, start_cluster: u64, size: u64) -> Self {
+        if attributes.directory() {
+            Self::Directory(DirectoryNode::new(name, attributes, start_cluster))
+        } else {
+            Self::File(FileNode::new_file(name, attributes, start_cluster, size))
+        }
+    }
+
+    pub fn size(&self) -> u64 {
+        match self {
+            Self::File(file) => file.size,
+            Self::Directory(_) => 0,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::File(file) => &file.name,
+            Self::Directory(dir) => &dir.name,
+        }
+    }
+
+    pub fn is_dir(&self) -> bool {
+        matches!(self, Self::Directory(_))
+    }
+
+    pub fn into_dir(self) -> Result<DirectoryNode, FileSystemError> {
+        match self {
+            Self::Directory(dir) => Ok(dir),
+            Self::File(_) => Err(FileSystemError::IsNotDirectory),
+        }
+    }
+
+    pub fn into_file(self) -> Result<FileNode, FileSystemError> {
+        match self {
+            Self::File(file) => Ok(file),
+            Self::Directory(_) => Err(FileSystemError::IsDirectory),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn attributes(&self) -> FileAttributes {
+        match self {
+            Self::File(file) => file.attributes,
+            Self::Directory(dir) => dir.attributes,
+        }
+    }
+
+    pub fn as_file_stat(&self) -> FileStat {
+        FileStat {
+            size: self.size(),
+            file_type: match self {
+                Self::File(_) => FileType::File,
+                Self::Directory(_) => FileType::Directory,
+            },
+        }
+    }
+
+    pub fn try_open_device(&mut self) -> Result<(), FileSystemError> {
+        if let Self::File(file) = self {
+            file.try_open_device()?;
+        }
+
+        Ok(())
+    }
+}
+
+pub enum DirTreverse {
+    Continue,
+    Stop,
+}
+
 pub trait FileSystem: Send + Sync {
-    fn open_root(&self) -> Result<INode, FileSystemError>;
-    // TODO: don't use Vector please, use an iterator somehow
-    fn open_dir(&self, path: &Path) -> Result<Vec<INode>, FileSystemError>;
-    fn read_dir(&self, inode: &INode) -> Result<Vec<INode>, FileSystemError>;
+    fn open_root(&self) -> Result<DirectoryNode, FileSystemError>;
+    fn read_dir(
+        &self,
+        inode: &DirectoryNode,
+        handler: &mut dyn FnMut(Node) -> DirTreverse,
+    ) -> Result<(), FileSystemError>;
+
     fn read_file(
         &self,
-        inode: &INode,
+        inode: &FileNode,
         position: u64,
         buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
-        if inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
-        if let Some(device) = inode.device() {
+        if let Some(device) = &inode.device {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.read(position, buf)
         } else {
@@ -231,11 +297,13 @@ pub trait FileSystem: Send + Sync {
         }
     }
 
-    fn write_file(&self, inode: &INode, position: u64, buf: &[u8]) -> Result<u64, FileSystemError> {
-        if inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
-        if let Some(device) = inode.device() {
+    fn write_file(
+        &self,
+        inode: &FileNode,
+        position: u64,
+        buf: &[u8],
+    ) -> Result<u64, FileSystemError> {
+        if let Some(device) = &inode.device {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.write(position, buf)
         } else {
@@ -247,15 +315,15 @@ pub trait FileSystem: Send + Sync {
 pub struct EmptyFileSystem;
 
 impl FileSystem for EmptyFileSystem {
-    fn open_root(&self) -> Result<INode, FileSystemError> {
+    fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
         Err(FileSystemError::FileNotFound)
     }
 
-    fn open_dir(&self, _path: &Path) -> Result<Vec<INode>, FileSystemError> {
-        Err(FileSystemError::FileNotFound)
-    }
-
-    fn read_dir(&self, _inode: &INode) -> Result<Vec<INode>, FileSystemError> {
+    fn read_dir(
+        &self,
+        _inode: &DirectoryNode,
+        _handler: &mut dyn FnMut(Node) -> DirTreverse,
+    ) -> Result<(), FileSystemError> {
         Err(FileSystemError::FileNotFound)
     }
 }
@@ -311,6 +379,22 @@ impl FileSystemMapping {
             .ok_or(FileSystemError::FileNotFound)?;
 
         Ok((stripped_path, filesystem.clone()))
+    }
+
+    fn get_all_matching_mappings<'a, 'p>(
+        &'a mut self,
+        path: &'p Path,
+    ) -> impl Iterator<Item = (&'a Path, Arc<dyn FileSystem>)>
+    where
+        'p: 'a,
+    {
+        self.mappings.iter().filter_map(move |(fs_path, fs)| {
+            let stripped = fs_path.strip_prefix(path).ok()?;
+            if stripped.is_empty() {
+                return None;
+            }
+            Some((stripped, fs.clone()))
+        })
     }
 
     fn mount<P: AsRef<Path>>(&mut self, arg: P, filesystem: Arc<dyn FileSystem>) {
@@ -407,7 +491,7 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
 /// This function must be called with an absolute path. Otherwise it will return [`FileSystemError::MustBeAbsolute`].
 pub(crate) fn open_inode<P: AsRef<Path>>(
     path: P,
-) -> Result<(Arc<dyn FileSystem>, INode), FileSystemError> {
+) -> Result<(Arc<dyn FileSystem>, Node), FileSystemError> {
     if !path.as_ref().is_absolute() {
         // this is an internal kernel only result, this function must be called with an absolute path
         return Err(FileSystemError::MustBeAbsolute);
@@ -430,7 +514,9 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
             }
             Some(Component::RootDir) | None => {
                 // we reached root, return it directly
-                return filesystem.open_root().map(|inode| (filesystem, inode));
+                return filesystem
+                    .open_root()
+                    .map(|inode| (filesystem, inode.into()));
             }
             Some(Component::CurDir) => {
                 // ignore
@@ -446,26 +532,65 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
         }
     }
 
-    for mut entry in filesystem.open_dir(parent)? {
-        if entry.name() == filename {
-            // if this is a file, return error if we requst a directory (using "/")
-            if !entry.is_dir() && opening_dir {
-                return Err(FileSystemError::IsNotDirectory);
+    let full_path = parent.join(filename);
+    let root = filesystem.open_root()?;
+    if full_path.is_empty() || full_path.is_root() {
+        return Ok((filesystem, root.into()));
+    }
+
+    let open_component_inode =
+        |inode: &DirectoryNode, component: &str| -> Result<Node, FileSystemError> {
+            let mut entry = None;
+            filesystem.read_dir(inode, &mut |inode| {
+                if inode.name() == component {
+                    entry = Some(inode);
+                    DirTreverse::Stop
+                } else {
+                    DirTreverse::Continue
+                }
+            })?;
+            entry.ok_or(FileSystemError::FileNotFound)
+        };
+
+    let mut dir = root;
+    for component in parent.components() {
+        let component = match component {
+            Component::RootDir | Component::CurDir => {
+                continue;
             }
-            // if this is a device, open it
-            entry.try_open_device()?;
-            return Ok((filesystem, entry));
+            keep @ (Component::ParentDir | Component::Normal(_)) => keep.as_str(),
+        };
+        if component.is_empty() {
+            continue;
+        }
+        let entry = open_component_inode(&dir, component)?;
+        if let Node::Directory(dir_node) = entry {
+            dir = dir_node;
+        } else {
+            return Err(FileSystemError::IsNotDirectory);
         }
     }
 
-    Err(FileSystemError::FileNotFound)
+    // open the file inside `dir`
+    let mut entry = open_component_inode(&dir, filename)?;
+    if opening_dir {
+        if entry.is_dir() {
+            Ok((filesystem, entry))
+        } else {
+            Err(FileSystemError::IsNotDirectory)
+        }
+    } else {
+        // open the device if it is a device
+        entry.try_open_device()?;
+        Ok((filesystem, entry))
+    }
 }
 
 /// A handle to a file, it has the inode which controls the properties of the node in the filesystem
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
     path: Box<Path>,
-    inode: INode,
+    inode: FileNode,
     position: u64,
     is_terminal: bool,
     blocking_mode: BlockingMode,
@@ -474,13 +599,11 @@ pub struct File {
 /// A handle to a directory, it has the inode which controls the properties of the node in the filesystem
 #[allow(dead_code)]
 pub struct Directory {
-    inode: INode,
+    inode: DirectoryNode,
     path: Box<Path>,
     position: u64,
-    // TODO: replace by iter so that new files can be added in the middle
-    dir_entries: Vec<INode>,
-    // now we don't need the filesystem, but if we implement dynamic directory read, we will
-    // filesystem: Arc<dyn FileSystem>,
+    dir_entries: Option<Vec<Node>>,
+    filesystem: Arc<dyn FileSystem>,
 }
 
 /// A node in the filesystem, can be a file or a directory
@@ -503,20 +626,16 @@ impl File {
     ) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path.as_ref())?;
 
-        Self::from_inode(inode, path, filesystem, 0, blocking_mode)
+        Self::from_inode(inode.into_file()?, path, filesystem, 0, blocking_mode)
     }
 
     pub fn from_inode<P: AsRef<Path>>(
-        inode: INode,
+        inode: FileNode,
         path: P,
         filesystem: Arc<dyn FileSystem>,
         position: u64,
         blocking_mode: BlockingMode,
     ) -> Result<Self, FileSystemError> {
-        if inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
-
         Ok(Self {
             filesystem,
             path: path.as_ref().into(),
@@ -528,8 +647,6 @@ impl File {
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
-        assert!(!self.inode.is_dir());
-
         let count = match self.blocking_mode {
             BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,
             BlockingMode::Line => {
@@ -605,8 +722,6 @@ impl File {
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
-        assert!(!self.inode.is_dir());
-
         let written = self
             .filesystem
             .write_file(&self.inode, self.position, buf)?;
@@ -615,8 +730,6 @@ impl File {
     }
 
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {
-        assert!(!self.inode.is_dir());
-
         if position > self.inode.size() {
             return Err(FileSystemError::InvalidOffset);
         }
@@ -702,28 +815,53 @@ impl Directory {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path.as_ref())?;
 
-        Self::from_inode(inode, path, filesystem, 0)
+        Self::from_inode(inode.into_dir()?, path, filesystem, 0)
     }
 
     pub fn from_inode<P: AsRef<Path>>(
-        inode: INode,
+        inode: DirectoryNode,
         path: P,
         filesystem: Arc<dyn FileSystem>,
         position: u64,
     ) -> Result<Self, FileSystemError> {
-        if !inode.is_dir() {
-            return Err(FileSystemError::IsNotDirectory);
-        }
-
-        // TODO: read dynamically, not at creation, as we sometimes don't use this (e.g. current_dir in `Process`)
-        let dir_entries = filesystem.read_dir(&inode)?;
-
         Ok(Self {
             path: path.as_ref().into(),
             inode,
             position,
-            dir_entries,
+            dir_entries: None,
+            filesystem,
         })
+    }
+
+    fn fetch_entries(&mut self) -> Result<(), FileSystemError> {
+        if self.dir_entries.is_none() {
+            let mut dir_entries = Vec::new();
+            self.filesystem.read_dir(&self.inode, &mut |entry| {
+                dir_entries.push(entry);
+                DirTreverse::Continue
+            })?;
+            // add entries from the root mappings
+            for (path, _fs) in FILESYSTEM_MAPPING
+                .lock()
+                .get_all_matching_mappings(&self.path)
+            {
+                // only add path with one component
+                if path.components().count() == 1 {
+                    dir_entries.push(
+                        DirectoryNode::new(
+                            path.components().next().unwrap().as_str().into(),
+                            FileAttributes::DIRECTORY,
+                            ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC,
+                        )
+                        .into(),
+                    );
+                }
+            }
+
+            self.dir_entries = Some(dir_entries);
+        }
+
+        Ok(())
     }
 
     pub fn path(&self) -> &Path {
@@ -731,15 +869,20 @@ impl Directory {
     }
 
     pub fn read(&mut self, entries: &mut [DirEntry]) -> Result<usize, FileSystemError> {
-        assert!(self.inode.is_dir());
+        self.fetch_entries()?;
+
+        let dir_entries = self
+            .dir_entries
+            .as_ref()
+            .expect("Entries must be initialized");
 
         let mut i = 0;
         while i < entries.len() {
-            if self.position >= self.dir_entries.len() as u64 {
+            if self.position >= dir_entries.len() as u64 {
                 break;
             }
 
-            let entry = &self.dir_entries[self.position as usize];
+            let entry = &dir_entries[self.position as usize];
             entries[i] = DirEntry {
                 stat: entry.as_file_stat(),
                 name: entry.name().into(),
@@ -758,7 +901,8 @@ impl Clone for Directory {
             inode: self.inode.clone(),
             path: self.path.clone(),
             position: 0,
-            dir_entries: self.dir_entries.clone(),
+            dir_entries: None, // allow for refetch
+            filesystem: self.filesystem.clone(),
         }
     }
 }
@@ -768,25 +912,17 @@ impl FilesystemNode {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path.as_ref())?;
 
-        if inode.is_dir() {
-            Ok(Self::Directory(Directory::from_inode(
-                inode, path, filesystem, 0,
-            )?))
-        } else {
-            Ok(Self::File(File::from_inode(
-                inode,
+        match inode {
+            Node::File(file) => Ok(Self::File(File::from_inode(
+                file,
                 path,
                 filesystem,
                 0,
                 BlockingMode::None,
-            )?))
-        }
-    }
-
-    pub fn inode(&self) -> &INode {
-        match self {
-            Self::File(file) => &file.inode,
-            Self::Directory(dir) => &dir.inode,
+            )?)),
+            Node::Directory(directory) => Ok(Self::Directory(Directory::from_inode(
+                directory, path, filesystem, 0,
+            )?)),
         }
     }
 

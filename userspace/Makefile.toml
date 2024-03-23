@@ -52,4 +52,5 @@ args = ["-r", "${USER_OUTDIR}/echo",
               "${USER_OUTDIR}/mouse",
               "${USER_OUTDIR}/graphics",
               "${USER_OUTDIR}/video",
+              "${USER_OUTDIR}/tree",
               "${FILESYSTEM_PATH}/"]
