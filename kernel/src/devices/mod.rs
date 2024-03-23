@@ -3,7 +3,10 @@ use core::fmt;
 use alloc::{collections::BTreeMap, string::String, sync::Arc};
 
 use crate::{
-    fs::{self, DirTreverse, FileAttributes, FileSystem, FileSystemError, INode},
+    fs::{
+        self, DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem, FileSystemError,
+        Node,
+    },
     sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
@@ -54,28 +57,24 @@ pub trait Device: Sync + Send + fmt::Debug {
 }
 
 impl FileSystem for RwLock<Devices> {
-    fn open_root(&self) -> Result<INode, FileSystemError> {
-        Ok(INode::new_file(
+    fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
+        Ok(DirectoryNode::new(
             String::from("/"),
             FileAttributes::DIRECTORY,
             DEVICES_FILESYSTEM_ROOT_INODE_MAGIC,
-            0,
         ))
     }
 
     fn read_dir(
         &self,
-        inode: &INode,
-        handler: &mut dyn FnMut(INode) -> DirTreverse,
+        inode: &DirectoryNode,
+        handler: &mut dyn FnMut(Node) -> DirTreverse,
     ) -> Result<(), FileSystemError> {
-        if !inode.is_dir() {
-            return Err(FileSystemError::IsNotDirectory);
-        }
         assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_ROOT_INODE_MAGIC);
 
         if inode.name().is_empty() || inode.name() == "/" {
             for node in self.read().devices.iter().map(|(name, device)| {
-                INode::new_device(name.clone(), FileAttributes::EMPTY, Some(device.clone()))
+                FileNode::new_device(name.clone(), FileAttributes::EMPTY, device.clone()).into()
             }) {
                 if let DirTreverse::Stop = handler(node) {
                     break;

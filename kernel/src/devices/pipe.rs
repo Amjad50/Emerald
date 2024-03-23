@@ -4,7 +4,7 @@ use alloc::{collections::VecDeque, string::String, sync::Arc};
 use kernel_user_link::file::BlockingMode;
 
 use crate::{
-    fs::{self, FileAttributes, FileSystemError, INode},
+    fs::{self, FileAttributes, FileNode, FileSystemError},
     sync::spin::mutex::Mutex,
 };
 
@@ -31,15 +31,15 @@ pub fn create_pipe_pair() -> (fs::File, fs::File) {
         clones: AtomicUsize::new(1),
     });
 
-    let read_inode = INode::new_device(
+    let read_inode = FileNode::new_device(
         String::from("read_pipe"),
         FileAttributes::EMPTY,
-        Some(read_device),
+        read_device,
     );
-    let write_inode = INode::new_device(
+    let write_inode = FileNode::new_device(
         String::from("write_pipe"),
         FileAttributes::EMPTY,
-        Some(write_device),
+        write_device,
     );
     let read_file = fs::File::from_inode(
         read_inode,

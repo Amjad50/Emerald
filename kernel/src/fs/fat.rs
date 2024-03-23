@@ -13,7 +13,9 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::{DirTreverse, FileAttributes, FileSystem, FileSystemError, INode};
+use super::{
+    DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem, FileSystemError, Node,
+};
 
 const DIRECTORY_ENTRY_SIZE: u32 = 32;
 
@@ -344,7 +346,7 @@ enum Directory {
         size_in_sectors: u32,
     },
     Normal {
-        inode: INode,
+        inode: DirectoryNode,
     },
 }
 
@@ -369,17 +371,17 @@ impl DirectoryIterator<'_> {
             }
             Directory::Normal { ref inode } => {
                 if matches!(filesystem.fat_type(), FatType::Fat12 | FatType::Fat16)
-                    && inode.start_cluster == 0
+                    && inode.start_cluster() == 0
                 {
                     // looks like we got back using `..` to the root, thus, we should use the root directly
                     return Self::new(filesystem, filesystem.open_root_dir()?);
                 }
 
-                let start_sector = filesystem.first_sector_of_cluster(inode.start_cluster as u32);
+                let start_sector = filesystem.first_sector_of_cluster(inode.start_cluster() as u32);
 
                 (
                     start_sector,
-                    inode.start_cluster as u32,
+                    inode.start_cluster() as u32,
                     filesystem.read_sectors(start_sector, 1)?,
                 )
             }
@@ -456,7 +458,7 @@ impl DirectoryIterator<'_> {
 }
 
 impl Iterator for DirectoryIterator<'_> {
-    type Item = INode;
+    type Item = Node;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut entry = self.get_next_entry().ok()?;
@@ -554,7 +556,7 @@ impl Iterator for DirectoryIterator<'_> {
 
         let start_cluster = (cluster_hi << 16) | cluster_lo;
 
-        let inode = INode::new_file(
+        let inode = Node::new(
             name,
             file_attribute_from_fat(attributes),
             start_cluster as u64,
@@ -684,27 +686,24 @@ impl FatFilesystem {
             FatType::Fat32 => {
                 let root_cluster =
                     unsafe { self.boot_sector.boot_sector.extended.fat32.root_cluster };
-                let inode = INode::new_file(
+                let inode = DirectoryNode::new(
                     String::from("/"),
                     file_attribute_from_fat(attrs::DIRECTORY),
                     root_cluster as u64,
-                    0,
                 );
                 Ok(Directory::Normal { inode })
             }
         }
     }
 
-    fn open_root_dir_inode(&self) -> Result<INode, FileSystemError> {
+    fn open_root_dir_inode(&self) -> Result<DirectoryNode, FileSystemError> {
         match self.fat_type() {
             FatType::Fat12 | FatType::Fat16 => {
                 // use a special inode for root
-                let inode = INode::new_file(
+                let inode = DirectoryNode::new(
                     String::from("/"),
                     file_attribute_from_fat(attrs::DIRECTORY),
-                    self.boot_sector.root_dir_start_sector() as u64,
-                    self.boot_sector.root_dir_sectors() as u64
-                        * self.boot_sector.bytes_per_sector() as u64,
+                    0,
                 );
 
                 Ok(inode)
@@ -712,32 +711,25 @@ impl FatFilesystem {
             FatType::Fat32 => {
                 let root_cluster =
                     unsafe { self.boot_sector.boot_sector.extended.fat32.root_cluster };
-                let inode = INode::new_file(
+                let inode = DirectoryNode::new(
                     String::from("/"),
                     file_attribute_from_fat(attrs::DIRECTORY),
                     root_cluster as u64,
-                    0,
                 );
                 Ok(inode)
             }
         }
     }
 
-    pub fn open_dir_inode(&self, inode: &INode) -> Result<DirectoryIterator, FileSystemError> {
-        if !inode.is_dir() {
-            return Err(FileSystemError::IsNotDirectory);
-        }
-
+    pub fn open_dir_inode(
+        &self,
+        inode: &DirectoryNode,
+    ) -> Result<DirectoryIterator, FileSystemError> {
         let dir = match self.fat_type() {
             FatType::Fat12 | FatType::Fat16 => {
                 // try to see if this is the root
                 // this could be 0 if we are back from using `..` to the root
-                if inode.start_cluster() == 0
-                    || inode.start_cluster() == self.boot_sector.root_dir_start_sector() as u64
-                        && inode.size()
-                            == self.boot_sector.root_dir_sectors() as u64
-                                * self.boot_sector.bytes_per_sector() as u64
-                {
+                if inode.start_cluster() == 0 {
                     self.open_root_dir()?
                 } else {
                     Directory::Normal {
@@ -745,12 +737,9 @@ impl FatFilesystem {
                     }
                 }
             }
-            FatType::Fat32 => {
-                assert!(inode.size() == 0);
-                Directory::Normal {
-                    inode: inode.clone(),
-                }
-            }
+            FatType::Fat32 => Directory::Normal {
+                inode: inode.clone(),
+            },
         };
 
         DirectoryIterator::new(self, dir)
@@ -758,20 +747,17 @@ impl FatFilesystem {
 
     pub fn read_file(
         &self,
-        inode: &INode,
+        inode: &FileNode,
         position: u32,
         buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
-        if inode.is_dir() {
-            return Err(FileSystemError::IsDirectory);
-        }
-        if position >= inode.size as u32 {
+        if position >= inode.size() as u32 {
             return Ok(0);
         }
-        let remaining_file = inode.size as u32 - position;
+        let remaining_file = inode.size() as u32 - position;
         let max_to_read = (buf.len() as u32).min(remaining_file);
 
-        let mut cluster = inode.start_cluster as u32;
+        let mut cluster = inode.start_cluster() as u32;
         let cluster_index = position / self.boot_sector.bytes_per_cluster();
         for _ in 0..cluster_index {
             cluster = self
@@ -813,7 +799,7 @@ impl FatFilesystem {
 impl FileSystem for Mutex<FatFilesystem> {
     fn read_file(
         &self,
-        inode: &INode,
+        inode: &FileNode,
         position: u64,
         buf: &mut [u8],
     ) -> Result<u64, FileSystemError> {
@@ -821,14 +807,14 @@ impl FileSystem for Mutex<FatFilesystem> {
         self.lock().read_file(inode, position as u32, buf)
     }
 
-    fn open_root(&self) -> Result<INode, FileSystemError> {
+    fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
         self.lock().open_root_dir_inode()
     }
 
     fn read_dir(
         &self,
-        inode: &INode,
-        handler: &mut dyn FnMut(INode) -> DirTreverse,
+        inode: &DirectoryNode,
+        handler: &mut dyn FnMut(Node) -> DirTreverse,
     ) -> Result<(), FileSystemError> {
         for node in self.lock().open_dir_inode(inode)? {
             if let DirTreverse::Stop = handler(node) {
