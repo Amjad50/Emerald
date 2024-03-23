@@ -523,10 +523,8 @@ pub struct Directory {
     inode: INode,
     path: Box<Path>,
     position: u64,
-    // TODO: replace by iter so that new files can be added in the middle
-    dir_entries: Vec<INode>,
-    // now we don't need the filesystem, but if we implement dynamic directory read, we will
-    // filesystem: Arc<dyn FileSystem>,
+    dir_entries: Option<Vec<INode>>,
+    filesystem: Arc<dyn FileSystem>,
 }
 
 /// A node in the filesystem, can be a file or a directory
@@ -761,20 +759,26 @@ impl Directory {
             return Err(FileSystemError::IsNotDirectory);
         }
 
-        // TODO: read dynamically, not at creation, as we sometimes don't use this (e.g. current_dir in `Process`)
-        let mut dir_entries = Vec::new();
-
-        filesystem.read_dir(&inode, &mut |entry| {
-            dir_entries.push(entry);
-            DirTreverse::Continue
-        })?;
-
         Ok(Self {
             path: path.as_ref().into(),
             inode,
             position,
-            dir_entries,
+            dir_entries: None,
+            filesystem,
         })
+    }
+
+    fn fetch_entries(&mut self) -> Result<(), FileSystemError> {
+        if self.dir_entries.is_none() {
+            let mut dir_entries = Vec::new();
+            self.filesystem.read_dir(&self.inode, &mut |entry| {
+                dir_entries.push(entry);
+                DirTreverse::Continue
+            })?;
+            self.dir_entries = Some(dir_entries);
+        }
+
+        Ok(())
     }
 
     pub fn path(&self) -> &Path {
@@ -783,14 +787,20 @@ impl Directory {
 
     pub fn read(&mut self, entries: &mut [DirEntry]) -> Result<usize, FileSystemError> {
         assert!(self.inode.is_dir());
+        self.fetch_entries()?;
+
+        let dir_entries = self
+            .dir_entries
+            .as_ref()
+            .expect("Entries must be initialized");
 
         let mut i = 0;
         while i < entries.len() {
-            if self.position >= self.dir_entries.len() as u64 {
+            if self.position >= dir_entries.len() as u64 {
                 break;
             }
 
-            let entry = &self.dir_entries[self.position as usize];
+            let entry = &dir_entries[self.position as usize];
             entries[i] = DirEntry {
                 stat: entry.as_file_stat(),
                 name: entry.name().into(),
@@ -809,7 +819,8 @@ impl Clone for Directory {
             inode: self.inode.clone(),
             path: self.path.clone(),
             position: 0,
-            dir_entries: self.dir_entries.clone(),
+            dir_entries: None, // allow for refetch
+            filesystem: self.filesystem.clone(),
         }
     }
 }
