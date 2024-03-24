@@ -31,11 +31,6 @@
 <a href="#29" id="29">29</a>
 <a href="#30" id="30">30</a>
 <a href="#31" id="31">31</a>
-<a href="#32" id="32">32</a>
-<a href="#33" id="33">33</a>
-<a href="#34" id="34">34</a>
-<a href="#35" id="35">35</a>
-<a href="#36" id="36">36</a>
 </pre></div><pre class="rust"><code><span class="attr">#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 </span><span class="kw">pub struct </span>SpawnFileMapping {
@@ -43,26 +38,21 @@
     <span class="kw">pub </span>dst_fd: usize,
 }
 
-<span class="attr">#[derive(Debug, Clone)]
+<span class="attr">#[derive(Debug, Clone, Default)]
 </span><span class="kw">pub struct </span>ProcessMetadata {
     <span class="kw">pub </span>pid: u64,
     <span class="kw">pub </span>image_base: usize,
     <span class="kw">pub </span>image_size: usize,
     <span class="kw">pub </span>program_headers_offset: usize,
-    <span class="kw">pub </span>eh_frame_adress: usize,
+    <span class="kw">pub </span>eh_frame_address: usize,
     <span class="kw">pub </span>eh_frame_size: usize,
+    <span class="kw">pub </span>text_address: usize,
+    <span class="kw">pub </span>text_size: usize,
 }
 
 <span class="kw">impl </span>ProcessMetadata {
-    <span class="kw">pub fn </span>empty() -&gt; ProcessMetadata {
-        ProcessMetadata {
-            pid: <span class="number">0</span>,
-            image_base: <span class="number">0</span>,
-            image_size: <span class="number">0</span>,
-            program_headers_offset: <span class="number">0</span>,
-            eh_frame_adress: <span class="number">0</span>,
-            eh_frame_size: <span class="number">0</span>,
-        }
+    <span class="kw">pub fn </span>empty() -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::default()
     }
 }
 

@@ -89,6 +89,9 @@
 <a href="#87" id="87">87</a>
 <a href="#88" id="88">88</a>
 <a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>kernel_user_link::process::ProcessMetadata;
 
 <span class="kw">use crate</span>::{cpu, fs, memory_management::virtual_memory_mapper};
@@ -155,8 +158,11 @@
 
     <span class="kw">for </span>section <span class="kw">in </span>elf.sections() {
         <span class="kw">if </span>section.name() == <span class="string">".eh_frame" </span>{
-            process_meta.eh_frame_adress = section.address() <span class="kw">as </span>usize;
+            process_meta.eh_frame_address = section.address() <span class="kw">as </span>usize;
             process_meta.eh_frame_size = section.size() <span class="kw">as </span>usize;
+        } <span class="kw">else if </span>section.name() == <span class="string">".text" </span>{
+            process_meta.text_address = section.address() <span class="kw">as </span>usize;
+            process_meta.text_size = section.size() <span class="kw">as </span>usize;
         }
     }
 
@@ -166,8 +172,8 @@
     process_meta.program_headers_offset = phdr_address - min_address;
 
     <span class="comment">// reset if we got an invalid eh_frame, its optional
-    </span><span class="kw">if </span>process_meta.eh_frame_adress &lt; min_address || process_meta.eh_frame_adress &gt;= max_address {
-        process_meta.eh_frame_adress = <span class="number">0</span>;
+    </span><span class="kw">if </span>process_meta.eh_frame_address &lt; min_address || process_meta.eh_frame_address &gt;= max_address {
+        process_meta.eh_frame_address = <span class="number">0</span>;
         process_meta.eh_frame_size = <span class="number">0</span>;
     }
 
