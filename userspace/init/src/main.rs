@@ -44,10 +44,19 @@ fn main() {
                 }
                 core::hint::spin_loop();
             }
+            if buf[0] == 0x08 {
+                // backspace
+                if line_buffer.pop().is_none() {
+                    // nothing to delete
+                    continue;
+                }
+            } else {
+                line_buffer.push(buf[0]);
+            }
+
             // also output to our stdout
             std::io::stdout().write_all(&buf).unwrap();
             std::io::stdout().flush().unwrap();
-            line_buffer.push(buf[0]);
 
             if buf[0] == b'\n' {
                 if child_stdin.write_all(&line_buffer).is_err() {
