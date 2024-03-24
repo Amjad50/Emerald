@@ -139,6 +139,21 @@
 <a href="#137" id="137">137</a>
 <a href="#138" id="138">138</a>
 <a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A temporary tool to allow for easy printing to the screen.
 //! We are using the VGA text mode buffer to print to the screen.
 
@@ -240,6 +255,21 @@
         <span class="self">self</span>.memory[i + <span class="number">1</span>] = <span class="self">self</span>.attrib;
         <span class="self">self</span>.pos.<span class="number">0 </span>+= <span class="number">1</span>;
         <span class="self">self</span>.fix_after_advance();
+    }
+
+    <span class="kw">fn </span>backspace(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="kw">if </span><span class="self">self</span>.pos.<span class="number">0 </span>== <span class="number">0 </span>{
+            <span class="kw">if </span><span class="self">self</span>.pos.<span class="number">1 </span>== <span class="number">0 </span>{
+                <span class="kw">return</span>;
+            }
+            <span class="self">self</span>.pos.<span class="number">0 </span>= <span class="self">self</span>.width - <span class="number">1</span>;
+            <span class="self">self</span>.pos.<span class="number">1 </span>-= <span class="number">1</span>;
+        } <span class="kw">else </span>{
+            <span class="self">self</span>.pos.<span class="number">0 </span>-= <span class="number">1</span>;
+        }
+        <span class="kw">let </span>i = <span class="self">self</span>.get_arr_pos(<span class="self">self</span>.pos);
+        <span class="self">self</span>.memory[i] = <span class="string">b' '</span>;
+        <span class="self">self</span>.memory[i + <span class="number">1</span>] = <span class="self">self</span>.attrib;
     }
 
     <span class="kw">fn </span>set_attrib(<span class="kw-2">&amp;mut </span><span class="self">self</span>, attrib: VideoConsoleAttribute) {
