@@ -5,26 +5,21 @@ pub struct SpawnFileMapping {
     pub dst_fd: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProcessMetadata {
     pub pid: u64,
     pub image_base: usize,
     pub image_size: usize,
     pub program_headers_offset: usize,
-    pub eh_frame_adress: usize,
+    pub eh_frame_address: usize,
     pub eh_frame_size: usize,
+    pub text_address: usize,
+    pub text_size: usize,
 }
 
 impl ProcessMetadata {
-    pub fn empty() -> ProcessMetadata {
-        ProcessMetadata {
-            pid: 0,
-            image_base: 0,
-            image_size: 0,
-            program_headers_offset: 0,
-            eh_frame_adress: 0,
-            eh_frame_size: 0,
-        }
+    pub fn empty() -> Self {
+        Self::default()
     }
 }
 

@@ -64,8 +64,11 @@ pub unsafe fn load_elf_to_vm(
 
     for section in elf.sections() {
         if section.name() == ".eh_frame" {
-            process_meta.eh_frame_adress = section.address() as usize;
+            process_meta.eh_frame_address = section.address() as usize;
             process_meta.eh_frame_size = section.size() as usize;
+        } else if section.name() == ".text" {
+            process_meta.text_address = section.address() as usize;
+            process_meta.text_size = section.size() as usize;
         }
     }
 
@@ -75,8 +78,8 @@ pub unsafe fn load_elf_to_vm(
     process_meta.program_headers_offset = phdr_address - min_address;
 
     // reset if we got an invalid eh_frame, its optional
-    if process_meta.eh_frame_adress < min_address || process_meta.eh_frame_adress >= max_address {
-        process_meta.eh_frame_adress = 0;
+    if process_meta.eh_frame_address < min_address || process_meta.eh_frame_address >= max_address {
+        process_meta.eh_frame_address = 0;
         process_meta.eh_frame_size = 0;
     }
 

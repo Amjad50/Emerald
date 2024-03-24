@@ -11,4 +11,4 @@ keywords = ["userspace", "os"]
 categories = ["os"]
 
 [dependencies]
-kernel_user_link = { version="0.2.6", path = "../kernel_user_link", package = "emerald_kernel_user_link" }
+kernel_user_link = { version="0.2.9", path = "../kernel_user_link", package = "emerald_kernel_user_link" }
