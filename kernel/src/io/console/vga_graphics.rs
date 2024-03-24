@@ -105,6 +105,31 @@ impl VideoConsole for VgaGraphics {
         self.fix_after_advance(&mut vga);
     }
 
+    fn backspace(&mut self) {
+        let Some(mut vga) = self.vga.lock_kernel() else {
+            // don't change anything if we can't lock the VGA
+            return;
+        };
+
+        if self.pos.x < self.text_style.font.character_size.width as i32 {
+            if self.pos.y >= self.text_style.line_height() as i32 {
+                self.pos.y -= self.text_style.line_height() as i32;
+                self.pos.x = self.vga.framebuffer_info().width as i32
+                    - self.text_style.font.character_size.width as i32;
+            }
+        } else {
+            self.pos.x -= self.text_style.font.character_size.width as i32;
+        }
+
+        vga.clear_rect(
+            self.pos.x as usize,
+            (self.pos.y as usize).saturating_sub(self.text_style.line_height() as usize),
+            self.text_style.font.character_size.width as usize,
+            self.text_style.line_height() as usize,
+            Pixel { r: 0, g: 0, b: 0 },
+        );
+    }
+
     fn set_attrib(&mut self, attrib: VideoConsoleAttribute) {
         // These colors are used in PowerShell 6 in Windows 10
         // except for black, changed to all zeros

@@ -101,6 +101,21 @@ impl VideoConsole for VgaText {
         self.fix_after_advance();
     }
 
+    fn backspace(&mut self) {
+        if self.pos.0 == 0 {
+            if self.pos.1 == 0 {
+                return;
+            }
+            self.pos.0 = self.width - 1;
+            self.pos.1 -= 1;
+        } else {
+            self.pos.0 -= 1;
+        }
+        let i = self.get_arr_pos(self.pos);
+        self.memory[i] = b' ';
+        self.memory[i + 1] = self.attrib;
+    }
+
     fn set_attrib(&mut self, attrib: VideoConsoleAttribute) {
         let to_vga_color = |color: u8| {
             let mappings = &[

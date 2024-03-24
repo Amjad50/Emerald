@@ -142,6 +142,7 @@ impl Default for VideoConsoleAttribute {
 
 trait VideoConsole: Send + Sync {
     fn write_byte(&mut self, c: u8);
+    fn backspace(&mut self);
     fn init(&mut self);
     fn set_attrib(&mut self, attrib: VideoConsoleAttribute);
 }
@@ -313,8 +314,19 @@ impl LateConsole {
 
     fn write_byte(&mut self, byte: u8) {
         let mut write_byte_inner = |byte: u8| {
-            // backspace, ignore
-            if byte != 8 {
+            // backspace
+            if byte == 8 {
+                self.video_console.backspace();
+                // Safety: we are sure that the uart is initialized
+                unsafe {
+                    // write backspace
+                    self.uart.write_byte(byte);
+                    // write space to clear the character
+                    self.uart.write_byte(b' ');
+                    // write backspace again
+                    self.uart.write_byte(byte);
+                };
+            } else {
                 self.video_console.write_byte(byte);
                 // Safety: we are sure that the uart is initialized
                 unsafe { self.uart.write_byte(byte) };
@@ -428,9 +440,11 @@ impl Console for LateConsole {
         // so we have to convert it to \n
         // Safety: we are sure that the uart is initialized
         let read_uart = || unsafe {
-            self.uart
-                .try_read_byte()
-                .map(|c| if c == b'\r' { b'\n' } else { c })
+            self.uart.try_read_byte().map(|c| match c {
+                b'\r' => b'\n',
+                b'\x7f' => b'\x08', // delete -> backspace
+                _ => c,
+            })
         };
 
         while i < dst.len() {
