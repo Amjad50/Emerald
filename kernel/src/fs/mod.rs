@@ -182,6 +182,10 @@ impl FileNode {
         self.size
     }
 
+    pub(self) fn set_size(&mut self, size: u64) {
+        self.size = size;
+    }
+
     pub fn try_open_device(&mut self) -> Result<(), FileSystemError> {
         if let Some(device) = self.device.take() {
             self.device = Some(device.try_create().unwrap_or(Ok(device))?);
@@ -390,7 +394,7 @@ pub trait FileSystem: Send + Sync {
 
     fn write_file(
         &self,
-        inode: &FileNode,
+        inode: &mut FileNode,
         position: u64,
         buf: &[u8],
         _access_helper: &mut AccessHelper,
@@ -409,6 +413,10 @@ pub trait FileSystem: Send + Sync {
         _access_helper: &mut AccessHelper,
     ) -> Result<(), FileSystemError> {
         Ok(())
+    }
+
+    fn set_file_size(&self, _inode: &mut FileNode, _size: u64) -> Result<(), FileSystemError> {
+        Err(FileSystemError::OperationNotSupported)
     }
 }
 
@@ -541,6 +549,7 @@ pub enum FileSystemError {
     ReadNotSupported,
     WriteNotSupported,
     OperationNotSupported,
+    CouldNotSetFileLength,
     EndOfFile,
     BufferNotLargeEnough(usize),
 }
@@ -835,9 +844,12 @@ impl File {
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
-        let written =
-            self.filesystem
-                .write_file(&self.inode, self.position, buf, &mut self.access_helper)?;
+        let written = self.filesystem.write_file(
+            &mut self.inode,
+            self.position,
+            buf,
+            &mut self.access_helper,
+        )?;
         self.position += written;
         Ok(written)
     }

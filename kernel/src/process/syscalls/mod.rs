@@ -58,7 +58,7 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::InvalidPath => SyscallError::CouldNotOpenFile,
             FileSystemError::FileNotFound => SyscallError::FileNotFound,
             FileSystemError::ReadNotSupported => SyscallError::CouldNotReadFromFile,
-            FileSystemError::WriteNotSupported => SyscallError::CouldNotWriteToFile,
+            FileSystemError::WriteNotSupported | FileSystemError::CouldNotSetFileLength => SyscallError::CouldNotWriteToFile,
             FileSystemError::EndOfFile => SyscallError::EndOfFile,
             FileSystemError::IsNotDirectory => SyscallError::IsNotDirectory,
             FileSystemError::IsDirectory => SyscallError::IsDirectory,

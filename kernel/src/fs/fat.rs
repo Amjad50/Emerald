@@ -48,6 +48,7 @@ fn file_attribute_from_fat(attributes: u8) -> FileAttributes {
 pub enum FatError {
     InvalidBootSector,
     UnexpectedFatEntry,
+    NotEnoughSpace,
 }
 
 impl From<FatError> for FileSystemError {
@@ -244,6 +245,29 @@ impl FatEntry {
             }
         }
     }
+
+    pub fn to_u32(self, ty: FatType) -> Option<u32> {
+        match self {
+            FatEntry::Free => Some(0),
+            FatEntry::EndOfChain => match ty {
+                FatType::Fat12 => Some(0xFF8),
+                FatType::Fat16 => Some(0xFFF8),
+                FatType::Fat32 => Some(0x0FFF_FFF8),
+            },
+            FatEntry::Bad => match ty {
+                FatType::Fat12 => Some(0xFF7),
+                FatType::Fat16 => Some(0xFFF7),
+                FatType::Fat32 => Some(0x0FFF_FFF7),
+            },
+            FatEntry::Next(entry) => match (ty, entry) {
+                (FatType::Fat12, 0x002..=0xFF6) => Some(entry),
+                (FatType::Fat16, 0x002..=0xFFF6) => Some(entry),
+                (FatType::Fat32, 0x002..=0x0FFF_FFF6) => Some(entry),
+                _ => None,
+            },
+            FatEntry::Reserved => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -353,13 +377,14 @@ mod attrs {
     pub const LONG_NAME: u8 = READ_ONLY | HIDDEN | SYSTEM | VOLUME_ID;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum DirectoryEntryState {
     Free,
     FreeAndLast,
     Used,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(C, packed)]
 struct DirectoryEntryNormal {
     short_name: [u8; 11],
@@ -418,18 +443,28 @@ impl DirectoryEntryLong {
     }
 }
 
-enum DirectoryEntry {
-    Normal(DirectoryEntryNormal),
-    Long(DirectoryEntryLong),
+enum DirectoryEntry<'a> {
+    Normal(&'a mut DirectoryEntryNormal),
+    Long(&'a mut DirectoryEntryLong),
 }
 
-impl DirectoryEntry {
-    pub fn from_raw(raw: &[u8]) -> DirectoryEntry {
+impl<'a> DirectoryEntry<'a> {
+    pub fn from_raw(raw: &mut [u8]) -> DirectoryEntry {
         assert!(raw.len() == DIRECTORY_ENTRY_SIZE as usize);
-        let normal = unsafe { raw.as_ptr().cast::<DirectoryEntryNormal>().read() };
+        let normal = unsafe {
+            raw.as_mut_ptr()
+                .cast::<DirectoryEntryNormal>()
+                .as_mut()
+                .unwrap()
+        };
         let attributes = normal.attributes;
         if attributes & attrs::LONG_NAME == attrs::LONG_NAME {
-            DirectoryEntry::Long(unsafe { raw.as_ptr().cast::<DirectoryEntryLong>().read() })
+            DirectoryEntry::Long(unsafe {
+                raw.as_mut_ptr()
+                    .cast::<DirectoryEntryLong>()
+                    .as_mut()
+                    .unwrap()
+            })
         } else {
             DirectoryEntry::Normal(normal)
         }
@@ -452,6 +487,17 @@ impl DirectoryEntry {
             DirectoryEntry::Normal(entry) => entry,
             _ => panic!("expected normal entry"),
         }
+    }
+
+    pub fn as_normal_mut(&mut self) -> &mut DirectoryEntryNormal {
+        match self {
+            DirectoryEntry::Normal(entry) => entry,
+            _ => panic!("expected normal entry"),
+        }
+    }
+
+    pub fn is_long(&self) -> bool {
+        matches!(self, DirectoryEntry::Long(_))
     }
 
     pub fn as_long(&self) -> &DirectoryEntryLong {
@@ -576,7 +622,7 @@ impl DirectoryIterator<'_> {
                 Err(FileSystemError::FileNotFound)
             };
         }
-        let entry = &self.current_sector[entry_start..entry_end];
+        let entry = &mut self.current_sector[entry_start..entry_end];
         self.entry_index_in_sector += 1;
 
         assert!(entry.len() == DIRECTORY_ENTRY_SIZE as usize);
@@ -602,8 +648,8 @@ impl Iterator for DirectoryIterator<'_> {
             }
         }
 
-        let name = if let DirectoryEntry::Long(ref long_entry) = entry {
-            let mut long_entry = long_entry.clone();
+        let name = if entry.is_long() {
+            let mut long_entry = entry.as_long().clone();
             // long file name
             // this should be the last
             assert!(long_entry.sequence_number & 0x40 == 0x40);
@@ -660,10 +706,12 @@ impl Iterator for DirectoryIterator<'_> {
         let size = entry.file_size;
         let start_cluster = (cluster_hi << 16) | cluster_lo;
 
+        let attributes = entry.attributes();
+
         assert!(self.entry_index_in_sector > 0);
         let inode = Node::new(
             name,
-            file_attribute_from_fat(entry.attributes()),
+            file_attribute_from_fat(attributes),
             start_cluster.into(),
             size.into(),
             self.current_sector_index.into(),
@@ -749,6 +797,7 @@ pub struct FatFilesystem {
     size_in_sectors: u32,
     boot_sector: Box<FatBootSector>,
     fat: NoDebug<Vec<u8>>,
+    fat_dirty: bool,
     device: NoDebug<Arc<IdeDevice>>,
     cluster_cache: ClusterCache,
 }
@@ -765,6 +814,7 @@ impl FatFilesystem {
             size_in_sectors,
             boot_sector: Box::new(boot_sector),
             fat: NoDebug(Vec::new()),
+            fat_dirty: false,
             device: NoDebug(device),
             cluster_cache: ClusterCache::default(),
         };
@@ -796,6 +846,10 @@ impl FatFilesystem {
         start_sector: u32,
         count: u32,
     ) -> Result<Vec<u8>, FileSystemError> {
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+
         let sector_size = self.boot_sector.bytes_per_sector() as usize;
         let mut sectors = vec![0; sector_size * count as usize];
 
@@ -808,6 +862,21 @@ impl FatFilesystem {
             })?;
 
         Ok(sectors)
+    }
+
+    fn write_sectors(&self, start_sector: u32, data: &[u8]) -> Result<(), FileSystemError> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        assert!(data.len() % self.boot_sector.bytes_per_sector() as usize == 0);
+        let start_lba = (self.start_lba + start_sector) as u64;
+        self.device
+            .write_sync(start_lba, data)
+            .map_err(|e| FileSystemError::DiskReadError {
+                sector: start_lba,
+                error: e,
+            })?;
+        Ok(())
     }
 
     fn get_cluster(&mut self, cluster: u32) -> Option<&mut ClusterCacheEntry> {
@@ -833,14 +902,7 @@ impl FatFilesystem {
             if cluster.dirty {
                 // write back
                 let start_sector = self.first_sector_of_cluster(cluster.cluster);
-                let data = &cluster.data;
-                let start_lba = (self.start_lba + start_sector) as u64;
-                self.device.write_sync(start_lba, data).map_err(|e| {
-                    FileSystemError::DiskReadError {
-                        sector: start_lba,
-                        error: e,
-                    }
-                })?;
+                self.write_sectors(start_sector, &cluster.data)?;
             }
         }
         Ok(())
@@ -855,6 +917,21 @@ impl FatFilesystem {
         let fat_start_sector = self.boot_sector.fat_start_sector();
 
         self.fat.0 = self.read_sectors_no_cache(fat_start_sector, fats_size_in_sectors)?;
+
+        Ok(())
+    }
+
+    fn flush_fat(&mut self) -> Result<(), FileSystemError> {
+        if !self.fat_dirty {
+            return Ok(());
+        }
+
+        // write back the FAT
+        let fat_start_sector = self.boot_sector.fat_start_sector();
+
+        self.write_sectors(fat_start_sector, &self.fat.0)?;
+
+        self.fat_dirty = false;
 
         Ok(())
     }
@@ -883,6 +960,50 @@ impl FatFilesystem {
         };
 
         FatEntry::from_u32(self.fat_type(), entry)
+    }
+
+    fn write_fat_entry(&mut self, entry: u32, fat_entry: FatEntry) {
+        let fat_offset = match self.fat_type() {
+            FatType::Fat12 => entry * 3 / 2,
+            FatType::Fat16 => entry * 2,
+            FatType::Fat32 => entry * 4,
+        } as usize;
+        assert!(fat_offset < self.fat.0.len(), "FAT entry out of bounds");
+        let ptr = unsafe { self.fat.0.as_mut_ptr().add(fat_offset) };
+
+        let new_entry = fat_entry
+            .to_u32(self.fat_type())
+            .expect("invalid FAT entry");
+
+        match self.fat_type() {
+            FatType::Fat12 => {
+                if entry & 1 == 1 {
+                    self.fat.0[fat_offset] =
+                        (self.fat.0[fat_offset] & 0x0F) | (new_entry << 4) as u8;
+                    self.fat.0[fat_offset + 1] = (new_entry >> 4) as u8;
+                } else {
+                    self.fat.0[fat_offset] = new_entry as u8;
+                    self.fat.0[fat_offset + 1] =
+                        (self.fat.0[fat_offset + 1] & 0xF0) | ((new_entry >> 8) as u8);
+                }
+            }
+            FatType::Fat16 => unsafe { *(ptr as *mut u16) = new_entry as u16 },
+            FatType::Fat32 => unsafe { *(ptr as *mut u32) = new_entry },
+        }
+
+        self.fat_dirty = true;
+    }
+
+    fn find_free_cluster(&self) -> Option<u32> {
+        let fat_size = self.fat.len();
+
+        let number_of_fat_entries = match self.fat_type() {
+            FatType::Fat12 => fat_size * 2 / 3,
+            FatType::Fat16 => fat_size / 2,
+            FatType::Fat32 => fat_size / 4,
+        } as u32;
+
+        (2..number_of_fat_entries).find(|&i| self.read_fat_entry(i) == FatEntry::Free)
     }
 
     fn next_cluster(&self, cluster: u32) -> Result<Option<u32>, FileSystemError> {
@@ -1057,6 +1178,94 @@ impl FatFilesystem {
 
         Ok(accessed as u64)
     }
+
+    fn update_directory_entry(
+        &mut self,
+        inode: &FileNode,
+        mut update: impl FnMut(&mut DirectoryEntryNormal),
+    ) -> Result<(), FileSystemError> {
+        let mut sector = self.read_sectors_no_cache(inode.parent_dir_sector() as u32, 1)?;
+        let entry_index = inode.parent_dir_index();
+        let start = entry_index as usize * DIRECTORY_ENTRY_SIZE as usize;
+        let end = start + DIRECTORY_ENTRY_SIZE as usize;
+
+        let mut entry = DirectoryEntry::from_raw(&mut sector[start..end]);
+        assert!(entry.state() == DirectoryEntryState::Used);
+
+        let entry = entry.as_normal_mut();
+        let current = entry.clone();
+        update(entry);
+
+        if current != *entry {
+            // write back
+            self.write_sectors(inode.parent_dir_sector() as u32, &sector)?;
+        }
+
+        Ok(())
+    }
+
+    fn set_file_size(&mut self, inode: &mut FileNode, size: u64) -> Result<(), FileSystemError> {
+        let bytes_per_cluster = self.boot_sector.bytes_per_cluster() as u64;
+        let current_size_in_clusters = (inode.size() + bytes_per_cluster - 1) / bytes_per_cluster;
+        let new_size_in_clusters = (size + bytes_per_cluster - 1) / bytes_per_cluster;
+
+        assert!(new_size_in_clusters > 0);
+        assert!(current_size_in_clusters > 0);
+
+        if new_size_in_clusters != current_size_in_clusters {
+            // update fat references
+            let to_keep = new_size_in_clusters.min(current_size_in_clusters);
+
+            let mut current_cluster = inode.start_cluster() as u32;
+
+            for _ in 0..to_keep - 1 {
+                let next_cluster = self.next_cluster(current_cluster)?.expect("next cluster");
+                current_cluster = next_cluster;
+            }
+
+            let mut last_cluster = current_cluster;
+
+            if current_size_in_clusters > new_size_in_clusters {
+                // deleting old clusters
+                let to_delete = current_size_in_clusters - new_size_in_clusters;
+                let mut clusters = Vec::with_capacity(to_delete as usize);
+
+                for _ in 0..to_delete {
+                    let next_cluster = self.next_cluster(current_cluster)?.expect("next cluster");
+                    clusters.push(next_cluster);
+                    current_cluster = next_cluster;
+                }
+
+                // move backwards
+                for cluster in clusters.into_iter().rev() {
+                    self.write_fat_entry(cluster, FatEntry::Free);
+                }
+            } else {
+                // adding new clusters
+
+                let to_add = new_size_in_clusters - current_size_in_clusters;
+
+                for _ in 0..to_add {
+                    let new_cluster = self.find_free_cluster().ok_or(FatError::NotEnoughSpace)?;
+
+                    self.write_fat_entry(last_cluster, FatEntry::Next(new_cluster));
+
+                    last_cluster = new_cluster;
+                }
+            }
+
+            // mark the current cluster as last
+            self.write_fat_entry(last_cluster, FatEntry::EndOfChain);
+        }
+
+        self.update_directory_entry(inode, |entry| {
+            entry.file_size = size as u32;
+        })?;
+
+        inode.set_size(size);
+
+        Ok(())
+    }
 }
 
 impl FileSystem for Mutex<FatFilesystem> {
@@ -1078,13 +1287,24 @@ impl FileSystem for Mutex<FatFilesystem> {
 
     fn write_file(
         &self,
-        inode: &FileNode,
+        inode: &mut FileNode,
         position: u64,
         buf: &[u8],
         access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         assert!(position <= u32::MAX as u64);
-        self.lock().read_write_file(
+
+        let mut s = self.lock();
+
+        let current_size = inode.size();
+        let new_size = position + buf.len() as u64;
+
+        if new_size > current_size {
+            s.set_file_size(inode, new_size)
+                .map_err(|_| FileSystemError::CouldNotSetFileLength)?;
+        }
+
+        s.read_write_file(
             inode,
             position as u32,
             FileAccessBuffer::Write(buf),
@@ -1115,9 +1335,14 @@ impl FileSystem for Mutex<FatFilesystem> {
         _inode: &FileNode,
         access_helper: &mut AccessHelper,
     ) -> Result<(), FileSystemError> {
-        self.lock()
-            .release_cluster(access_helper.current_cluster as u32)?;
+        let mut s = self.lock();
+        s.release_cluster(access_helper.current_cluster as u32)?;
+        s.flush_fat()?;
 
         Ok(())
+    }
+
+    fn set_file_size(&self, inode: &mut FileNode, size: u64) -> Result<(), FileSystemError> {
+        self.lock().set_file_size(inode, size)
     }
 }
