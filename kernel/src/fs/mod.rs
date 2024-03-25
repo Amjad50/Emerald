@@ -96,10 +96,30 @@ impl ops::BitAnd for FileAttributes {
 }
 
 #[derive(Debug, Clone)]
-pub struct FileNode {
+pub struct BaseNode {
     name: String,
     attributes: FileAttributes,
     start_cluster: u64,
+}
+
+impl BaseNode {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    #[allow(dead_code)]
+    pub fn attributes(&self) -> FileAttributes {
+        self.attributes
+    }
+
+    pub fn start_cluster(&self) -> u64 {
+        self.start_cluster
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FileNode {
+    base: BaseNode,
     size: u64,
     device: Option<Arc<dyn Device>>,
 }
@@ -113,9 +133,11 @@ impl FileNode {
     ) -> Self {
         assert!(!attributes.directory());
         Self {
-            name,
-            attributes,
-            start_cluster,
+            base: BaseNode {
+                name,
+                attributes,
+                start_cluster,
+            },
             size,
             device: None,
         }
@@ -124,9 +146,11 @@ impl FileNode {
     pub fn new_device(name: String, attributes: FileAttributes, device: Arc<dyn Device>) -> Self {
         assert!(!attributes.directory());
         Self {
-            name,
-            attributes,
-            start_cluster: DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+            base: BaseNode {
+                name,
+                attributes,
+                start_cluster: DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+            },
             size: 0,
             device: Some(device),
         }
@@ -136,16 +160,20 @@ impl FileNode {
         self.size
     }
 
-    pub fn start_cluster(&self) -> u64 {
-        self.start_cluster
-    }
-
     pub fn try_open_device(&mut self) -> Result<(), FileSystemError> {
         if let Some(device) = self.device.take() {
             self.device = Some(device.try_create().unwrap_or(Ok(device))?);
         }
 
         Ok(())
+    }
+}
+
+impl ops::Deref for FileNode {
+    type Target = BaseNode;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
     }
 }
 
@@ -159,27 +187,27 @@ impl Drop for FileNode {
 
 #[derive(Debug, Clone)]
 pub struct DirectoryNode {
-    name: String,
-    attributes: FileAttributes,
-    start_cluster: u64,
+    base: BaseNode,
 }
 
 impl DirectoryNode {
     pub fn new(name: String, attributes: FileAttributes, start_cluster: u64) -> Self {
         assert!(attributes.directory());
         Self {
-            name,
-            attributes,
-            start_cluster,
+            base: BaseNode {
+                name,
+                attributes,
+                start_cluster,
+            },
         }
     }
+}
 
-    pub fn start_cluster(&self) -> u64 {
-        self.start_cluster
-    }
+impl ops::Deref for DirectoryNode {
+    type Target = BaseNode;
 
-    pub fn name(&self) -> &str {
-        &self.name
+    fn deref(&self) -> &Self::Target {
+        &self.base
     }
 }
 
