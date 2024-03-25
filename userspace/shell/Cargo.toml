@@ -37,6 +37,10 @@ path = "src/mouse.rs"
 name = "tree"
 path = "src/tree.rs"
 
+[[bin]]
+name = "time"
+path = "src/time.rs"
+
 [dependencies]
 colored = "2.1.0"
 emerald_runtime = { path = "../../libraries/emerald_runtime"}
