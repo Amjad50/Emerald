@@ -352,6 +352,14 @@ impl Node {
     }
 }
 
+// This is some sort of cache or extra metadata the filesystem
+// use to help implement the filesystem and improve performance
+#[derive(Debug, Default)]
+pub struct AccessHelper {
+    previous_position: u64,
+    current_cluster: u64,
+}
+
 pub enum DirTreverse {
     Continue,
     Stop,
@@ -370,6 +378,7 @@ pub trait FileSystem: Send + Sync {
         inode: &FileNode,
         position: u64,
         buf: &mut [u8],
+        _access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         if let Some(device) = &inode.device {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
@@ -384,6 +393,7 @@ pub trait FileSystem: Send + Sync {
         inode: &FileNode,
         position: u64,
         buf: &[u8],
+        _access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         if let Some(device) = &inode.device {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
@@ -391,6 +401,14 @@ pub trait FileSystem: Send + Sync {
         } else {
             Err(FileSystemError::WriteNotSupported)
         }
+    }
+
+    fn close_file(
+        &self,
+        _inode: &FileNode,
+        _access_helper: &mut AccessHelper,
+    ) -> Result<(), FileSystemError> {
+        Ok(())
     }
 }
 
@@ -676,6 +694,7 @@ pub struct File {
     position: u64,
     is_terminal: bool,
     blocking_mode: BlockingMode,
+    access_helper: AccessHelper,
 }
 
 /// A handle to a directory, it has the inode which controls the properties of the node in the filesystem
@@ -725,12 +744,18 @@ impl File {
             position,
             is_terminal: false,
             blocking_mode,
+            access_helper: AccessHelper::default(),
         })
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let count = match self.blocking_mode {
-            BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,
+            BlockingMode::None => self.filesystem.read_file(
+                &self.inode,
+                self.position,
+                buf,
+                &mut self.access_helper,
+            )?,
             BlockingMode::Line => {
                 // read until \n or \0
                 let mut i = 0;
@@ -740,6 +765,7 @@ impl File {
                         &self.inode,
                         self.position,
                         core::slice::from_mut(&mut char_buf),
+                        &mut self.access_helper,
                     );
 
                     let read_byte = match read_byte {
@@ -775,7 +801,12 @@ impl File {
 
                 // try to read until we have something
                 loop {
-                    let read_byte = self.filesystem.read_file(&self.inode, self.position, buf);
+                    let read_byte = self.filesystem.read_file(
+                        &self.inode,
+                        self.position,
+                        buf,
+                        &mut self.access_helper,
+                    );
 
                     let read_byte = match read_byte {
                         Ok(read_byte) => read_byte,
@@ -804,9 +835,9 @@ impl File {
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
-        let written = self
-            .filesystem
-            .write_file(&self.inode, self.position, buf)?;
+        let written =
+            self.filesystem
+                .write_file(&self.inode, self.position, buf, &mut self.access_helper)?;
         self.position += written;
         Ok(written)
     }
@@ -878,6 +909,7 @@ impl File {
             position: 0,
             is_terminal: self.is_terminal,
             blocking_mode: self.blocking_mode,
+            access_helper: AccessHelper::default(),
         };
 
         // inform the device of a clone operation
@@ -889,6 +921,14 @@ impl File {
         }
 
         s
+    }
+}
+
+impl Drop for File {
+    fn drop(&mut self) {
+        self.filesystem
+            .close_file(&self.inode, &mut self.access_helper)
+            .expect("Failed to close file");
     }
 }
 
