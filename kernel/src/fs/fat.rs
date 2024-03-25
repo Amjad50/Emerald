@@ -680,6 +680,7 @@ struct ClusterCacheEntry {
     cluster: u32,
     /// Number of active users of this cluster
     reference_count: u32,
+    dirty: bool,
     data: NoDebug<Vec<u8>>,
 }
 
@@ -689,36 +690,54 @@ struct ClusterCache {
 }
 
 impl ClusterCache {
-    pub fn try_get_cluster(&self, cluster: u32) -> Option<&[u8]> {
-        if let Some(entry) = self.entries.get(&cluster) {
-            return Some(&entry.data);
-        }
-        None
+    pub fn try_get_cluster_mut(&mut self, cluster: u32) -> Option<&mut ClusterCacheEntry> {
+        self.entries.get_mut(&cluster)
     }
 
-    pub fn try_get_cluster_locked(&mut self, cluster: u32) -> Option<&[u8]> {
+    pub fn try_get_cluster_locked(&mut self, cluster: u32) -> Option<&mut ClusterCacheEntry> {
         if let Some(entry) = self.entries.get_mut(&cluster) {
             entry.reference_count += 1;
-            return Some(&entry.data);
+            return Some(entry);
         }
         None
     }
 
-    pub fn insert_cluster(&mut self, cluster: u32, data: Vec<u8>) -> &[u8] {
+    pub fn insert_cluster(&mut self, cluster: u32, data: Vec<u8>) -> &mut ClusterCacheEntry {
         let entry = ClusterCacheEntry {
             cluster,
             reference_count: 1,
             data: NoDebug(data),
+            dirty: false,
         };
-        self.entries.entry(cluster).or_insert(entry).data.as_ref()
+        self.entries.entry(cluster).or_insert(entry)
     }
 
-    pub fn release_cluster(&mut self, cluster: u32) {
-        if let Some(entry) = self.entries.get_mut(&cluster) {
-            entry.reference_count -= 1;
-            if entry.reference_count == 0 {
-                self.entries.remove(&cluster);
+    pub fn release_cluster(&mut self, cluster: u32) -> Option<ClusterCacheEntry> {
+        match self.entries.entry(cluster) {
+            alloc::collections::btree_map::Entry::Vacant(_) => None,
+            alloc::collections::btree_map::Entry::Occupied(mut entry) => {
+                let cluster = entry.get_mut();
+                cluster.reference_count -= 1;
+                if cluster.reference_count == 0 {
+                    return Some(entry.remove());
+                }
+                None
             }
+        }
+    }
+}
+
+/// Buffer for reading or writing file data
+enum FileAccessBuffer<'a> {
+    Read(&'a mut [u8]),
+    Write(&'a [u8]),
+}
+
+impl FileAccessBuffer<'_> {
+    pub fn len(&self) -> usize {
+        match self {
+            FileAccessBuffer::Read(data) => data.len(),
+            FileAccessBuffer::Write(data) => data.len(),
         }
     }
 }
@@ -780,24 +799,25 @@ impl FatFilesystem {
         let sector_size = self.boot_sector.bytes_per_sector() as usize;
         let mut sectors = vec![0; sector_size * count as usize];
 
+        let start_lba = (self.start_lba + start_sector) as u64;
         self.device
-            .read_sync((self.start_lba + start_sector) as u64, &mut sectors)
+            .read_sync(start_lba, &mut sectors)
             .map_err(|e| FileSystemError::DiskReadError {
-                sector: (self.start_lba + start_sector) as u64,
+                sector: start_lba,
                 error: e,
             })?;
 
         Ok(sectors)
     }
 
-    fn get_cluster(&mut self, cluster: u32) -> Option<&[u8]> {
-        self.cluster_cache.try_get_cluster(cluster)
+    fn get_cluster(&mut self, cluster: u32) -> Option<&mut ClusterCacheEntry> {
+        self.cluster_cache.try_get_cluster_mut(cluster)
     }
 
-    fn lock_cluster(&mut self, cluster: u32) -> Result<&[u8], FileSystemError> {
+    fn lock_cluster(&mut self, cluster: u32) -> Result<&mut ClusterCacheEntry, FileSystemError> {
         // TODO: fix this borrow checker issue when the language fixes it
         //       without borrow checker error we won't need to call `try_get_cluster_locked` twice
-        if self.cluster_cache.try_get_cluster(cluster).is_none() {
+        if self.cluster_cache.try_get_cluster_mut(cluster).is_none() {
             let data = self.read_sectors_no_cache(
                 self.first_sector_of_cluster(cluster),
                 self.boot_sector.sectors_per_cluster().into(),
@@ -808,8 +828,22 @@ impl FatFilesystem {
         Ok(self.cluster_cache.try_get_cluster_locked(cluster).unwrap())
     }
 
-    fn release_cluster(&mut self, cluster: u32) {
-        self.cluster_cache.release_cluster(cluster);
+    fn release_cluster(&mut self, cluster: u32) -> Result<(), FileSystemError> {
+        if let Some(cluster) = self.cluster_cache.release_cluster(cluster) {
+            if cluster.dirty {
+                // write back
+                let start_sector = self.first_sector_of_cluster(cluster.cluster);
+                let data = &cluster.data;
+                let start_lba = (self.start_lba + start_sector) as u64;
+                self.device.write_sync(start_lba, data).map_err(|e| {
+                    FileSystemError::DiskReadError {
+                        sector: start_lba,
+                        error: e,
+                    }
+                })?;
+            }
+        }
+        Ok(())
     }
 
     fn load_fat(&mut self) -> Result<(), FileSystemError> {
@@ -929,18 +963,18 @@ impl FatFilesystem {
         DirectoryIterator::new(self, dir)
     }
 
-    pub fn read_file(
+    fn read_write_file(
         &mut self,
         inode: &FileNode,
         position: u32,
-        buf: &mut [u8],
+        mut buf: FileAccessBuffer,
         access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         if position >= inode.size() as u32 {
             return Ok(0);
         }
         let remaining_file = inode.size() as u32 - position;
-        let max_to_read = (buf.len() as u32).min(remaining_file);
+        let max_to_access = (buf.len() as u32).min(remaining_file);
         let bytes_per_cluster = self.boot_sector.bytes_per_cluster();
         let mut position_in_cluster = position % bytes_per_cluster;
 
@@ -952,14 +986,14 @@ impl FatFilesystem {
 
             if previous_cluster_index != current_cluster_index {
                 if access_helper.current_cluster != 0 {
-                    self.release_cluster(access_helper.current_cluster as u32);
+                    self.release_cluster(access_helper.current_cluster as u32)?;
                 }
                 access_helper.current_cluster = 0;
             }
         }
 
         // starting out
-        let mut cluster_data = if access_helper.current_cluster == 0 {
+        let mut cluster_entry = if access_helper.current_cluster == 0 {
             let cluster_index = position / bytes_per_cluster;
 
             let mut cluster = inode.start_cluster() as u32;
@@ -977,24 +1011,36 @@ impl FatFilesystem {
         };
         let mut cluster = access_helper.current_cluster as u32;
 
-        let mut read = 0;
-        while read < max_to_read as usize {
-            let remaining_in_cluster = &cluster_data[position_in_cluster as usize..];
+        // read/write
+        let mut accessed = 0;
+        while accessed < max_to_access as usize {
+            let remaining_in_cluster = &mut cluster_entry.data[position_in_cluster as usize..];
 
-            let to_read =
-                core::cmp::min(remaining_in_cluster.len() as u32, max_to_read - read as u32)
-                    as usize;
-            buf[read..read + to_read].copy_from_slice(&remaining_in_cluster[..to_read]);
+            let to_access = core::cmp::min(
+                remaining_in_cluster.len() as u32,
+                max_to_access - accessed as u32,
+            ) as usize;
+            match buf {
+                FileAccessBuffer::Read(ref mut buf) => {
+                    buf[accessed..accessed + to_access]
+                        .copy_from_slice(&remaining_in_cluster[..to_access]);
+                }
+                FileAccessBuffer::Write(buf) => {
+                    cluster_entry.dirty = true;
+                    remaining_in_cluster[..to_access]
+                        .copy_from_slice(&buf[accessed..accessed + to_access]);
+                }
+            }
 
-            read += to_read;
-            position_in_cluster += to_read as u32;
+            accessed += to_access;
+            position_in_cluster += to_access as u32;
             if position_in_cluster >= bytes_per_cluster {
                 position_in_cluster = 0;
                 match self.next_cluster(cluster)? {
                     Some(next_cluster) => {
-                        self.release_cluster(cluster);
+                        self.release_cluster(cluster)?;
                         cluster = next_cluster;
-                        cluster_data = self.lock_cluster(cluster)?;
+                        cluster_entry = self.lock_cluster(cluster)?;
                         access_helper.current_cluster = cluster as u64;
                     }
                     None => break,
@@ -1003,13 +1049,13 @@ impl FatFilesystem {
         }
 
         // finished the file
-        if read >= remaining_file as usize {
-            self.release_cluster(cluster);
+        if accessed >= remaining_file as usize {
+            self.release_cluster(cluster)?;
             access_helper.current_cluster = 0;
         }
-        access_helper.previous_position = position as u64 + read as u64;
+        access_helper.previous_position = position as u64 + accessed as u64;
 
-        Ok(read as u64)
+        Ok(accessed as u64)
     }
 }
 
@@ -1022,8 +1068,28 @@ impl FileSystem for Mutex<FatFilesystem> {
         access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         assert!(position <= u32::MAX as u64);
-        self.lock()
-            .read_file(inode, position as u32, buf, access_helper)
+        self.lock().read_write_file(
+            inode,
+            position as u32,
+            FileAccessBuffer::Read(buf),
+            access_helper,
+        )
+    }
+
+    fn write_file(
+        &self,
+        inode: &FileNode,
+        position: u64,
+        buf: &[u8],
+        access_helper: &mut AccessHelper,
+    ) -> Result<u64, FileSystemError> {
+        assert!(position <= u32::MAX as u64);
+        self.lock().read_write_file(
+            inode,
+            position as u32,
+            FileAccessBuffer::Write(buf),
+            access_helper,
+        )
     }
 
     fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
@@ -1050,7 +1116,7 @@ impl FileSystem for Mutex<FatFilesystem> {
         access_helper: &mut AccessHelper,
     ) -> Result<(), FileSystemError> {
         self.lock()
-            .release_cluster(access_helper.current_cluster as u32);
+            .release_cluster(access_helper.current_cluster as u32)?;
 
         Ok(())
     }
