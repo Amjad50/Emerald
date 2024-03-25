@@ -22,6 +22,7 @@ pub mod path;
 
 /// This is not used at all, just an indicator in [`Directory::fetch_entries`]
 pub(crate) const ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC: u64 = 0xf11356573e;
+pub(crate) const NO_PARENT_DIR_SECTOR: u64 = 0xFFFF_FFFF_FFFF_FFFF;
 
 static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
     mappings: Vec::new(),
@@ -100,6 +101,11 @@ pub struct BaseNode {
     name: String,
     attributes: FileAttributes,
     start_cluster: u64,
+    parent_dir_sector: u64,
+    /// The position of this file in the parent directory
+    /// the size of the sector shouldn't exceed 16 bits
+    /// this is element wise and not byte wise
+    parent_dir_index: u16,
 }
 
 impl BaseNode {
@@ -107,13 +113,23 @@ impl BaseNode {
         &self.name
     }
 
+    pub fn start_cluster(&self) -> u64 {
+        self.start_cluster
+    }
+
     #[allow(dead_code)]
     pub fn attributes(&self) -> FileAttributes {
         self.attributes
     }
 
-    pub fn start_cluster(&self) -> u64 {
-        self.start_cluster
+    #[allow(dead_code)]
+    pub fn parent_dir_sector(&self) -> u64 {
+        self.parent_dir_sector
+    }
+
+    #[allow(dead_code)]
+    pub fn parent_dir_index(&self) -> u16 {
+        self.parent_dir_index
     }
 }
 
@@ -130,6 +146,8 @@ impl FileNode {
         attributes: FileAttributes,
         start_cluster: u64,
         size: u64,
+        parent_dir_sector: u64,
+        parent_dir_index: u16,
     ) -> Self {
         assert!(!attributes.directory());
         Self {
@@ -137,6 +155,8 @@ impl FileNode {
                 name,
                 attributes,
                 start_cluster,
+                parent_dir_sector,
+                parent_dir_index,
             },
             size,
             device: None,
@@ -150,6 +170,8 @@ impl FileNode {
                 name,
                 attributes,
                 start_cluster: DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+                parent_dir_sector: NO_PARENT_DIR_SECTOR,
+                parent_dir_index: 0,
             },
             size: 0,
             device: Some(device),
@@ -191,13 +213,25 @@ pub struct DirectoryNode {
 }
 
 impl DirectoryNode {
-    pub fn new(name: String, attributes: FileAttributes, start_cluster: u64) -> Self {
+    pub fn without_parent(name: String, attributes: FileAttributes, start_cluster: u64) -> Self {
+        Self::new(name, attributes, start_cluster, NO_PARENT_DIR_SECTOR, 0)
+    }
+
+    pub fn new(
+        name: String,
+        attributes: FileAttributes,
+        start_cluster: u64,
+        parent_dir_sector: u64,
+        parent_dir_index: u16,
+    ) -> Self {
         assert!(attributes.directory());
         Self {
             base: BaseNode {
                 name,
                 attributes,
                 start_cluster,
+                parent_dir_sector,
+                parent_dir_index,
             },
         }
     }
@@ -231,11 +265,31 @@ impl From<DirectoryNode> for Node {
 }
 
 impl Node {
-    pub fn new(name: String, attributes: FileAttributes, start_cluster: u64, size: u64) -> Self {
+    pub fn new(
+        name: String,
+        attributes: FileAttributes,
+        start_cluster: u64,
+        size: u64,
+        parent_dir_sector: u64,
+        parent_dir_index: u16,
+    ) -> Self {
         if attributes.directory() {
-            Self::Directory(DirectoryNode::new(name, attributes, start_cluster))
+            Self::Directory(DirectoryNode::new(
+                name,
+                attributes,
+                start_cluster,
+                parent_dir_sector,
+                parent_dir_index,
+            ))
         } else {
-            Self::File(FileNode::new_file(name, attributes, start_cluster, size))
+            Self::File(FileNode::new_file(
+                name,
+                attributes,
+                start_cluster,
+                size,
+                parent_dir_sector,
+                parent_dir_index,
+            ))
         }
     }
 
@@ -876,7 +930,7 @@ impl Directory {
                 // only add path with one component
                 if path.components().count() == 1 {
                     dir_entries.push(
-                        DirectoryNode::new(
+                        DirectoryNode::without_parent(
                             path.components().next().unwrap().as_str().into(),
                             FileAttributes::DIRECTORY,
                             ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC,

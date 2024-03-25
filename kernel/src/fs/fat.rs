@@ -478,7 +478,7 @@ pub struct DirectoryIterator<'a> {
     current_sector: Vec<u8>,
     current_sector_index: u32,
     current_cluster: u32,
-    entry_index_in_sector: u32,
+    entry_index_in_sector: u16,
 }
 
 impl DirectoryIterator<'_> {
@@ -654,11 +654,14 @@ impl Iterator for DirectoryIterator<'_> {
         let size = entry.file_size;
         let start_cluster = (cluster_hi << 16) | cluster_lo;
 
+        assert!(self.entry_index_in_sector > 0);
         let inode = Node::new(
             name,
             file_attribute_from_fat(entry.attributes()),
-            start_cluster as u64,
-            size as u64,
+            start_cluster.into(),
+            size.into(),
+            self.current_sector_index.into(),
+            self.entry_index_in_sector - 1,
         );
 
         Some(inode)
@@ -784,7 +787,7 @@ impl FatFilesystem {
             FatType::Fat32 => {
                 let root_cluster =
                     unsafe { self.boot_sector.boot_sector.extended.fat32.root_cluster };
-                let inode = DirectoryNode::new(
+                let inode = DirectoryNode::without_parent(
                     String::from("/"),
                     file_attribute_from_fat(attrs::DIRECTORY),
                     root_cluster as u64,
@@ -798,7 +801,7 @@ impl FatFilesystem {
         match self.fat_type() {
             FatType::Fat12 | FatType::Fat16 => {
                 // use a special inode for root
-                let inode = DirectoryNode::new(
+                let inode = DirectoryNode::without_parent(
                     String::from("/"),
                     file_attribute_from_fat(attrs::DIRECTORY),
                     0,
@@ -809,7 +812,7 @@ impl FatFilesystem {
             FatType::Fat32 => {
                 let root_cluster =
                     unsafe { self.boot_sector.boot_sector.extended.fat32.root_cluster };
-                let inode = DirectoryNode::new(
+                let inode = DirectoryNode::without_parent(
                     String::from("/"),
                     file_attribute_from_fat(attrs::DIRECTORY),
                     root_cluster as u64,
