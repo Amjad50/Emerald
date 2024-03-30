@@ -911,6 +911,10 @@ impl File {
         self.position
     }
 
+    pub fn set_size(&mut self, size: u64) -> Result<(), FileSystemError> {
+        self.filesystem.set_file_size(&mut self.inode, size)
+    }
+
     /// This is a move verbose method than `Clone::clone`, as I want it to be
     /// more explicit to the user that this is not a normal `clone` operation.
     pub fn clone_inherit(&self) -> Self {
