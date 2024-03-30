@@ -897,9 +897,15 @@ impl FatFilesystem {
         Ok(self.cluster_cache.try_get_cluster_locked(cluster).unwrap())
     }
 
-    fn release_cluster(&mut self, cluster: u32) -> Result<(), FileSystemError> {
+    fn release_cluster(&mut self, inode: &FileNode, cluster: u32) -> Result<(), FileSystemError> {
         if let Some(cluster) = self.cluster_cache.release_cluster(cluster) {
             if cluster.dirty {
+                self.flush_fat()?;
+
+                self.update_directory_entry(inode, |entry| {
+                    entry.file_size = inode.size() as u32;
+                })?;
+
                 // write back
                 let start_sector = self.first_sector_of_cluster(cluster.cluster);
                 self.write_sectors(start_sector, &cluster.data)?;
@@ -1098,25 +1104,18 @@ impl FatFilesystem {
         let max_to_access = (buf.len() as u32).min(remaining_file);
         let bytes_per_cluster = self.boot_sector.bytes_per_cluster();
         let mut position_in_cluster = position % bytes_per_cluster;
+        let cluster_index = position / bytes_per_cluster;
 
-        // seek happened
-        if access_helper.previous_position != position as u64 {
-            // are we on the same cluster
-            let previous_cluster_index = access_helper.previous_position as u32 / bytes_per_cluster;
-            let current_cluster_index = position / bytes_per_cluster;
-
-            if previous_cluster_index != current_cluster_index {
-                if access_helper.current_cluster != 0 {
-                    self.release_cluster(access_helper.current_cluster as u32)?;
-                }
-                access_helper.current_cluster = 0;
+        // seek happened or switch exactly to next cluster after last call
+        if access_helper.cluster_index != cluster_index as u64 {
+            if access_helper.current_cluster != 0 {
+                self.release_cluster(inode, access_helper.current_cluster as u32)?;
             }
+            access_helper.current_cluster = 0;
         }
 
         // starting out
         let mut cluster_entry = if access_helper.current_cluster == 0 {
-            let cluster_index = position / bytes_per_cluster;
-
             let mut cluster = inode.start_cluster() as u32;
             for _ in 0..cluster_index {
                 cluster = self
@@ -1125,6 +1124,7 @@ impl FatFilesystem {
             }
 
             access_helper.current_cluster = cluster as u64;
+            access_helper.cluster_index = cluster_index as u64;
             self.lock_cluster(access_helper.current_cluster as u32)?
         } else {
             self.get_cluster(access_helper.current_cluster as u32)
@@ -1156,25 +1156,22 @@ impl FatFilesystem {
             accessed += to_access;
             position_in_cluster += to_access as u32;
             if position_in_cluster >= bytes_per_cluster {
+                assert!(position_in_cluster == bytes_per_cluster);
                 position_in_cluster = 0;
                 match self.next_cluster(cluster)? {
                     Some(next_cluster) => {
-                        self.release_cluster(cluster)?;
+                        self.release_cluster(inode, cluster)?;
                         cluster = next_cluster;
                         cluster_entry = self.lock_cluster(cluster)?;
                         access_helper.current_cluster = cluster as u64;
+                        access_helper.cluster_index += 1;
                     }
-                    None => break,
+                    None => {
+                        break;
+                    }
                 };
             }
         }
-
-        // finished the file
-        if accessed >= remaining_file as usize {
-            self.release_cluster(cluster)?;
-            access_helper.current_cluster = 0;
-        }
-        access_helper.previous_position = position as u64 + accessed as u64;
 
         Ok(accessed as u64)
     }
@@ -1258,10 +1255,6 @@ impl FatFilesystem {
             self.write_fat_entry(last_cluster, FatEntry::EndOfChain);
         }
 
-        self.update_directory_entry(inode, |entry| {
-            entry.file_size = size as u32;
-        })?;
-
         inode.set_size(size);
 
         Ok(())
@@ -1332,17 +1325,22 @@ impl FileSystem for Mutex<FatFilesystem> {
 
     fn close_file(
         &self,
-        _inode: &FileNode,
-        access_helper: &mut AccessHelper,
+        inode: &FileNode,
+        access_helper: AccessHelper,
     ) -> Result<(), FileSystemError> {
-        let mut s = self.lock();
-        s.release_cluster(access_helper.current_cluster as u32)?;
-        s.flush_fat()?;
-
-        Ok(())
+        self.lock()
+            .release_cluster(inode, access_helper.current_cluster as u32)
     }
 
     fn set_file_size(&self, inode: &mut FileNode, size: u64) -> Result<(), FileSystemError> {
-        self.lock().set_file_size(inode, size)
+        let mut s = self.lock();
+
+        s.set_file_size(inode, size)?;
+        s.flush_fat()?;
+        s.update_directory_entry(inode, |entry| {
+            entry.file_size = inode.size() as u32;
+        })?;
+
+        Ok(())
     }
 }

@@ -360,8 +360,8 @@ impl Node {
 // use to help implement the filesystem and improve performance
 #[derive(Debug, Default)]
 pub struct AccessHelper {
-    previous_position: u64,
     current_cluster: u64,
+    cluster_index: u64,
 }
 
 pub enum DirTreverse {
@@ -410,7 +410,7 @@ pub trait FileSystem: Send + Sync {
     fn close_file(
         &self,
         _inode: &FileNode,
-        _access_helper: &mut AccessHelper,
+        _access_helper: AccessHelper,
     ) -> Result<(), FileSystemError> {
         Ok(())
     }
@@ -939,7 +939,7 @@ impl File {
 impl Drop for File {
     fn drop(&mut self) {
         self.filesystem
-            .close_file(&self.inode, &mut self.access_helper)
+            .close_file(&self.inode, core::mem::take(&mut self.access_helper))
             .expect("Failed to close file");
     }
 }
