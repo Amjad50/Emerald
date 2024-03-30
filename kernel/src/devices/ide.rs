@@ -254,8 +254,6 @@ impl IdeIo {
     }
 
     pub fn read_data_block(&self, data: &mut [u8]) -> Result<(), u8> {
-        self.wait_until_free();
-
         if self.read_status() & ata::STATUS_ERR != 0 {
             // error
             return Err(self.read_error());
@@ -263,15 +261,16 @@ impl IdeIo {
 
         // read data
         for i in 0..data.len() / 2 {
+            if i % 256 == 0 {
+                self.wait_until_free();
+            }
+
             let word = self.read_data();
             data[i * 2] = (word & 0xFF) as u8;
             data[i * 2 + 1] = ((word >> 8) & 0xFF) as u8;
-
-            // TODO: maybe not best to check on every read, but when reading multiple sectors
-            if self.read_status() & ata::STATUS_BUSY != 0 {
-                self.wait_until_free();
-            }
         }
+
+        self.wait_until_free();
 
         // TODO: replace with error
         assert!(self.read_status() & ata::STATUS_DATA_REQUEST == 0);
@@ -280,8 +279,6 @@ impl IdeIo {
     }
 
     pub fn write_data_block(&self, data: &[u8]) -> Result<(), u8> {
-        self.wait_until_free();
-
         if self.read_status() & ata::STATUS_ERR != 0 {
             // error
             return Err(self.read_error());
@@ -289,15 +286,16 @@ impl IdeIo {
 
         // write data
         for i in 0..data.len() / 2 {
+            if i % 256 == 0 {
+                self.wait_until_free();
+            }
+
             let word = (data[i * 2] as u16) | ((data[i * 2 + 1] as u16) << 8);
 
             self.write_data(word);
-
-            // TODO: maybe not best to check on every write, but when reading multiple sectors
-            if self.read_status() & ata::STATUS_BUSY != 0 {
-                self.wait_until_free();
-            }
         }
+
+        self.wait_until_free();
 
         // TODO: replace with error
         assert!(self.read_status() & ata::STATUS_DATA_REQUEST == 0);
@@ -955,7 +953,10 @@ impl IdeDeviceImpl {
         command.execute_write(&self.io, data)
     }
 
-    fn interrupt(&mut self) {}
+    fn interrupt(&mut self) {
+        // acknowledge interrupt
+        self.io.read_status();
+    }
 }
 
 impl PciDevice for IdeDevice {
