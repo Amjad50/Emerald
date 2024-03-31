@@ -93,8 +93,8 @@ fn create_dir_entries(
     }
     assert!(filename.len() <= 8);
 
-    for i in 0..8 {
-        short_name[i] = if i < filename.len() {
+    for (i, c) in short_name.iter_mut().enumerate().take(8) {
+        *c = if i < filename.len() {
             filename.as_bytes()[i].to_ascii_uppercase()
         } else {
             b' '
@@ -1616,7 +1616,7 @@ impl FatFilesystem {
                 _nt_reserved: 0,
                 ..normal_entry
             };
-            dot_entry.short_name[0] = '.' as u8;
+            dot_entry.short_name[0] = b'.';
             let parent_cluster = parent_inode.start_cluster() as u32;
             let mut dot_dot_entry = DirectoryEntryNormal {
                 short_name: [0x20; 11],
@@ -1632,15 +1632,15 @@ impl FatFilesystem {
                 last_modification_date: 0,
                 file_size: 0,
             };
-            dot_dot_entry.short_name[0] = '.' as u8;
-            dot_dot_entry.short_name[1] = '.' as u8;
+            dot_dot_entry.short_name[0] = b'.';
+            dot_dot_entry.short_name[1] = b'.';
 
             let dir_node = match node {
                 Node::Directory(ref dir) => dir,
                 _ => unreachable!(),
             };
 
-            let mut dir_iter = self.open_dir_inode(&dir_node)?;
+            let mut dir_iter = self.open_dir_inode(dir_node)?;
             let dot_node = dir_iter.add_entry(dot_entry, Vec::new())?;
             let dot_dot_node = dir_iter.add_entry(dot_dot_entry, Vec::new())?;
 
