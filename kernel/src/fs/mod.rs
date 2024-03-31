@@ -72,6 +72,10 @@ impl FileAttributes {
     pub fn archive(self) -> bool {
         self.0 & Self::ARCHIVE.0 != 0
     }
+
+    fn contains(&self, other: FileAttributes) -> bool {
+        self.0 & other.0 != 0
+    }
 }
 
 impl ops::BitOr for FileAttributes {
@@ -115,6 +119,10 @@ impl BaseNode {
 
     pub fn start_cluster(&self) -> u64 {
         self.start_cluster
+    }
+
+    pub(self) fn set_start_cluster(&mut self, cluster: u64) {
+        self.start_cluster = cluster;
     }
 
     #[allow(dead_code)]
@@ -200,6 +208,12 @@ impl ops::Deref for FileNode {
 
     fn deref(&self) -> &Self::Target {
         &self.base
+    }
+}
+
+impl ops::DerefMut for FileNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }
 
@@ -377,6 +391,15 @@ pub trait FileSystem: Send + Sync {
         handler: &mut dyn FnMut(Node) -> DirTreverse,
     ) -> Result<(), FileSystemError>;
 
+    fn create_node(
+        &self,
+        _parent: &DirectoryNode,
+        _name: &str,
+        _attributes: FileAttributes,
+    ) -> Result<Node, FileSystemError> {
+        Err(FileSystemError::OperationNotSupported)
+    }
+
     fn read_file(
         &self,
         inode: &FileNode,
@@ -552,6 +575,7 @@ pub enum FileSystemError {
     CouldNotSetFileLength,
     EndOfFile,
     BufferNotLargeEnough(usize),
+    FileAlreadyExists,
 }
 
 fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
