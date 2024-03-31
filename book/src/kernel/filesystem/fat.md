@@ -6,6 +6,9 @@
 
 The FAT filesystem is a simple filesystem that is widely used in many devices, such as USB drives, SD cards, and floppy disks.
 
-In this kernel, we have FAT12, FAT16, and FAT32 support. Along with long file names (LFN) support.
-
-We don't have write support yet, but we can read files and directories.
+In this kernel, we have support for:
+- FAT12
+- FAT16
+- FAT32 
+- Long file names (LFN).
+- reading and writing files, changing file size, and creating files and directories.
