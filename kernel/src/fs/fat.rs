@@ -1787,6 +1787,26 @@ impl FileSystem for Mutex<FatFilesystem> {
                 .map_err(|_| FileSystemError::CouldNotSetFileLength)?;
         }
 
+        // we seeked past the end of the file
+        // extend to the position with zeros
+        if position > current_size {
+            let extend_size = position - current_size;
+
+            let zeros = vec![0; s.boot_sector.bytes_per_sector() as usize];
+
+            let mut written = 0;
+            while written < extend_size {
+                let to_write = zeros.len().min((extend_size - written) as usize);
+                s.read_write_file(
+                    inode,
+                    (current_size + written) as u32,
+                    FileAccessBuffer::Write(&zeros[..to_write]),
+                    access_helper,
+                )?;
+                written += to_write as u64;
+            }
+        }
+
         s.read_write_file(
             inode,
             position as u32,

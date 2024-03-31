@@ -905,9 +905,6 @@ impl File {
     }
 
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {
-        if position > self.inode.size() {
-            return Err(FileSystemError::InvalidOffset);
-        }
         self.position = position;
         Ok(())
     }
