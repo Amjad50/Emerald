@@ -956,10 +956,13 @@ impl DirectoryIterator<'_> {
         let node = self.next();
 
         if is_last {
+            let pos = self.save_current();
             // that was the last entry, make sure the new last is valid
             current_entry = self.get_next_entry()?;
             current_entry.as_normal_mut().short_name[0] = 0x00;
             self.mark_sector_dirty();
+            // restore, so that next calls to `add_entry` can continue without missing an entry
+            self.restore_at(pos)?;
         }
 
         Ok(node.expect("node should be created"))
@@ -1553,14 +1556,105 @@ impl FatFilesystem {
         name: &str,
         attributes: FileAttributes,
     ) -> Result<Node, FileSystemError> {
-        let (normal_entry, long_name_entries) = create_dir_entries(name, attributes);
+        let (mut normal_entry, long_name_entries) = create_dir_entries(name, attributes);
 
-        let node = {
-            let mut dir_iter = self.open_dir_inode(parent_inode)?;
-            dir_iter.add_entry(normal_entry, long_name_entries)?
+        // NOTE: here, we perform the following (for dirs)
+        // - allocate cluster
+        // - create the directory (this may fail, if so, rollback)
+        // - create the . and .. entries
+        // We could have done it more efficiently, by starting with cluster=0
+        // and then allocating and creating directoties if its not existent
+        // but the issue is that qemu vvfat driver will complain and print some debug messages that
+        // cluster 0 is used multiple times, so we are here, making sure the cluster is always
+        // valid
+        //
+        // TODO: probably we don't need this for normal disks, but for now, lets keep it as its
+        // easier to use vvfat
+
+        // create the . and .. entries if this is a directory
+        let cluster = if attributes.directory() {
+            let cluster = self.find_free_cluster().ok_or(FatError::NotEnoughSpace)?;
+            // must be empty
+            self.write_sectors(
+                self.first_sector_of_cluster(cluster),
+                &vec![0; self.boot_sector.bytes_per_cluster() as usize],
+            )?;
+            self.write_fat_entry(cluster, FatEntry::EndOfChain);
+            self.flush_fat()?;
+
+            normal_entry.first_cluster_lo = (cluster & 0xFFFF) as u16;
+            normal_entry.first_cluster_hi = (cluster >> 16) as u16;
+
+            Some(cluster)
+        } else {
+            None
         };
 
-        assert!(node.name() == name);
+        let node = self
+            .open_dir_inode(parent_inode)
+            .and_then(|mut dir| dir.add_entry(normal_entry.clone(), long_name_entries));
+
+        let node = match node {
+            Ok(node) => node,
+            e @ Err(_) => {
+                // revert fat changes
+                if let Some(cluster) = cluster {
+                    self.write_fat_entry(cluster, FatEntry::Free);
+                    self.flush_fat()?;
+                }
+                return e;
+            }
+        };
+
+        assert!(node.name() == name, "node name: {:?}", node.name());
+
+        // create the . and .. entries if this is a directory
+        if attributes.directory() {
+            assert!(node.start_cluster() == cluster.unwrap() as u64);
+            let mut dot_entry = DirectoryEntryNormal {
+                short_name: [0x20; 11],
+                _nt_reserved: 0,
+                ..normal_entry
+            };
+            dot_entry.short_name[0] = '.' as u8;
+            let parent_cluster = parent_inode.start_cluster() as u32;
+            let mut dot_dot_entry = DirectoryEntryNormal {
+                short_name: [0x20; 11],
+                _nt_reserved: 0,
+                attributes: file_attribute_to_fat(parent_inode.attributes()),
+                creation_time_tenths_of_seconds: 0,
+                creation_time: 0,
+                creation_date: 0,
+                last_access_date: 0,
+                first_cluster_lo: (parent_cluster & 0xFFFF) as u16,
+                first_cluster_hi: (parent_cluster >> 16) as u16,
+                last_modification_time: 0,
+                last_modification_date: 0,
+                file_size: 0,
+            };
+            dot_dot_entry.short_name[0] = '.' as u8;
+            dot_dot_entry.short_name[1] = '.' as u8;
+
+            let dir_node = match node {
+                Node::Directory(ref dir) => dir,
+                _ => unreachable!(),
+            };
+
+            let mut dir_iter = self.open_dir_inode(&dir_node)?;
+            let dot_node = dir_iter.add_entry(dot_entry, Vec::new())?;
+            let dot_dot_node = dir_iter.add_entry(dot_dot_entry, Vec::new())?;
+
+            assert!(
+                dot_node.name() == ".",
+                "dot node name: {:?}",
+                dot_node.name()
+            );
+            assert!(
+                dot_dot_node.name() == "..",
+                "dot dot node name: {:?}",
+                dot_dot_node.name()
+            );
+        }
 
         Ok(node)
     }
