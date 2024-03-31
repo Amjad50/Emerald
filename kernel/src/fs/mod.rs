@@ -1056,6 +1056,16 @@ impl Directory {
         &self.path
     }
 
+    pub fn create_node(
+        &mut self,
+        name: &str,
+        attributes: FileAttributes,
+    ) -> Result<FilesystemNode, FileSystemError> {
+        let node = self.filesystem.create_node(&self.inode, name, attributes)?;
+
+        FilesystemNode::from_node(self.path.join(name), node, self.filesystem.clone())
+    }
+
     pub fn read(&mut self, entries: &mut [DirEntry]) -> Result<usize, FileSystemError> {
         self.fetch_entries()?;
 
@@ -1100,7 +1110,15 @@ impl FilesystemNode {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path.as_ref())?;
 
-        match inode {
+        Self::from_node(path, inode, filesystem)
+    }
+
+    pub fn from_node<P: AsRef<Path>>(
+        path: P,
+        node: Node,
+        filesystem: Arc<dyn FileSystem>,
+    ) -> Result<Self, FileSystemError> {
+        match node {
             Node::File(file) => Ok(Self::File(File::from_inode(
                 file,
                 path,
