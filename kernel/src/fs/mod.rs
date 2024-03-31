@@ -203,20 +203,6 @@ impl FileNode {
     }
 }
 
-impl ops::Deref for FileNode {
-    type Target = BaseNode;
-
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl ops::DerefMut for FileNode {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
-}
-
 impl Drop for FileNode {
     fn drop(&mut self) {
         if let Some(device) = self.device.take() {
@@ -252,14 +238,6 @@ impl DirectoryNode {
                 parent_dir_index,
             },
         }
-    }
-}
-
-impl ops::Deref for DirectoryNode {
-    type Target = BaseNode;
-
-    fn deref(&self) -> &Self::Target {
-        &self.base
     }
 }
 
@@ -367,6 +345,54 @@ impl Node {
         }
 
         Ok(())
+    }
+}
+
+impl ops::Deref for FileNode {
+    type Target = BaseNode;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl ops::DerefMut for FileNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ops::Deref for DirectoryNode {
+    type Target = BaseNode;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl ops::DerefMut for DirectoryNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ops::Deref for Node {
+    type Target = BaseNode;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::File(file) => file,
+            Self::Directory(dir) => dir,
+        }
+    }
+}
+
+impl ops::DerefMut for Node {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::File(file) => file,
+            Self::Directory(dir) => dir,
+        }
     }
 }
 

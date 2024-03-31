@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    AccessHelper, DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem,
+    AccessHelper, BaseNode, DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem,
     FileSystemError, Node,
 };
 
@@ -1524,7 +1524,7 @@ impl FatFilesystem {
 
     fn update_directory_entry(
         &mut self,
-        inode: &FileNode,
+        inode: &BaseNode,
         mut update: impl FnMut(&mut DirectoryEntryNormal),
     ) -> Result<(), FileSystemError> {
         let mut sector = self.read_sectors_no_cache(inode.parent_dir_sector() as u32, 1)?;
