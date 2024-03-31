@@ -1117,6 +1117,10 @@ impl FatFilesystem {
         // starting out
         let mut cluster_entry = if access_helper.current_cluster == 0 {
             let mut cluster = inode.start_cluster() as u32;
+
+            // cannot be empty, or be the root
+            assert!(cluster != 0);
+
             for _ in 0..cluster_index {
                 cluster = self
                     .next_cluster(cluster)?
@@ -1206,16 +1210,14 @@ impl FatFilesystem {
         let current_size_in_clusters = (inode.size() + bytes_per_cluster - 1) / bytes_per_cluster;
         let new_size_in_clusters = (size + bytes_per_cluster - 1) / bytes_per_cluster;
 
-        assert!(new_size_in_clusters > 0);
-        assert!(current_size_in_clusters > 0);
-
         if new_size_in_clusters != current_size_in_clusters {
             // update fat references
             let to_keep = new_size_in_clusters.min(current_size_in_clusters);
 
             let mut current_cluster = inode.start_cluster() as u32;
 
-            for _ in 0..to_keep - 1 {
+            // if we won't keep anything, then don't loop
+            for _ in 0..to_keep.saturating_sub(1) {
                 let next_cluster = self.next_cluster(current_cluster)?.expect("next cluster");
                 current_cluster = next_cluster;
             }
@@ -1227,6 +1229,11 @@ impl FatFilesystem {
                 let to_delete = current_size_in_clusters - new_size_in_clusters;
                 let mut clusters = Vec::with_capacity(to_delete as usize);
 
+                if new_size_in_clusters == 0 {
+                    // delete the first one
+                    clusters.push(current_cluster);
+                }
+
                 for _ in 0..to_delete {
                     let next_cluster = self.next_cluster(current_cluster)?.expect("next cluster");
                     clusters.push(next_cluster);
@@ -1237,15 +1244,44 @@ impl FatFilesystem {
                 for cluster in clusters.into_iter().rev() {
                     self.write_fat_entry(cluster, FatEntry::Free);
                 }
+
+                if new_size_in_clusters == 0 {
+                    inode.set_start_cluster(0);
+                    self.update_directory_entry(inode, |entry| {
+                        assert!(size == 0);
+                        // make sure we are in sync with the fat, an no orphaned cluster is left
+                        entry.file_size = 0;
+                        entry.first_cluster_hi = 0;
+                        entry.first_cluster_lo = 0;
+                    })?;
+                }
             } else {
                 // adding new clusters
 
-                let to_add = new_size_in_clusters - current_size_in_clusters;
+                let mut to_add = new_size_in_clusters - current_size_in_clusters;
+
+                if current_size_in_clusters == 0 {
+                    let new_cluster = self.find_free_cluster().ok_or(FatError::NotEnoughSpace)?;
+                    inode.set_start_cluster(new_cluster as u64);
+                    self.update_directory_entry(inode, |entry| {
+                        assert!(size > 0);
+                        // make sure we are in sync with the fat, an no orphaned cluster is left
+                        entry.file_size = size as u32;
+                        entry.first_cluster_lo = (new_cluster & 0xFFFF) as u16;
+                        entry.first_cluster_hi = (new_cluster >> 16) as u16;
+                    })?;
+                    // reserve it
+                    self.write_fat_entry(new_cluster, FatEntry::EndOfChain);
+                    last_cluster = new_cluster;
+                    to_add -= 1;
+                }
 
                 for _ in 0..to_add {
                     let new_cluster = self.find_free_cluster().ok_or(FatError::NotEnoughSpace)?;
 
                     self.write_fat_entry(last_cluster, FatEntry::Next(new_cluster));
+                    // reserve
+                    self.write_fat_entry(new_cluster, FatEntry::EndOfChain);
 
                     last_cluster = new_cluster;
                 }
