@@ -787,7 +787,7 @@ impl DirectoryIterator<'_> {
                 if next_sector_index % self.filesystem.boot_sector.sectors_per_cluster() as u32 == 0
                 {
                     // get next cluster
-                    let next_cluster = self.filesystem.next_cluster(self.current_cluster);
+                    let next_cluster = self.filesystem.fat.next_cluster(self.current_cluster);
                     match next_cluster {
                         Ok(Some(cluster)) => {
                             self.current_cluster = cluster;
@@ -1135,14 +1135,191 @@ impl FileAccessBuffer<'_> {
     }
 }
 
+/// File Allocation Table buffer
+#[derive(Debug)]
+struct Fat {
+    buffer: NoDebug<Vec<u8>>,
+    sector_size: u16,
+    fat_type: FatType,
+    dirty: bool,
+    /// One bit for each sector in the FAT
+    dirty_bitmap: Vec<u64>,
+}
+
+impl Fat {
+    /// A temmporary initilizer for the FAT, will be replaced with [`Fat::load`]
+    fn new() -> Self {
+        Self {
+            buffer: NoDebug(Vec::new()),
+            sector_size: 0,
+            fat_type: FatType::Fat12,
+            dirty: false,
+            dirty_bitmap: Vec::new(),
+        }
+    }
+
+    fn load(filesystem: &FatFilesystem) -> Result<Self, FileSystemError> {
+        let fats_size_in_sectors = filesystem.boot_sector.fat_size_in_sectors()
+            * filesystem.boot_sector.number_of_fats() as u32;
+        let fat_start_sector = filesystem.boot_sector.fat_start_sector();
+
+        let buffer = filesystem.read_sectors_no_cache(fat_start_sector, fats_size_in_sectors)?;
+        let fat_type = filesystem.fat_type();
+
+        Ok(Self {
+            buffer: NoDebug(buffer),
+            sector_size: filesystem.boot_sector.bytes_per_sector(),
+            fat_type,
+            dirty: false,
+            dirty_bitmap: vec![0; (fats_size_in_sectors as usize + 63) / 64],
+        })
+    }
+
+    // return an iterator of (sector_index, sector_data) for all dirty sectors
+    fn dirty_sectors(&self) -> Option<impl Iterator<Item = (u32, &[u8])>> {
+        if !self.dirty {
+            return None;
+        }
+
+        Some(
+            self.dirty_bitmap
+                .iter()
+                .enumerate()
+                .filter_map(move |(i, dirty)| {
+                    if *dirty == 0 {
+                        return None;
+                    }
+
+                    let mut dirty = *dirty;
+                    let mut bit = 0;
+
+                    Some(core::iter::from_fn(move || {
+                        while dirty != 0 {
+                            if dirty & 1 != 0 {
+                                let sector = (i * 64 + bit) as u32;
+                                let sector_start = sector * self.sector_size as u32;
+                                let sector_end = sector_start + self.sector_size as u32;
+                                let data = &self.buffer[sector_start as usize..sector_end as usize];
+                                dirty >>= 1;
+                                bit += 1;
+                                return Some((sector, data));
+                            }
+                            dirty >>= 1;
+                            bit += 1;
+                        }
+                        None
+                    }))
+                })
+                .flatten(),
+        )
+    }
+
+    fn clear_dirty(&mut self) {
+        if self.dirty {
+            self.dirty = false;
+            self.dirty_bitmap.iter_mut().for_each(|d| *d = 0);
+        }
+    }
+
+    fn read_fat_entry(&self, entry: u32) -> FatEntry {
+        let fat_offset = match self.fat_type {
+            FatType::Fat12 => entry * 3 / 2,
+            FatType::Fat16 => entry * 2,
+            FatType::Fat32 => entry * 4,
+        } as usize;
+        assert!(fat_offset < self.buffer.0.len(), "FAT entry out of bounds");
+        let ptr = unsafe { self.buffer.0.as_ptr().add(fat_offset) };
+
+        let entry = match self.fat_type {
+            FatType::Fat12 => {
+                let byte1 = self.buffer.0[fat_offset];
+                let byte2 = self.buffer.0[fat_offset + 1];
+                if entry & 1 == 1 {
+                    ((byte2 as u32) << 4) | ((byte1 as u32) >> 4)
+                } else {
+                    (((byte2 as u32) & 0xF) << 8) | (byte1 as u32)
+                }
+            }
+            FatType::Fat16 => unsafe { (*(ptr as *const u16)) as u32 },
+            FatType::Fat32 => unsafe { (*(ptr as *const u32)) & 0x0FFF_FFFF },
+        };
+
+        FatEntry::from_u32(self.fat_type, entry)
+    }
+
+    fn mark_sector_dirty(&mut self, sector: usize) {
+        let index = sector / 64;
+        let bit = sector % 64;
+        self.dirty_bitmap[index] |= 1 << bit;
+    }
+
+    fn write_fat_entry(&mut self, entry: u32, fat_entry: FatEntry) {
+        let fat_offset = match self.fat_type {
+            FatType::Fat12 => entry * 3 / 2,
+            FatType::Fat16 => entry * 2,
+            FatType::Fat32 => entry * 4,
+        } as usize;
+        assert!(fat_offset < self.buffer.0.len(), "FAT entry out of bounds");
+        let ptr = unsafe { self.buffer.0.as_mut_ptr().add(fat_offset) };
+
+        let new_entry = fat_entry.to_u32(self.fat_type).expect("invalid FAT entry");
+
+        match self.fat_type {
+            FatType::Fat12 => {
+                if entry & 1 == 1 {
+                    self.buffer.0[fat_offset] =
+                        (self.buffer.0[fat_offset] & 0x0F) | (new_entry << 4) as u8;
+                    self.buffer.0[fat_offset + 1] = (new_entry >> 4) as u8;
+                } else {
+                    self.buffer.0[fat_offset] = new_entry as u8;
+                    self.buffer.0[fat_offset + 1] =
+                        (self.buffer.0[fat_offset + 1] & 0xF0) | ((new_entry >> 8) as u8);
+                }
+            }
+            FatType::Fat16 => unsafe { *(ptr as *mut u16) = new_entry as u16 },
+            FatType::Fat32 => unsafe { *(ptr as *mut u32) = new_entry },
+        }
+
+        self.mark_sector_dirty(fat_offset / self.sector_size as usize);
+
+        // can cross sector boundary sometimes
+        if self.fat_type == FatType::Fat12 {
+            self.mark_sector_dirty((fat_offset + 1) / self.sector_size as usize);
+        }
+
+        self.dirty = true;
+    }
+
+    fn find_free_cluster(&self) -> Option<u32> {
+        let fat_size = self.buffer.0.len();
+
+        let number_of_fat_entries = match self.fat_type {
+            FatType::Fat12 => fat_size * 2 / 3,
+            FatType::Fat16 => fat_size / 2,
+            FatType::Fat32 => fat_size / 4,
+        } as u32;
+
+        (2..number_of_fat_entries).find(|&i| self.read_fat_entry(i) == FatEntry::Free)
+    }
+
+    fn next_cluster(&self, cluster: u32) -> Result<Option<u32>, FileSystemError> {
+        match self.read_fat_entry(cluster) {
+            FatEntry::Next(next_cluster) => Ok(Some(next_cluster)),
+            FatEntry::EndOfChain => Ok(None),
+            FatEntry::Bad => Err(FatError::UnexpectedFatEntry.into()),
+            FatEntry::Reserved => Err(FatError::UnexpectedFatEntry.into()),
+            FatEntry::Free => Err(FatError::UnexpectedFatEntry.into()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct FatFilesystem {
     start_lba: u32,
     #[allow(dead_code)]
     size_in_sectors: u32,
     boot_sector: Box<FatBootSector>,
-    fat: NoDebug<Vec<u8>>,
-    fat_dirty: bool,
+    fat: Fat,
     device: NoDebug<Arc<IdeDevice>>,
     cluster_cache: ClusterCache,
 }
@@ -1158,14 +1335,13 @@ impl FatFilesystem {
             start_lba,
             size_in_sectors,
             boot_sector: Box::new(boot_sector),
-            fat: NoDebug(Vec::new()),
-            fat_dirty: false,
+            fat: Fat::new(),
             device: NoDebug(device),
             cluster_cache: ClusterCache::default(),
         };
 
         // TODO: replace by lazily reading FAT when needed
-        s.load_fat()?;
+        s.fat = Fat::load(&s)?;
 
         Ok(s)
     }
@@ -1259,112 +1435,15 @@ impl FatFilesystem {
         Ok(())
     }
 
-    fn load_fat(&mut self) -> Result<(), FileSystemError> {
-        // already loaded
-        assert!(self.fat.is_empty(), "FAT already loaded");
-
-        let fats_size_in_sectors =
-            self.boot_sector.fat_size_in_sectors() * self.boot_sector.number_of_fats() as u32;
-        let fat_start_sector = self.boot_sector.fat_start_sector();
-
-        self.fat.0 = self.read_sectors_no_cache(fat_start_sector, fats_size_in_sectors)?;
-
-        Ok(())
-    }
-
     fn flush_fat(&mut self) -> Result<(), FileSystemError> {
-        if !self.fat_dirty {
-            return Ok(());
+        if let Some(dirt_iter) = self.fat.dirty_sectors() {
+            for (sector, data) in dirt_iter {
+                self.write_sectors(self.boot_sector.fat_start_sector() + sector, data)?;
+            }
         }
-
-        // write back the FAT
-        let fat_start_sector = self.boot_sector.fat_start_sector();
-
-        self.write_sectors(fat_start_sector, &self.fat.0)?;
-
-        self.fat_dirty = false;
+        self.fat.clear_dirty();
 
         Ok(())
-    }
-
-    fn read_fat_entry(&self, entry: u32) -> FatEntry {
-        let fat_offset = match self.fat_type() {
-            FatType::Fat12 => entry * 3 / 2,
-            FatType::Fat16 => entry * 2,
-            FatType::Fat32 => entry * 4,
-        } as usize;
-        assert!(fat_offset < self.fat.0.len(), "FAT entry out of bounds");
-        let ptr = unsafe { self.fat.0.as_ptr().add(fat_offset) };
-
-        let entry = match self.fat_type() {
-            FatType::Fat12 => {
-                let byte1 = self.fat.0[fat_offset];
-                let byte2 = self.fat.0[fat_offset + 1];
-                if entry & 1 == 1 {
-                    ((byte2 as u32) << 4) | ((byte1 as u32) >> 4)
-                } else {
-                    (((byte2 as u32) & 0xF) << 8) | (byte1 as u32)
-                }
-            }
-            FatType::Fat16 => unsafe { (*(ptr as *const u16)) as u32 },
-            FatType::Fat32 => unsafe { (*(ptr as *const u32)) & 0x0FFF_FFFF },
-        };
-
-        FatEntry::from_u32(self.fat_type(), entry)
-    }
-
-    fn write_fat_entry(&mut self, entry: u32, fat_entry: FatEntry) {
-        let fat_offset = match self.fat_type() {
-            FatType::Fat12 => entry * 3 / 2,
-            FatType::Fat16 => entry * 2,
-            FatType::Fat32 => entry * 4,
-        } as usize;
-        assert!(fat_offset < self.fat.0.len(), "FAT entry out of bounds");
-        let ptr = unsafe { self.fat.0.as_mut_ptr().add(fat_offset) };
-
-        let new_entry = fat_entry
-            .to_u32(self.fat_type())
-            .expect("invalid FAT entry");
-
-        match self.fat_type() {
-            FatType::Fat12 => {
-                if entry & 1 == 1 {
-                    self.fat.0[fat_offset] =
-                        (self.fat.0[fat_offset] & 0x0F) | (new_entry << 4) as u8;
-                    self.fat.0[fat_offset + 1] = (new_entry >> 4) as u8;
-                } else {
-                    self.fat.0[fat_offset] = new_entry as u8;
-                    self.fat.0[fat_offset + 1] =
-                        (self.fat.0[fat_offset + 1] & 0xF0) | ((new_entry >> 8) as u8);
-                }
-            }
-            FatType::Fat16 => unsafe { *(ptr as *mut u16) = new_entry as u16 },
-            FatType::Fat32 => unsafe { *(ptr as *mut u32) = new_entry },
-        }
-
-        self.fat_dirty = true;
-    }
-
-    fn find_free_cluster(&self) -> Option<u32> {
-        let fat_size = self.fat.len();
-
-        let number_of_fat_entries = match self.fat_type() {
-            FatType::Fat12 => fat_size * 2 / 3,
-            FatType::Fat16 => fat_size / 2,
-            FatType::Fat32 => fat_size / 4,
-        } as u32;
-
-        (2..number_of_fat_entries).find(|&i| self.read_fat_entry(i) == FatEntry::Free)
-    }
-
-    fn next_cluster(&self, cluster: u32) -> Result<Option<u32>, FileSystemError> {
-        match self.read_fat_entry(cluster) {
-            FatEntry::Next(next_cluster) => Ok(Some(next_cluster)),
-            FatEntry::EndOfChain => Ok(None),
-            FatEntry::Bad => Err(FatError::UnexpectedFatEntry.into()),
-            FatEntry::Reserved => Err(FatError::UnexpectedFatEntry.into()),
-            FatEntry::Free => Err(FatError::UnexpectedFatEntry.into()),
-        }
     }
 
     fn open_root_dir(&self) -> Result<Directory, FileSystemError> {
@@ -1468,6 +1547,7 @@ impl FatFilesystem {
 
             for _ in 0..cluster_index {
                 cluster = self
+                    .fat
                     .next_cluster(cluster)?
                     .ok_or(FatError::UnexpectedFatEntry)?;
             }
@@ -1507,7 +1587,7 @@ impl FatFilesystem {
             if position_in_cluster >= bytes_per_cluster {
                 assert!(position_in_cluster == bytes_per_cluster);
                 position_in_cluster = 0;
-                match self.next_cluster(cluster)? {
+                match self.fat.next_cluster(cluster)? {
                     Some(next_cluster) => {
                         self.release_cluster(inode, cluster)?;
                         cluster = next_cluster;
@@ -1573,13 +1653,16 @@ impl FatFilesystem {
 
         // create the . and .. entries if this is a directory
         let cluster = if attributes.directory() {
-            let cluster = self.find_free_cluster().ok_or(FatError::NotEnoughSpace)?;
+            let cluster = self
+                .fat
+                .find_free_cluster()
+                .ok_or(FatError::NotEnoughSpace)?;
             // must be empty
             self.write_sectors(
                 self.first_sector_of_cluster(cluster),
                 &vec![0; self.boot_sector.bytes_per_cluster() as usize],
             )?;
-            self.write_fat_entry(cluster, FatEntry::EndOfChain);
+            self.fat.write_fat_entry(cluster, FatEntry::EndOfChain);
             self.flush_fat()?;
 
             normal_entry.first_cluster_lo = (cluster & 0xFFFF) as u16;
@@ -1599,7 +1682,7 @@ impl FatFilesystem {
             e @ Err(_) => {
                 // revert fat changes
                 if let Some(cluster) = cluster {
-                    self.write_fat_entry(cluster, FatEntry::Free);
+                    self.fat.write_fat_entry(cluster, FatEntry::Free);
                     self.flush_fat()?;
                 }
                 return e;
@@ -1672,7 +1755,10 @@ impl FatFilesystem {
 
             // if we won't keep anything, then don't loop
             for _ in 0..to_keep.saturating_sub(1) {
-                let next_cluster = self.next_cluster(current_cluster)?.expect("next cluster");
+                let next_cluster = self
+                    .fat
+                    .next_cluster(current_cluster)?
+                    .expect("next cluster");
                 current_cluster = next_cluster;
             }
 
@@ -1689,14 +1775,17 @@ impl FatFilesystem {
                 }
 
                 for _ in 0..to_delete {
-                    let next_cluster = self.next_cluster(current_cluster)?.expect("next cluster");
+                    let next_cluster = self
+                        .fat
+                        .next_cluster(current_cluster)?
+                        .expect("next cluster");
                     clusters.push(next_cluster);
                     current_cluster = next_cluster;
                 }
 
                 // move backwards
                 for cluster in clusters.into_iter().rev() {
-                    self.write_fat_entry(cluster, FatEntry::Free);
+                    self.fat.write_fat_entry(cluster, FatEntry::Free);
                 }
 
                 if new_size_in_clusters == 0 {
@@ -1715,7 +1804,10 @@ impl FatFilesystem {
                 let mut to_add = new_size_in_clusters - current_size_in_clusters;
 
                 if current_size_in_clusters == 0 {
-                    let new_cluster = self.find_free_cluster().ok_or(FatError::NotEnoughSpace)?;
+                    let new_cluster = self
+                        .fat
+                        .find_free_cluster()
+                        .ok_or(FatError::NotEnoughSpace)?;
                     inode.set_start_cluster(new_cluster as u64);
                     self.update_directory_entry(inode, |entry| {
                         assert!(size > 0);
@@ -1725,24 +1817,28 @@ impl FatFilesystem {
                         entry.first_cluster_hi = (new_cluster >> 16) as u16;
                     })?;
                     // reserve it
-                    self.write_fat_entry(new_cluster, FatEntry::EndOfChain);
+                    self.fat.write_fat_entry(new_cluster, FatEntry::EndOfChain);
                     last_cluster = new_cluster;
                     to_add -= 1;
                 }
 
                 for _ in 0..to_add {
-                    let new_cluster = self.find_free_cluster().ok_or(FatError::NotEnoughSpace)?;
+                    let new_cluster = self
+                        .fat
+                        .find_free_cluster()
+                        .ok_or(FatError::NotEnoughSpace)?;
 
-                    self.write_fat_entry(last_cluster, FatEntry::Next(new_cluster));
+                    self.fat
+                        .write_fat_entry(last_cluster, FatEntry::Next(new_cluster));
                     // reserve
-                    self.write_fat_entry(new_cluster, FatEntry::EndOfChain);
+                    self.fat.write_fat_entry(new_cluster, FatEntry::EndOfChain);
 
                     last_cluster = new_cluster;
                 }
             }
 
             // mark the current cluster as last
-            self.write_fat_entry(last_cluster, FatEntry::EndOfChain);
+            self.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
         }
 
         inode.set_size(size);
