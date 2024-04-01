@@ -191,16 +191,31 @@ For example, currently we have the following mappings:</p>
 '/devices' -&gt; Devices (a virtual filesystem)
 </code></pre>
 <p>When you open a path, it will find the best mapping, i.e. the longest prefix that matches the path.
-Then will use the resulting <code>Filesystem</code> manager to open the file.</p>
-<p>For example, if you open the path <code>/devices/console</code>, it will use the <code>Devices</code> manager to open the file <code>/console</code>.</p>
-<h2 id="inode"><a class="header" href="#inode">INode</a></h2>
+Then will use the resulting <a href="/Emerald/docs/kernel/fs/trait.FileSystem.html"><code>Filesystem</code></a> manager to open the file.</p>
+<p>For example, if you open the path <code>/devices/console</code>, it will use the <code>Devices</code> filesystem manager to open the file <code>/console</code>.</p>
+<h3 id="filesystem-trait"><a class="header" href="#filesystem-trait">Filesystem trait</a></h3>
+<p>The &quot;manager&quot; here is an implementor of the <a href="/Emerald/docs/kernel/fs/trait.FileSystem.html"><code>Filesystem</code></a> trait, which is a simple interface that controls all
+the filesystem operations.</p>
+<p>Operations supported are:</p>
+<ul>
+<li><code>open_root</code> - Open the root directory, this is the entry point when treversing the filesystem.</li>
+<li><code>read_dir</code> - Read the directory entries from a <a href="/Emerald/docs/kernel/fs/struct.DirectoryNode.html"><code>DirectoryNode</code></a>.</li>
+<li><code>create_node</code> - Create a new file or directory inside a <a href="/Emerald/docs/kernel/fs/struct.DirectoryNode.html"><code>DirectoryNode</code></a>.</li>
+<li><code>read_file</code> - Read the file contents from a <a href="/Emerald/docs/kernel/fs/struct.FileNode.html"><code>FileNode</code></a>.</li>
+<li><code>write_file</code> - Write the file contents to a <a href="/Emerald/docs/kernel/fs/struct.FileNode.html"><code>FileNode</code></a>.</li>
+<li><code>close_file</code> - Send a message that we are closing the file, if you notice, we don't have <code>open_file</code>, but instead, the user can 
+treverse the filesystem with <code>open_root</code> and <code>read_dir</code> until the file node is found, then it can be used directly. This function
+is used to alert the filesystem to clean up any resources that it might have allocated for this file.</li>
+<li><code>set_file_size</code> - Set the file size to a custom value, this is similar to <code>truncate</code> in Unix systems, <code>write_file</code>, will increase
+the file size if needed.</li>
+</ul>
+<h2 id="node"><a class="header" href="#node">Node</a></h2>
 <blockquote>
-<p>See <a href="/Emerald/docs/kernel/fs/struct.INode.html">INode</a></p>
+<p>See <a href="/Emerald/docs/kernel/fs/enum.Node.html">Node</a></p>
 </blockquote>
-<p>The <code>Filesystem</code> will give us an <code>INode</code> when we open a directory or a file, and this <code>INode</code> gives information
-about the file, as well as the <code>device</code> that it may contain.</p>
+<p>The <code>Filesystem</code> will give us an <code>Node</code> when we open a directory or a file, and this <code>Node</code> can be either <a href="/Emerald/docs/kernel/fs/struct.FileNode.html"><code>FileNode</code></a> or <a href="/Emerald/docs/kernel/fs/struct.DirectoryNode.html"><code>DirectoryNode</code></a></p>
 <blockquote>
-<p>I'm calling <code>INode</code> even though <a href="./fat.html">FAT</a> doesn't have this concept, but I'm using it to represent the file information.</p>
+<p>I'm calling <code>Node</code> even though <a href="./fat.html">FAT</a> doesn't have this concept, but I'm using it to represent the file information.</p>
 </blockquote>
 <h2 id="partition-tables"><a class="header" href="#partition-tables">Partition tables</a></h2>
 <p>Currently we only support the <a href="/Emerald/docs/kernel/fs/mbr">MBR</a> partition table, and we can only read the first partition, we don't check the partition type, and just forward it to the <a href="./fat.html">FAT</a> filesystem.</p>
@@ -209,7 +224,7 @@ about the file, as well as the <code>device</code> that it may contain.</p>
 <p>See <a href="/Emerald/docs/kernel/devices/struct.Devices.html">Devices</a></p>
 </blockquote>
 <p>This is a basic dictionary that maps a device name, to a <code>Arc&lt;dyn Device&gt;</code>. Then, when its opened, the device clone is
-returned in a special <code>INode</code>.</p>
+returned in a special <a href="/Emerald/docs/kernel/fs/struct.FileNode.html"><code>FileNode</code></a>, so we can act upon it as a file.</p>
 
                     </main>
 

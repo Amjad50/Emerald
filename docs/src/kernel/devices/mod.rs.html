@@ -207,7 +207,7 @@
 
 <span class="kw">impl </span>FileSystem <span class="kw">for </span>RwLock&lt;Devices&gt; {
     <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt; {
-        <span class="prelude-val">Ok</span>(DirectoryNode::new(
+        <span class="prelude-val">Ok</span>(DirectoryNode::without_parent(
             String::from(<span class="string">"/"</span>),
             FileAttributes::DIRECTORY,
             DEVICES_FILESYSTEM_ROOT_INODE_MAGIC,

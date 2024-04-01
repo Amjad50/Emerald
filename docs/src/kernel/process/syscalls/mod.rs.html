@@ -808,8 +808,6 @@
 <a href="#806" id="806">806</a>
 <a href="#807" id="807">807</a>
 <a href="#808" id="808">808</a>
-<a href="#809" id="809">809</a>
-<a href="#810" id="810">810</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{ffi::CStr, mem};
 
 <span class="kw">use </span>alloc::{borrow::Cow, string::String, vec::Vec};
@@ -870,10 +868,11 @@
             FileSystemError::InvalidPath =&gt; SyscallError::CouldNotOpenFile,
             FileSystemError::FileNotFound =&gt; SyscallError::FileNotFound,
             FileSystemError::ReadNotSupported =&gt; SyscallError::CouldNotReadFromFile,
-            FileSystemError::WriteNotSupported =&gt; SyscallError::CouldNotWriteToFile,
+            FileSystemError::WriteNotSupported | FileSystemError::CouldNotSetFileLength =&gt; SyscallError::CouldNotWriteToFile,
             FileSystemError::EndOfFile =&gt; SyscallError::EndOfFile,
             FileSystemError::IsNotDirectory =&gt; SyscallError::IsNotDirectory,
             FileSystemError::IsDirectory =&gt; SyscallError::IsDirectory,
+            FileSystemError::FileAlreadyExists =&gt; <span class="macro">todo!</span>(),
             FileSystemError::DeviceNotFound =&gt; <span class="macro">todo!</span>(),
             FileSystemError::BufferNotLargeEnough(<span class="kw">_</span>) =&gt; SyscallError::BufferTooSmall,
             FileSystemError::DiskReadError { .. }
@@ -1577,10 +1576,9 @@
                 .try_into()
                 .map_err(|<span class="kw">_</span>| SyscallError::InvalidOffset)<span class="question-mark">?</span>,
             SeekWhence::Current =&gt; {
-                <span class="kw">let </span>current: i64 = file
-                    .current_position()
-                    .try_into()
-                    .map_err(|<span class="kw">_</span>| SyscallError::InvalidOffset)<span class="question-mark">?</span>;
+                <span class="kw">let </span>current: i64 = file.current_position().try_into().expect(
+                    <span class="string">"current position should be positive and would be less than i64 bit in size"</span>,
+                );
                 current
                     .checked_add(seek.offset)
                     .ok_or(SyscallError::InvalidOffset)<span class="question-mark">?
@@ -1588,11 +1586,9 @@
                     .map_err(|<span class="kw">_</span>| SyscallError::InvalidOffset)<span class="question-mark">?
             </span>}
             SeekWhence::End =&gt; {
-                <span class="comment">// TODO: add support for seek more than the file size
-                </span><span class="kw">if </span>seek.offset &gt; <span class="number">0 </span>{
-                    <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::InvalidOffset);
-                }
-                <span class="kw">let </span>end: i64 = size.try_into().map_err(|<span class="kw">_</span>| SyscallError::InvalidOffset)<span class="question-mark">?</span>;
+                <span class="kw">let </span>end: i64 = size
+                    .try_into()
+                    .expect(<span class="string">"size should be positive and would be less than i64 bit in size"</span>);
                 end.checked_add(seek.offset)
                     .ok_or(SyscallError::InvalidOffset)<span class="question-mark">?
                     </span>.try_into()
@@ -1602,7 +1598,7 @@
 
         file.seek(new_location)<span class="question-mark">?</span>;
 
-        <span class="prelude-val">Ok</span>(new_location)
+        <span class="prelude-val">Ok</span>::&lt;<span class="kw">_</span>, SyscallError&gt;(new_location)
     })<span class="question-mark">?</span>;
 
     SyscallResult::Ok(new_position)
