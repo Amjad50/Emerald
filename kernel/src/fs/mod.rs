@@ -22,6 +22,7 @@ pub mod path;
 
 /// This is not used at all, just an indicator in [`Directory::fetch_entries`]
 pub(crate) const ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC: u64 = 0xf11356573e;
+pub(crate) const NO_PARENT_DIR_SECTOR: u64 = 0xFFFF_FFFF_FFFF_FFFF;
 
 static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
     mappings: Vec::new(),
@@ -71,6 +72,10 @@ impl FileAttributes {
     pub fn archive(self) -> bool {
         self.0 & Self::ARCHIVE.0 != 0
     }
+
+    fn contains(&self, other: FileAttributes) -> bool {
+        self.0 & other.0 != 0
+    }
 }
 
 impl ops::BitOr for FileAttributes {
@@ -96,10 +101,49 @@ impl ops::BitAnd for FileAttributes {
 }
 
 #[derive(Debug, Clone)]
-pub struct FileNode {
+pub struct BaseNode {
     name: String,
     attributes: FileAttributes,
     start_cluster: u64,
+    parent_dir_sector: u64,
+    /// The position of this file in the parent directory
+    /// the size of the sector shouldn't exceed 16 bits
+    /// this is element wise and not byte wise
+    parent_dir_index: u16,
+}
+
+impl BaseNode {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn start_cluster(&self) -> u64 {
+        self.start_cluster
+    }
+
+    pub(self) fn set_start_cluster(&mut self, cluster: u64) {
+        self.start_cluster = cluster;
+    }
+
+    #[allow(dead_code)]
+    pub fn attributes(&self) -> FileAttributes {
+        self.attributes
+    }
+
+    #[allow(dead_code)]
+    pub fn parent_dir_sector(&self) -> u64 {
+        self.parent_dir_sector
+    }
+
+    #[allow(dead_code)]
+    pub fn parent_dir_index(&self) -> u16 {
+        self.parent_dir_index
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FileNode {
+    base: BaseNode,
     size: u64,
     device: Option<Arc<dyn Device>>,
 }
@@ -110,12 +154,18 @@ impl FileNode {
         attributes: FileAttributes,
         start_cluster: u64,
         size: u64,
+        parent_dir_sector: u64,
+        parent_dir_index: u16,
     ) -> Self {
         assert!(!attributes.directory());
         Self {
-            name,
-            attributes,
-            start_cluster,
+            base: BaseNode {
+                name,
+                attributes,
+                start_cluster,
+                parent_dir_sector,
+                parent_dir_index,
+            },
             size,
             device: None,
         }
@@ -124,9 +174,13 @@ impl FileNode {
     pub fn new_device(name: String, attributes: FileAttributes, device: Arc<dyn Device>) -> Self {
         assert!(!attributes.directory());
         Self {
-            name,
-            attributes,
-            start_cluster: DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+            base: BaseNode {
+                name,
+                attributes,
+                start_cluster: DEVICES_FILESYSTEM_CLUSTER_MAGIC,
+                parent_dir_sector: NO_PARENT_DIR_SECTOR,
+                parent_dir_index: 0,
+            },
             size: 0,
             device: Some(device),
         }
@@ -136,8 +190,8 @@ impl FileNode {
         self.size
     }
 
-    pub fn start_cluster(&self) -> u64 {
-        self.start_cluster
+    pub(self) fn set_size(&mut self, size: u64) {
+        self.size = size;
     }
 
     pub fn try_open_device(&mut self) -> Result<(), FileSystemError> {
@@ -159,27 +213,31 @@ impl Drop for FileNode {
 
 #[derive(Debug, Clone)]
 pub struct DirectoryNode {
-    name: String,
-    attributes: FileAttributes,
-    start_cluster: u64,
+    base: BaseNode,
 }
 
 impl DirectoryNode {
-    pub fn new(name: String, attributes: FileAttributes, start_cluster: u64) -> Self {
+    pub fn without_parent(name: String, attributes: FileAttributes, start_cluster: u64) -> Self {
+        Self::new(name, attributes, start_cluster, NO_PARENT_DIR_SECTOR, 0)
+    }
+
+    pub fn new(
+        name: String,
+        attributes: FileAttributes,
+        start_cluster: u64,
+        parent_dir_sector: u64,
+        parent_dir_index: u16,
+    ) -> Self {
         assert!(attributes.directory());
         Self {
-            name,
-            attributes,
-            start_cluster,
+            base: BaseNode {
+                name,
+                attributes,
+                start_cluster,
+                parent_dir_sector,
+                parent_dir_index,
+            },
         }
-    }
-
-    pub fn start_cluster(&self) -> u64 {
-        self.start_cluster
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
     }
 }
 
@@ -203,11 +261,31 @@ impl From<DirectoryNode> for Node {
 }
 
 impl Node {
-    pub fn new(name: String, attributes: FileAttributes, start_cluster: u64, size: u64) -> Self {
+    pub fn new(
+        name: String,
+        attributes: FileAttributes,
+        start_cluster: u64,
+        size: u64,
+        parent_dir_sector: u64,
+        parent_dir_index: u16,
+    ) -> Self {
         if attributes.directory() {
-            Self::Directory(DirectoryNode::new(name, attributes, start_cluster))
+            Self::Directory(DirectoryNode::new(
+                name,
+                attributes,
+                start_cluster,
+                parent_dir_sector,
+                parent_dir_index,
+            ))
         } else {
-            Self::File(FileNode::new_file(name, attributes, start_cluster, size))
+            Self::File(FileNode::new_file(
+                name,
+                attributes,
+                start_cluster,
+                size,
+                parent_dir_sector,
+                parent_dir_index,
+            ))
         }
     }
 
@@ -270,6 +348,62 @@ impl Node {
     }
 }
 
+impl ops::Deref for FileNode {
+    type Target = BaseNode;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl ops::DerefMut for FileNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ops::Deref for DirectoryNode {
+    type Target = BaseNode;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl ops::DerefMut for DirectoryNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ops::Deref for Node {
+    type Target = BaseNode;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::File(file) => file,
+            Self::Directory(dir) => dir,
+        }
+    }
+}
+
+impl ops::DerefMut for Node {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::File(file) => file,
+            Self::Directory(dir) => dir,
+        }
+    }
+}
+
+// This is some sort of cache or extra metadata the filesystem
+// use to help implement the filesystem and improve performance
+#[derive(Debug, Default)]
+pub struct AccessHelper {
+    current_cluster: u64,
+    cluster_index: u64,
+}
+
 pub enum DirTreverse {
     Continue,
     Stop,
@@ -283,11 +417,21 @@ pub trait FileSystem: Send + Sync {
         handler: &mut dyn FnMut(Node) -> DirTreverse,
     ) -> Result<(), FileSystemError>;
 
+    fn create_node(
+        &self,
+        _parent: &DirectoryNode,
+        _name: &str,
+        _attributes: FileAttributes,
+    ) -> Result<Node, FileSystemError> {
+        Err(FileSystemError::OperationNotSupported)
+    }
+
     fn read_file(
         &self,
         inode: &FileNode,
         position: u64,
         buf: &mut [u8],
+        _access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         if let Some(device) = &inode.device {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
@@ -299,9 +443,10 @@ pub trait FileSystem: Send + Sync {
 
     fn write_file(
         &self,
-        inode: &FileNode,
+        inode: &mut FileNode,
         position: u64,
         buf: &[u8],
+        _access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         if let Some(device) = &inode.device {
             assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
@@ -309,6 +454,18 @@ pub trait FileSystem: Send + Sync {
         } else {
             Err(FileSystemError::WriteNotSupported)
         }
+    }
+
+    fn close_file(
+        &self,
+        _inode: &FileNode,
+        _access_helper: AccessHelper,
+    ) -> Result<(), FileSystemError> {
+        Ok(())
+    }
+
+    fn set_file_size(&self, _inode: &mut FileNode, _size: u64) -> Result<(), FileSystemError> {
+        Err(FileSystemError::OperationNotSupported)
     }
 }
 
@@ -441,8 +598,10 @@ pub enum FileSystemError {
     ReadNotSupported,
     WriteNotSupported,
     OperationNotSupported,
+    CouldNotSetFileLength,
     EndOfFile,
     BufferNotLargeEnough(usize),
+    FileAlreadyExists,
 }
 
 fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
@@ -594,6 +753,7 @@ pub struct File {
     position: u64,
     is_terminal: bool,
     blocking_mode: BlockingMode,
+    access_helper: AccessHelper,
 }
 
 /// A handle to a directory, it has the inode which controls the properties of the node in the filesystem
@@ -643,12 +803,18 @@ impl File {
             position,
             is_terminal: false,
             blocking_mode,
+            access_helper: AccessHelper::default(),
         })
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
         let count = match self.blocking_mode {
-            BlockingMode::None => self.filesystem.read_file(&self.inode, self.position, buf)?,
+            BlockingMode::None => self.filesystem.read_file(
+                &self.inode,
+                self.position,
+                buf,
+                &mut self.access_helper,
+            )?,
             BlockingMode::Line => {
                 // read until \n or \0
                 let mut i = 0;
@@ -658,6 +824,7 @@ impl File {
                         &self.inode,
                         self.position,
                         core::slice::from_mut(&mut char_buf),
+                        &mut self.access_helper,
                     );
 
                     let read_byte = match read_byte {
@@ -693,7 +860,12 @@ impl File {
 
                 // try to read until we have something
                 loop {
-                    let read_byte = self.filesystem.read_file(&self.inode, self.position, buf);
+                    let read_byte = self.filesystem.read_file(
+                        &self.inode,
+                        self.position,
+                        buf,
+                        &mut self.access_helper,
+                    );
 
                     let read_byte = match read_byte {
                         Ok(read_byte) => read_byte,
@@ -722,17 +894,17 @@ impl File {
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
-        let written = self
-            .filesystem
-            .write_file(&self.inode, self.position, buf)?;
+        let written = self.filesystem.write_file(
+            &mut self.inode,
+            self.position,
+            buf,
+            &mut self.access_helper,
+        )?;
         self.position += written;
         Ok(written)
     }
 
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {
-        if position > self.inode.size() {
-            return Err(FileSystemError::InvalidOffset);
-        }
         self.position = position;
         Ok(())
     }
@@ -786,6 +958,10 @@ impl File {
         self.position
     }
 
+    pub fn set_size(&mut self, size: u64) -> Result<(), FileSystemError> {
+        self.filesystem.set_file_size(&mut self.inode, size)
+    }
+
     /// This is a move verbose method than `Clone::clone`, as I want it to be
     /// more explicit to the user that this is not a normal `clone` operation.
     pub fn clone_inherit(&self) -> Self {
@@ -796,6 +972,7 @@ impl File {
             position: 0,
             is_terminal: self.is_terminal,
             blocking_mode: self.blocking_mode,
+            access_helper: AccessHelper::default(),
         };
 
         // inform the device of a clone operation
@@ -807,6 +984,14 @@ impl File {
         }
 
         s
+    }
+}
+
+impl Drop for File {
+    fn drop(&mut self) {
+        self.filesystem
+            .close_file(&self.inode, core::mem::take(&mut self.access_helper))
+            .expect("Failed to close file");
     }
 }
 
@@ -848,7 +1033,7 @@ impl Directory {
                 // only add path with one component
                 if path.components().count() == 1 {
                     dir_entries.push(
-                        DirectoryNode::new(
+                        DirectoryNode::without_parent(
                             path.components().next().unwrap().as_str().into(),
                             FileAttributes::DIRECTORY,
                             ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC,
@@ -866,6 +1051,16 @@ impl Directory {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn create_node(
+        &mut self,
+        name: &str,
+        attributes: FileAttributes,
+    ) -> Result<FilesystemNode, FileSystemError> {
+        let node = self.filesystem.create_node(&self.inode, name, attributes)?;
+
+        FilesystemNode::from_node(self.path.join(name), node, self.filesystem.clone())
     }
 
     pub fn read(&mut self, entries: &mut [DirEntry]) -> Result<usize, FileSystemError> {
@@ -912,7 +1107,15 @@ impl FilesystemNode {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
         let (filesystem, inode) = open_inode(path.as_ref())?;
 
-        match inode {
+        Self::from_node(path, inode, filesystem)
+    }
+
+    pub fn from_node<P: AsRef<Path>>(
+        path: P,
+        node: Node,
+        filesystem: Arc<dyn FileSystem>,
+    ) -> Result<Self, FileSystemError> {
+        match node {
             Node::File(file) => Ok(Self::File(File::from_inode(
                 file,
                 path,

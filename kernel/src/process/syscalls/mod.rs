@@ -58,10 +58,11 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::InvalidPath => SyscallError::CouldNotOpenFile,
             FileSystemError::FileNotFound => SyscallError::FileNotFound,
             FileSystemError::ReadNotSupported => SyscallError::CouldNotReadFromFile,
-            FileSystemError::WriteNotSupported => SyscallError::CouldNotWriteToFile,
+            FileSystemError::WriteNotSupported | FileSystemError::CouldNotSetFileLength => SyscallError::CouldNotWriteToFile,
             FileSystemError::EndOfFile => SyscallError::EndOfFile,
             FileSystemError::IsNotDirectory => SyscallError::IsNotDirectory,
             FileSystemError::IsDirectory => SyscallError::IsDirectory,
+            FileSystemError::FileAlreadyExists => todo!(),
             FileSystemError::DeviceNotFound => todo!(),
             FileSystemError::BufferNotLargeEnough(_) => SyscallError::BufferTooSmall,
             FileSystemError::DiskReadError { .. }
@@ -765,10 +766,9 @@ fn sys_seek(all_state: &mut InterruptAllSavedState) -> SyscallResult {
                 .try_into()
                 .map_err(|_| SyscallError::InvalidOffset)?,
             SeekWhence::Current => {
-                let current: i64 = file
-                    .current_position()
-                    .try_into()
-                    .map_err(|_| SyscallError::InvalidOffset)?;
+                let current: i64 = file.current_position().try_into().expect(
+                    "current position should be positive and would be less than i64 bit in size",
+                );
                 current
                     .checked_add(seek.offset)
                     .ok_or(SyscallError::InvalidOffset)?
@@ -776,11 +776,9 @@ fn sys_seek(all_state: &mut InterruptAllSavedState) -> SyscallResult {
                     .map_err(|_| SyscallError::InvalidOffset)?
             }
             SeekWhence::End => {
-                // TODO: add support for seek more than the file size
-                if seek.offset > 0 {
-                    return Err(SyscallError::InvalidOffset);
-                }
-                let end: i64 = size.try_into().map_err(|_| SyscallError::InvalidOffset)?;
+                let end: i64 = size
+                    .try_into()
+                    .expect("size should be positive and would be less than i64 bit in size");
                 end.checked_add(seek.offset)
                     .ok_or(SyscallError::InvalidOffset)?
                     .try_into()
@@ -790,7 +788,7 @@ fn sys_seek(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
         file.seek(new_location)?;
 
-        Ok(new_location)
+        Ok::<_, SyscallError>(new_location)
     })?;
 
     SyscallResult::Ok(new_position)

@@ -160,6 +160,7 @@ mod ata {
     pub const COMMAND_IDENTIFY: u8 = 0xEC;
     pub const COMMAND_PACKET_IDENTIFY: u8 = 0xA1;
     pub const COMMAND_READ_SECTORS: u8 = 0x20;
+    pub const COMMAND_WRITE_SECTORS: u8 = 0x30;
     pub const COMMAND_DEVICE_RESET: u8 = 0x08;
     pub const COMMAND_PACKET: u8 = 0xA0;
 
@@ -253,8 +254,6 @@ impl IdeIo {
     }
 
     pub fn read_data_block(&self, data: &mut [u8]) -> Result<(), u8> {
-        self.wait_until_free();
-
         if self.read_status() & ata::STATUS_ERR != 0 {
             // error
             return Err(self.read_error());
@@ -262,15 +261,41 @@ impl IdeIo {
 
         // read data
         for i in 0..data.len() / 2 {
+            if i % 256 == 0 {
+                self.wait_until_free();
+            }
+
             let word = self.read_data();
             data[i * 2] = (word & 0xFF) as u8;
             data[i * 2 + 1] = ((word >> 8) & 0xFF) as u8;
+        }
 
-            // TODO: maybe not best to check on every read, but when reading multiple sectors
-            if self.read_status() & ata::STATUS_BUSY != 0 {
+        self.wait_until_free();
+
+        // TODO: replace with error
+        assert!(self.read_status() & ata::STATUS_DATA_REQUEST == 0);
+
+        Ok(())
+    }
+
+    pub fn write_data_block(&self, data: &[u8]) -> Result<(), u8> {
+        if self.read_status() & ata::STATUS_ERR != 0 {
+            // error
+            return Err(self.read_error());
+        }
+
+        // write data
+        for i in 0..data.len() / 2 {
+            if i % 256 == 0 {
                 self.wait_until_free();
             }
+
+            let word = (data[i * 2] as u16) | ((data[i * 2 + 1] as u16) << 8);
+
+            self.write_data(word);
         }
+
+        self.wait_until_free();
 
         // TODO: replace with error
         assert!(self.read_status() & ata::STATUS_DATA_REQUEST == 0);
@@ -334,13 +359,22 @@ impl AtaCommand {
         io_port.write_command_block(ata::COMMAND, self.command);
     }
 
-    pub fn execute(&self, io_port: &IdeIo, data: &mut [u8]) -> Result<(), u8> {
+    pub fn execute_read(&self, io_port: &IdeIo, data: &mut [u8]) -> Result<(), u8> {
         // must be even since we are receiving 16 bit words
         assert!(data.len() % 2 == 0);
         io_port.wait_until_can_command()?;
         self.write(io_port);
 
         io_port.read_data_block(data)
+    }
+
+    pub fn execute_write(&self, io_port: &IdeIo, data: &[u8]) -> Result<(), u8> {
+        // must be even since we are sending 16 bit words
+        assert!(data.len() % 2 == 0);
+        io_port.wait_until_can_command()?;
+        self.write(io_port);
+
+        io_port.write_data_block(data)
     }
 }
 
@@ -709,6 +743,29 @@ impl IdeDevice {
                 .map_err(IdeError::DeviceError)
         }
     }
+
+    pub fn write_sync(&self, start_sector: u64, data: &[u8]) -> Result<(), IdeError> {
+        let sector_size = self.sector_size as u64;
+        let buffer_len = data.len() as u64;
+
+        if buffer_len % sector_size != 0 {
+            return Err(IdeError::UnalignedSize);
+        }
+        if start_sector >= self.number_of_sectors {
+            return Err(IdeError::BoundsExceeded);
+        }
+
+        let number_of_sectors = buffer_len / sector_size;
+
+        if self.device_type == IdeDeviceType::Ata {
+            self.device_impl
+                .lock()
+                .write_sync_ata(start_sector, number_of_sectors, data)
+                .map_err(IdeError::DeviceError)
+        } else {
+            todo!("write_sync for ATAPI");
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -736,7 +793,7 @@ impl IdeDeviceImpl {
 
         let mut device_type = IdeDeviceType::Ata;
 
-        if let Err(err) = command.execute(&io, &mut identify_data) {
+        if let Err(err) = command.execute_read(&io, &mut identify_data) {
             assert!(err & ata::ERROR_ABORTED != 0);
             let lbalo = io.read_command_block(ata::LBA_LO);
             let lbamid = io.read_command_block(ata::LBA_MID);
@@ -766,7 +823,7 @@ impl IdeDeviceImpl {
             // here we know we are running an ATAPI device
             let command = AtaCommand::new(ata::COMMAND_PACKET_IDENTIFY)
                 .with_second_drive(second_device_select);
-            if let Err(err) = command.execute(&io, &mut identify_data) {
+            if let Err(err) = command.execute_read(&io, &mut identify_data) {
                 println!("Error: unknown ATAPI device aborted: Err={err:02x}",);
                 return None;
             }
@@ -857,7 +914,7 @@ impl IdeDeviceImpl {
             .with_sector_count(len_sectors as u16)
             .with_second_drive(self.second_device_select);
 
-        command.execute(&self.io, data)
+        command.execute_read(&self.io, data)
     }
 
     fn read_sync_atapi(
@@ -880,7 +937,26 @@ impl IdeDeviceImpl {
         command.execute(&self.io, data)
     }
 
-    fn interrupt(&mut self) {}
+    fn write_sync_ata(
+        &mut self,
+        start_sector: u64,
+        len_sectors: u64,
+        data: &[u8],
+    ) -> Result<(), u8> {
+        assert!(len_sectors <= u16::MAX as u64);
+        // the buffer is enough to hold the data (see write_sync)
+        let command = AtaCommand::new(ata::COMMAND_WRITE_SECTORS)
+            .with_lba(start_sector)
+            .with_sector_count(len_sectors as u16)
+            .with_second_drive(self.second_device_select);
+
+        command.execute_write(&self.io, data)
+    }
+
+    fn interrupt(&mut self) {
+        // acknowledge interrupt
+        self.io.read_status();
+    }
 }
 
 impl PciDevice for IdeDevice {

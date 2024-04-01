@@ -58,7 +58,7 @@ pub trait Device: Sync + Send + fmt::Debug {
 
 impl FileSystem for RwLock<Devices> {
     fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
-        Ok(DirectoryNode::new(
+        Ok(DirectoryNode::without_parent(
             String::from("/"),
             FileAttributes::DIRECTORY,
             DEVICES_FILESYSTEM_ROOT_INODE_MAGIC,

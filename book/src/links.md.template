@@ -14,7 +14,10 @@
 [uart]: {ROOT_PATH}docs/kernel/io/uart
 [console]: {ROOT_PATH}docs/kernel/io/console
 [kernel_filesystem]: {ROOT_PATH}docs/kernel/fs
-[kernel_inode]: {ROOT_PATH}docs/kernel/fs/struct.INode.html
+[kernel_fs_node]: {ROOT_PATH}docs/kernel/fs/enum.Node.html
+[kernel_fs_filenode]: {ROOT_PATH}docs/kernel/fs/struct.FileNode.html
+[kernel_fs_dirnode]: {ROOT_PATH}docs/kernel/fs/struct.DirectoryNode.html
+[kernel_fs_trait]: {ROOT_PATH}docs/kernel/fs/trait.FileSystem.html
 [kernel_mbr]: {ROOT_PATH}docs/kernel/fs/mbr
 [kernel_devices_map]: {ROOT_PATH}docs/kernel/devices/struct.Devices.html
 [kernel_fat]: {ROOT_PATH}docs/kernel/fs/fat
