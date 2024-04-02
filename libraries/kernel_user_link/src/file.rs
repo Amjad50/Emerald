@@ -187,140 +187,122 @@ impl SeekFrom {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct OpenOptions {
-    read: bool,
-    write: bool,
-    create: bool,
-    create_new: bool,
-    truncate: bool,
-    append: bool,
-}
+pub struct OpenOptions(u8);
 
 #[allow(dead_code)]
 impl OpenOptions {
-    pub const READ: Self = Self {
-        read: true,
-        write: false,
-        create: false,
-        create_new: false,
-        truncate: false,
-        append: false,
-    };
-
-    pub const WRITE: Self = Self {
-        read: false,
-        write: true,
-        create: false,
-        create_new: false,
-        truncate: false,
-        append: false,
-    };
-
-    pub const CREATE: Self = Self {
-        read: false,
-        write: false,
-        create: true,
-        create_new: false,
-        truncate: false,
-        append: false,
-    };
-
-    pub const CREATE_NEW: Self = Self {
-        read: false,
-        write: false,
-        create: true,
-        create_new: true,
-        truncate: false,
-        append: false,
-    };
-
-    pub const TRUNCATE: Self = Self {
-        read: false,
-        write: false,
-        create: false,
-        create_new: false,
-        truncate: true,
-        append: false,
-    };
-
-    pub const APPEND: Self = Self {
-        read: false,
-        write: false,
-        create: false,
-        create_new: false,
-        truncate: false,
-        append: true,
-    };
+    pub const READ: Self = Self(1 << 0);
+    pub const WRITE: Self = Self(1 << 1);
+    pub const CREATE: Self = Self(1 << 2);
+    pub const CREATE_NEW: Self = Self(1 << 3);
+    pub const TRUNCATE: Self = Self(1 << 4);
+    pub const APPEND: Self = Self(1 << 5);
 
     pub fn new() -> Self {
-        Self {
-            read: false,
-            write: false,
-            create: false,
-            create_new: false,
-            truncate: false,
-            append: false,
+        Self(0)
+    }
+
+    pub fn read(&mut self, read: bool) -> &mut Self {
+        if read {
+            self.0 |= Self::READ.0;
+        } else {
+            self.0 &= !Self::READ.0;
         }
-    }
-
-    pub fn read(mut self, read: bool) -> Self {
-        self.read = read;
         self
     }
 
-    pub fn write(mut self, write: bool) -> Self {
-        self.write = write;
+    pub fn write(&mut self, write: bool) -> &mut Self {
+        if write {
+            self.0 |= Self::WRITE.0;
+        } else {
+            self.0 &= !Self::WRITE.0;
+        }
         self
     }
 
-    pub fn create(mut self, create: bool) -> Self {
-        self.create = create;
+    pub fn create(&mut self, create: bool) -> &mut Self {
+        if create {
+            self.0 |= Self::CREATE.0;
+        } else {
+            self.0 &= !Self::CREATE.0;
+        }
         self
     }
 
-    pub fn create_new(mut self, create_new: bool) -> Self {
-        self.create_new = create_new;
+    pub fn create_new(&mut self, create_new: bool) -> &mut Self {
+        if create_new {
+            self.0 |= Self::CREATE_NEW.0;
+        } else {
+            self.0 &= !Self::CREATE_NEW.0;
+        }
         self
     }
 
-    pub fn truncate(mut self, truncate: bool) -> Self {
-        self.truncate = truncate;
+    pub fn truncate(&mut self, truncate: bool) -> &mut Self {
+        if truncate {
+            self.0 |= Self::TRUNCATE.0;
+        } else {
+            self.0 &= !Self::TRUNCATE.0;
+        }
         self
     }
 
-    pub fn append(mut self, append: bool) -> Self {
-        self.append = append;
+    pub fn append(&mut self, append: bool) -> &mut Self {
+        if append {
+            self.0 |= Self::APPEND.0;
+        } else {
+            self.0 &= !Self::APPEND.0;
+        }
         self
     }
 
     pub fn is_read(&self) -> bool {
-        self.read
+        self.0 & Self::READ.0 != 0
     }
 
     pub fn is_write(&self) -> bool {
-        self.write || self.append
+        (self.0 & Self::WRITE.0 != 0) || self.is_append()
     }
 
     pub fn is_create(&self) -> bool {
-        self.create
+        self.0 & Self::CREATE.0 != 0
     }
 
     pub fn is_create_new(&self) -> bool {
-        self.create_new
+        self.0 & Self::CREATE_NEW.0 != 0
     }
 
     pub fn is_truncate(&self) -> bool {
-        self.truncate
+        self.0 & Self::TRUNCATE.0 != 0
     }
 
     pub fn is_append(&self) -> bool {
-        self.append
+        self.0 & Self::APPEND.0 != 0
+    }
+
+    pub fn from_u64(flags: u64) -> Option<Self> {
+        let all = (Self::READ.0
+            | Self::WRITE.0
+            | Self::CREATE.0
+            | Self::CREATE_NEW.0
+            | Self::TRUNCATE.0
+            | Self::APPEND.0) as u64;
+
+        if flags & !all != 0 {
+            return None;
+        }
+
+        Some(Self(flags as u8))
+    }
+
+    pub fn to_u64(&self) -> u64 {
+        self.0 as u64
     }
 }
 
 impl Default for OpenOptions {
     fn default() -> Self {
-        Self::new().read(true)
+        Self::READ
     }
 }
 
@@ -328,14 +310,7 @@ impl ops::BitOr for OpenOptions {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        Self {
-            read: self.read | rhs.read,
-            write: self.write | rhs.write,
-            create: self.create | rhs.create,
-            create_new: self.create_new | rhs.create_new,
-            truncate: self.truncate | rhs.truncate,
-            append: self.append | rhs.append,
-        }
+        Self(self.0 | rhs.0)
     }
 }
 
@@ -349,14 +324,7 @@ impl ops::BitAnd for OpenOptions {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        Self {
-            read: self.read & rhs.read,
-            write: self.write & rhs.write,
-            create: self.create & rhs.create,
-            create_new: self.create_new & rhs.create_new,
-            truncate: self.truncate & rhs.truncate,
-            append: self.append & rhs.append,
-        }
+        Self(self.0 & rhs.0)
     }
 }
 

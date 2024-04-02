@@ -6,6 +6,7 @@ pub use kernel_user_link::file::DirFilename;
 pub use kernel_user_link::file::FileMeta;
 pub use kernel_user_link::file::FileStat;
 pub use kernel_user_link::file::FileType;
+pub use kernel_user_link::file::OpenOptions;
 pub use kernel_user_link::file::SeekFrom;
 pub use kernel_user_link::file::SeekWhence;
 pub use kernel_user_link::file::MAX_FILENAME_LEN;
@@ -59,18 +60,18 @@ pub unsafe fn syscall_write(fd: usize, buf: &[u8]) -> Result<u64, SyscallError> 
 
 /// # Safety
 /// This function assumes that `path` is a valid C string.
-/// And that `access_mode` and `flags` are valid.
+/// And that `flags` are valid.
 pub unsafe fn syscall_open(
     path: &CStr,
-    access_mode: usize,
+    open_options: OpenOptions,
     flags: usize,
 ) -> Result<usize, SyscallError> {
     unsafe {
         call_syscall!(
             SYS_OPEN,
-            path.as_ptr() as u64, // path
-            access_mode as u64,   // access_mode
-            flags as u64          // flags
+            path.as_ptr() as u64,  // path
+            open_options.to_u64(), // open_options
+            flags as u64           // flags
         )
         .map(|fd| fd as usize)
     }

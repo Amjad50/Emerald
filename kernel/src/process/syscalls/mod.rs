@@ -211,21 +211,20 @@ fn path_to_proc_absolute_path(path: &Path) -> Cow<'_, Path> {
 }
 
 fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
-    let (path, _access_mode, flags, ..) = verify_args! {
+    let (path, open_options, flags, ..) = verify_args! {
         sys_arg!(0, all_state.rest => sys_arg_to_path(*const u8)),
         sys_arg!(1, all_state.rest => u64),
         sys_arg!(2, all_state.rest => u64),
     };
+
+    let open_options = OpenOptions::from_u64(open_options)
+        .ok_or(to_arg_err!(1, SyscallArgError::GeneralInvalid))?;
+
     let blocking_mode = kernel_user_link::file::parse_flags(flags)
         .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
 
     let absolute_path = path_to_proc_absolute_path(path);
-    // TODO: implement flags and access_mode, for now just open file for reading
-    let file = fs::File::open_blocking(
-        absolute_path,
-        blocking_mode,
-        OpenOptions::READ | OpenOptions::WRITE,
-    )?;
+    let file = fs::File::open_blocking(absolute_path, blocking_mode, open_options)?;
     let file_index = with_current_process(|process| process.push_fs_node(file));
 
     SyscallResult::Ok(file_index as u64)

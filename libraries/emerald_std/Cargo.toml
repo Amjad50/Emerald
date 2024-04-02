@@ -1,6 +1,6 @@
 [package]
 name = "emerald_std"
-version = "0.2.9"
+version = "0.3.0"
 edition = "2021"
 readme = "README.md"
 authors = ["Amjad Alsharafi"]
