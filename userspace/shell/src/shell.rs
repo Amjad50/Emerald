@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    fs,
     io::{self, Write},
     path::Path,
     process::Command,
@@ -56,6 +57,20 @@ fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
                     Ok(seconds) => std::thread::sleep(std::time::Duration::from_secs(seconds)),
                     Err(e) => {
                         println!("sleep: invalid time interval `{}`, e: {e}", args[0])
+                    }
+                }
+            }
+        }
+        "touch" => {
+            if args.is_empty() {
+                println!("touch: missing operand");
+            } else {
+                let path = args[0];
+                let file = fs::OpenOptions::new().create(true).write(true).open(path);
+                match file {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("touch: {e}");
                     }
                 }
             }
