@@ -68,6 +68,19 @@ fn main() -> ExitCode {
     let mut buf = [0u8; 1024];
     let mut last_16 = [0u8; 16];
     let mut offset = 0;
+
+    let print_ascii = |last_16: &[u8]| {
+        print!(" "); // more space between the hex and ascii
+        for &c in last_16.iter() {
+            if (0x20..=0x7e).contains(&c) {
+                print!("{}", c as char);
+            } else {
+                print!(".");
+            }
+        }
+        println!();
+    };
+
     'outer: loop {
         match file.read(&mut buf) {
             Ok(0) => break,
@@ -86,15 +99,7 @@ fn main() -> ExitCode {
                     }
 
                     if offset % 16 == 15 {
-                        print!(" "); // more space between the hex and ascii
-                        for &c in last_16.iter() {
-                            if (0x20..=0x7e).contains(&c) {
-                                print!("{}", c as char);
-                            } else {
-                                print!(".");
-                            }
-                        }
-                        println!();
+                        print_ascii(&last_16);
                     }
                     offset += 1;
 
@@ -110,6 +115,18 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+    }
+
+    if offset % 16 != 0 {
+        // print the remaining ascii characters
+        let remaining = 16 - (offset % 16);
+        for i in 0..remaining {
+            print!("  ");
+            if (offset + i) % 2 == 1 {
+                print!(" "); // space separating each 2 bytes
+            }
+        }
+        print_ascii(&last_16[..(offset % 16)]);
     }
     // print the last line
     println!();
