@@ -11,7 +11,7 @@ fn main() -> ExitCode {
     let args = std::env::args().collect::<Vec<_>>();
 
     if args.len() < 2 {
-        println!("Usage: {} [-l <n>] [-s <n>] [file]", args[0]);
+        eprintln!("Usage: {} [-l <n>] [-s <n>] [file]", args[0]);
         return ExitCode::FAILURE;
     }
 
@@ -24,20 +24,20 @@ fn main() -> ExitCode {
     while let Some(arg) = iter.next() {
         if arg == "-l" {
             let arg = iter.next().unwrap_or_else(|| {
-                println!("missing argument for -l");
+                eprintln!("missing argument for -l");
                 exit(1); // TODO: replace with ExitCode::FAILURE
             });
             limit = Some(arg.parse::<usize>().unwrap_or_else(|_| {
-                println!("invalid argument for -l");
+                eprintln!("invalid argument for -l");
                 exit(1); // TODO: replace with ExitCode::FAILURE
             }));
         } else if arg == "-s" {
             let arg = iter.next().unwrap_or_else(|| {
-                println!("missing argument for -s");
+                eprintln!("missing argument for -s");
                 exit(1); // TODO: replace with ExitCode::FAILURE
             });
             skip = Some(arg.parse::<usize>().unwrap_or_else(|_| {
-                println!("invalid argument for -s");
+                eprintln!("invalid argument for -s");
                 exit(1); // TODO: replace with ExitCode::FAILURE
             }));
         } else {
@@ -46,21 +46,21 @@ fn main() -> ExitCode {
     }
 
     let file = file.unwrap_or_else(|| {
-        println!("missing file argument");
+        eprintln!("missing file argument");
         exit(1); // TODO: replace with ExitCode::FAILURE
     });
 
     let mut file = match std::fs::File::open(file) {
         Ok(f) => f,
         Err(e) => {
-            println!("[!] error: {}", e);
+            eprintln!("[!] error: {}", e);
             return ExitCode::FAILURE;
         }
     };
 
     if let Some(skip) = skip {
         if let Err(e) = file.seek(std::io::SeekFrom::Start(skip as u64)) {
-            println!("[!] error: {}", e);
+            eprintln!("[!] error: {}", e);
             return ExitCode::FAILURE;
         }
     }
@@ -106,7 +106,7 @@ fn main() -> ExitCode {
                 }
             }
             Err(e) => {
-                println!("[!] error: {}", e);
+                eprintln!("[!] error: {}", e);
                 return ExitCode::FAILURE;
             }
         }

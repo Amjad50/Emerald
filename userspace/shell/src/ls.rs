@@ -75,14 +75,14 @@ fn ls(path: &str, print_parent: bool) -> bool {
         Err(e) => {
             match e.kind() {
                 std::io::ErrorKind::NotFound => {
-                    println!("{indent_space}[!] path not found: {}", path);
+                    eprintln!("{indent_space}[!] path not found: {}", path);
                     return false;
                 }
                 std::io::ErrorKind::NotADirectory => {
                     let meta = match std::fs::metadata(path) {
                         Ok(s) => s,
                         Err(e) => {
-                            println!("{indent_space}[!] error: {}", e);
+                            eprintln!("{indent_space}[!] error: {}", e);
                             return false;
                         }
                     };
@@ -93,7 +93,7 @@ fn ls(path: &str, print_parent: bool) -> bool {
                 _ => {}
             }
 
-            println!("{indent_space}[!] error: {}", e);
+            eprintln!("{indent_space}[!] error: {}", e);
             return false;
         }
     };
@@ -107,7 +107,7 @@ fn ls(path: &str, print_parent: bool) -> bool {
     match entries {
         Ok(mut entries) => {
             if entries.is_empty() {
-                println!("{indent_space}[!] empty directory",);
+                eprintln!("{indent_space}[!] empty directory",);
                 return true;
             }
 
@@ -146,7 +146,7 @@ fn ls(path: &str, print_parent: bool) -> bool {
             }
         }
         Err(e) => {
-            println!("{indent_space}[!] error: {}", e);
+            eprintln!("{indent_space}[!] error: {}", e);
         }
     }
 

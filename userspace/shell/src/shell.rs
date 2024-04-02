@@ -3,7 +3,7 @@ use std::{
     fs,
     io::{self, Write},
     path::Path,
-    process::Command,
+    process::{Command, Stdio},
     string::String,
 };
 
@@ -34,7 +34,7 @@ fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
         }
         "cd" => {
             if args.is_empty() {
-                println!("cd: missing argument");
+                eprintln!("cd: missing argument");
             } else {
                 let path = args[0];
                 match std::env::set_current_dir(path) {
@@ -50,20 +50,20 @@ fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
         }
         "sleep" => {
             if args.is_empty() {
-                println!("sleep: missing operand");
+                eprintln!("sleep: missing operand");
             } else {
                 let seconds = args[0].parse::<u64>();
                 match seconds {
                     Ok(seconds) => std::thread::sleep(std::time::Duration::from_secs(seconds)),
                     Err(e) => {
-                        println!("sleep: invalid time interval `{}`, e: {e}", args[0])
+                        eprintln!("sleep: invalid time interval `{}`, e: {e}", args[0])
                     }
                 }
             }
         }
         "touch" => {
             if args.is_empty() {
-                println!("touch: missing operand");
+                eprintln!("touch: missing operand");
             } else {
                 let path = args[0];
                 let file = fs::OpenOptions::new().create(true).write(true).open(path);
@@ -102,6 +102,77 @@ fn main() {
         io::stdin().read_line(&mut input).unwrap();
 
         let input = input.trim();
+
+        // try to see if there is file redirection
+        let redirect_pos = input.find('>');
+
+        let (input, out_file) = match redirect_pos {
+            Some(pos) => {
+                let (input, mut out_file) = input.split_at(pos);
+                let mut is_append = false;
+
+                if out_file.starts_with(">>") {
+                    // this is >>, so we need to append
+                    is_append = true;
+                    out_file = &out_file[2..];
+
+                    if out_file.starts_with('>') {
+                        eprintln!("invalid operator >>>, use > or >>");
+                        continue;
+                    }
+                } else {
+                    out_file = &out_file[1..];
+                }
+
+                out_file = out_file.trim();
+
+                // make sure `out_file` is a path and not empty
+                if out_file.is_empty() {
+                    eprintln!("missing output file");
+                    continue;
+                }
+
+                let mut out_file = out_file;
+                if out_file.starts_with('"') {
+                    // take until end quote
+                    if let Some(end_quote) = out_file.find('"') {
+                        if &out_file[end_quote - 1..end_quote] == "\\" {
+                            eprintln!("can't have file path with quote escaped");
+                            continue;
+                        }
+                        out_file = &out_file[1..end_quote];
+                    } else {
+                        eprintln!("missing end quote");
+                        continue;
+                    }
+                } else {
+                    // must not contain any whitespace
+                    if out_file.contains(char::is_whitespace) {
+                        eprintln!("invalid output file, can't have whitespace");
+                        continue;
+                    }
+                }
+
+                let mut open_options = fs::OpenOptions::new();
+                open_options.write(true).create(true);
+                if is_append {
+                    open_options.append(true);
+                } else {
+                    open_options.truncate(true);
+                }
+                let file = match open_options.open(out_file) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        eprintln!("error creating out file: {e}");
+                        continue;
+                    }
+                };
+
+                (input.trim(), Some(file))
+            }
+            None => (input, None),
+        };
+
         let args = input.split_whitespace().collect::<Vec<_>>();
 
         if args.is_empty() {
@@ -124,16 +195,26 @@ fn main() {
             format!("/{}", cmd).into()
         };
 
-        let result = match Command::new(cmd_path.as_ref()).args(remaining_args).spawn() {
+        let stdout = if let Some(file) = out_file {
+            Stdio::from(file)
+        } else {
+            Stdio::inherit()
+        };
+
+        let result = match Command::new(cmd_path.as_ref())
+            .stdout(stdout)
+            .args(remaining_args)
+            .spawn()
+        {
             Ok(mut proc) => proc.wait().unwrap(),
             Err(e) => match e.kind() {
                 io::ErrorKind::NotFound => {
-                    println!("[!] command not found: {cmd}");
+                    eprintln!("[!] command not found: {cmd}");
                     old_result = Some(0x7F);
                     continue;
                 }
                 _ => {
-                    println!("[!] error: {e}");
+                    eprintln!("[!] error: {e}");
                     old_result = Some(0x7F);
                     continue;
                 }

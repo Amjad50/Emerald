@@ -117,15 +117,15 @@ fn main() -> ExitCode {
     while let Some(arg) = iter.next() {
         if arg == "-d" {
             let arg = iter.next().unwrap_or_else(|| {
-                println!("missing argument for -d");
+                eprintln!("missing argument for -d");
                 exit(1); // TODO: replace with ExitCode::FAILURE
             });
             depth = Some(arg.parse::<usize>().unwrap_or_else(|_| {
-                println!("invalid argument for -d");
+                eprintln!("invalid argument for -d");
                 exit(1); // TODO: replace with ExitCode::FAILURE
             }));
         } else if arg == "-h" {
-            println!("Usage: {} [-d <n>] [paths...]", args[0]);
+            eprintln!("Usage: {} [-d <n>] [paths...]", args[0]);
             return ExitCode::SUCCESS;
         } else {
             paths.push(arg);
