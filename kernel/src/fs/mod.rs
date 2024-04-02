@@ -601,7 +601,7 @@ pub enum FileSystemError {
     CouldNotSetFileLength,
     EndOfFile,
     BufferNotLargeEnough(usize),
-    FileAlreadyExists,
+    AlreadyExists,
 }
 
 fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
@@ -829,7 +829,7 @@ impl File {
         let (mut node, filesystem) = match open_inode(path.as_ref()) {
             Ok((filesystem, inode)) => {
                 if open_options.is_create_new() {
-                    return Err(FileSystemError::FileAlreadyExists);
+                    return Err(FileSystemError::AlreadyExists);
                 }
 
                 (inode.into_file()?, filesystem)

@@ -62,7 +62,7 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::EndOfFile => SyscallError::EndOfFile,
             FileSystemError::IsNotDirectory => SyscallError::IsNotDirectory,
             FileSystemError::IsDirectory => SyscallError::IsDirectory,
-            FileSystemError::FileAlreadyExists => todo!(),
+            FileSystemError::AlreadyExists => SyscallError::AlreadyExists,
             FileSystemError::DeviceNotFound => todo!(),
             FileSystemError::BufferNotLargeEnough(_) => SyscallError::BufferTooSmall,
             FileSystemError::DiskReadError { .. }

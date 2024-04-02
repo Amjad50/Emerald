@@ -910,7 +910,7 @@ impl DirectoryIterator<'_> {
                     running_free = 0;
                     first_free = None;
                     if !entry.is_long() && entry.as_normal().short_name == new_entry_short_name {
-                        return Err(FileSystemError::FileAlreadyExists);
+                        return Err(FileSystemError::AlreadyExists);
                     }
                 }
             }
@@ -925,7 +925,7 @@ impl DirectoryIterator<'_> {
                     DirectoryEntryState::Used => {
                         if !entry.is_long() && entry.as_normal().short_name == new_entry_short_name
                         {
-                            return Err(FileSystemError::FileAlreadyExists);
+                            return Err(FileSystemError::AlreadyExists);
                         }
                     }
                     _ => {}
