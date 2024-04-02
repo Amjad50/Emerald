@@ -3,7 +3,7 @@ use core::{ffi::CStr, mem};
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use kernel_user_link::{
     clock::ClockType,
-    file::{BlockingMode, DirEntry, FileMeta, SeekFrom, SeekWhence},
+    file::{BlockingMode, DirEntry, FileMeta, OpenOptions, SeekFrom, SeekWhence},
     graphics::{BlitCommand, FrameBufferInfo, GraphicsCommand},
     process::SpawnFileMapping,
     sys_arg,
@@ -221,7 +221,11 @@ fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     let absolute_path = path_to_proc_absolute_path(path);
     // TODO: implement flags and access_mode, for now just open file for reading
-    let file = fs::File::open_blocking(absolute_path, blocking_mode)?;
+    let file = fs::File::open_blocking(
+        absolute_path,
+        blocking_mode,
+        OpenOptions::READ | OpenOptions::WRITE,
+    )?;
     let file_index = with_current_process(|process| process.push_fs_node(file));
 
     SyscallResult::Ok(file_index as u64)

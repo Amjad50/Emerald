@@ -1,4 +1,4 @@
-use core::ffi::CStr;
+use core::{ffi::CStr, ops};
 
 /// A blocking flag when dealing with files
 /// When using [`crate::syscalls::SYS_OPEN`], Bit 0 of `flags` argument can be:
@@ -7,8 +7,9 @@ use core::ffi::CStr;
 ///
 /// In order to use `Block` mode, you need to issue `syscall_blocking_mode`
 ///  with the whole range of blocking modes available for usage
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum BlockingMode {
+    #[default]
     None,
     Line,
     Block(u32),
@@ -182,5 +183,185 @@ pub struct SeekFrom {
 impl SeekFrom {
     pub fn new(offset: i64, whence: SeekWhence) -> Self {
         Self { offset, whence }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OpenOptions {
+    read: bool,
+    write: bool,
+    create: bool,
+    create_new: bool,
+    truncate: bool,
+    append: bool,
+}
+
+#[allow(dead_code)]
+impl OpenOptions {
+    pub const READ: Self = Self {
+        read: true,
+        write: false,
+        create: false,
+        create_new: false,
+        truncate: false,
+        append: false,
+    };
+
+    pub const WRITE: Self = Self {
+        read: false,
+        write: true,
+        create: false,
+        create_new: false,
+        truncate: false,
+        append: false,
+    };
+
+    pub const CREATE: Self = Self {
+        read: false,
+        write: false,
+        create: true,
+        create_new: false,
+        truncate: false,
+        append: false,
+    };
+
+    pub const CREATE_NEW: Self = Self {
+        read: false,
+        write: false,
+        create: true,
+        create_new: true,
+        truncate: false,
+        append: false,
+    };
+
+    pub const TRUNCATE: Self = Self {
+        read: false,
+        write: false,
+        create: false,
+        create_new: false,
+        truncate: true,
+        append: false,
+    };
+
+    pub const APPEND: Self = Self {
+        read: false,
+        write: false,
+        create: false,
+        create_new: false,
+        truncate: false,
+        append: true,
+    };
+
+    pub fn new() -> Self {
+        Self {
+            read: false,
+            write: false,
+            create: false,
+            create_new: false,
+            truncate: false,
+            append: false,
+        }
+    }
+
+    pub fn read(mut self, read: bool) -> Self {
+        self.read = read;
+        self
+    }
+
+    pub fn write(mut self, write: bool) -> Self {
+        self.write = write;
+        self
+    }
+
+    pub fn create(mut self, create: bool) -> Self {
+        self.create = create;
+        self
+    }
+
+    pub fn create_new(mut self, create_new: bool) -> Self {
+        self.create_new = create_new;
+        self
+    }
+
+    pub fn truncate(mut self, truncate: bool) -> Self {
+        self.truncate = truncate;
+        self
+    }
+
+    pub fn append(mut self, append: bool) -> Self {
+        self.append = append;
+        self
+    }
+
+    pub fn is_read(&self) -> bool {
+        self.read
+    }
+
+    pub fn is_write(&self) -> bool {
+        self.write || self.append
+    }
+
+    pub fn is_create(&self) -> bool {
+        self.create
+    }
+
+    pub fn is_create_new(&self) -> bool {
+        self.create_new
+    }
+
+    pub fn is_truncate(&self) -> bool {
+        self.truncate
+    }
+
+    pub fn is_append(&self) -> bool {
+        self.append
+    }
+}
+
+impl Default for OpenOptions {
+    fn default() -> Self {
+        Self::new().read(true)
+    }
+}
+
+impl ops::BitOr for OpenOptions {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self {
+            read: self.read | rhs.read,
+            write: self.write | rhs.write,
+            create: self.create | rhs.create,
+            create_new: self.create_new | rhs.create_new,
+            truncate: self.truncate | rhs.truncate,
+            append: self.append | rhs.append,
+        }
+    }
+}
+
+impl ops::BitOrAssign for OpenOptions {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
+    }
+}
+
+impl ops::BitAnd for OpenOptions {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self {
+            read: self.read & rhs.read,
+            write: self.write & rhs.write,
+            create: self.create & rhs.create,
+            create_new: self.create_new & rhs.create_new,
+            truncate: self.truncate & rhs.truncate,
+            append: self.append & rhs.append,
+        }
+    }
+}
+
+impl ops::BitAndAssign for OpenOptions {
+    fn bitand_assign(&mut self, rhs: Self) {
+        *self = *self & rhs;
     }
 }

@@ -4,7 +4,7 @@ use alloc::{collections::VecDeque, string::String, sync::Arc};
 use kernel_user_link::file::BlockingMode;
 
 use crate::{
-    fs::{self, FileAttributes, FileNode, FileSystemError},
+    fs::{self, FileAccess, FileAttributes, FileNode, FileSystemError},
     sync::spin::mutex::Mutex,
 };
 
@@ -47,6 +47,7 @@ pub fn create_pipe_pair() -> (fs::File, fs::File) {
         fs::empty_filesystem(),
         0,
         BlockingMode::Block(1),
+        FileAccess::READ,
     )
     .expect("This is a file, shouldn't fail");
     // no blocking for write
@@ -56,6 +57,7 @@ pub fn create_pipe_pair() -> (fs::File, fs::File) {
         fs::empty_filesystem(),
         0,
         BlockingMode::None,
+        FileAccess::WRITE,
     )
     .expect("This is a file, shouldn't fail");
 
