@@ -1961,6 +1961,7 @@
 <a href="#1959" id="1959">1959</a>
 <a href="#1960" id="1960">1960</a>
 <a href="#1961" id="1961">1961</a>
+<a href="#1962" id="1962">1962</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem};
 
 <span class="kw">use </span>alloc::{
@@ -2873,7 +2874,7 @@
                     </span>running_free = <span class="number">0</span>;
                     first_free = <span class="prelude-val">None</span>;
                     <span class="kw">if </span>!entry.is_long() &amp;&amp; entry.as_normal().short_name == new_entry_short_name {
-                        <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::FileAlreadyExists);
+                        <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::AlreadyExists);
                     }
                 }
             }
@@ -2888,7 +2889,7 @@
                     DirectoryEntryState::Used =&gt; {
                         <span class="kw">if </span>!entry.is_long() &amp;&amp; entry.as_normal().short_name == new_entry_short_name
                         {
-                            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::FileAlreadyExists);
+                            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::AlreadyExists);
                         }
                     }
                     <span class="kw">_ </span>=&gt; {}
@@ -3729,12 +3730,13 @@
 
             <span class="kw">if </span>current_size_in_clusters &gt; new_size_in_clusters {
                 <span class="comment">// deleting old clusters
-                </span><span class="kw">let </span>to_delete = current_size_in_clusters - new_size_in_clusters;
+                </span><span class="kw">let </span><span class="kw-2">mut </span>to_delete = current_size_in_clusters - new_size_in_clusters;
                 <span class="kw">let </span><span class="kw-2">mut </span>clusters = Vec::with_capacity(to_delete <span class="kw">as </span>usize);
 
                 <span class="kw">if </span>new_size_in_clusters == <span class="number">0 </span>{
                     <span class="comment">// delete the first one
                     </span>clusters.push(current_cluster);
+                    to_delete -= <span class="number">1</span>;
                 }
 
                 <span class="kw">for _ in </span><span class="number">0</span>..to_delete {
@@ -3760,6 +3762,9 @@
                         entry.first_cluster_hi = <span class="number">0</span>;
                         entry.first_cluster_lo = <span class="number">0</span>;
                     })<span class="question-mark">?</span>;
+                } <span class="kw">else </span>{
+                    <span class="comment">// mark the current cluster as last
+                    </span><span class="self">self</span>.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
                 }
             } <span class="kw">else </span>{
                 <span class="comment">// adding new clusters
@@ -3799,9 +3804,6 @@
                     last_cluster = new_cluster;
                 }
             }
-
-            <span class="comment">// mark the current cluster as last
-            </span><span class="self">self</span>.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
         }
 
         inode.set_size(size);

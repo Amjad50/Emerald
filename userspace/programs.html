@@ -199,11 +199,18 @@ us behavior similar to a normal terminal in linux.</li>
 <p>This is a temporary behavior (maybe?), but we still need to improve file operations as <code>init</code> is looping a lot.</p>
 <h2 id="shell"><a class="header" href="#shell"><code>shell</code></a></h2>
 <p>This is a basic shell, that can change directories, and execute programs.</p>
+<p>It also support output redirect (no piping between processes yet), so you can do something like:</p>
+<pre><code class="language-sh">ls &gt; file.txt
+</code></pre>
+<p>or even append to a file:</p>
+<pre><code class="language-sh">ls &gt;&gt; file.txt
+</code></pre>
 <h3 id="list-of-commandsprograms"><a class="header" href="#list-of-commandsprograms">List of commands/programs</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>cd</code> (internal)</td><td>Change directory</td></tr>
 <tr><td><code>pwd</code> (internal)</td><td>Print working directory</td></tr>
 <tr><td><code>exit</code> (internal)</td><td>Exit the shell, which will just cause another to come back up</td></tr>
+<tr><td><code>touch</code> (internal)</td><td>Create a file, if not present</td></tr>
 <tr><td><code>ls</code></td><td>List directory contents</td></tr>
 <tr><td><code>tree</code></td><td>List directory contents recursively</td></tr>
 <tr><td><code>echo</code></td><td>Write arguments to the standard output</td></tr>

@@ -808,12 +808,13 @@
 <a href="#806" id="806">806</a>
 <a href="#807" id="807">807</a>
 <a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{ffi::CStr, mem};
 
 <span class="kw">use </span>alloc::{borrow::Cow, string::String, vec::Vec};
 <span class="kw">use </span>kernel_user_link::{
     clock::ClockType,
-    file::{BlockingMode, DirEntry, FileMeta, SeekFrom, SeekWhence},
+    file::{BlockingMode, DirEntry, FileMeta, OpenOptions, SeekFrom, SeekWhence},
     graphics::{BlitCommand, FrameBufferInfo, GraphicsCommand},
     process::SpawnFileMapping,
     sys_arg,
@@ -872,14 +873,12 @@
             FileSystemError::EndOfFile =&gt; SyscallError::EndOfFile,
             FileSystemError::IsNotDirectory =&gt; SyscallError::IsNotDirectory,
             FileSystemError::IsDirectory =&gt; SyscallError::IsDirectory,
-            FileSystemError::FileAlreadyExists =&gt; <span class="macro">todo!</span>(),
-            FileSystemError::DeviceNotFound =&gt; <span class="macro">todo!</span>(),
+            FileSystemError::AlreadyExists =&gt; SyscallError::AlreadyExists,
             FileSystemError::BufferNotLargeEnough(<span class="kw">_</span>) =&gt; SyscallError::BufferTooSmall,
+            FileSystemError::OperationNotSupported =&gt; SyscallError::OperationNotSupported,
             FileSystemError::DiskReadError { .. }
-            | FileSystemError::InvalidOffset
             | FileSystemError::FatError(<span class="kw">_</span>)
-            | FileSystemError::InvalidData
-            | FileSystemError::OperationNotSupported
+            | FileSystemError::DeviceNotFound
             | FileSystemError::MustBeAbsolute   <span class="comment">// should not happen from user mode
             </span>| FileSystemError::PartitionTableNotFound =&gt; <span class="macro">panic!</span>(<span class="string">"should not happen?"</span>),
         }
@@ -1021,17 +1020,20 @@
 }
 
 <span class="kw">fn </span>sys_open(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) -&gt; SyscallResult {
-    <span class="kw">let </span>(path, _access_mode, flags, ..) = <span class="macro">verify_args! </span>{
+    <span class="kw">let </span>(path, open_options, flags, ..) = <span class="macro">verify_args! </span>{
         <span class="macro">sys_arg!</span>(<span class="number">0</span>, all_state.rest =&gt; sys_arg_to_path(<span class="kw-2">*const </span>u8)),
         <span class="macro">sys_arg!</span>(<span class="number">1</span>, all_state.rest =&gt; u64),
         <span class="macro">sys_arg!</span>(<span class="number">2</span>, all_state.rest =&gt; u64),
     };
+
+    <span class="kw">let </span>open_options = OpenOptions::from_u64(open_options)
+        .ok_or(<span class="macro">to_arg_err!</span>(<span class="number">1</span>, SyscallArgError::GeneralInvalid))<span class="question-mark">?</span>;
+
     <span class="kw">let </span>blocking_mode = kernel_user_link::file::parse_flags(flags)
         .ok_or(<span class="macro">to_arg_err!</span>(<span class="number">2</span>, SyscallArgError::GeneralInvalid))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>absolute_path = path_to_proc_absolute_path(path);
-    <span class="comment">// TODO: implement flags and access_mode, for now just open file for reading
-    </span><span class="kw">let </span>file = fs::File::open_blocking(absolute_path, blocking_mode)<span class="question-mark">?</span>;
+    <span class="kw">let </span>file = fs::File::open_blocking(absolute_path, blocking_mode, open_options)<span class="question-mark">?</span>;
     <span class="kw">let </span>file_index = with_current_process(|process| process.push_fs_node(file));
 
     SyscallResult::Ok(file_index <span class="kw">as </span>u64)

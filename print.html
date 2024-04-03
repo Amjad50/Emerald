@@ -728,8 +728,19 @@ one for reading and one for writing. The kernel then assign those to the process
 </blockquote>
 <p>In this kernel, the filesystem is implemented by several layers, and components.</p>
 <p>When you try to open a file path, the <code>filesystem</code> will look for the best entity that contains this path.
-And this is achieved by the <strong>mapping</strong> system.</p>
-<p>Check <a href="kernel/filesystem/./fat.html">FAT</a> for more information about the FAT filesystem.</p>
+And this is achieved by the <a href="kernel/filesystem/index.html#mapping">mapping</a> system.</p>
+<p>Check <a href="kernel/filesystem/./fat.html">FAT</a> for more information about the FAT filesystem specifically.</p>
+<p>Then, when you open a file, you can specify several flags (implemented in <a href="kernel/filesystem//Emerald/docs/emerald_kernel_user_link/file/struct.OpenOptions.html"><code>OpenOptions</code></a>):</p>
+<ul>
+<li><code>read</code> - Open the file for reading.</li>
+<li><code>write</code> - Open the file for writing.</li>
+<li><code>create</code> - Create the file if it doesn't exist.</li>
+<li><code>create_new</code> - Fail if the file exists.</li>
+<li><code>truncate</code> - Truncate the file if it exists.</li>
+<li><code>append</code> (implicit <code>write</code>) - Append to the file if it exists.</li>
+</ul>
+<p>With these, you can create new files and choose which mode to open them with. Of course the filesystem may refuse to create the file if the
+operation is not supported, such as with <code>/devices</code> directory mappings.</p>
 <h2 id="mapping"><a class="header" href="#mapping">Mapping</a></h2>
 <p>The mapping, is a dictionary that maps a path prefix to a <code>Filesystem</code> manager.
 For example, currently we have the following mappings:</p>
@@ -1411,11 +1422,18 @@ us behavior similar to a normal terminal in linux.</li>
 <p>This is a temporary behavior (maybe?), but we still need to improve file operations as <code>init</code> is looping a lot.</p>
 <h2 id="shell"><a class="header" href="#shell"><code>shell</code></a></h2>
 <p>This is a basic shell, that can change directories, and execute programs.</p>
+<p>It also support output redirect (no piping between processes yet), so you can do something like:</p>
+<pre><code class="language-sh">ls &gt; file.txt
+</code></pre>
+<p>or even append to a file:</p>
+<pre><code class="language-sh">ls &gt;&gt; file.txt
+</code></pre>
 <h3 id="list-of-commandsprograms"><a class="header" href="#list-of-commandsprograms">List of commands/programs</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>cd</code> (internal)</td><td>Change directory</td></tr>
 <tr><td><code>pwd</code> (internal)</td><td>Print working directory</td></tr>
 <tr><td><code>exit</code> (internal)</td><td>Exit the shell, which will just cause another to come back up</td></tr>
+<tr><td><code>touch</code> (internal)</td><td>Create a file, if not present</td></tr>
 <tr><td><code>ls</code></td><td>List directory contents</td></tr>
 <tr><td><code>tree</code></td><td>List directory contents recursively</td></tr>
 <tr><td><code>echo</code></td><td>Write arguments to the standard output</td></tr>

@@ -141,13 +141,15 @@
 <a href="#139" id="139">139</a>
 <a href="#140" id="140">140</a>
 <a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::sync::atomic::{AtomicUsize, Ordering};
 
 <span class="kw">use </span>alloc::{collections::VecDeque, string::String, sync::Arc};
 <span class="kw">use </span>kernel_user_link::file::BlockingMode;
 
 <span class="kw">use crate</span>::{
-    fs::{<span class="self">self</span>, FileAttributes, FileNode, FileSystemError},
+    fs::{<span class="self">self</span>, FileAccess, FileAttributes, FileNode, FileSystemError},
     sync::spin::mutex::Mutex,
 };
 
@@ -190,6 +192,7 @@
         fs::empty_filesystem(),
         <span class="number">0</span>,
         BlockingMode::Block(<span class="number">1</span>),
+        FileAccess::READ,
     )
     .expect(<span class="string">"This is a file, shouldn't fail"</span>);
     <span class="comment">// no blocking for write
@@ -199,6 +202,7 @@
         fs::empty_filesystem(),
         <span class="number">0</span>,
         BlockingMode::None,
+        FileAccess::WRITE,
     )
     .expect(<span class="string">"This is a file, shouldn't fail"</span>);
 

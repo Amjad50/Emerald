@@ -148,6 +148,13 @@
 <a href="#146" id="146">146</a>
 <a href="#147" id="147">147</a>
 <a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
 </pre></div><pre class="rust"><code><span class="attr">#![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
@@ -185,7 +192,10 @@
 <span class="kw">use </span>executable::elf::Elf;
 <span class="kw">use </span>increasing_heap_allocator::HeapStats;
 <span class="kw">use </span>io::console;
-<span class="kw">use </span>kernel_user_link::{file::BlockingMode, FD_STDERR, FD_STDIN, FD_STDOUT};
+<span class="kw">use </span>kernel_user_link::{
+    file::{BlockingMode, OpenOptions},
+    FD_STDERR, FD_STDIN, FD_STDOUT,
+};
 <span class="kw">use </span>memory_management::virtual_memory_mapper;
 <span class="kw">use </span>multiboot2::MultiBoot2Info;
 <span class="kw">use </span>process::scheduler;
@@ -249,8 +259,12 @@
 
     <span class="comment">// add the console to `init` manually, after that processes will either inherit it or open a pipe or something
     // to act as STDIN/STDOUT/STDERR
-    </span><span class="kw">let </span><span class="kw-2">mut </span>console = fs::File::open_blocking(<span class="string">"/devices/console"</span>, BlockingMode::Line)
-        .expect(<span class="string">"Could not find `/devices/console`"</span>);
+    </span><span class="kw">let </span><span class="kw-2">mut </span>console = fs::File::open_blocking(
+        <span class="string">"/devices/console"</span>,
+        BlockingMode::Line,
+        OpenOptions::READ | OpenOptions::WRITE,
+    )
+    .expect(<span class="string">"Could not find `/devices/console`"</span>);
     <span class="comment">// mark it as `terminal`
     </span>console.set_terminal(<span class="bool-val">true</span>);
     process.attach_fs_node_to_fd(FD_STDIN, console.clone_inherit());
