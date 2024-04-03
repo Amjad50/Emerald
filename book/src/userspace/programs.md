@@ -24,6 +24,15 @@ This is a temporary behavior (maybe?), but we still need to improve file operati
 
 This is a basic shell, that can change directories, and execute programs.
 
+It also support output redirect (no piping between processes yet), so you can do something like:
+```sh
+ls > file.txt
+```
+or even append to a file:
+```sh
+ls >> file.txt
+```
+
 ### List of commands/programs
 
 | Name | Description |
@@ -31,6 +40,7 @@ This is a basic shell, that can change directories, and execute programs.
 | `cd` (internal) | Change directory |
 | `pwd` (internal) | Print working directory |
 | `exit` (internal) | Exit the shell, which will just cause another to come back up |
+| `touch` (internal) | Create a file, if not present |
 | `ls` | List directory contents |
 | `tree` | List directory contents recursively |
 | `echo` | Write arguments to the standard output |
