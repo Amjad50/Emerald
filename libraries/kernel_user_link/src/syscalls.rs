@@ -250,6 +250,7 @@ pub enum SyscallError {
     InvalidGraphicsBuffer = 19,
     InvalidOffset = 20,
     AlreadyExists = 21,
+    OperationNotSupported = 22,
     InvalidArgument(
         Option<SyscallArgError>,
         Option<SyscallArgError>,
@@ -344,6 +345,7 @@ pub fn syscall_result_to_u64(result: SyscallResult) -> u64 {
                 SyscallError::InvalidGraphicsBuffer => 19 << 56,
                 SyscallError::InvalidOffset => 20 << 56,
                 SyscallError::AlreadyExists => 21 << 56,
+                SyscallError::OperationNotSupported => 22 << 56,
                 SyscallError::InvalidError => panic!("Should never be used"),
             };
 
@@ -403,6 +405,7 @@ pub fn syscall_result_from_u64(value: u64) -> SyscallResult {
             19 => SyscallError::InvalidGraphicsBuffer,
             20 => SyscallError::InvalidOffset,
             21 => SyscallError::AlreadyExists,
+            22 => SyscallError::OperationNotSupported,
             _ => SyscallError::InvalidError,
         };
         SyscallResult::Err(err)

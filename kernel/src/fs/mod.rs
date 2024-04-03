@@ -578,23 +578,13 @@ impl FileSystemMapping {
 pub enum FileSystemError {
     PartitionTableNotFound,
     DeviceNotFound,
-    DiskReadError {
-        sector: u64,
-        error: ide::IdeError,
-    },
+    DiskReadError { sector: u64, error: ide::IdeError },
     FatError(fat::FatError),
     FileNotFound,
     InvalidPath,
     MustBeAbsolute,
     IsNotDirectory,
     IsDirectory,
-    InvalidOffset,
-    /// Unlike InvalidInput, this typically means that the operation parameters were valid,
-    ///  however the error was caused by malformed input data.
-    ///
-    /// For example, a function that reads a file into a string will error with InvalidData
-    /// if the file’s contents are not valid `UTF-8`.
-    InvalidData,
     ReadNotSupported,
     WriteNotSupported,
     OperationNotSupported,

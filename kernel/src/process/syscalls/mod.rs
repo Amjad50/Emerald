@@ -63,13 +63,11 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::IsNotDirectory => SyscallError::IsNotDirectory,
             FileSystemError::IsDirectory => SyscallError::IsDirectory,
             FileSystemError::AlreadyExists => SyscallError::AlreadyExists,
-            FileSystemError::DeviceNotFound => todo!(),
             FileSystemError::BufferNotLargeEnough(_) => SyscallError::BufferTooSmall,
+            FileSystemError::OperationNotSupported => SyscallError::OperationNotSupported,
             FileSystemError::DiskReadError { .. }
-            | FileSystemError::InvalidOffset
             | FileSystemError::FatError(_)
-            | FileSystemError::InvalidData
-            | FileSystemError::OperationNotSupported
+            | FileSystemError::DeviceNotFound
             | FileSystemError::MustBeAbsolute   // should not happen from user mode
             | FileSystemError::PartitionTableNotFound => panic!("should not happen?"),
         }
