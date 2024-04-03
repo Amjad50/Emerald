@@ -910,7 +910,7 @@ impl DirectoryIterator<'_> {
                     running_free = 0;
                     first_free = None;
                     if !entry.is_long() && entry.as_normal().short_name == new_entry_short_name {
-                        return Err(FileSystemError::FileAlreadyExists);
+                        return Err(FileSystemError::AlreadyExists);
                     }
                 }
             }
@@ -925,7 +925,7 @@ impl DirectoryIterator<'_> {
                     DirectoryEntryState::Used => {
                         if !entry.is_long() && entry.as_normal().short_name == new_entry_short_name
                         {
-                            return Err(FileSystemError::FileAlreadyExists);
+                            return Err(FileSystemError::AlreadyExists);
                         }
                     }
                     _ => {}
@@ -1766,12 +1766,13 @@ impl FatFilesystem {
 
             if current_size_in_clusters > new_size_in_clusters {
                 // deleting old clusters
-                let to_delete = current_size_in_clusters - new_size_in_clusters;
+                let mut to_delete = current_size_in_clusters - new_size_in_clusters;
                 let mut clusters = Vec::with_capacity(to_delete as usize);
 
                 if new_size_in_clusters == 0 {
                     // delete the first one
                     clusters.push(current_cluster);
+                    to_delete -= 1;
                 }
 
                 for _ in 0..to_delete {
@@ -1797,6 +1798,9 @@ impl FatFilesystem {
                         entry.first_cluster_hi = 0;
                         entry.first_cluster_lo = 0;
                     })?;
+                } else {
+                    // mark the current cluster as last
+                    self.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
                 }
             } else {
                 // adding new clusters
@@ -1836,9 +1840,6 @@ impl FatFilesystem {
                     last_cluster = new_cluster;
                 }
             }
-
-            // mark the current cluster as last
-            self.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
         }
 
         inode.set_size(size);

@@ -7,9 +7,20 @@
 In this kernel, the filesystem is implemented by several layers, and components.
 
 When you try to open a file path, the `filesystem` will look for the best entity that contains this path.
-And this is achieved by the **mapping** system.
+And this is achieved by the [mapping](#mapping) system.
 
-Check [FAT] for more information about the FAT filesystem.
+Check [FAT] for more information about the FAT filesystem specifically.
+
+Then, when you open a file, you can specify several flags (implemented in [`OpenOptions`][fs_open_options]):
+- `read` - Open the file for reading.
+- `write` - Open the file for writing.
+- `create` - Create the file if it doesn't exist.
+- `create_new` - Fail if the file exists.
+- `truncate` - Truncate the file if it exists.
+- `append` (implicit `write`) - Append to the file if it exists.
+
+With these, you can create new files and choose which mode to open them with. Of course the filesystem may refuse to create the file if the
+operation is not supported, such as with `/devices` directory mappings.
 
 ## Mapping
 

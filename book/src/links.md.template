@@ -48,3 +48,4 @@
 [clocks]: {ROOT_PATH}docs/kernel/devices/clock
 [vga]: {ROOT_PATH}docs/kernel/graphics/vga
 [framebufferinfo]: {ROOT_PATH}docs/kernel/graphics/vga/struct.FrameBufferInfo.html
+[fs_open_options]: {ROOT_PATH}docs/emerald_kernel_user_link/file/struct.OpenOptions.html

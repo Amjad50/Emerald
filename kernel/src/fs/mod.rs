@@ -1,7 +1,7 @@
 use core::ops;
 
 use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
-use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType};
+use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType, OpenOptions};
 
 use crate::{
     devices::{
@@ -578,30 +578,20 @@ impl FileSystemMapping {
 pub enum FileSystemError {
     PartitionTableNotFound,
     DeviceNotFound,
-    DiskReadError {
-        sector: u64,
-        error: ide::IdeError,
-    },
+    DiskReadError { sector: u64, error: ide::IdeError },
     FatError(fat::FatError),
     FileNotFound,
     InvalidPath,
     MustBeAbsolute,
     IsNotDirectory,
     IsDirectory,
-    InvalidOffset,
-    /// Unlike InvalidInput, this typically means that the operation parameters were valid,
-    ///  however the error was caused by malformed input data.
-    ///
-    /// For example, a function that reads a file into a string will error with InvalidData
-    /// if the file’s contents are not valid `UTF-8`.
-    InvalidData,
     ReadNotSupported,
     WriteNotSupported,
     OperationNotSupported,
     CouldNotSetFileLength,
     EndOfFile,
     BufferNotLargeEnough(usize),
-    FileAlreadyExists,
+    AlreadyExists,
 }
 
 fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
@@ -745,6 +735,46 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileAccess {
+    read: bool,
+    write: bool,
+}
+
+impl FileAccess {
+    pub const READ: Self = Self {
+        read: true,
+        write: false,
+    };
+    pub const WRITE: Self = Self {
+        read: false,
+        write: true,
+    };
+
+    fn new(read: bool, write: bool) -> Self {
+        Self { read, write }
+    }
+
+    fn is_read(&self) -> bool {
+        self.read
+    }
+
+    fn is_write(&self) -> bool {
+        self.write
+    }
+}
+
+impl ops::BitOr for FileAccess {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self {
+            read: self.read || rhs.read,
+            write: self.write || rhs.write,
+        }
+    }
+}
+
 /// A handle to a file, it has the inode which controls the properties of the node in the filesystem
 pub struct File {
     filesystem: Arc<dyn FileSystem>,
@@ -754,6 +784,7 @@ pub struct File {
     is_terminal: bool,
     blocking_mode: BlockingMode,
     access_helper: AccessHelper,
+    file_access: FileAccess,
 }
 
 /// A handle to a directory, it has the inode which controls the properties of the node in the filesystem
@@ -777,16 +808,62 @@ pub enum FilesystemNode {
 #[allow(dead_code)]
 impl File {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
-        Self::open_blocking(path, BlockingMode::None)
+        Self::open_blocking(path, BlockingMode::None, OpenOptions::default())
     }
 
     pub fn open_blocking<P: AsRef<Path>>(
         path: P,
         blocking_mode: BlockingMode,
+        open_options: OpenOptions,
     ) -> Result<Self, FileSystemError> {
-        let (filesystem, inode) = open_inode(path.as_ref())?;
+        let (mut node, filesystem) = match open_inode(path.as_ref()) {
+            Ok((filesystem, inode)) => {
+                if open_options.is_create_new() {
+                    return Err(FileSystemError::AlreadyExists);
+                }
 
-        Self::from_inode(inode.into_file()?, path, filesystem, 0, blocking_mode)
+                (inode.into_file()?, filesystem)
+            }
+            Err(FileSystemError::FileNotFound)
+                if open_options.is_create() || open_options.is_create_new() =>
+            {
+                let path = path.as_ref();
+                let (filesystem, parent_inode) = open_inode(path.parent().unwrap())?;
+                let filename = path.file_name().unwrap();
+                if filename == "." || filename == ".." || filename == "/" {
+                    return Err(FileSystemError::InvalidPath);
+                }
+                let node = filesystem.create_node(
+                    &parent_inode.into_dir()?,
+                    filename,
+                    FileAttributes::EMPTY,
+                )?;
+                (
+                    node.into_file()
+                        .expect("This should be a valid file, we created it"),
+                    filesystem,
+                )
+            }
+            Err(e) => return Err(e),
+        };
+
+        if open_options.is_truncate() {
+            if open_options.is_write() {
+                filesystem.set_file_size(&mut node, 0)?;
+            } else {
+                return Err(FileSystemError::WriteNotSupported);
+            }
+        }
+
+        let pos = if open_options.is_append() {
+            node.size()
+        } else {
+            0
+        };
+
+        let access = FileAccess::new(open_options.is_read(), open_options.is_write());
+
+        Self::from_inode(node, path, filesystem, pos, blocking_mode, access)
     }
 
     pub fn from_inode<P: AsRef<Path>>(
@@ -795,6 +872,7 @@ impl File {
         filesystem: Arc<dyn FileSystem>,
         position: u64,
         blocking_mode: BlockingMode,
+        file_access: FileAccess,
     ) -> Result<Self, FileSystemError> {
         Ok(Self {
             filesystem,
@@ -804,10 +882,15 @@ impl File {
             is_terminal: false,
             blocking_mode,
             access_helper: AccessHelper::default(),
+            file_access,
         })
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> Result<u64, FileSystemError> {
+        if !self.file_access.is_read() {
+            return Err(FileSystemError::ReadNotSupported);
+        }
+
         let count = match self.blocking_mode {
             BlockingMode::None => self.filesystem.read_file(
                 &self.inode,
@@ -894,6 +977,10 @@ impl File {
     }
 
     pub fn write(&mut self, buf: &[u8]) -> Result<u64, FileSystemError> {
+        if !self.file_access.is_write() {
+            return Err(FileSystemError::WriteNotSupported);
+        }
+
         let written = self.filesystem.write_file(
             &mut self.inode,
             self.position,
@@ -959,6 +1046,10 @@ impl File {
     }
 
     pub fn set_size(&mut self, size: u64) -> Result<(), FileSystemError> {
+        if !self.file_access.is_write() {
+            return Err(FileSystemError::WriteNotSupported);
+        }
+
         self.filesystem.set_file_size(&mut self.inode, size)
     }
 
@@ -973,6 +1064,7 @@ impl File {
             is_terminal: self.is_terminal,
             blocking_mode: self.blocking_mode,
             access_helper: AccessHelper::default(),
+            file_access: self.file_access,
         };
 
         // inform the device of a clone operation
@@ -1060,7 +1152,23 @@ impl Directory {
     ) -> Result<FilesystemNode, FileSystemError> {
         let node = self.filesystem.create_node(&self.inode, name, attributes)?;
 
-        FilesystemNode::from_node(self.path.join(name), node, self.filesystem.clone())
+        let path = self.path.join(name);
+
+        match node {
+            Node::File(file) => Ok(File::from_inode(
+                file,
+                path,
+                self.filesystem.clone(),
+                0,
+                BlockingMode::None,
+                // TODO: for now, set it as readable and writable, find a better way to handle that
+                FileAccess::READ | FileAccess::WRITE,
+            )?
+            .into()),
+            Node::Directory(directory) => {
+                Ok(Directory::from_inode(directory, path, self.filesystem.clone(), 0)?.into())
+            }
+        }
     }
 
     pub fn read(&mut self, entries: &mut [DirEntry]) -> Result<usize, FileSystemError> {
@@ -1104,31 +1212,6 @@ impl Clone for Directory {
 
 #[allow(dead_code)]
 impl FilesystemNode {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
-        let (filesystem, inode) = open_inode(path.as_ref())?;
-
-        Self::from_node(path, inode, filesystem)
-    }
-
-    pub fn from_node<P: AsRef<Path>>(
-        path: P,
-        node: Node,
-        filesystem: Arc<dyn FileSystem>,
-    ) -> Result<Self, FileSystemError> {
-        match node {
-            Node::File(file) => Ok(Self::File(File::from_inode(
-                file,
-                path,
-                filesystem,
-                0,
-                BlockingMode::None,
-            )?)),
-            Node::Directory(directory) => Ok(Self::Directory(Directory::from_inode(
-                directory, path, filesystem, 0,
-            )?)),
-        }
-    }
-
     pub fn as_file(&self) -> Result<&File, FileSystemError> {
         match self {
             Self::File(file) => Ok(file),

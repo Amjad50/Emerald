@@ -35,7 +35,10 @@ use cpu::{
 use executable::elf::Elf;
 use increasing_heap_allocator::HeapStats;
 use io::console;
-use kernel_user_link::{file::BlockingMode, FD_STDERR, FD_STDIN, FD_STDOUT};
+use kernel_user_link::{
+    file::{BlockingMode, OpenOptions},
+    FD_STDERR, FD_STDIN, FD_STDOUT,
+};
 use memory_management::virtual_memory_mapper;
 use multiboot2::MultiBoot2Info;
 use process::scheduler;
@@ -99,8 +102,12 @@ fn load_init_process() {
 
     // add the console to `init` manually, after that processes will either inherit it or open a pipe or something
     // to act as STDIN/STDOUT/STDERR
-    let mut console = fs::File::open_blocking("/devices/console", BlockingMode::Line)
-        .expect("Could not find `/devices/console`");
+    let mut console = fs::File::open_blocking(
+        "/devices/console",
+        BlockingMode::Line,
+        OpenOptions::READ | OpenOptions::WRITE,
+    )
+    .expect("Could not find `/devices/console`");
     // mark it as `terminal`
     console.set_terminal(true);
     process.attach_fs_node_to_fd(FD_STDIN, console.clone_inherit());

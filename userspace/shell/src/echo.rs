@@ -8,7 +8,7 @@ fn main() -> ExitCode {
     let args = std::env::args().collect::<Vec<_>>();
 
     if args.len() < 2 {
-        println!("Usage: {} [string]", args[0]);
+        eprintln!("Usage: {} [string]", args[0]);
         return ExitCode::FAILURE;
     }
 

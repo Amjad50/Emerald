@@ -42,40 +42,38 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: 'false'
-      - name: Get changed files in `rust` submodule
-        id: rust-changes
-        uses: tj-actions/changed-files@v42
-        with:
-          files: 'extern/rust'
+
+      - name: Get submodule hash
+        id: submodule-hash
+        run: echo "hash=$(git ls-tree HEAD extern/rust | awk '{print $3}')" >> $GITHUB_OUTPUT
       
       - name: Restore cached rust build
         id: cache-os-rust-restore
-        if: steps.rust-changes.outputs.any_changed != 'true'
         uses: actions/cache/restore@v4
         with:
-          key: rust-build-toolchain
+          key: rust-${{ steps.submodule-hash.outputs.hash }}
           path: /tmp/dist
   
       # run after this if something changed, otherwise skip all
       - uses: actions-rs/toolchain@v1
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
         with:
           toolchain: nightly-2024-01-04
           components: rust-src
       - name: Get cargo-make
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
         uses: davidB/rust-cargo-make@v1
       
       # Fetch only top level submodules without recursive
       # building the toolchain will automatically fetch the children of `rust`
       # 100 so that we can get at least a single `upstream` commit, for llvm-ci cache to work
       - name: submodule fetch bare
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
         run: git submodule update --init --depth 100
       - run: cargo make toolchain_dist
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
       - name: Copy dist to tmp
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
         run: |
           mkdir -p /tmp/dist
           cp ./extern/rust/build/dist/rustc-1*linux*.xz ./extern/rust/build/dist/rust-std*.xz ./extern/rust/build/dist/rustfmt*.xz /tmp/dist
@@ -83,7 +81,7 @@ jobs:
       - name: Save cache toolchain
         id: cache-os-rust-save
         uses: actions/cache/save@v4
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true' || steps.rust-changes.outputs.any_changed == 'true'
+        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
         with:
           path: /tmp/dist
           key: ${{ steps.cache-os-rust-restore.outputs.cache-primary-key }}
@@ -106,12 +104,17 @@ jobs:
           toolchain: nightly-2024-01-04
           components: rust-src
       - uses: davidB/rust-cargo-make@v1
+
+      - name: Get submodule hash
+        id: submodule-hash
+        run: echo "hash=$(git ls-tree HEAD extern/rust | awk '{print $3}')" >> $GITHUB_OUTPUT
+
       - name: Restore cached rust build
         id: cache-os-rust-restore
         uses: actions/cache/restore@v4
         with:
           path: /tmp/dist
-          key: rust-build-toolchain
+          key: rust-${{ steps.submodule-hash.outputs.hash }}
           fail-on-cache-miss: true
       - name: install toolchain
         run: bash tools/install_toolchain_and_link.sh /tmp/dist

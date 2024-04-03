@@ -1,6 +1,6 @@
 [package]
 name = "emerald_kernel_user_link"
-version = "0.2.9"
+version = "0.2.11"
 edition = "2021"
 readme = "README.md"
 authors = ["Amjad Alsharafi"]

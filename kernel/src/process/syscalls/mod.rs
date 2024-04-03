@@ -3,7 +3,7 @@ use core::{ffi::CStr, mem};
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use kernel_user_link::{
     clock::ClockType,
-    file::{BlockingMode, DirEntry, FileMeta, SeekFrom, SeekWhence},
+    file::{BlockingMode, DirEntry, FileMeta, OpenOptions, SeekFrom, SeekWhence},
     graphics::{BlitCommand, FrameBufferInfo, GraphicsCommand},
     process::SpawnFileMapping,
     sys_arg,
@@ -62,14 +62,12 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::EndOfFile => SyscallError::EndOfFile,
             FileSystemError::IsNotDirectory => SyscallError::IsNotDirectory,
             FileSystemError::IsDirectory => SyscallError::IsDirectory,
-            FileSystemError::FileAlreadyExists => todo!(),
-            FileSystemError::DeviceNotFound => todo!(),
+            FileSystemError::AlreadyExists => SyscallError::AlreadyExists,
             FileSystemError::BufferNotLargeEnough(_) => SyscallError::BufferTooSmall,
+            FileSystemError::OperationNotSupported => SyscallError::OperationNotSupported,
             FileSystemError::DiskReadError { .. }
-            | FileSystemError::InvalidOffset
             | FileSystemError::FatError(_)
-            | FileSystemError::InvalidData
-            | FileSystemError::OperationNotSupported
+            | FileSystemError::DeviceNotFound
             | FileSystemError::MustBeAbsolute   // should not happen from user mode
             | FileSystemError::PartitionTableNotFound => panic!("should not happen?"),
         }
@@ -211,17 +209,20 @@ fn path_to_proc_absolute_path(path: &Path) -> Cow<'_, Path> {
 }
 
 fn sys_open(all_state: &mut InterruptAllSavedState) -> SyscallResult {
-    let (path, _access_mode, flags, ..) = verify_args! {
+    let (path, open_options, flags, ..) = verify_args! {
         sys_arg!(0, all_state.rest => sys_arg_to_path(*const u8)),
         sys_arg!(1, all_state.rest => u64),
         sys_arg!(2, all_state.rest => u64),
     };
+
+    let open_options = OpenOptions::from_u64(open_options)
+        .ok_or(to_arg_err!(1, SyscallArgError::GeneralInvalid))?;
+
     let blocking_mode = kernel_user_link::file::parse_flags(flags)
         .ok_or(to_arg_err!(2, SyscallArgError::GeneralInvalid))?;
 
     let absolute_path = path_to_proc_absolute_path(path);
-    // TODO: implement flags and access_mode, for now just open file for reading
-    let file = fs::File::open_blocking(absolute_path, blocking_mode)?;
+    let file = fs::File::open_blocking(absolute_path, blocking_mode, open_options)?;
     let file_index = with_current_process(|process| process.push_fs_node(file));
 
     SyscallResult::Ok(file_index as u64)
