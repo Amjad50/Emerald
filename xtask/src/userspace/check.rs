@@ -1,20 +1,28 @@
-use super::run_for_all_userspace_members;
+use crate::{
+    args::{Check, Clippy, Fmt},
+    GlobalMeta,
+};
 
-pub fn check(meta: &crate::GlobalMeta) -> anyhow::Result<()> {
+use super::{check_toolchain_installed, run_for_all_userspace_members};
+
+pub fn check(meta: &GlobalMeta, check: Check) -> anyhow::Result<()> {
+    check_toolchain_installed(meta)?;
     run_for_all_userspace_members(meta, false, |cmd| {
-        cmd.arg("check");
+        cmd.arg("check").args(&check.extra);
     })
 }
 
-pub fn clippy(meta: &crate::GlobalMeta) -> anyhow::Result<()> {
+pub fn clippy(meta: &GlobalMeta, clippy: Clippy) -> anyhow::Result<()> {
     // TODO: we don't have clippy installed yet
+    check_toolchain_installed(meta)?;
     run_for_all_userspace_members(meta, false, |cmd| {
-        cmd.arg("clippy");
+        cmd.arg("clippy").args(&clippy.extra);
     })
 }
 
-pub fn fmt(meta: &crate::GlobalMeta) -> anyhow::Result<()> {
+pub fn fmt(meta: &GlobalMeta, fmt: Fmt) -> anyhow::Result<()> {
+    check_toolchain_installed(meta)?;
     run_for_all_userspace_members(meta, false, |cmd| {
-        cmd.arg("fmt").arg("--check");
+        cmd.arg("fmt").args(&fmt.extra);
     })
 }

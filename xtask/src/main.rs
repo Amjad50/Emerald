@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use utils::NoDebug;
 
-use crate::args::{Args, Command};
+use crate::args::{Args, Command, RustMiscCmd};
 
 #[derive(Debug)]
 struct GlobalMeta {
@@ -60,7 +60,7 @@ fn main() -> anyhow::Result<()> {
     match args.cmd {
         Command::Run(run) => {
             kernel::iso::build_iso(&meta)?;
-            userspace::build_filesystem(&meta)?;
+            userspace::build_programs(&meta, Default::default())?;
             let result = kernel::run::RunConfig::new()
                 .with_serial(true)
                 .with_gdb(run.gdb)
@@ -71,27 +71,18 @@ fn main() -> anyhow::Result<()> {
         Command::BuildIso(_) => {
             kernel::iso::build_iso(&meta)?;
         }
-        Command::KernelCheck(_) => {
-            kernel::check::check(&meta)?;
-        }
-        Command::KernelClippy(_) => {
-            kernel::check::clippy(&meta)?;
-        }
-        Command::KernelFmtCheck(_) => {
-            kernel::check::fmt(&meta)?;
-        }
-        Command::BuildUserspace(_) => {
-            userspace::build_filesystem(&meta)?;
-        }
-        Command::UserCheck(_) => {
-            userspace::check::check(&meta)?;
-        }
-        Command::UserClippy(_) => {
-            userspace::check::clippy(&meta)?;
-        }
-        Command::UserFmtCheck(_) => {
-            userspace::check::fmt(&meta)?;
-        }
+        Command::Kernel(cmd) => match cmd.cmd {
+            RustMiscCmd::Build(build) => kernel::build::build_kernel(&meta, build).map(|_| ())?,
+            RustMiscCmd::Check(check) => kernel::check::check(&meta, check)?,
+            RustMiscCmd::Clippy(clippy) => kernel::check::clippy(&meta, clippy)?,
+            RustMiscCmd::Fmt(fmt) => kernel::check::fmt(&meta, fmt)?,
+        },
+        Command::Userspace(cmd) => match cmd.cmd {
+            RustMiscCmd::Build(build) => userspace::build_programs(&meta, build).map(|_| ())?,
+            RustMiscCmd::Check(check) => userspace::check::check(&meta, check)?,
+            RustMiscCmd::Clippy(clippy) => userspace::check::clippy(&meta, clippy)?,
+            RustMiscCmd::Fmt(fmt) => userspace::check::fmt(&meta, fmt)?,
+        },
         Command::Toolchain(toolchain) => {
             toolchain::dist(&meta, &toolchain)?;
         }

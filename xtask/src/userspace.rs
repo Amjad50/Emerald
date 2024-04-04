@@ -3,6 +3,7 @@ pub mod check;
 use cargo_metadata::Package;
 
 use crate::{
+    args::Build,
     utils::{copy_files, has_changed, run_cmd},
     GlobalMeta,
 };
@@ -109,8 +110,6 @@ fn run_for_all_userspace_members(
 
         edit_cmd(&mut cmd);
 
-        cmd.arg("--manifest-path").arg(&package.manifest_path);
-
         run_cmd(cmd)?;
     }
 
@@ -136,19 +135,20 @@ pub fn copy_to_filesystem(meta: &GlobalMeta) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build(meta: &GlobalMeta) -> anyhow::Result<()> {
+fn build(meta: &GlobalMeta, build: Build) -> anyhow::Result<()> {
     run_for_all_userspace_members(meta, true, |cmd| {
         cmd.arg("build")
             .arg("--profile")
             .arg(meta.profile_name())
             .arg("--target")
-            .arg(TARGET);
+            .arg(TARGET)
+            .args(&build.extra);
     })
 }
 
-pub fn build_filesystem(meta: &GlobalMeta) -> anyhow::Result<()> {
+pub fn build_programs(meta: &GlobalMeta, cmd: Build) -> anyhow::Result<()> {
     check_toolchain_installed(meta)?;
-    build(meta)?;
+    build(meta, cmd)?;
     copy_to_filesystem(meta)?;
 
     Ok(())

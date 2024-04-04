@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
 use crate::{
+    args::Build,
     utils::{has_changed, run_cmd},
     GlobalMeta,
 };
 
-pub fn build_kernel(meta: &GlobalMeta) -> anyhow::Result<PathBuf> {
+pub fn build_kernel(meta: &GlobalMeta, build: Build) -> anyhow::Result<PathBuf> {
     let kernel_path = super::kernel_path(meta);
     let elf_path = meta
         .target_path
@@ -23,7 +24,8 @@ pub fn build_kernel(meta: &GlobalMeta) -> anyhow::Result<PathBuf> {
         cmd.current_dir(&kernel_path)
             .arg("build")
             .arg("--profile")
-            .arg(meta.profile_name());
+            .arg(meta.profile_name())
+            .args(build.extra);
 
         run_cmd(cmd)?;
     } else {

@@ -1,4 +1,8 @@
-use crate::{utils::run_cmd, GlobalMeta};
+use crate::{
+    args::{Check, Clippy, Fmt},
+    utils::run_cmd,
+    GlobalMeta,
+};
 
 fn kernel_run_cargo(
     meta: &GlobalMeta,
@@ -17,20 +21,20 @@ fn kernel_run_cargo(
     Ok(())
 }
 
-pub fn check(meta: &GlobalMeta) -> anyhow::Result<()> {
+pub fn check(meta: &GlobalMeta, check: Check) -> anyhow::Result<()> {
     kernel_run_cargo(meta, |cmd| {
-        cmd.arg("check");
+        cmd.arg("check").args(check.extra);
     })
 }
 
-pub fn clippy(meta: &GlobalMeta) -> anyhow::Result<()> {
+pub fn clippy(meta: &GlobalMeta, clippy: Clippy) -> anyhow::Result<()> {
     kernel_run_cargo(meta, |cmd| {
-        cmd.arg("clippy");
+        cmd.arg("clippy").args(clippy.extra);
     })
 }
 
-pub fn fmt(meta: &GlobalMeta) -> anyhow::Result<()> {
+pub fn fmt(meta: &GlobalMeta, fmt: Fmt) -> anyhow::Result<()> {
     kernel_run_cargo(meta, |cmd| {
-        cmd.arg("fmt").arg("--").arg("--check");
+        cmd.arg("fmt").args(fmt.extra);
     })
 }

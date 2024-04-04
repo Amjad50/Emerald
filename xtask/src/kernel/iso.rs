@@ -18,7 +18,7 @@ fn iso_copy_grub_cfg(meta: &GlobalMeta) -> anyhow::Result<()> {
 }
 
 fn iso_copy_kernel(meta: &GlobalMeta) -> anyhow::Result<()> {
-    let elf_path = build_kernel(meta)?;
+    let elf_path = build_kernel(meta, Default::default())?;
 
     copy_files(
         elf_path,

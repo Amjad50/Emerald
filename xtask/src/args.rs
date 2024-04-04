@@ -9,6 +9,9 @@ pub struct Args {
     #[argh(switch, long = "release")]
     #[argh(description = "build in release mode")]
     pub release: bool,
+
+    #[argh(positional)]
+    pub extra: Vec<String>,
 }
 
 #[derive(FromArgs, Debug)]
@@ -16,13 +19,8 @@ pub struct Args {
 pub enum Command {
     Run(RunKernel),
     BuildIso(BuildIso),
-    KernelCheck(KernelCheck),
-    KernelClippy(KernelClippy),
-    KernelFmtCheck(KernelFmtCheck),
-    BuildUserspace(BuildUserspace),
-    UserCheck(UserCheck),
-    UserClippy(UserClippy),
-    UserFmtCheck(UserFmtCheck),
+    Kernel(Kernel),
+    Userspace(Userspace),
     Toolchain(Toolchain),
 }
 
@@ -44,19 +42,61 @@ pub struct RunKernel {
 pub struct BuildIso {}
 
 #[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "kernel-check")]
-#[argh(description = "Check the kernel")]
-pub struct KernelCheck {}
+#[argh(subcommand, name = "kernel")]
+#[argh(description = "Run rust commands on the kernel")]
+pub struct Kernel {
+    #[argh(subcommand)]
+    pub cmd: RustMiscCmd,
+}
 
 #[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "kernel-clippy")]
-#[argh(description = "Run clippy on the kernel")]
-pub struct KernelClippy {}
+#[argh(subcommand, name = "userspace")]
+#[argh(description = "Run rust commands on the userspace programs")]
+pub struct Userspace {
+    #[argh(subcommand)]
+    pub cmd: RustMiscCmd,
+}
 
 #[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "kernel-fmt-check")]
-#[argh(description = "Run fmt check on the kernel")]
-pub struct KernelFmtCheck {}
+#[argh(subcommand)]
+pub enum RustMiscCmd {
+    Build(Build),
+    Check(Check),
+    Clippy(Clippy),
+    Fmt(Fmt),
+}
+
+#[derive(FromArgs, Debug, Default)]
+#[argh(subcommand, name = "build")]
+#[argh(description = "Run rust build command")]
+pub struct Build {
+    #[argh(positional)]
+    pub extra: Vec<String>,
+}
+
+#[derive(FromArgs, Debug)]
+#[argh(subcommand, name = "check")]
+#[argh(description = "Run rust check command")]
+pub struct Check {
+    #[argh(positional)]
+    pub extra: Vec<String>,
+}
+
+#[derive(FromArgs, Debug)]
+#[argh(subcommand, name = "clippy")]
+#[argh(description = "Run rust clippy command")]
+pub struct Clippy {
+    #[argh(positional)]
+    pub extra: Vec<String>,
+}
+
+#[derive(FromArgs, Debug)]
+#[argh(subcommand, name = "fmt")]
+#[argh(description = "Run rust fmt command")]
+pub struct Fmt {
+    #[argh(positional)]
+    pub extra: Vec<String>,
+}
 
 #[derive(FromArgs, Debug)]
 #[argh(subcommand, name = "userspace")]
