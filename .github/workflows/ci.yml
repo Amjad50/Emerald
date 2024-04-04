@@ -116,8 +116,7 @@ jobs:
       - name: Userspace check
         run: |
           cargo xtask userspace fmt -- --check
-          # TODO: add clippy to toolchain
-          # cargo xtask userspace clippy -- -- -D warnings
+          cargo xtask userspace clippy -- -- -D warnings
 
       - run: cargo xtask --release userspace build
         env: 

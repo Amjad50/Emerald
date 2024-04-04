@@ -38,6 +38,7 @@ pub fn dist(meta: &GlobalMeta, opts: &Toolchain) -> anyhow::Result<()> {
         .arg("x.py")
         .arg("dist")
         .arg("rustfmt")
+        .arg("clippy")
         .arg("rustc")
         .arg("rust-std");
 
@@ -74,6 +75,7 @@ pub fn dist(meta: &GlobalMeta, opts: &Toolchain) -> anyhow::Result<()> {
             }
 
             if filename.starts_with("rustfmt")
+                || filename.starts_with("clippy")
                 || filename.starts_with("rust-std")
                 || (filename.starts_with("rustc-1") && !filename.contains("src"))
             {
