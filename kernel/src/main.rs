@@ -22,6 +22,7 @@ mod devices;
 mod executable;
 mod fs;
 mod graphics;
+mod hw;
 mod io;
 mod memory_management;
 mod multiboot2;
