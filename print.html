@@ -207,15 +207,14 @@
 to the kernel as a disk.</p>
 </blockquote>
 <h2 id="building"><a class="header" href="#building">Building</a></h2>
-<p>We are using <a href="https://github.com/sagiegurari/cargo-make"><code>cargo-make</code></a> utility to build everything and run it with qemu.</p>
-<pre><code class="language-sh">cargo install cargo-make
-</code></pre>
+<h2 id="building-1"><a class="header" href="#building-1">Building</a></h2>
+<p>The whole building and packaging is done by <a href="https://github.com/Amjad50/Emerald/tree/master/xtask/">xtask</a></p>
 <p>The ISO file can be used to run on other VMs/hardware(not tested)</p>
 <p>For building the ISO image, you can use <code>make</code> but you need to have other dependencies installed to build and run the ISO:</p>
 <pre><code>xorriso mtools grub-pc-bin qemu-system-x86
 </code></pre>
 <p>Build kernel iso:</p>
-<pre><code class="language-sh">cargo make kernel_iso
+<pre><code class="language-sh">cargo xtask build-iso
 </code></pre>
 <h3 id="building-userspace-programs"><a class="header" href="#building-userspace-programs">Building userspace programs</a></h3>
 <p>This builds userspace programs into <a href="filesystem"><code>filesystem</code></a> directory (used by qemu):</p>
@@ -227,35 +226,33 @@ to the kernel as a disk.</p>
 <li><a href="https://nightly.link/Amjad50/Emerald/workflows/ci/master/toolchain.zip">toolchain.zip</a>
 Where you can install with</li>
 </ul>
-<pre><code class="language-sh">sh tools/install_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
+<pre><code class="language-sh">bash tools/install_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
 </code></pre>
 <p>This will install the toolchain into <code>extern/toolchain</code> and link it to <code>rustup</code> as <code>emerald</code>.</p>
-<p>Then, when using our <code>cargo make</code> to build our programs, you need to provide the environment <code>USE_INSTALLED_TOOLCHAIN=true</code>.</p>
-<pre><code>USE_INSTALLED_TOOLCHAIN=true cargo make filesystem
+<p>Then, <code>xtask</code> will use the installed toolchain to build userspace programs, if its not installed
+it will give an error.</p>
+<pre><code>cargo xtask userspace build
 </code></pre>
 <h4 id="building-the-toolchain"><a class="header" href="#building-the-toolchain">Building the toolchain</a></h4>
-<p>The default behavior if you didn't specify the <code>USE_INSTALLED_TOOLCHAIN=true</code> flag, is to build the toolchain
-from source if it hasn't been built before.</p>
-<blockquote>
-<p>Note: this will build the <code>rust</code> toolchain if it hasn't been built before (might take some time)</p>
-</blockquote>
-<pre><code class="language-sh">cargo make filesystem
+<p>We don't build the toolchain automatically, i.e. if you don't have the toolchain you can build the toolchain yourself from source if you don't want to installed prebuilt.</p>
+<pre><code class="language-sh">cargo xtask toolchain
 </code></pre>
-<p>(optional) If you want to build and install from source into <a href="extern/toolchain"><code>extern/toolchain</code></a> directory:</p>
+<p>If you want to build and install from source into <a href="extern/toolchain"><code>extern/toolchain</code></a> directory</p>
 <blockquote>
 <p>You can then use <code>rustup toolchain link ...</code> to link to this folder</p>
 </blockquote>
-<pre><code class="language-sh">cargo make toolchain
+<pre><code class="language-sh">cargo xtask toolchain --install
 </code></pre>
-<p>For running:</p>
-<pre><code class="language-sh">cargo make run_iso
+<h3 id="building-and-running"><a class="header" href="#building-and-running">Building and running</a></h3>
+<p>To build and run kernel and userspace programs:</p>
+<pre><code class="language-sh">cargo xtask run
 </code></pre>
 <p>You need to have <code>qemu-system-x86_64</code> installed.</p>
 <h3 id="debugging"><a class="header" href="#debugging">Debugging</a></h3>
 <p>You can use <code>gdb</code> or <code>lldb</code> to debug this.</p>
 <p>But I have included vscode configs to enable easily debugging with <code>CodeLLDB</code> extension.</p>
 <p>And to boot QEMU in debug mode you can use (it will wait for debugger on port <code>:1234</code>)</p>
-<pre><code class="language-sh">cargo make run_iso_gdb
+<pre><code class="language-sh">cargo xtask run --gdb
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="kernel"><a class="header" href="#kernel">Kernel</a></h1>
 <blockquote>
@@ -1382,12 +1379,12 @@ Where you can install with</li>
 <pre><code class="language-sh">sh tools/install_toolchain_and_link.sh &lt;path_to_toolchain.zip&gt;
 </code></pre>
 <p>This will install the toolchain into <code>extern/toolchain</code> and link it to <code>rustup</code> as <code>emerald</code>.</p>
-<p>Then, when using our <code>cargo make</code> to build our programs, you need to provide the environment <code>USE_INSTALLED_TOOLCHAIN=true</code>.</p>
-<pre><code>USE_INSTALLED_TOOLCHAIN=true cargo make filesystem
+<p>Then, when using our <code>cargo xtask</code> to build our programs.</p>
+<pre><code>cargo xtask userspace [build/check/fmt/clippy]
 </code></pre>
 <h4 id="building-the-toolchain-1"><a class="header" href="#building-the-toolchain-1">Building the toolchain</a></h4>
 <p>You can build our toolchain with the command</p>
-<pre><code class="language-sh">cargo make toolchain
+<pre><code class="language-sh">cargo xtask toolchain --install
 </code></pre>
 <p>in <a href="https://github.com/Amjad50/Emerald">the root of the project</a>.</p>
 <p>Which will install a toolchain in <code>./extern/toolchain</code>, which you can then link to your <code>rustup</code> toolchain with <code>rustup toolchain link emerald ./extern/toolchain</code>.</p>
