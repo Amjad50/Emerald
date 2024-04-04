@@ -77,17 +77,17 @@ fn has_changed_for_package(meta: &GlobalMeta, package: &Package) -> anyhow::Resu
 
 fn run_for_all_userspace_members(
     meta: &GlobalMeta,
-    run_if_changed: bool,
+    cargo_cmd: &str,
     edit_cmd: impl Fn(&mut std::process::Command),
 ) -> anyhow::Result<()> {
     let userspace_packages = userspace_packages(meta);
 
     let toolchain_prefix = "+".to_string() + toolchain_path(meta).to_str().unwrap();
 
-    for package in userspace_packages {
-        let package_path = package.manifest_path.parent().unwrap();
+    let mut packages_to_run = Vec::new();
 
-        let should_run = if run_if_changed {
+    for package in userspace_packages {
+        let should_run = if cargo_cmd == "build" {
             has_changed_for_package(meta, package)?
         } else {
             // run always
@@ -102,16 +102,22 @@ fn run_for_all_userspace_members(
             continue;
         }
 
-        let mut cmd = std::process::Command::new("cargo");
-
-        cmd.arg(&toolchain_prefix);
-
-        cmd.current_dir(package_path);
-
-        edit_cmd(&mut cmd);
-
-        run_cmd(cmd)?;
+        packages_to_run.push(&package.name)
     }
+
+    let mut cmd = std::process::Command::new("cargo");
+
+    cmd.current_dir(meta.root_path.join("userspace"))
+        .arg(&toolchain_prefix)
+        .arg(cargo_cmd);
+
+    for package in packages_to_run {
+        cmd.arg("-p").arg(package);
+    }
+
+    edit_cmd(&mut cmd);
+
+    run_cmd(cmd)?;
 
     Ok(())
 }
@@ -136,9 +142,8 @@ pub fn copy_to_filesystem(meta: &GlobalMeta) -> anyhow::Result<()> {
 }
 
 fn build(meta: &GlobalMeta, build: Build) -> anyhow::Result<()> {
-    run_for_all_userspace_members(meta, true, |cmd| {
-        cmd.arg("build")
-            .arg("--profile")
+    run_for_all_userspace_members(meta, "build", |cmd| {
+        cmd.arg("--profile")
             .arg(meta.profile_name())
             .arg("--target")
             .arg(TARGET)
