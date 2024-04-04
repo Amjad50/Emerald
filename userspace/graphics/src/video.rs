@@ -176,7 +176,7 @@ fn main() {
                 }
 
                 if old_mouse_pressed && !mouse_pressed {
-                    let x = graphics.size().width / 2 - video_w as u32 / 2;
+                    let x = graphics.size().width / 2 - video_w / 2;
                     let y = padding_top;
 
                     // if we are inside the image, pause/unpause
@@ -238,11 +238,11 @@ fn main() {
             }
 
             // draw in the center
-            let x = graphics.size().width / 2 - video_w as u32 / 2;
+            let x = graphics.size().width / 2 - video_w / 2;
             let y = padding_top;
             if let Some(img_bytes) = &last_frame_image {
                 graphics.draw_image(
-                    &img_bytes,
+                    img_bytes,
                     (x as i32, y as i32),
                     (video_w as usize, video_h as usize),
                 );
@@ -252,8 +252,8 @@ fn main() {
             let rect = Rectangle::new(
                 Point::new(x as i32 - RECT_WIDTH, y as i32 - RECT_WIDTH),
                 Size::new(
-                    video_w as u32 + 2 * RECT_WIDTH as u32,
-                    video_h as u32 + 2 * RECT_WIDTH as u32,
+                    video_w + 2 * RECT_WIDTH as u32,
+                    video_h + 2 * RECT_WIDTH as u32,
                 ),
             );
             rect.draw_styled(&rect_border_style, &mut graphics).ok();
