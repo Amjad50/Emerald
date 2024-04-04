@@ -23,9 +23,12 @@ jobs:
         with:
           toolchain: nightly-2024-01-04
           components: rust-src, rustfmt, clippy
-      - uses: davidB/rust-cargo-make@v1
-      - run: cargo make kernel_check
-      - run: cargo make --profile=release kernel_iso
+      - name: Kernel check
+        run: |
+          cargo xtask kernel fmt -- --check
+          cargo xtask kernel clippy -- -- -D warnings
+
+      - run: cargo xtask --release build-iso
       - name: Upload kernel artifact
         if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
@@ -60,9 +63,6 @@ jobs:
         with:
           toolchain: nightly-2024-01-04
           components: rust-src
-      - name: Get cargo-make
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
-        uses: davidB/rust-cargo-make@v1
       
       # Fetch only top level submodules without recursive
       # building the toolchain will automatically fetch the children of `rust`
@@ -70,13 +70,8 @@ jobs:
       - name: submodule fetch bare
         if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
         run: git submodule update --init --depth 100
-      - run: cargo make toolchain_dist
+      - run: cargo xtask toolchain -o /tmp/dist
         if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
-      - name: Copy dist to tmp
-        if: steps.cache-os-rust-restore.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p /tmp/dist
-          cp ./extern/rust/build/dist/rustc-1*linux*.xz ./extern/rust/build/dist/rust-std*.xz ./extern/rust/build/dist/rustfmt*.xz /tmp/dist
       
       - name: Save cache toolchain
         id: cache-os-rust-save
@@ -103,7 +98,6 @@ jobs:
         with:
           toolchain: nightly-2024-01-04
           components: rust-src
-      - uses: davidB/rust-cargo-make@v1
 
       - name: Get submodule hash
         id: submodule-hash
@@ -118,7 +112,14 @@ jobs:
           fail-on-cache-miss: true
       - name: install toolchain
         run: bash tools/install_toolchain_and_link.sh /tmp/dist
-      - run: cargo make --profile=release filesystem
+
+      - name: Userspace check
+        run: |
+          cargo xtask userspace fmt -- --check
+          # TODO: add clippy to toolchain
+          # cargo xtask userspace clippy -- -- -D warnings
+
+      - run: cargo xtask --release userspace build
         env: 
           USE_INSTALLED_TOOLCHAIN: true
       - name: Upload filesystem artifact

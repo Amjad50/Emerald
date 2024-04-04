@@ -33,10 +33,11 @@ where `<kernel.iso>` is the path to the ISO file, and `<filesystem>` is the path
 > to the kernel as a disk.
 
 ## Building
-We are using [`cargo-make`](https://github.com/sagiegurari/cargo-make) utility to build everything and run it with qemu.
-```sh
-cargo install cargo-make
-```
+
+## Building
+
+The whole building and packaging is done by [xtask](https://github.com/Amjad50/Emerald/tree/master/xtask/)
+
 
 The ISO file can be used to run on other VMs/hardware(not tested)
 
@@ -46,9 +47,8 @@ xorriso mtools grub-pc-bin qemu-system-x86
 ```
 Build kernel iso:
 ```sh
-cargo make kernel_iso
+cargo xtask build-iso
 ```
-
 ### Building userspace programs
 This builds userspace programs into [`filesystem`](filesystem) directory (used by qemu):
 
@@ -61,30 +61,34 @@ We distribute a prebuilt toolchain in:
 - [toolchain.zip](https://nightly.link/Amjad50/Emerald/workflows/ci/master/toolchain.zip)
 Where you can install with
 ```sh
-sh tools/install_toolchain_and_link.sh <path_to_toolchain.zip>
+bash tools/install_toolchain_and_link.sh <path_to_toolchain.zip>
 ```
 This will install the toolchain into `extern/toolchain` and link it to `rustup` as `emerald`.
 
-Then, when using our `cargo make` to build our programs, you need to provide the environment `USE_INSTALLED_TOOLCHAIN=true`.
+Then, `xtask` will use the installed toolchain to build userspace programs, if its not installed
+it will give an error.
 ```
-USE_INSTALLED_TOOLCHAIN=true cargo make filesystem
+cargo xtask userspace build
 ```
 
 #### Building the toolchain
-The default behavior if you didn't specify the `USE_INSTALLED_TOOLCHAIN=true` flag, is to build the toolchain
-from source if it hasn't been built before.
-> Note: this will build the `rust` toolchain if it hasn't been built before (might take some time)
+We don't build the toolchain automatically, i.e. if you don't have the toolchain you can build the toolchain yourself from source if you don't want to installed prebuilt.
+
+
 ```sh
-cargo make filesystem
+cargo xtask toolchain
 ```
-(optional) If you want to build and install from source into [`extern/toolchain`](extern/toolchain) directory:
+If you want to build and install from source into [`extern/toolchain`](extern/toolchain) directory
 > You can then use `rustup toolchain link ...` to link to this folder
 ```sh
-cargo make toolchain
+cargo xtask toolchain --install
 ```
-For running:
+
+### Building and running
+
+To build and run kernel and userspace programs:
 ```sh
-cargo make run_iso
+cargo xtask run
 ```
 You need to have `qemu-system-x86_64` installed.
 
@@ -95,7 +99,7 @@ But I have included vscode configs to enable easily debugging with `CodeLLDB` ex
 
 And to boot QEMU in debug mode you can use (it will wait for debugger on port `:1234`)
 ```sh
-cargo make run_iso_gdb
+cargo xtask run --gdb
 ```
 
 [Rust]: https://www.rust-lang.org/

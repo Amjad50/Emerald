@@ -9,7 +9,7 @@
         {
             "label": "build-run-qemu",
             "type": "shell",
-            "command": "cargo make run_iso_gdb",
+            "command": "cargo xtask run --gdb",
             "isBackground": true,
             "problemMatcher": [
                 // notify launch that qemu has started
