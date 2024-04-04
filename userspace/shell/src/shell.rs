@@ -66,7 +66,11 @@ fn handle_internal_cmds(cmd: &str, args: &[&str]) -> bool {
                 eprintln!("touch: missing operand");
             } else {
                 let path = args[0];
-                let file = fs::OpenOptions::new().create(true).write(true).open(path);
+                let file = fs::OpenOptions::new()
+                    .truncate(true)
+                    .create(true)
+                    .write(true)
+                    .open(path);
                 match file {
                     Ok(_) => {}
                     Err(e) => {
@@ -132,7 +136,6 @@ fn main() {
                     continue;
                 }
 
-                let mut out_file = out_file;
                 if out_file.starts_with('"') {
                     // take until end quote
                     if let Some(end_quote) = out_file.find('"') {

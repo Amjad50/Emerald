@@ -23,15 +23,15 @@ sh tools/install_toolchain_and_link.sh <path_to_toolchain.zip>
 ```
 This will install the toolchain into `extern/toolchain` and link it to `rustup` as `emerald`.
 
-Then, when using our `cargo make` to build our programs, you need to provide the environment `USE_INSTALLED_TOOLCHAIN=true`.
+Then, when using our `cargo xtask` to build our programs.
 ```
-USE_INSTALLED_TOOLCHAIN=true cargo make filesystem
+cargo xtask userspace [build/check/fmt/clippy]
 ```
 
 #### Building the toolchain
 You can build our toolchain with the command
 ```sh
-cargo make toolchain
+cargo xtask toolchain --install
 ```
 in [the root of the project](https://github.com/Amjad50/Emerald).
 

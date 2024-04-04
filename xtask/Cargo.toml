@@ -1,0 +1,12 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0.81"
+argh = "0.1.12"
+cargo_metadata = "0.18.1"
+glob = "0.3.1"

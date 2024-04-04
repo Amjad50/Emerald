@@ -41,13 +41,10 @@ fn main() {
                 if !key.pressed {
                     continue;
                 }
-                match key.key_type {
-                    emerald_runtime::keyboard::KeyType::Escape => {
-                        graphics.clear(Rgb888::BLACK).ok();
-                        graphics.present_changed();
-                        std::process::exit(0);
-                    }
-                    _ => {}
+                if key.key_type == emerald_runtime::keyboard::KeyType::Escape {
+                    graphics.clear(Rgb888::BLACK).ok();
+                    graphics.present_changed();
+                    std::process::exit(0);
                 }
             }
 
