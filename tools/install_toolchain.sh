@@ -30,7 +30,7 @@ for file in $@; do
     # move into the folder of the xz file
     pushd $(dirname $file)
     # extract
-    tar -xf $file
+    tar -xf $(basename $file)
     # get the name of the directory
     dir=$(basename $file .tar.xz)
     # go into the directory
