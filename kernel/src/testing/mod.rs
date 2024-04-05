@@ -48,11 +48,17 @@ pub use test;
 
 #[cfg(test)]
 pub fn test_runner(tests: &[&TestCase]) {
+    use alloc::{string::String, vec::Vec};
+
+    use crate::{io::console, panic_handler};
+
     println!("Running {} tests", tests.len());
 
     let mut passed = 0;
     let mut failed = 0;
     let mut ignored = 0;
+
+    let mut failed_buffers = Vec::new();
 
     for test in tests {
         print!("test {} ... ", test.name);
@@ -62,23 +68,41 @@ pub fn test_runner(tests: &[&TestCase]) {
             continue;
         }
 
+        assert!(console::start_capture().is_none());
+
         let r = unwinding::panic::catch_unwind(|| (test.test_fn)());
 
-        if test.should_panic {
-            if r.is_err() {
+        let buffer = console::stop_capture().unwrap();
+
+        if r.is_ok() {
+            if test.should_panic {
+                failed += 1;
+                println!("FAILED (should_panic)");
+            } else {
+                passed += 1;
+                println!("OK");
+            }
+        } else {
+            if test.should_panic {
                 passed += 1;
                 println!("OK");
             } else {
                 failed += 1;
-                println!("FAILED (should_panic)");
+                println!("FAILED");
+
+                failed_buffers.push((test.name, buffer));
             }
-        } else if r.is_ok() {
-            passed += 1;
-            println!("OK");
-        } else {
-            failed += 1;
-            println!("FAILED");
         }
+    }
+
+    if !failed_buffers.is_empty() {
+        println!("\n\nfailures:\n");
+
+        for (name, panic) in failed_buffers {
+            println!("--- {name} ---\n{panic}\n");
+        }
+
+        println!();
     }
 
     println!("{} passed; {} failed; {} ignored", passed, failed, ignored);

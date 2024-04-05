@@ -29,13 +29,13 @@ static mut CONSOLE: ConsoleController = ConsoleController::empty_early();
 /// # SAFETY
 /// the caller must assure that this is not called while not being initialized
 /// at the same time
-pub(super) fn run_with_console<F, U>(f: F) -> U
+pub(super) fn run_with_console<F, U>(mut f: F) -> U
 where
     F: FnMut(&mut dyn core::fmt::Write) -> U,
 {
     // SAFETY: printing is done after initialization steps and not at the same time
     //  look at `io::_print`
-    unsafe { CONSOLE.run_with(f) }
+    unsafe { CONSOLE.run_with(|c| f(c)) }
 }
 
 /// Create an early console, this is used before the kernel heap is initialized
@@ -60,6 +60,18 @@ pub fn init_late_device(framebuffer: Option<multiboot2::Framebuffer>) {
     };
 
     devices::register_device(device);
+}
+
+#[allow(dead_code)]
+pub fn start_capture() -> Option<String> {
+    // SAFETY: we are sure that the console is initialized
+    unsafe { CONSOLE.run_with(|c| c.start_capture()) }
+}
+
+#[allow(dead_code)]
+pub fn stop_capture() -> Option<String> {
+    // SAFETY: we are sure that the console is initialized
+    unsafe { CONSOLE.run_with(|c| c.stop_capture()) }
 }
 
 fn create_video_console(framebuffer: Option<multiboot2::Framebuffer>) -> Box<dyn VideoConsole> {
@@ -150,6 +162,9 @@ trait VideoConsole: Send + Sync {
 trait Console: Write {
     fn write(&mut self, src: &[u8]) -> usize;
     fn read(&mut self, dst: &mut [u8]) -> usize;
+    #[must_use]
+    fn start_capture(&mut self) -> Option<String>;
+    fn stop_capture(&mut self) -> Option<String>;
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -207,9 +222,9 @@ impl ConsoleController {
         }
     }
 
-    pub fn run_with<F, U>(&self, mut f: F) -> U
+    fn run_with<F, U>(&self, mut f: F) -> U
     where
-        F: FnMut(&mut dyn core::fmt::Write) -> U,
+        F: FnMut(&mut dyn Console) -> U,
     {
         let ret = match self {
             ConsoleController::Early(console) => {
@@ -248,12 +263,14 @@ impl ConsoleController {
 
 pub(super) struct EarlyConsole {
     uart: Uart,
+    capture: Option<String>,
 }
 
 impl EarlyConsole {
     pub const fn empty() -> Self {
         Self {
             uart: Uart::new(UartPort::COM1),
+            capture: None,
         }
     }
 
@@ -276,8 +293,12 @@ impl Write for EarlyConsole {
 
 impl Console for EarlyConsole {
     fn write(&mut self, src: &[u8]) -> usize {
-        for &c in src {
-            self.write_byte(c);
+        if let Some(capture) = &mut self.capture {
+            capture.push_str(core::str::from_utf8(src).expect("Non-UTF8"));
+        } else {
+            for &c in src {
+                self.write_byte(c);
+            }
         }
         src.len()
     }
@@ -285,6 +306,14 @@ impl Console for EarlyConsole {
     fn read(&mut self, _dst: &mut [u8]) -> usize {
         // we can't read from early console
         0
+    }
+
+    fn start_capture(&mut self) -> Option<String> {
+        self.capture.replace(String::new())
+    }
+
+    fn stop_capture(&mut self) -> Option<String> {
+        self.capture.take()
     }
 }
 
@@ -294,6 +323,7 @@ pub(super) struct LateConsole {
     keyboard: KeyboardReader,
     console_cmd_buffer: Option<String>,
     current_attrib: VideoConsoleAttribute,
+    capture: Option<String>,
 }
 
 impl LateConsole {
@@ -305,6 +335,7 @@ impl LateConsole {
             keyboard: keyboard_mouse::get_keyboard_reader(),
             console_cmd_buffer: None,
             current_attrib: Default::default(),
+            capture: None,
         };
 
         // split inputs
@@ -427,8 +458,12 @@ impl Write for LateConsole {
 
 impl Console for LateConsole {
     fn write(&mut self, src: &[u8]) -> usize {
-        for &c in src {
-            self.write_byte(c);
+        if let Some(capture) = &mut self.capture {
+            capture.push_str(core::str::from_utf8(src).expect("Non-UTF8"));
+        } else {
+            for &c in src {
+                self.write_byte(c);
+            }
         }
         src.len()
     }
@@ -464,6 +499,14 @@ impl Console for LateConsole {
             }
         }
         i
+    }
+
+    fn start_capture(&mut self) -> Option<String> {
+        self.capture.replace(String::new())
+    }
+
+    fn stop_capture(&mut self) -> Option<String> {
+        self.capture.take()
     }
 }
 
