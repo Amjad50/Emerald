@@ -1,25 +1,23 @@
 use core::{
+    any::Any,
     ffi::c_void,
-    hint,
     panic::PanicInfo,
     sync::atomic::{AtomicI32, Ordering},
 };
 
+use alloc::boxed::Box;
 use alloc::{string::String, vec::Vec};
 use framehop::{
     x86_64::{CacheX86_64, UnwindRegsX86_64, UnwinderX86_64},
     ExplicitModuleSectionInfo, Module, Unwinder,
 };
+use unwinding::abi::{UnwindContext, UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
 
 use kernel_user_link::process::process_metadata;
-// for some reason, removing this doesn't make the compiler find `eh_personality` in the `unwinding` crate
-// so keeping it here :D
-#[allow(unused_imports)]
-use unwinding::abi::UnwindContext;
-use unwinding::abi::{UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
 
 use crate::{
     cpu::{self, idt::InterruptStackFrame64},
+    hw::qemu,
     memory_management::memory_layout::{
         eh_frame_end, eh_frame_start, kernel_elf_end, kernel_text_end, KERNEL_LINK,
     },
@@ -184,28 +182,30 @@ fn stack_trace() {
     cpu::cpu().pop_cli();
 }
 
+fn panic_trace(msg: Box<dyn Any + Send>) -> ! {
+    if PANIC_COUNT.load(Ordering::Relaxed) >= 1 {
+        stack_trace();
+        println!("thread panicked while processing panic. halting...");
+
+        qemu::exit(qemu::ExitStatus::Failure);
+    }
+    PANIC_COUNT.store(1, Ordering::Relaxed);
+    stack_trace();
+
+    let code = unwinding::panic::begin_panic(Box::new(msg));
+    println!(
+        "failed to initiate panic, maybe, no one is catching it?. got code: {} halting...",
+        code.0
+    );
+
+    qemu::exit(qemu::ExitStatus::Failure);
+}
+
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     unsafe { cpu::clear_interrupts() };
     println!("{}", info);
 
-    if PANIC_COUNT.load(Ordering::Relaxed) >= 1 {
-        // we can't print the trace, as the panic probably happened while printing the trace
-        println!("thread panicked while processing panic. halting without backtrace...");
-        abort();
-    }
-
-    PANIC_COUNT.store(1, Ordering::Relaxed);
-    stack_trace();
-    println!("failed to initiate panic, maybe, we don't have `eh_frame` data?. halting...");
-    abort()
-}
-
-fn abort() -> ! {
-    loop {
-        unsafe {
-            cpu::halt();
-        }
-        hint::spin_loop();
-    }
+    struct NoPayload;
+    panic_trace(Box::new(NoPayload))
 }

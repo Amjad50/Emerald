@@ -20,8 +20,6 @@ pub fn exit(status: ExitStatus) -> ! {
         ExitStatus::Custom(code) => code,
     };
 
-    println!("Exiting with code {}", code);
-
     unsafe {
         cpu::io_out(IO_BASE, code);
     }
