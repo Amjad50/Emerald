@@ -8,6 +8,7 @@ use crate::{
     },
     multiboot2::{MemoryMapType, MultiBoot2Info},
     sync::{once::OnceLock, spin::mutex::Mutex},
+    testing,
 };
 
 struct FreePage {
@@ -42,15 +43,17 @@ pub unsafe fn alloc_zeroed() -> *mut u8 {
     page
 }
 
-/// SAFETY: this must be called after `init`
+/// SAFETY:
+/// this must be called after `init`
+/// this must never be called with same page twice, the allocator doesn't check itself
 ///
 /// panics if:
 /// - `page` is not a valid page
-/// - `page` is already free
 /// - `page` is not in the range of the allocator
 /// - `page` is not aligned to 4K
 pub unsafe fn free(page: *mut u8) {
-    ALLOCATOR.get().lock().free(page);
+    let r = { ALLOCATOR.get().lock().free(page) };
+    r.unwrap_or_else(|| panic!("Page {page:p} not valid"))
 }
 
 pub fn stats() -> (usize, usize) {
@@ -162,7 +165,7 @@ impl PhysicalPageAllocator {
         assert!(start < end);
         let mut page = start;
         while page < end {
-            unsafe { self.free(page) };
+            unsafe { self.free(page).expect("valid page") };
             page = unsafe { page.add(PAGE_4K) };
         }
     }
@@ -185,27 +188,29 @@ impl PhysicalPageAllocator {
         page
     }
 
-    /// SAFETY: this must be called after `init`
+    /// SAFETY:
+    /// this must be called after `init`
+    /// this must never be called with same page twice, the allocator doesn't check itself
     ///
-    /// panics if:
-    /// - `page` is not a valid page
-    /// - `page` is already free
+    /// fails if:
+    /// - `page` is null
     /// - `page` is not in the range of the allocator
     /// - `page` is not aligned to 4K
-    unsafe fn free(&mut self, page: *mut u8) {
-        // fill with random data to catch dangling pointer bugs
-        page.write_bytes(2, PAGE_4K);
-
-        let page = page as *mut FreePage;
+    /// with `None`, otherwise, `Some(())`
+    #[must_use]
+    unsafe fn free(&mut self, page: *mut u8) -> Option<()> {
+        let page = page.cast::<FreePage>();
 
         if page.is_null()
             || !is_aligned(page as usize, PAGE_4K)
-            || page > unsafe { page.add(1) }
             || page >= self.end as _
             || page < self.start as _
         {
-            panic!("freeing invalid page: {:p}", page);
+            return None;
         }
+
+        // fill with random data to catch dangling pointer bugs
+        page.cast::<u8>().write_bytes(2, PAGE_4K);
         // TODO: for now make sure we are not freeing the high memory for now
         assert!(self.high_mem_start == 0 || page < self.high_mem_start as _);
         let mut page = NonNull::new_unchecked(page);
@@ -213,5 +218,68 @@ impl PhysicalPageAllocator {
         page.as_mut().next = self.low_mem_free_list_head;
         self.low_mem_free_list_head = Some(page);
         self.free_count += 1;
+        Some(())
+    }
+}
+
+testing::test! {
+    fn test_general() {
+        let page1 = unsafe { alloc() };
+        let page2 = unsafe { alloc() };
+        let page3 = unsafe { alloc() };
+
+        // make sure its aligned
+        assert_eq!(page1 as usize % PAGE_4K, 0);
+        assert_eq!(page2 as usize % PAGE_4K, 0);
+        assert_eq!(page3 as usize % PAGE_4K, 0);
+
+        // make sure its after one another in reverse
+        assert_eq!(page1 as usize, page2 as usize + PAGE_4K);
+        assert_eq!(page2 as usize, page3 as usize + PAGE_4K);
+
+        // make sure the content are 1
+        assert!(unsafe { core::slice::from_raw_parts(page1, PAGE_4K) }
+            .iter()
+            .all(|&x| x == 1),);
+        assert!(unsafe { core::slice::from_raw_parts(page2, PAGE_4K) }
+            .iter()
+            .all(|&x| x == 1),);
+        assert!(unsafe { core::slice::from_raw_parts(page3, PAGE_4K) }
+            .iter()
+            .all(|&x| x == 1),);
+
+        let zeros = unsafe { alloc_zeroed() };
+        assert!(unsafe { core::slice::from_raw_parts(zeros, PAGE_4K) }
+            .iter()
+            .all(|&x| x == 0),);
+
+        unsafe {
+            free(page1);
+            free(page2);
+            free(page3);
+            free(zeros);
+        }
+    }
+
+    fn test_free_realloc() {
+        let page = unsafe { alloc() };
+        let addr = page as usize;
+
+        unsafe { free(page) };
+
+        let page2 = unsafe { alloc() };
+
+        assert_eq!(page as usize, addr);
+
+        unsafe { free(page2) };
+    }
+
+    #[should_panic]
+    fn test_unaligned_free() {
+        let page = unsafe { alloc() };
+
+        let addr_inside_page = unsafe { page.add(1) };
+
+        unsafe { free(addr_inside_page) };
     }
 }
