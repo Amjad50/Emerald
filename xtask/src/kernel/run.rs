@@ -1,25 +1,27 @@
-use std::process::Command;
-
-use crate::GlobalMeta;
+use std::{path::PathBuf, process::Command};
 
 pub struct RunConfig {
-    pub enable_debug: bool,
+    iso_path: PathBuf,
+    pub enable_debug_port: bool,
     pub enable_gdb: bool,
     pub enable_serial: bool,
+    pub enable_graphics: bool,
 }
 
 #[allow(dead_code)]
 impl RunConfig {
-    pub fn new() -> RunConfig {
+    pub fn new(iso_path: PathBuf) -> RunConfig {
         RunConfig {
-            enable_debug: false,
+            iso_path,
+            enable_debug_port: false,
             enable_gdb: false,
             enable_serial: false,
+            enable_graphics: true,
         }
     }
 
-    pub fn with_debug(mut self, enable_debug: bool) -> Self {
-        self.enable_debug = enable_debug;
+    pub fn with_debug_port(mut self, enable_debug_port: bool) -> Self {
+        self.enable_debug_port = enable_debug_port;
         self
     }
 
@@ -33,11 +35,16 @@ impl RunConfig {
         self
     }
 
-    pub fn run(self, meta: &GlobalMeta, extra_args: &[String]) -> anyhow::Result<i32> {
+    pub fn with_graphics(mut self, enable_graphics: bool) -> Self {
+        self.enable_graphics = enable_graphics;
+        self
+    }
+
+    pub fn run(self, extra_args: &[String]) -> anyhow::Result<i32> {
         let mut cmd = Command::new("qemu-system-x86_64");
 
         cmd.arg("-cdrom")
-            .arg(super::iso_path(meta))
+            .arg(self.iso_path)
             .arg("-m")
             .arg("512")
             .arg("-boot")
@@ -53,9 +60,13 @@ impl RunConfig {
             cmd.arg("-s").arg("-S");
         }
 
-        if self.enable_debug {
+        if self.enable_debug_port {
             cmd.arg("-device")
                 .arg("isa-debug-exit,iobase=0xf4,iosize=0x04");
+        }
+
+        if !self.enable_graphics {
+            cmd.arg("-display").arg("none");
         }
 
         cmd.args(extra_args);

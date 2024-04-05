@@ -13,3 +13,6 @@ exclude = ["extern"]
 
 [patch.crates-io]
 jpeg-decoder = { git = "https://github.com/Amjad50/jpeg-decoder", branch = "master" }
+
+[profile.test]
+opt-level = 2

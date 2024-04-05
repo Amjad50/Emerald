@@ -59,17 +59,39 @@ fn main() -> anyhow::Result<()> {
 
     match args.cmd {
         Command::Run(run) => {
-            kernel::iso::build_iso(&meta)?;
+            let iso_path = kernel::iso::build_normal_iso(&meta)?;
             userspace::build_programs(&meta, Default::default())?;
-            let result = kernel::run::RunConfig::new()
+            let result = kernel::run::RunConfig::new(iso_path)
                 .with_serial(true)
                 .with_gdb(run.gdb)
-                .run(&meta, &run.extra)?;
+                .with_debug_port(true)
+                .run(&run.extra)?;
 
             std::process::exit(result);
         }
+        Command::Test(test) => {
+            let iso_path = kernel::iso::build_test_iso(&meta)?;
+            let result = kernel::run::RunConfig::new(iso_path)
+                .with_serial(true)
+                .with_gdb(test.gdb)
+                .with_debug_port(true)
+                .with_graphics(false)
+                .run(&test.extra)?;
+
+            let code = result >> 1;
+
+            // custom exit code as qemu can't return 0
+            if code == 1 {
+                // QEMU exit code 3 means that the test succeeded
+                println!("Test succeeded!");
+                std::process::exit(0);
+            } else {
+                println!("Test failed! code: {}", code);
+                std::process::exit(1);
+            }
+        }
         Command::BuildIso(_) => {
-            kernel::iso::build_iso(&meta)?;
+            kernel::iso::build_normal_iso(&meta)?;
         }
         Command::Kernel(cmd) => match cmd.cmd {
             RustMiscCmd::Build(build) => kernel::build::build_kernel(&meta, build).map(|_| ())?,

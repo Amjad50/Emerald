@@ -18,6 +18,7 @@ pub struct Args {
 #[argh(subcommand)]
 pub enum Command {
     Run(RunKernel),
+    Test(TestKernel),
     BuildIso(BuildIso),
     Kernel(Kernel),
     Userspace(Userspace),
@@ -28,6 +29,18 @@ pub enum Command {
 #[argh(subcommand, name = "run")]
 #[argh(description = "Run the kernel")]
 pub struct RunKernel {
+    #[argh(switch, long = "gdb")]
+    #[argh(description = "run with gdb")]
+    pub gdb: bool,
+
+    #[argh(positional)]
+    pub extra: Vec<String>,
+}
+
+#[derive(FromArgs, Debug)]
+#[argh(subcommand, name = "test")]
+#[argh(description = "Test the kernel")]
+pub struct TestKernel {
     #[argh(switch, long = "gdb")]
     #[argh(description = "run with gdb")]
     pub gdb: bool,
