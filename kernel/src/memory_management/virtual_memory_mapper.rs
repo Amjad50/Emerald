@@ -303,6 +303,12 @@ impl VirtualMemoryMapper {
         }
     }
 
+    /// Return `true` if the current VM is used by the current cpu
+    pub fn is_used_by_me(&self) -> bool {
+        let cr3 = unsafe { cpu::get_cr3() };
+        cr3 == self.page_map_l4.as_physical()
+    }
+
     /// # Safety
     /// This must be used with caution, it must never be switched while we are using
     /// memory from the same regions, i.e. kernel stack while we are in an interrupt

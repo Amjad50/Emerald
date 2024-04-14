@@ -467,6 +467,7 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
+        assert!(!self.vm.is_used_by_me());
         self.vm.unmap_process_memory();
     }
 }
