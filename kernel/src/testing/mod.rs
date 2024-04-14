@@ -70,7 +70,7 @@ pub fn test_runner(tests: &[&TestCase]) {
 
         assert!(console::start_capture().is_none());
 
-        let r = unwinding::panic::catch_unwind(|| (test.test_fn)());
+        let r = panic_handler::catch_unwind(|| (test.test_fn)());
 
         let buffer = console::stop_capture().unwrap();
 

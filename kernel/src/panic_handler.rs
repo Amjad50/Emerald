@@ -153,6 +153,15 @@ pub fn print_originating_stack_trace(frame: &InterruptStackFrame64, rbp: u64) {
     }
 }
 
+#[allow(dead_code)]
+pub fn catch_unwind<R, F: FnOnce() -> R>(f: F) -> Result<R, Box<dyn Any + Send>> {
+    unwinding::panic::catch_unwind(f).map_err(|e| {
+        // reset panic count
+        PANIC_COUNT.store(0, Ordering::Relaxed);
+        e
+    })
+}
+
 fn stack_trace() {
     cpu::cpu().push_cli();
     struct CallbackData {
