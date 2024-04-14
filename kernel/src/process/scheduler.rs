@@ -1,6 +1,6 @@
 use core::mem;
 
-use alloc::vec::Vec;
+use alloc::{collections::BinaryHeap, vec::Vec};
 
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
@@ -10,27 +10,70 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::{Process, ProcessContext, ProcessState};
+use super::{Process, ProcessContext};
 
 static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessState {
+    Running,
+    Scheduled,
+    WaitingForPid(u64),
+    WaitingForTime(ClockTime),
+}
+
+/// A wrapper around [`Process`] that has extra details the scheduler cares about
+struct SchedulerProcess {
+    process: Process,
+    state: ProcessState,
+    priority_counter: u64,
+}
+
+impl PartialEq for SchedulerProcess {
+    fn eq(&self, other: &Self) -> bool {
+        self.priority_counter == other.priority_counter
+    }
+}
+
+impl PartialOrd for SchedulerProcess {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Eq for SchedulerProcess {}
+impl Ord for SchedulerProcess {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.priority_counter.cmp(&other.priority_counter)
+    }
+}
+
 struct Scheduler {
     interrupt_initialized: bool,
-    processes: Vec<Process>,
-    earliest_wait: Option<ClockTime>,
+    scheduled_processes: BinaryHeap<SchedulerProcess>,
+    running_waiting_procs: Vec<SchedulerProcess>,
+    exited_processes: Vec<Process>,
+    max_priority: u64,
 }
 
 impl Scheduler {
     const fn new() -> Self {
         Self {
             interrupt_initialized: false,
-            processes: Vec::new(),
-            earliest_wait: None,
+            scheduled_processes: BinaryHeap::new(),
+            running_waiting_procs: Vec::new(),
+            exited_processes: Vec::new(),
+            max_priority: u64::MAX,
         }
     }
 
     pub fn push_process(&mut self, process: Process) {
-        self.processes.push(process);
+        // data will be rewritten
+        self.reschedule_process(SchedulerProcess {
+            process,
+            state: ProcessState::Scheduled,
+            priority_counter: self.max_priority,
+        })
     }
 
     fn init_interrupt(&mut self) {
@@ -41,6 +84,87 @@ impl Scheduler {
 
         interrupts::create_scheduler_interrupt(scheduler_interrupt_handler);
         interrupts::create_syscall_interrupt(syscall_interrupt_handler);
+    }
+
+    fn reschedule_process(&mut self, mut process: SchedulerProcess) {
+        process.priority_counter = self.max_priority;
+        process.state = ProcessState::Scheduled;
+        self.scheduled_processes.push(process);
+    }
+
+    fn try_wake_waiting_processes(&mut self) {
+        let time_now = clock::clocks().time_since_startup();
+
+        // First, check waiting processes
+        let mut len = self.running_waiting_procs.len();
+        let mut i = 0;
+        while i < len {
+            let process = &mut self.running_waiting_procs[i];
+            let mut remove = false;
+            match process.state {
+                ProcessState::WaitingForPid(_) | ProcessState::Running => {
+                    self.exited_processes.retain_mut(|exited_proc| {
+                        let found_parent = exited_proc.parent_id == process.process.id;
+
+                        // add to parent
+                        if found_parent {
+                            process
+                                .process
+                                .add_child_exit(exited_proc.id, exited_proc.exit_code);
+                        }
+
+                        // wake explicit waiters
+                        if let ProcessState::WaitingForPid(pid) = process.state {
+                            if pid == exited_proc.id {
+                                remove = true;
+                                // put the exit code in rax
+                                // this should return to user mode directly
+                                assert!(
+                                    process.process.context.cs & 0x3 == 3,
+                                    "must be from user only"
+                                );
+                                process.process.context.rax = exited_proc.exit_code as u64;
+                            }
+                        }
+
+                        // retain if we didn't find the parent
+                        !found_parent
+                    });
+                }
+                ProcessState::WaitingForTime(t) => {
+                    if t <= time_now {
+                        remove = true;
+                    }
+                }
+                _ => unreachable!("We can't have Scheduled state here"),
+            }
+
+            if remove {
+                let process = self.running_waiting_procs.swap_remove(i);
+                self.reschedule_process(process);
+                len -= 1;
+            } else {
+                i += 1;
+            }
+        }
+
+        // here are processes with parent either in `scheduled_processes` or already gone
+        // FIXME: very very inefficient, replace with `Arc` for process in the future
+        let mut scheduled_list = self.scheduled_processes.drain().collect::<Vec<_>>();
+        for exited_proc in self.exited_processes.drain(..) {
+            for process in scheduled_list.iter_mut() {
+                if process.process.id == exited_proc.parent_id {
+                    process
+                        .process
+                        .add_child_exit(exited_proc.id, exited_proc.exit_code);
+                }
+            }
+        }
+        // put back
+        self.scheduled_processes.extend(scheduled_list);
+
+        // we can clear here, since we don't use the vm of the process anymore
+        self.exited_processes.clear();
     }
 }
 
@@ -57,55 +181,31 @@ pub fn schedule() -> ! {
 
         let mut scheduler = SCHEDULER.lock();
 
-        let earliest_wait = scheduler.earliest_wait.take();
-        let mut new_earliest_wait: Option<ClockTime> = None;
-        let time_now = clock::clocks().time_since_startup();
-        // we are going to wake one process, so make it a priority
-        let going_to_wake = earliest_wait.map(|t| t <= time_now).unwrap_or(false);
+        current_cpu.push_cli();
 
-        // no context holding, i.e. free to take a new process
-        for process in scheduler.processes.iter_mut() {
-            let mut run = false;
-            match process.state {
-                // only schedule another if we don't have current process ready to be run
-                ProcessState::Scheduled if current_cpu.context.is_none() && !going_to_wake => {
-                    run = true;
-                }
-                ProcessState::WaitingForTime(t) => {
-                    if current_cpu.context.is_none() && t <= time_now {
-                        run = true;
-                    } else {
-                        // this is not done yet, add it to the earliest wait
-                        new_earliest_wait = Some(new_earliest_wait.map_or(t, |et| et.min(t)));
-                    }
-                }
-                ProcessState::Yielded => {
-                    // schedule for next time
-                    process.state = ProcessState::Scheduled;
-                }
-                ProcessState::Exited => {
-                    // keep the process for one time, it will be deleted later.
-                    // this is if we want to do extra stuff later
-                }
-                _ => {}
-            }
-            if run {
-                // found a process to run
-                current_cpu.push_cli();
-                process.state = ProcessState::Running;
-                // SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
-                // as it has clones of our kernel mappings
-                unsafe { process.switch_to_this_vm() };
-                current_cpu.process_id = process.id;
-                current_cpu.context = Some(process.context);
-                current_cpu.scheduling = true;
-                current_cpu.pop_cli();
-            }
+        scheduler.try_wake_waiting_processes();
+
+        let top = scheduler.scheduled_processes.pop();
+
+        if let Some(mut top) = top {
+            assert!(top.state == ProcessState::Scheduled);
+            // found a process to run
+            top.state = ProcessState::Running;
+            // TODO: add priority levels support
+            top.priority_counter -= 1;
+            scheduler.max_priority = top.priority_counter;
+            // SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
+            // as it has clones of our kernel mappings
+            unsafe { top.process.switch_to_this_vm() };
+            current_cpu.process_id = top.process.id;
+            current_cpu.context = Some(top.process.context);
+            current_cpu.scheduling = true;
+
+            scheduler.running_waiting_procs.push(top);
+
+            current_cpu.pop_cli();
         }
-        scheduler.earliest_wait = new_earliest_wait;
-        scheduler
-            .processes
-            .retain(|p| p.state != ProcessState::Exited);
+
         drop(scheduler);
 
         if current_cpu.context.is_some() {
@@ -125,19 +225,44 @@ pub fn schedule() -> ! {
     }
 }
 
-pub fn with_current_process<F, U>(f: F) -> U
+fn with_current_process_and_state<F, U>(f: F) -> U
 where
-    F: FnOnce(&mut Process) -> U,
+    F: FnOnce(&mut SchedulerProcess) -> U,
 {
     let current_cpu = cpu::cpu();
     let mut scheduler = SCHEDULER.lock();
     // TODO: find a better way to store processes or store process index/id.
     let process = scheduler
-        .processes
+        .running_waiting_procs
         .iter_mut()
-        .find(|p| p.id == current_cpu.process_id)
+        .find(|p| p.process.id == current_cpu.process_id)
         .expect("current process not found");
+    assert!(process.state == ProcessState::Running);
     f(process)
+}
+
+/// # Safety
+/// Must ensure that this is called and handled inside pop_cli and push_cli block, as an interrupt in the middle
+/// causes the `current_process` to be inavailable later on
+unsafe fn take_current_process() -> SchedulerProcess {
+    let current_cpu = cpu::cpu();
+    let mut scheduler = SCHEDULER.lock();
+    // TODO: find a better way to store processes or store process index/id.
+    let i = scheduler
+        .running_waiting_procs
+        .iter()
+        .position(|p| p.process.id == current_cpu.process_id)
+        .expect("current process not found");
+    let process = scheduler.running_waiting_procs.swap_remove(i);
+    assert!(process.state == ProcessState::Running);
+    process
+}
+
+pub fn with_current_process<F, U>(f: F) -> U
+where
+    F: FnOnce(&mut Process) -> U,
+{
+    with_current_process_and_state(|p| f(&mut p.process))
 }
 
 /// Exit the current process, and move the `all_state` to the scheduler.
@@ -146,38 +271,25 @@ where
 pub fn exit_current_process(exit_code: i32, all_state: &mut InterruptAllSavedState) {
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
+    current_cpu.push_cli();
 
-    let pid = current_cpu.process_id;
-    let mut ppid = 0;
-    with_current_process(|process| {
-        assert!(process.state == ProcessState::Running);
-        current_cpu.push_cli();
-        ppid = process.parent_id;
-        eprintln!("Process {} exited with code {}", process.id, exit_code);
+    // SAFETY: called within push_cli and pop_cli
+    let mut process = unsafe { take_current_process() };
 
-        swap_context(current_cpu.context.as_mut().unwrap(), all_state);
-        // clear context from the CPU
-        // move the cpu context,
-        // this may be useful if a process wants to read that context later on
-        // the virtual memory will be cleared once we drop the process
-        process.context = current_cpu.context.take().unwrap();
-        process.exit(exit_code);
-    });
-    // notify listeners for this process
-    // TODO: do it better with general waiting mechanism not just for pids
-    let mut scheduler = SCHEDULER.lock();
-    for proc in scheduler.processes.iter_mut() {
-        if proc.state == ProcessState::WaitingForPid(pid) {
-            // put the exit code in rax
-            // this should return to user mode directly
-            assert!(proc.context.cs & 0x3 == 3, "must be from user only");
-            proc.context.rax = exit_code as u64;
-            proc.state = ProcessState::Scheduled;
-        }
-        if proc.id == ppid {
-            proc.add_child_exit(pid, exit_code);
-        }
-    }
+    eprintln!(
+        "Process {} exited with code {}",
+        process.process.id, exit_code
+    );
+
+    swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+    // Even though this context won't run again
+    // This may be useful if a process wants to read that context later on.
+    // The virtual memory will be cleared once we drop the process
+    // thus, we can't drop the process here
+    process.process.context = current_cpu.context.take().unwrap();
+    process.process.exit(exit_code);
+
+    SCHEDULER.lock().exited_processes.push(process.process);
 
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
@@ -189,21 +301,18 @@ pub fn sleep_current_process(time: ClockTime, all_state: &mut InterruptAllSavedS
 
     let deadline = clock::clocks().time_since_startup() + time;
 
-    with_current_process(|process| {
-        assert!(process.state == ProcessState::Running);
+    with_current_process_and_state(|p| {
         current_cpu.push_cli();
-        process.state = ProcessState::WaitingForTime(deadline);
-        eprintln!("Process {} is waiting for time {:?}", process.id, deadline);
+        p.state = ProcessState::WaitingForTime(deadline);
+        eprintln!(
+            "Process {} is waiting for time {:?}",
+            p.process.id, deadline
+        );
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
-        // clear context from the CPU
-        process.context = current_cpu.context.take().unwrap();
+
+        p.process.context = current_cpu.context.take().unwrap();
     });
-    {
-        let mut scheduler = SCHEDULER.lock();
-        let earliest_wait = scheduler.earliest_wait.take();
-        let new_earliest_wait = earliest_wait.map_or(deadline, |et| et.min(deadline));
-        scheduler.earliest_wait = Some(new_earliest_wait);
-    }
+
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
 }
@@ -214,22 +323,24 @@ pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
     if current_cpu.context.is_none() || current_cpu.scheduling {
         return;
     }
-    // save context of this process and mark is as scheduled
-    with_current_process(|process| {
-        assert!(process.state == ProcessState::Running);
-        current_cpu.push_cli();
-        swap_context(current_cpu.context.as_mut().unwrap(), all_state);
-        // clear context from the CPU
-        process.context = current_cpu.context.take().unwrap();
-        process.state = ProcessState::Yielded;
-    });
+    current_cpu.push_cli();
+    // SAFETY: called within push_cli and pop_cli
+    let mut process = unsafe { take_current_process() };
+    swap_context(current_cpu.context.as_mut().unwrap(), all_state);
+    process.process.context = current_cpu.context.take().unwrap();
+
+    SCHEDULER.lock().reschedule_process(process);
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
 }
 
 pub fn is_process_running(pid: u64) -> bool {
     let scheduler = SCHEDULER.lock();
-    scheduler.processes.iter().any(|p| p.id == pid)
+    scheduler
+        .running_waiting_procs
+        .iter()
+        .chain(scheduler.scheduled_processes.iter())
+        .any(|p| p.process.id == pid)
 }
 
 pub fn wait_for_pid(all_state: &mut InterruptAllSavedState, pid: u64) -> bool {
@@ -243,15 +354,15 @@ pub fn wait_for_pid(all_state: &mut InterruptAllSavedState, pid: u64) -> bool {
         return false;
     }
 
-    // save context of this process and mark it as waiting
-    with_current_process(|process| {
-        assert!(process.state == ProcessState::Running);
+    with_current_process_and_state(|p| {
         current_cpu.push_cli();
+        p.state = ProcessState::WaitingForPid(pid);
+        eprintln!("Process {} is waiting for process {}", p.process.id, pid);
+
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
-        // clear context from the CPU
-        process.context = current_cpu.context.take().unwrap();
-        process.state = ProcessState::WaitingForPid(pid);
+        p.process.context = current_cpu.context.take().unwrap();
     });
+
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
     true

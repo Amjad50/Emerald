@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 #![feature(linked_list_cursors)]
+#![feature(const_binary_heap_constructor)]
 
 extern crate alloc;
 
