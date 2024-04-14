@@ -105,6 +105,11 @@ fn run_for_all_userspace_members(
         packages_to_run.push(&package.name)
     }
 
+    if packages_to_run.is_empty() {
+        println!("[-] No userspace packages to run");
+        return Ok(());
+    }
+
     let mut cmd = std::process::Command::new("cargo");
 
     cmd.current_dir(meta.root_path.join("userspace"))
