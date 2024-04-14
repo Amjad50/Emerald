@@ -27,7 +27,7 @@ jobs:
         run: |
           cargo xtask kernel fmt -- --check
           cargo xtask kernel clippy -- -- -D warnings
-
+      - run: cargo xtask test
       - run: cargo xtask --release build-iso
       - name: Upload kernel artifact
         if: github.ref == 'refs/heads/master'
