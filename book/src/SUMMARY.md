@@ -34,6 +34,7 @@
         - [TSC](./kernel/clocks/tsc.md)
     - [Graphics](./kernel/graphics/index.md)
         - [VGA](./kernel/graphics/vga.md)
+    - [Testing](./kernel/testing/index.md)
 - [Userspace](./userspace/index.md)
     - [Programs](./userspace/programs.md)
     - [Libraries](./userspace/libraries.md)
