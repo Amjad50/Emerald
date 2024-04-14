@@ -9,6 +9,7 @@ extern "C" {
     static rodata_end: usize;
     static data_end: usize;
     static stack_guard_page: usize;
+    static __eh_frame: usize;
 }
 
 // The virtual address of the kernel
@@ -87,6 +88,14 @@ pub fn kernel_elf_data_end() -> usize {
 
 pub fn stack_guard_page_ptr() -> usize {
     (unsafe { &stack_guard_page } as *const usize as usize)
+}
+
+pub fn eh_frame_start() -> usize {
+    (unsafe { &__eh_frame } as *const usize as usize)
+}
+
+pub fn eh_frame_end() -> usize {
+    (unsafe { &rodata_end } as *const usize as usize)
 }
 
 pub trait AlignMem: Sized {

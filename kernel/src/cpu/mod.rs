@@ -309,3 +309,48 @@ pub unsafe fn read_tsc() -> u64 {
     core::arch::asm!("rdtsc", out("eax") low, out("edx") high, options(nomem, nostack, preserves_flags));
     ((high as u64) << 32) | (low as u64)
 }
+
+#[macro_export]
+macro_rules! rip {
+    () => {
+        {
+            let rip: u64;
+            unsafe {
+                core::arch::asm!("lea {0:r}, [rip]", out(reg) rip, options(nomem, nostack, preserves_flags));
+            }
+            rip
+        }
+    };
+}
+#[allow(unused_imports)]
+pub use rip;
+
+#[macro_export]
+macro_rules! rbp {
+    () => {
+        {
+            let rbp: u64;
+            unsafe {
+                core::arch::asm!("mov {0:r}, rbp", out(reg) rbp, options(nomem, nostack, preserves_flags));
+            }
+            rbp
+        }
+    };
+}
+#[allow(unused_imports)]
+pub use rbp;
+
+#[macro_export]
+macro_rules! rsp {
+    () => {
+        {
+            let rsp: u64;
+            unsafe {
+                core::arch::asm!("mov {0:r}, rsp", out(reg) rsp, options(nomem, nostack, preserves_flags));
+            }
+            rsp
+        }
+    };
+}
+#[allow(unused_imports)]
+pub use rsp;
