@@ -14,6 +14,10 @@ use super::{Process, ProcessContext};
 
 static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
 
+// an arbitrary value to reset the priority counters
+// we don't want to get to 0, as it will result in underflow on subtract
+const MIN_PRIORITY_VALUE: u64 = 100;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessState {
     Running,
@@ -90,6 +94,18 @@ impl Scheduler {
         process.priority_counter = self.max_priority;
         process.state = ProcessState::Scheduled;
         self.scheduled_processes.push(process);
+    }
+
+    fn reset_scheduled_processes_counters(&mut self) {
+        let max_priority = u64::MAX;
+        self.scheduled_processes = self
+            .scheduled_processes
+            .drain()
+            .map(|mut p| {
+                p.priority_counter = max_priority;
+                p
+            })
+            .collect::<BinaryHeap<_>>();
     }
 
     fn try_wake_waiting_processes(&mut self) {
@@ -184,6 +200,16 @@ pub fn schedule() -> ! {
         current_cpu.push_cli();
 
         scheduler.try_wake_waiting_processes();
+
+        // check if we need to reset the priority counters
+        if scheduler
+            .scheduled_processes
+            .peek()
+            .map(|p| p.priority_counter < MIN_PRIORITY_VALUE)
+            .unwrap_or(false)
+        {
+            scheduler.reset_scheduled_processes_counters();
+        }
 
         let top = scheduler.scheduled_processes.pop();
 
