@@ -1,6 +1,10 @@
 use core::mem;
 
-use alloc::{collections::BinaryHeap, vec::Vec};
+use alloc::{
+    boxed::Box,
+    collections::{BTreeMap, BinaryHeap},
+    vec::Vec,
+};
 
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
@@ -28,7 +32,8 @@ pub enum ProcessState {
 
 /// A wrapper around [`Process`] that has extra details the scheduler cares about
 struct SchedulerProcess {
-    process: Process,
+    // using box here so that moving this around won't be as expensive
+    process: Box<Process>,
     state: ProcessState,
     priority_counter: u64,
 }
@@ -55,7 +60,7 @@ impl Ord for SchedulerProcess {
 struct Scheduler {
     interrupt_initialized: bool,
     scheduled_processes: BinaryHeap<SchedulerProcess>,
-    running_waiting_procs: Vec<SchedulerProcess>,
+    running_waiting_procs: BTreeMap<u64, SchedulerProcess>,
     exited_processes: Vec<Process>,
     max_priority: u64,
 }
@@ -65,7 +70,7 @@ impl Scheduler {
         Self {
             interrupt_initialized: false,
             scheduled_processes: BinaryHeap::new(),
-            running_waiting_procs: Vec::new(),
+            running_waiting_procs: BTreeMap::new(),
             exited_processes: Vec::new(),
             max_priority: u64::MAX,
         }
@@ -74,7 +79,7 @@ impl Scheduler {
     pub fn push_process(&mut self, process: Process) {
         // data will be rewritten
         self.reschedule_process(SchedulerProcess {
-            process,
+            process: Box::new(process),
             state: ProcessState::Scheduled,
             priority_counter: self.max_priority,
         })
@@ -112,56 +117,53 @@ impl Scheduler {
         let time_now = clock::clocks().time_since_startup();
 
         // First, check waiting processes
-        let mut len = self.running_waiting_procs.len();
-        let mut i = 0;
-        while i < len {
-            let process = &mut self.running_waiting_procs[i];
-            let mut remove = false;
-            match process.state {
-                ProcessState::WaitingForPid(_) | ProcessState::Running => {
-                    self.exited_processes.retain_mut(|exited_proc| {
-                        let found_parent = exited_proc.parent_id == process.process.id;
+        let extracted = self
+            .running_waiting_procs
+            .extract_if(|_, process| {
+                let mut remove = false;
+                match process.state {
+                    ProcessState::WaitingForPid(_) | ProcessState::Running => {
+                        self.exited_processes.retain_mut(|exited_proc| {
+                            let found_parent = exited_proc.parent_id == process.process.id;
 
-                        // add to parent
-                        if found_parent {
-                            process
-                                .process
-                                .add_child_exit(exited_proc.id, exited_proc.exit_code);
-                        }
-
-                        // wake explicit waiters
-                        if let ProcessState::WaitingForPid(pid) = process.state {
-                            if pid == exited_proc.id {
-                                remove = true;
-                                // put the exit code in rax
-                                // this should return to user mode directly
-                                assert!(
-                                    process.process.context.cs & 0x3 == 3,
-                                    "must be from user only"
-                                );
-                                process.process.context.rax = exited_proc.exit_code as u64;
+                            // add to parent
+                            if found_parent {
+                                process
+                                    .process
+                                    .add_child_exit(exited_proc.id, exited_proc.exit_code);
                             }
-                        }
 
-                        // retain if we didn't find the parent
-                        !found_parent
-                    });
-                }
-                ProcessState::WaitingForTime(t) => {
-                    if t <= time_now {
-                        remove = true;
+                            // wake explicit waiters
+                            if let ProcessState::WaitingForPid(pid) = process.state {
+                                if pid == exited_proc.id {
+                                    remove = true;
+                                    // put the exit code in rax
+                                    // this should return to user mode directly
+                                    assert!(
+                                        process.process.context.cs & 0x3 == 3,
+                                        "must be from user only"
+                                    );
+                                    process.process.context.rax = exited_proc.exit_code as u64;
+                                }
+                            }
+
+                            // retain if we didn't find the parent
+                            !found_parent
+                        });
                     }
+                    ProcessState::WaitingForTime(t) => {
+                        if t <= time_now {
+                            remove = true;
+                        }
+                    }
+                    _ => unreachable!("We can't have Scheduled state here"),
                 }
-                _ => unreachable!("We can't have Scheduled state here"),
-            }
+                remove
+            })
+            .collect::<Vec<_>>();
 
-            if remove {
-                let process = self.running_waiting_procs.swap_remove(i);
-                self.reschedule_process(process);
-                len -= 1;
-            } else {
-                i += 1;
-            }
+        for (_, process) in extracted {
+            self.reschedule_process(process);
         }
 
         // here are processes with parent either in `scheduled_processes` or already gone
@@ -227,7 +229,7 @@ pub fn schedule() -> ! {
             current_cpu.context = Some(top.process.context);
             current_cpu.scheduling = true;
 
-            scheduler.running_waiting_procs.push(top);
+            scheduler.running_waiting_procs.insert(top.process.id, top);
 
             current_cpu.pop_cli();
         }
@@ -257,11 +259,9 @@ where
 {
     let current_cpu = cpu::cpu();
     let mut scheduler = SCHEDULER.lock();
-    // TODO: find a better way to store processes or store process index/id.
     let process = scheduler
         .running_waiting_procs
-        .iter_mut()
-        .find(|p| p.process.id == current_cpu.process_id)
+        .get_mut(&current_cpu.process_id)
         .expect("current process not found");
     assert!(process.state == ProcessState::Running);
     f(process)
@@ -272,14 +272,11 @@ where
 /// causes the `current_process` to be inavailable later on
 unsafe fn take_current_process() -> SchedulerProcess {
     let current_cpu = cpu::cpu();
-    let mut scheduler = SCHEDULER.lock();
-    // TODO: find a better way to store processes or store process index/id.
-    let i = scheduler
+    let process = SCHEDULER
+        .lock()
         .running_waiting_procs
-        .iter()
-        .position(|p| p.process.id == current_cpu.process_id)
+        .remove(&current_cpu.process_id)
         .expect("current process not found");
-    let process = scheduler.running_waiting_procs.swap_remove(i);
     assert!(process.state == ProcessState::Running);
     process
 }
@@ -315,7 +312,7 @@ pub fn exit_current_process(exit_code: i32, all_state: &mut InterruptAllSavedSta
     process.process.context = current_cpu.context.take().unwrap();
     process.process.exit(exit_code);
 
-    SCHEDULER.lock().exited_processes.push(process.process);
+    SCHEDULER.lock().exited_processes.push(*process.process);
 
     current_cpu.pop_cli();
     // go back to the kernel after the scheduler interrupt
@@ -364,7 +361,7 @@ pub fn is_process_running(pid: u64) -> bool {
     let scheduler = SCHEDULER.lock();
     scheduler
         .running_waiting_procs
-        .iter()
+        .values()
         .chain(scheduler.scheduled_processes.iter())
         .any(|p| p.process.id == pid)
 }
