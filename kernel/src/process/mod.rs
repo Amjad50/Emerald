@@ -4,11 +4,10 @@ mod syscalls;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
-use kernel_user_link::process::ProcessMetadata;
+use kernel_user_link::process::{PriorityLevel, ProcessMetadata};
 
 use crate::{
     cpu::{self, gdt},
-    devices::clock::ClockTime,
     executable::{elf, load_elf_to_vm},
     fs,
     graphics::vga,
@@ -96,16 +95,6 @@ pub struct ProcessContext {
     pub fxsave: FxSave,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProcessState {
-    Running,
-    Yielded, // Not used now, but should be scheduled next
-    Scheduled,
-    Exited,
-    WaitingForPid(u64),
-    WaitingForTime(ClockTime),
-}
-
 // TODO: implement threads, for now each process acts as a thread also
 #[allow(dead_code)]
 pub struct Process {
@@ -129,7 +118,8 @@ pub struct Process {
     heap_size: usize,
     heap_max: usize,
 
-    state: ProcessState,
+    priority: PriorityLevel,
+
     // split from the state, so that we can keep it as a simple enum
     exit_code: i32,
     children_exits: BTreeMap<u64, i32>,
@@ -218,7 +208,7 @@ impl Process {
             heap_start,
             heap_size,
             heap_max,
-            state: ProcessState::Scheduled,
+            priority: PriorityLevel::Normal,
             exit_code: 0,
             children_exits: BTreeMap::new(),
         })
@@ -294,8 +284,9 @@ impl Process {
         )
     }
 
+    /// Sets the exit_code and prepare to release the resources held by this process
+    /// The scheduler will handle the `state` of the process
     pub fn exit(&mut self, exit_code: i32) {
-        self.state = ProcessState::Exited;
         self.exit_code = exit_code;
         // release the vga if we have it
         if let Some(vga) = vga::controller() {
@@ -364,6 +355,14 @@ impl Process {
 
     pub fn set_current_dir(&mut self, current_dir: fs::Directory) {
         self.current_dir = current_dir;
+    }
+
+    pub fn get_priority(&self) -> PriorityLevel {
+        self.priority
+    }
+
+    pub fn set_priority(&mut self, priority: PriorityLevel) {
+        self.priority = priority;
     }
 }
 
@@ -479,6 +478,7 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
+        assert!(!self.vm.is_used_by_me());
         self.vm.unmap_process_memory();
     }
 }

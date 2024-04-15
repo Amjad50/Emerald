@@ -1,9 +1,11 @@
 use core::ffi::{c_char, CStr};
 
-pub use kernel_user_link::process::{process_metadata, ProcessMetadata, SpawnFileMapping};
+pub use kernel_user_link::process::{
+    process_metadata, PriorityLevel, ProcessMetadata, SpawnFileMapping,
+};
 use kernel_user_link::{
     call_syscall,
-    syscalls::{SyscallError, SYS_EXIT, SYS_SPAWN, SYS_WAIT_PID},
+    syscalls::{SyscallError, SYS_EXIT, SYS_PRIORITY, SYS_SPAWN, SYS_WAIT_PID},
 };
 
 /// # Safety
@@ -52,5 +54,23 @@ pub unsafe fn wait_for_pid(pid: u64, block: bool) -> Result<i32, SyscallError> {
             block as u64  // block
         )
         .map(|x| x as i32)
+    }
+}
+
+/// # Safety
+/// This is generally safe, it will return error if the pid is not valid, but its marked as unsafe
+/// because its a syscall
+pub unsafe fn priority(
+    pid: u64,
+    priority_level: Option<PriorityLevel>,
+) -> Result<PriorityLevel, SyscallError> {
+    unsafe {
+        call_syscall!(
+            SYS_PRIORITY,
+            pid,                                      // pid
+            priority_level.map_or(0, |x| x.to_u64())  // priority_level
+        )
+        // this should never fail
+        .map(|x| PriorityLevel::from_u64(x).unwrap())
     }
 }
