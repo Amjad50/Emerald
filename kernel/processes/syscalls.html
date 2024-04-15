@@ -224,6 +224,7 @@ these pointers/values to the correct types.</li>
 <tr><td><code>get_time</code></td><td><code>clock_type: ClockType, time: *mut ClockTime</code></td><td><code>()</code></td><td>Gets the time based on the <code>clock_type</code>, see <a href="../clocks/index.html">Clocks</a></td></tr>
 <tr><td><code>graphics</code></td><td><code>command: GraphicsCommand, extra: *mut ()</code></td><td><code>()</code></td><td>Graphics operations, see <a href="../graphics/vga.html#graphics-command">Graphics:VGA</a></td></tr>
 <tr><td><code>seek</code></td><td><code>file_index: usize, whence: SeekWhence, offset: i64</code></td><td><code>new_offset: u64</code></td><td>Seeks a file</td></tr>
+<tr><td><code>priority</code></td><td><code>pid: u64, priority: Option&lt;PriorityLevel&gt;</code></td><td><code>PriorityLevel</code></td><td>Sets and gets the priority of a process</td></tr>
 </tbody></table>
 </div>
                     </main>

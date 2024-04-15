@@ -490,11 +490,10 @@
 <span class="kw">use </span>core::sync::atomic::{AtomicU64, Ordering};
 
 <span class="kw">use </span>alloc::{collections::BTreeMap, string::String, vec::Vec};
-<span class="kw">use </span>kernel_user_link::process::ProcessMetadata;
+<span class="kw">use </span>kernel_user_link::process::{PriorityLevel, ProcessMetadata};
 
 <span class="kw">use crate</span>::{
     cpu::{<span class="self">self</span>, gdt},
-    devices::clock::ClockTime,
     executable::{elf, load_elf_to_vm},
     fs,
     graphics::vga,
@@ -582,16 +581,6 @@
     <span class="kw">pub </span>fxsave: FxSave,
 }
 
-<span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-</span><span class="kw">pub enum </span>ProcessState {
-    Running,
-    Yielded, <span class="comment">// Not used now, but should be scheduled next
-    </span>Scheduled,
-    Exited,
-    WaitingForPid(u64),
-    WaitingForTime(ClockTime),
-}
-
 <span class="comment">// TODO: implement threads, for now each process acts as a thread also
 </span><span class="attr">#[allow(dead_code)]
 </span><span class="kw">pub struct </span>Process {
@@ -615,7 +604,8 @@
     heap_size: usize,
     heap_max: usize,
 
-    state: ProcessState,
+    priority: PriorityLevel,
+
     <span class="comment">// split from the state, so that we can keep it as a simple enum
     </span>exit_code: i32,
     children_exits: BTreeMap&lt;u64, i32&gt;,
@@ -704,7 +694,7 @@
             heap_start,
             heap_size,
             heap_max,
-            state: ProcessState::Scheduled,
+            priority: PriorityLevel::Normal,
             exit_code: <span class="number">0</span>,
             children_exits: BTreeMap::new(),
         })
@@ -780,8 +770,9 @@
         </span>)
     }
 
-    <span class="kw">pub fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, exit_code: i32) {
-        <span class="self">self</span>.state = ProcessState::Exited;
+    <span class="doccomment">/// Sets the exit_code and prepare to release the resources held by this process
+    /// The scheduler will handle the `state` of the process
+    </span><span class="kw">pub fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, exit_code: i32) {
         <span class="self">self</span>.exit_code = exit_code;
         <span class="comment">// release the vga if we have it
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>(vga) = vga::controller() {
@@ -850,6 +841,14 @@
 
     <span class="kw">pub fn </span>set_current_dir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, current_dir: fs::Directory) {
         <span class="self">self</span>.current_dir = current_dir;
+    }
+
+    <span class="kw">pub fn </span>get_priority(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PriorityLevel {
+        <span class="self">self</span>.priority
+    }
+
+    <span class="kw">pub fn </span>set_priority(<span class="kw-2">&amp;mut </span><span class="self">self</span>, priority: PriorityLevel) {
+        <span class="self">self</span>.priority = priority;
     }
 }
 
@@ -965,6 +964,7 @@
 
 <span class="kw">impl </span>Drop <span class="kw">for </span>Process {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="macro">assert!</span>(!<span class="self">self</span>.vm.is_used_by_me());
         <span class="self">self</span>.vm.unmap_process_memory();
     }
 }

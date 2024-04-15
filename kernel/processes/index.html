@@ -198,7 +198,7 @@ is considered invalid and doesn't represent the current state of the process.</l
 <li><code>heap_start</code>: The start address of the heap, this will be padded by around <code>1MB</code> from the end of the <code>ELF</code> file loadded into memory.</li>
 <li><code>heap_size</code>: The current size of the heap. The user process can request more heap space with the <a href="./syscalls.html#syscalls-list"><code>inc_dec_heap</code></a> system call.</li>
 <li><code>heap_max</code>: The maximum possible size of the heap, this is not changed, currently set to <code>1GB</code>.</li>
-<li><code>status</code>: The status of the process, see <a href="./scheduler.html">scheduler</a> for more information.</li>
+<li><code>priority</code>: The priority of the process, this is used by the scheduler. see <a href="https://docs.rs/emerald_kernel_user_link/latest/emerald_kernel_user_link/process/enum.PriorityLevel.html"><code>PriorityLevel</code></a>.)</li>
 <li><code>exit_code</code>: The exit code of the process, if the process is exited, this will be set to the exit code.</li>
 <li><code>children_exits</code>: A list of the children processes that have exited, with their exit code (see #process-exit later for more information).</li>
 </ul>
@@ -253,9 +253,10 @@ is considered invalid and doesn't represent the current state of the process.</l
 <li>image size.</li>
 <li>program header offset (even though it can probably be obtained by reading the image header).</li>
 <li><code>eh_frame</code> address and size, this is used to implement unwinding.</li>
+<li><code>text</code> address and size, this is useful for debugging and getting backtrace from usermode.</li>
 </ul>
 <h2 id="process-exit"><a class="header" href="#process-exit">Process Exit</a></h2>
-<p>When the syscall <code>exit</code> is called, the process is marked as <code>Exited</code>, and the exit code is set.</p>
+<p>When the syscall <code>exit</code> is called, the process moved to <code>exited</code> list, and the exit code is set.</p>
 <p>The <code>Exited</code> process will be removed from the <code>scheduler</code>'s list, at the next <code>schedule</code> call, see <a href="./scheduler.html">scheduler</a> for more information.</p>
 <p>When the process exits, it does the following as well:</p>
 <ul>

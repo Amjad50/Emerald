@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["process_metadata"],"struct":["ProcessMetadata","SpawnFileMapping"]};
+window.SIDEBAR_ITEMS = {"enum":["PriorityLevel"],"fn":["process_metadata"],"struct":["ProcessMetadata","SpawnFileMapping"]};

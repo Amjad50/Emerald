@@ -413,6 +413,7 @@
 <a href="#411" id="411">411</a>
 <a href="#412" id="412">412</a>
 <a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>types_conversions;
 
 <span class="doccomment">/// must be one of user interrupts, i.e. 0x20+
@@ -421,7 +422,7 @@
 /// user-kernel
 </span><span class="kw">pub const </span>SYSCALL_INTERRUPT_NUMBER: u8 = <span class="number">0xFE</span>;
 
-<span class="kw">pub const </span>NUM_SYSCALLS: usize = <span class="number">21</span>;
+<span class="kw">pub const </span>NUM_SYSCALLS: usize = <span class="number">22</span>;
 
 <span class="kw">mod </span>numbers {
     <span class="kw">pub const </span>SYS_OPEN: u64 = <span class="number">0</span>;
@@ -446,6 +447,7 @@
     <span class="kw">pub const </span>SYS_GET_TIME: u64 = <span class="number">18</span>;
     <span class="kw">pub const </span>SYS_GRAPHICS: u64 = <span class="number">19</span>;
     <span class="kw">pub const </span>SYS_SEEK: u64 = <span class="number">20</span>;
+    <span class="kw">pub const </span>SYS_PRIORITY: u64 = <span class="number">21</span>;
 }
 <span class="kw">pub use </span>numbers::<span class="kw-2">*</span>;
 

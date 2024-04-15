@@ -809,6 +809,38 @@
 <a href="#807" id="807">807</a>
 <a href="#808" id="808">808</a>
 <a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
+<a href="#817" id="817">817</a>
+<a href="#818" id="818">818</a>
+<a href="#819" id="819">819</a>
+<a href="#820" id="820">820</a>
+<a href="#821" id="821">821</a>
+<a href="#822" id="822">822</a>
+<a href="#823" id="823">823</a>
+<a href="#824" id="824">824</a>
+<a href="#825" id="825">825</a>
+<a href="#826" id="826">826</a>
+<a href="#827" id="827">827</a>
+<a href="#828" id="828">828</a>
+<a href="#829" id="829">829</a>
+<a href="#830" id="830">830</a>
+<a href="#831" id="831">831</a>
+<a href="#832" id="832">832</a>
+<a href="#833" id="833">833</a>
+<a href="#834" id="834">834</a>
+<a href="#835" id="835">835</a>
+<a href="#836" id="836">836</a>
+<a href="#837" id="837">837</a>
+<a href="#838" id="838">838</a>
+<a href="#839" id="839">839</a>
+<a href="#840" id="840">840</a>
+<a href="#841" id="841">841</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{ffi::CStr, mem};
 
 <span class="kw">use </span>alloc::{borrow::Cow, string::String, vec::Vec};
@@ -816,7 +848,7 @@
     clock::ClockType,
     file::{BlockingMode, DirEntry, FileMeta, OpenOptions, SeekFrom, SeekWhence},
     graphics::{BlitCommand, FrameBufferInfo, GraphicsCommand},
-    process::SpawnFileMapping,
+    process::{PriorityLevel, SpawnFileMapping},
     sys_arg,
     syscalls::{
         syscall_arg_to_u64, syscall_handler_wrapper, SyscallArgError, SyscallError, SyscallResult,
@@ -835,7 +867,9 @@
     process::{scheduler, Process},
 };
 
-<span class="kw">use </span><span class="kw">super</span>::scheduler::{exit_current_process, sleep_current_process, with_current_process};
+<span class="kw">use </span><span class="kw">super</span>::scheduler::{
+    exit_current_process, sleep_current_process, with_current_process, with_process,
+};
 
 <span class="kw">type </span>Syscall = <span class="kw">fn</span>(<span class="kw-2">&amp;mut </span>InterruptAllSavedState) -&gt; SyscallResult;
 
@@ -861,6 +895,7 @@
     </span>sys_get_time,      <span class="comment">// kernel_user_link::syscalls::SYS_GET_TIME
     </span>sys_graphics,      <span class="comment">// kernel_user_link::syscalls::SYS_GRAPHICS
     </span>sys_seek,          <span class="comment">// kernel_user_link::syscalls::SYS_SEEK
+    </span>sys_priority,      <span class="comment">// kernel_user_link::syscalls::SYS_PRIORITY
 </span>];
 
 <span class="kw">impl </span>From&lt;FileSystemError&gt; <span class="kw">for </span>SyscallError {
@@ -1604,6 +1639,35 @@
     })<span class="question-mark">?</span>;
 
     SyscallResult::Ok(new_position)
+}
+
+<span class="doccomment">/// Set and Get process priority
+/// TODO: implement security levels, as now we can change the priority of any process
+</span><span class="kw">fn </span>sys_priority(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) -&gt; SyscallResult {
+    <span class="kw">let </span>(pid, priority_level, ..) = <span class="macro">verify_args! </span>{
+        <span class="macro">sys_arg!</span>(<span class="number">0</span>, all_state.rest =&gt; u64),
+        <span class="macro">sys_arg!</span>(<span class="number">1</span>, all_state.rest =&gt; u64),
+    };
+
+    <span class="comment">// if its `None`, just get the value
+    </span><span class="kw">let </span>priority_level = <span class="kw">if </span>priority_level == <span class="number">0 </span>{
+        <span class="prelude-val">None
+    </span>} <span class="kw">else </span>{
+        <span class="prelude-val">Some</span>(
+            PriorityLevel::from_u64(priority_level)
+                .ok_or(<span class="macro">to_arg_err!</span>(<span class="number">1</span>, SyscallArgError::GeneralInvalid))<span class="question-mark">?</span>,
+        )
+    };
+
+    <span class="kw">let </span>current_priority = with_process(pid, |process| {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(priority_level) = priority_level {
+            process.set_priority(priority_level);
+        }
+
+        <span class="prelude-val">Ok</span>::&lt;<span class="kw">_</span>, SyscallError&gt;(process.get_priority())
+    })<span class="question-mark">?</span>;
+
+    SyscallResult::Ok(current_priority.to_u64())
 }
 
 <span class="kw">pub fn </span>handle_syscall(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) {

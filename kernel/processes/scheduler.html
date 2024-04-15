@@ -182,24 +182,22 @@
 </blockquote>
 <p>The <code>scheduler</code> is responsible for scheduling the processes, and managing the CPU time between them.</p>
 <h2 id="scheduling-algorithm"><a class="header" href="#scheduling-algorithm">Scheduling Algorithm</a></h2>
-<p>Currently, the algorithm is very stupid and very bad. Not even round-robin.</p>
-<p>Its like so:</p>
+<p>We are using priority-queue based approach for scheduling processes.</p>
+<p>The queue order is determined by a value <code>priority_counter</code>, that starts at <code>u64::MAX</code>, its decremented by
+a value generated from the process's priority level, higher priority level will decrease the value less, and thus staying
+on top for more times.</p>
+<p>Each time we schedule a process we perform the following:</p>
 <ul>
-<li>Go through all <code>processes</code>, if the <code>process</code> is one of the following, we will run it next:
-<ul>
-<li><code>ProcessState::Scheduled</code> or</li>
-<li><code>ProcessState::WaitingForTime(deadline)</code>, and the <code>current</code> time is greater than or equal to <code>deadline</code>, this will have 
-more priority than <code>ProcessState::Scheduled</code>.</li>
+<li>Check all waiting processes, and wake them if its time, currently, we have <code>ProcessState::WaitingForTime</code> and <code>ProcessState::WaitingForPid</code> states that support waiting.</li>
+<li>After waking them (moving them to <code>scheduled</code> list), pick the top scheduled process, and run it, moving it to the <code>running_and_waiting</code> list.</li>
+<li>If we have <code>exited</code> processes, handle notifying waiters and parents and remove the process. Its important we remove the process
+here, since we can't do it while the process is running (still handling the <code>exit</code> syscall) since we still hold the virtual memory, deleting the process will free it up and cause a page fault.</li>
 </ul>
-</li>
-<li>If the process is <code>ProcessState::Yielded</code>, we will skip it, and mark it as <code>ProcessState::Scheduled</code>, for next time, and this what prevents us from running the same process forever and give us fake round-robin.</li>
-<li>If the process is <code>ProcessState::Exited</code>, we will remove it from the list of processes.</li>
-</ul>
-<p>When we schedule a <code>process</code> with <code>ProcessState::Scheduled</code> (<code>ProcessState::WaitingForTime</code> that is done, i.e. running it next), this is what's done:</p>
+<p>Running the process is simple:</p>
 <ul>
 <li>copy the <code>context</code> of the <code>process</code> to the saved <code>context</code> of the <code>CPU</code>, see <a href="../processor/index.html#saved-cpu-state">processor saved state</a>, which will be used by the <a href="#scheduler-interrupt">scheduler interrupt</a> to jump to it.</li>
 <li>Set the <code>pid</code> of the <code>process</code> to the <code>process_id</code> of the <code>CPU</code>.</li>
-<li>Mark the <code>process</code> as <code>ProcessState::Running</code>.</li>
+<li>Mark the <code>process</code> as <code>ProcessState::Running</code>, and move it to the <code>running_and_waiting</code> list as mentioned.</li>
 </ul>
 <h2 id="yielding"><a class="header" href="#yielding">Yielding</a></h2>
 <p>When a <code>process</code> is running, it can yield to the scheduler through 2 ways now:</p>
@@ -211,7 +209,7 @@ and this gives us preemptive multitasking.</li>
 <p>When yielding, we perform the following:</p>
 <ul>
 <li>Save the <code>all_state</code> of the CPU to the <code>context</code> of the <code>process</code>, and this <code>all_state</code> comes from the interrupt, i.e. we can only yield when an interrupt occurs from that process, since we have to save the exact <code>cpu</code> before the interrupt.</li>
-<li>Mark the <code>process</code> as <code>ProcessState::Yielded</code>.</li>
+<li>reschedule the <code>process</code>, by putting it in the <code>scheduled</code> list and fixing up the <code>priority_counter</code> to be similar to the top process. This is important, as if a process was sleeping for some time, we don't want it to hog the execution when it wakes up because at that point, its <code>priority_counter</code> will be much higher than any other process.</li>
 </ul>
 <h2 id="sleeping"><a class="header" href="#sleeping">Sleeping</a></h2>
 <p>When a <code>process</code> is running, it can sleep, and this is done through the <code>syscall</code> <code>sleep</code>, see <a href="./syscalls.html">syscalls</a>.</p>
@@ -220,7 +218,7 @@ and this gives us preemptive multitasking.</li>
 <li>Mark the <code>process</code> as <code>ProcessState::WaitingForTime(deadline)</code>, 
 where <code>deadline</code> is the expected time to finish the sleep from the <code>current</code> time. 
 See <a href="../clocks/index.html">Clocks</a>.</li>
-<li>Yield the <code>process</code> to the scheduler.</li>
+<li>the process would already be in <code>running_and_waiting</code> list, so no movement is done here.</li>
 </ul>
 <p>And then, in the scheduler, we handle sleeping processes (see <a href="#scheduling-algorithm">scheduling algorithm</a>).</p>
 <h2 id="scheduler-interrupt"><a class="header" href="#scheduler-interrupt">Scheduler Interrupt</a></h2>
