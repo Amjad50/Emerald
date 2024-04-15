@@ -19,6 +19,8 @@ use crate::{
     },
 };
 
+use self::scheduler::PriorityLevel;
+
 static PROCESS_ID_ALLOCATOR: GoingUpAllocator = GoingUpAllocator::new();
 // TODO: add dynamic stack allocation
 const INITIAL_STACK_SIZE_PAGES: usize = 256; // 1MB
@@ -118,6 +120,8 @@ pub struct Process {
     heap_size: usize,
     heap_max: usize,
 
+    priority: PriorityLevel,
+
     // split from the state, so that we can keep it as a simple enum
     exit_code: i32,
     children_exits: BTreeMap<u64, i32>,
@@ -206,6 +210,7 @@ impl Process {
             heap_start,
             heap_size,
             heap_max,
+            priority: PriorityLevel::Normal,
             exit_code: 0,
             children_exits: BTreeMap::new(),
         })
@@ -352,6 +357,10 @@ impl Process {
 
     pub fn set_current_dir(&mut self, current_dir: fs::Directory) {
         self.current_dir = current_dir;
+    }
+
+    pub fn change_priority(&mut self, priority: PriorityLevel) {
+        self.priority = priority;
     }
 }
 

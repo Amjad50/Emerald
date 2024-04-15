@@ -30,6 +30,24 @@ pub enum ProcessState {
     WaitingForTime(ClockTime),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+#[allow(dead_code)]
+pub enum PriorityLevel {
+    VeryLow = 1,
+    Low = 2,
+    Normal = 3,
+    High = 4,
+    VeryHigh = 5,
+}
+
+impl PriorityLevel {
+    pub fn counter_decrement(&self) -> u64 {
+        // the higher the value, the lower the priority
+        6 - *self as u64
+    }
+}
+
 /// A wrapper around [`Process`] that has extra details the scheduler cares about
 struct SchedulerProcess {
     // using box here so that moving this around won't be as expensive
@@ -219,8 +237,7 @@ pub fn schedule() -> ! {
             assert!(top.state == ProcessState::Scheduled);
             // found a process to run
             top.state = ProcessState::Running;
-            // TODO: add priority levels support
-            top.priority_counter -= 1;
+            top.priority_counter -= top.process.priority.counter_decrement();
             scheduler.max_priority = top.priority_counter;
             // SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
             // as it has clones of our kernel mappings
