@@ -30,24 +30,6 @@ pub enum ProcessState {
     WaitingForTime(ClockTime),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-#[allow(dead_code)]
-pub enum PriorityLevel {
-    VeryLow = 1,
-    Low = 2,
-    Normal = 3,
-    High = 4,
-    VeryHigh = 5,
-}
-
-impl PriorityLevel {
-    pub fn counter_decrement(&self) -> u64 {
-        // the higher the value, the lower the priority
-        6 - *self as u64
-    }
-}
-
 /// A wrapper around [`Process`] that has extra details the scheduler cares about
 struct SchedulerProcess {
     // using box here so that moving this around won't be as expensive
@@ -236,7 +218,9 @@ pub fn schedule() -> ! {
                 let mut inner_proc = top.process.borrow_mut();
                 pid = inner_proc.id;
 
-                top.priority_counter -= inner_proc.priority.counter_decrement();
+                // the higher the value, the lower the priority
+                let decrement = 6 - inner_proc.priority as u64;
+                top.priority_counter -= decrement;
 
                 scheduler.max_priority = top.priority_counter;
                 // SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm

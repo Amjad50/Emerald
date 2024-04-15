@@ -4,7 +4,7 @@ mod syscalls;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
-use kernel_user_link::process::ProcessMetadata;
+use kernel_user_link::process::{PriorityLevel, ProcessMetadata};
 
 use crate::{
     cpu::{self, gdt},
@@ -18,8 +18,6 @@ use crate::{
         },
     },
 };
-
-use self::scheduler::PriorityLevel;
 
 static PROCESS_ID_ALLOCATOR: GoingUpAllocator = GoingUpAllocator::new();
 // TODO: add dynamic stack allocation
@@ -359,7 +357,11 @@ impl Process {
         self.current_dir = current_dir;
     }
 
-    pub fn change_priority(&mut self, priority: PriorityLevel) {
+    pub fn get_priority(&self) -> PriorityLevel {
+        self.priority
+    }
+
+    pub fn set_priority(&mut self, priority: PriorityLevel) {
         self.priority = priority;
     }
 }

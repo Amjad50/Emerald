@@ -5,7 +5,7 @@ use kernel_user_link::{
     clock::ClockType,
     file::{BlockingMode, DirEntry, FileMeta, OpenOptions, SeekFrom, SeekWhence},
     graphics::{BlitCommand, FrameBufferInfo, GraphicsCommand},
-    process::SpawnFileMapping,
+    process::{PriorityLevel, SpawnFileMapping},
     sys_arg,
     syscalls::{
         syscall_arg_to_u64, syscall_handler_wrapper, SyscallArgError, SyscallError, SyscallResult,
@@ -24,7 +24,9 @@ use crate::{
     process::{scheduler, Process},
 };
 
-use super::scheduler::{exit_current_process, sleep_current_process, with_current_process};
+use super::scheduler::{
+    exit_current_process, sleep_current_process, with_current_process, with_process,
+};
 
 type Syscall = fn(&mut InterruptAllSavedState) -> SyscallResult;
 
@@ -50,6 +52,7 @@ const SYSCALLS: [Syscall; NUM_SYSCALLS] = [
     sys_get_time,      // kernel_user_link::syscalls::SYS_GET_TIME
     sys_graphics,      // kernel_user_link::syscalls::SYS_GRAPHICS
     sys_seek,          // kernel_user_link::syscalls::SYS_SEEK
+    sys_priority,      // kernel_user_link::syscalls::SYS_PRIORITY
 ];
 
 impl From<FileSystemError> for SyscallError {
@@ -793,6 +796,35 @@ fn sys_seek(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     })?;
 
     SyscallResult::Ok(new_position)
+}
+
+/// Set and Get process priority
+/// TODO: implement security levels, as now we can change the priority of any process
+fn sys_priority(all_state: &mut InterruptAllSavedState) -> SyscallResult {
+    let (pid, priority_level, ..) = verify_args! {
+        sys_arg!(0, all_state.rest => u64),
+        sys_arg!(1, all_state.rest => u64),
+    };
+
+    // if its `None`, just get the value
+    let priority_level = if priority_level == 0 {
+        None
+    } else {
+        Some(
+            PriorityLevel::from_u64(priority_level)
+                .ok_or(to_arg_err!(1, SyscallArgError::GeneralInvalid))?,
+        )
+    };
+
+    let current_priority = with_process(pid, |process| {
+        if let Some(priority_level) = priority_level {
+            process.set_priority(priority_level);
+        }
+
+        Ok::<_, SyscallError>(process.get_priority())
+    })?;
+
+    SyscallResult::Ok(current_priority.to_u64())
 }
 
 pub fn handle_syscall(all_state: &mut InterruptAllSavedState) {
