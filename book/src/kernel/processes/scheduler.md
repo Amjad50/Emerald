@@ -8,20 +8,22 @@ The `scheduler` is responsible for scheduling the processes, and managing the CP
 
 ## Scheduling Algorithm
 
-Currently, the algorithm is very stupid and very bad. Not even round-robin.
+We are using priority-queue based approach for scheduling processes.
 
-Its like so:
-- Go through all `processes`, if the `process` is one of the following, we will run it next:
-    - `ProcessState::Scheduled` or
-    - `ProcessState::WaitingForTime(deadline)`, and the `current` time is greater than or equal to `deadline`, this will have 
-      more priority than `ProcessState::Scheduled`.
-- If the process is `ProcessState::Yielded`, we will skip it, and mark it as `ProcessState::Scheduled`, for next time, and this what prevents us from running the same process forever and give us fake round-robin.
-- If the process is `ProcessState::Exited`, we will remove it from the list of processes.
+The queue order is determined by a value `priority_counter`, that starts at `u64::MAX`, its decremented by
+a value generated from the process's priority level, higher priority level will decrease the value less, and thus staying
+on top for more times.
 
-When we schedule a `process` with `ProcessState::Scheduled` (`ProcessState::WaitingForTime` that is done, i.e. running it next), this is what's done:
+Each time we schedule a process we perform the following:
+- Check all waiting processes, and wake them if its time, currently, we have `ProcessState::WaitingForTime` and `ProcessState::WaitingForPid` states that support waiting.
+- After waking them (moving them to `scheduled` list), pick the top scheduled process, and run it, moving it to the `running_and_waiting` list.
+- If we have `exited` processes, handle notifying waiters and parents and remove the process. Its important we remove the process
+here, since we can't do it while the process is running (still handling the `exit` syscall) since we still hold the virtual memory, deleting the process will free it up and cause a page fault.
+
+Running the process is simple:
 - copy the `context` of the `process` to the saved `context` of the `CPU`, see [processor saved state](../processor/index.md#saved-cpu-state), which will be used by the [scheduler interrupt](#scheduler-interrupt) to jump to it.
 - Set the `pid` of the `process` to the `process_id` of the `CPU`.
-- Mark the `process` as `ProcessState::Running`.
+- Mark the `process` as `ProcessState::Running`, and move it to the `running_and_waiting` list as mentioned.
 
 ## Yielding
 
@@ -32,7 +34,7 @@ and this gives us preemptive multitasking.
 
 When yielding, we perform the following:
 - Save the `all_state` of the CPU to the `context` of the `process`, and this `all_state` comes from the interrupt, i.e. we can only yield when an interrupt occurs from that process, since we have to save the exact `cpu` before the interrupt.
-- Mark the `process` as `ProcessState::Yielded`.
+- reschedule the `process`, by putting it in the `scheduled` list and fixing up the `priority_counter` to be similar to the top process. This is important, as if a process was sleeping for some time, we don't want it to hog the execution when it wakes up because at that point, its `priority_counter` will be much higher than any other process.
 
 ## Sleeping
     
@@ -42,7 +44,7 @@ When sleeping, we perform the following:
 - Mark the `process` as `ProcessState::WaitingForTime(deadline)`, 
   where `deadline` is the expected time to finish the sleep from the `current` time. 
   See [Clocks](../clocks/index.md).
-- Yield the `process` to the scheduler.
+- the process would already be in `running_and_waiting` list, so no movement is done here.
 
 And then, in the scheduler, we handle sleeping processes (see [scheduling algorithm](#scheduling-algorithm)).
 

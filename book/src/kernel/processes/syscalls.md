@@ -49,3 +49,4 @@ these pointers/values to the correct types.
 | `get_time` | `clock_type: ClockType, time: *mut ClockTime` | `()` | Gets the time based on the `clock_type`, see [Clocks](../clocks/index.md) |
 | `graphics` | `command: GraphicsCommand, extra: *mut ()` | `()` | Graphics operations, see [Graphics:VGA](../graphics/vga.md#graphics-command) |
 | `seek` | `file_index: usize, whence: SeekWhence, offset: i64` | `new_offset: u64` | Seeks a file |
+| `priority` | `pid: u64, priority: Option<PriorityLevel>` | `PriorityLevel` | Sets and gets the priority of a process |

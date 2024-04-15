@@ -23,7 +23,7 @@ The process structure [`Process`][process_structure] contain all the information
 - `heap_start`: The start address of the heap, this will be padded by around `1MB` from the end of the `ELF` file loadded into memory.
 - `heap_size`: The current size of the heap. The user process can request more heap space with the [`inc_dec_heap`](./syscalls.md#syscalls-list) system call.
 - `heap_max`: The maximum possible size of the heap, this is not changed, currently set to `1GB`.
-- `status`: The status of the process, see [scheduler](./scheduler.md) for more information.
+- `priority`: The priority of the process, this is used by the scheduler. see [`PriorityLevel`](https://docs.rs/emerald_kernel_user_link/latest/emerald_kernel_user_link/process/enum.PriorityLevel.html).)
 - `exit_code`: The exit code of the process, if the process is exited, this will be set to the exit code.
 - `children_exits`: A list of the children processes that have exited, with their exit code (see #process-exit later for more information).
 
@@ -77,10 +77,11 @@ This structure is placed in a static location in userspace memory (see [user mem
 - image size.
 - program header offset (even though it can probably be obtained by reading the image header).
 - `eh_frame` address and size, this is used to implement unwinding.
+- `text` address and size, this is useful for debugging and getting backtrace from usermode.
 
 ## Process Exit
 
-When the syscall `exit` is called, the process is marked as `Exited`, and the exit code is set.
+When the syscall `exit` is called, the process moved to `exited` list, and the exit code is set.
 
 The `Exited` process will be removed from the `scheduler`'s list, at the next `schedule` call, see [scheduler](./scheduler.md) for more information.
 
