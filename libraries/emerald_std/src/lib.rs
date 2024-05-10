@@ -9,7 +9,6 @@ pub mod alloc;
 pub mod clock;
 pub mod graphics;
 pub mod io;
-pub mod math;
 pub mod process;
 mod sync;
 

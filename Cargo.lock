@@ -149,9 +149,9 @@ dependencies = [
 
 [[package]]
 name = "compiler_builtins"
-version = "0.1.105"
+version = "0.1.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3686cc48897ce1950aa70fd595bd2dc9f767a3c4cca4cd17b2cb52a2d37e6eb4"
+checksum = "311b03493cee723d040ac2d55fce9d26dda95a388435900096092edeb1ebb461"
 
 [[package]]
 name = "crc32fast"
@@ -208,12 +208,11 @@ dependencies = [
 
 [[package]]
 name = "emerald_std"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "compiler_builtins",
  "emerald_kernel_user_link",
  "increasing_heap_allocator",
- "libm",
  "rustc-std-workspace-alloc",
  "rustc-std-workspace-core",
 ]
@@ -333,15 +332,6 @@ name = "libc"
 version = "0.2.153"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
-
-[[package]]
-name = "libm"
-version = "0.2.8"
-source = "git+https://github.com/Amjad50/libm?branch=compiling_libm_for_std#9ded10304060e82d5cb71fcf8ae99a9538802c65"
-dependencies = [
- "compiler_builtins",
- "rustc-std-workspace-core",
-]
 
 [[package]]
 name = "log"
