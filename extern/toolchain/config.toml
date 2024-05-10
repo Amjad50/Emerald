@@ -3,14 +3,14 @@
 # See `src/bootstrap/defaults` for more information.
 # Note that this has no default value (x.py uses the defaults in `config.example.toml`).
 # profile = 'dist'
-change-id = 102579
+change-id = 124501
 
 [llvm]
 download-ci-llvm = true
 # targets = "X86"
 
 [build]
-target = ["x86_64-unknown-emerald", "x86_64-unknown-linux-gnu"]
+target = ["x86_64-unknown-linux-gnu", "x86_64-unknown-emerald"]
 docs = false
 
 # Arguments passed to the `./configure` script, used during distcheck. You
