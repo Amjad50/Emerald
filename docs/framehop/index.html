@@ -1,0 +1,115 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="framehop"><title>framehop - Rust</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-4e54bb2b497cc83f.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="framehop" data-themes="" data-resource-suffix="" data-rustdoc-version="1.77.0-nightly (139fb2214 2024-01-03)" data-channel="nightly" data-search-js="search-c17e98913a53b3b7.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-f2adc0d6ca4d09fb.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-0b2e2def73e61cbe.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-04d5337699b92874.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../framehop/index.html">framehop</a><span class="version">0.11.2</span></h2></div><div class="sidebar-elems"><ul class="block">
+            <li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#traits">Traits</a></li><li><a href="#types">Type Aliases</a></li></ul></section></div></nav><div class="sidebar-resizer"></div>
+    <main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><div id="sidebar-button" tabindex="-1"><a href="../framehop/all.html" title="show sidebar"></a></div><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" tabindex="-1"><a href="../help.html" title="help">?</a></div><div id="settings-menu" tabindex="-1"><a href="../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">framehop</a><button id="copy-path" title="Copy item path to clipboard"><img src="../static.files/clipboard-7571035ce49a181d.svg" width="19" height="18" alt="Copy item path"></button></h1><span class="out-of-band"><a class="src" href="../src/framehop/lib.rs.html#1-166">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="framehop"><a href="#framehop">framehop</a></h2>
+<p>Framehop is a stack frame unwinder written in 100% Rust. It produces high quality stacks at high speed, on multiple platforms and architectures, without an expensive pre-processing step for unwind information. This makes it suitable for sampling profilers.</p>
+<p>It currently supports unwinding x86_64 and aarch64, with unwind information formats commonly used on Windows, macOS, Linux and Android.</p>
+<p>You give framehop register values, stack memory and unwind data, and framehop produces a list of return addresses.</p>
+<p>Framehop can be used in the following scenarios:</p>
+<ul>
+<li>Live unwinding of a remote process. This is how <a href="https://github.com/mstange/samply/"><code>samply</code></a> uses it.</li>
+<li>Offline unwinding from saved registers and stack bytes, even on a different machine, a different OS, or a different CPU architecture.</li>
+<li>Live unwinding inside the same process. This is currently unproven, but should work as long as you can do heap allocation before sampling, in order to allocate a cache and to update the list of modules. The actual unwinding does not require any heap allocation and should work even inside a signal handler, as long as you use <code>MustNotAllocateDuringUnwind</code>.</li>
+</ul>
+<p>As a user of framehop, your responsibilities are the following:</p>
+<ul>
+<li>You need to enumerate the modules (libraries) that are loaded in the sampled process ahead of time, or ideally maintain a live list which is updated whenever modules are loaded / unloaded.</li>
+<li>You need to provide address ranges and unwind section data for those modules.</li>
+<li>When sampling, you provide the register values and a callback  to read arbitrary stack memory without segfaulting.</li>
+<li>On aarch64, picking the right bitmask to strip pointer authentication bits from return addresses is up to you.</li>
+<li>You will need to do symbol resolution yourself, if you want function names. Framehop only produces addresses, it does not do any symbolication.</li>
+</ul>
+<p>In turn, framehop solves the following problems:</p>
+<ul>
+<li>It parses a number of different unwind information formats. At the moment, it supports the following:
+<ul>
+<li>Apple’s Compact Unwinding Format, in <code>__unwind_info</code> (macOS)</li>
+<li>DWARF CFI in <code>.eh_frame</code> (using <code>.eh_frame_hdr</code> as an index, if available)</li>
+<li>DWARF CFI in <code>.debug_frame</code></li>
+<li>PE unwind info in <code>.pdata</code>, <code>.rdata</code> and <code>.xdata</code> (for Windows x86_64)</li>
+</ul>
+</li>
+<li>It supports correct unwinding even when the program is interrupted inside a function prologue or epilogue. On macOS, it has to analyze assembly instructions in order to do this.</li>
+<li>On x86_64 and aarch64, it falls back to frame pointer unwinding if it cannot find unwind information for an address.</li>
+<li>It caches the unwind rule for each address in a fixed-size cache, so that repeated unwinding from the same address is even faster.</li>
+<li>It generates binary search indexes for unwind information formats which don’t have them. Specifically, for <code>.debug_frame</code> and for <code>.eh_frame</code> without <code>.eh_frame_hdr</code>.</li>
+<li>It does a reasonable job of detecting the end of the stack, so that you can differentiate between properly terminated stacks and prematurely truncated stacks.</li>
+</ul>
+<p>Framehop is not suitable for debuggers or to implement exception handling. Debuggers usually need to recover all register values for every frame whereas framehop only cares about return addresses. And exception handling needs the ability to call destructors, which is also a non-goal for framehop.</p>
+<h3 id="speed"><a href="#speed">Speed</a></h3>
+<p>Framehop achieves high speed in the following ways:</p>
+<ol>
+<li>It only recovers registers which are needed for computing return addresses. On x86_64 that’s <code>rip</code>, <code>rsp</code> and <code>rbp</code>, and on aarch64 that’s <code>lr</code>, <code>sp</code> and <code>fp</code>. All other registers are not needed - in theory they could be used as inputs to DWARF CFI expressions, but in practice they are not.</li>
+<li>It uses zero-copy parsing wherever possible. For example, the bytes in <code>__unwind_info</code> are only accessed during unwinding, and the binary search happens right inside the original <code>__unwind_info</code> memory. For DWARF unwinding, framehop uses the excellent <a href="https://github.com/gimli-rs/gimli/"><code>gimli</code> crate</a>, which was written with performance in mind.</li>
+<li>It uses binary search to find the correct unwind rule in all supported unwind information formats. For formats without an built-in index, it creates an index when the module is added.</li>
+<li>It caches unwind rules based on address. In practice, the 509-slot cache achieves a hit rate of around 80% on complicated code like Firefox (with the cache being shared across all Firefox processes). When profiling simpler applications, the hit rate is likely much higher.</li>
+</ol>
+<p>Furthermore, adding a module is fast too because framehop only does minimal up-front parsing and processing - really, the only thing it does is to create the index of FDE offsets for <code>.eh_frame</code> / <code>.debug_frame</code>.</p>
+<h3 id="example"><a href="#example">Example</a></h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>core::ops::Range;
+<span class="kw">use </span>framehop::aarch64::{CacheAarch64, UnwindRegsAarch64, UnwinderAarch64};
+<span class="kw">use </span>framehop::{ExplicitModuleSectionInfo, FrameAddress, Module};
+
+<span class="kw">let </span><span class="kw-2">mut </span>cache = CacheAarch64::&lt;<span class="kw">_</span>&gt;::new();
+<span class="kw">let </span><span class="kw-2">mut </span>unwinder = UnwinderAarch64::new();
+
+<span class="kw">let </span>module = Module::new(
+    <span class="string">"mybinary"</span>.to_string(),
+    <span class="number">0x1003fc000</span>..<span class="number">0x100634000</span>,
+    <span class="number">0x1003fc000</span>,
+    ExplicitModuleSectionInfo {
+        base_svma: <span class="number">0x100000000</span>,
+        text_svma: <span class="prelude-val">Some</span>(<span class="number">0x100000b64</span>..<span class="number">0x1001d2d18</span>),
+        text: <span class="prelude-val">Some</span>(<span class="macro">vec!</span>[<span class="comment">/* __text */</span>]),
+        stubs_svma: <span class="prelude-val">Some</span>(<span class="number">0x1001d2d18</span>..<span class="number">0x1001d309c</span>),
+        stub_helper_svma: <span class="prelude-val">Some</span>(<span class="number">0x1001d309c</span>..<span class="number">0x1001d3438</span>),
+        got_svma: <span class="prelude-val">Some</span>(<span class="number">0x100238000</span>..<span class="number">0x100238010</span>),
+        unwind_info: <span class="prelude-val">Some</span>(<span class="macro">vec!</span>[<span class="comment">/* __unwind_info */</span>]),
+        eh_frame_svma: <span class="prelude-val">Some</span>(<span class="number">0x100237f80</span>..<span class="number">0x100237ffc</span>),
+        eh_frame: <span class="prelude-val">Some</span>(<span class="macro">vec!</span>[<span class="comment">/* __eh_frame */</span>]),
+        text_segment_svma: <span class="prelude-val">Some</span>(<span class="number">0x1003fc000</span>..<span class="number">0x100634000</span>),
+        text_segment: <span class="prelude-val">Some</span>(<span class="macro">vec!</span>[<span class="comment">/* __TEXT */</span>]),
+        ..Default::default()
+    },
+);
+unwinder.add_module(module);
+
+<span class="kw">let </span>pc = <span class="number">0x1003fc000 </span>+ <span class="number">0x1292c0</span>;
+<span class="kw">let </span>lr = <span class="number">0x1003fc000 </span>+ <span class="number">0xe4830</span>;
+<span class="kw">let </span>sp = <span class="number">0x10</span>;
+<span class="kw">let </span>fp = <span class="number">0x20</span>;
+<span class="kw">let </span>stack = [
+    <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">0x40</span>, <span class="number">0x1003fc000 </span>+ <span class="number">0x100dc4</span>,
+    <span class="number">5</span>, <span class="number">6</span>, <span class="number">0x70</span>, <span class="number">0x1003fc000 </span>+ <span class="number">0x12ca28</span>,
+    <span class="number">7</span>, <span class="number">8</span>, <span class="number">9</span>, <span class="number">10</span>, <span class="number">0x0</span>, <span class="number">0x0</span>,
+];
+<span class="kw">let </span><span class="kw-2">mut </span>read_stack = |addr| stack.get((addr / <span class="number">8</span>) <span class="kw">as </span>usize).cloned().ok_or(());
+
+<span class="kw">use </span>framehop::Unwinder;
+<span class="kw">let </span><span class="kw-2">mut </span>iter = unwinder.iter_frames(
+    pc,
+    UnwindRegsAarch64::new(lr, sp, fp),
+    <span class="kw-2">&amp;mut </span>cache,
+    <span class="kw-2">&amp;mut </span>read_stack,
+);
+
+<span class="kw">let </span><span class="kw-2">mut </span>frames = Vec::new();
+<span class="kw">while let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(frame)) = iter.next() {
+    frames.push(frame);
+}
+
+<span class="macro">assert_eq!</span>(
+    frames,
+    <span class="macro">vec!</span>[
+        FrameAddress::from_instruction_pointer(<span class="number">0x1003fc000 </span>+ <span class="number">0x1292c0</span>),
+        FrameAddress::from_return_address(<span class="number">0x1003fc000 </span>+ <span class="number">0x100dc4</span>).unwrap(),
+        FrameAddress::from_return_address(<span class="number">0x1003fc000 </span>+ <span class="number">0x12ca28</span>).unwrap()
+    ]
+);</code></pre></div>
+</div></details><h2 id="modules" class="section-header"><a href="#modules">Modules</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="aarch64/index.html" title="mod framehop::aarch64">aarch64</a></div><div class="desc docblock-short">Types for unwinding on the aarch64 CPU architecture.</div></li><li><div class="item-name"><a class="mod" href="x86_64/index.html" title="mod framehop::x86_64">x86_64</a></div><div class="desc docblock-short">Types for unwinding on the x86_64 CPU architecture.</div></li></ul><h2 id="structs" class="section-header"><a href="#structs">Structs</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.CacheStats.html" title="struct framehop::CacheStats">CacheStats</a></div><div class="desc docblock-short">Statistics about the effectiveness of the rule cache.</div></li><li><div class="item-name"><a class="struct" href="struct.ExplicitModuleSectionInfo.html" title="struct framehop::ExplicitModuleSectionInfo">ExplicitModuleSectionInfo</a></div><div class="desc docblock-short">Explicit addresses and data of various sections in the module. This implements
+the <code>ModuleSectionInfo</code> trait.</div></li><li><div class="item-name"><a class="struct" href="struct.MayAllocateDuringUnwind.html" title="struct framehop::MayAllocateDuringUnwind">MayAllocateDuringUnwind</a></div><div class="desc docblock-short">Allow allocation during unwinding. This is one of the two <a href="trait.AllocationPolicy.html" title="trait framehop::AllocationPolicy"><code>AllocationPolicy</code></a>
+implementations.</div></li><li><div class="item-name"><a class="struct" href="struct.Module.html" title="struct framehop::Module">Module</a></div><div class="desc docblock-short">Information about a module that is loaded in a process. You might know this under a
+different name, for example: (Shared) library, binary image, DSO (“Dynamic shared object”)</div></li><li><div class="item-name"><a class="struct" href="struct.MustNotAllocateDuringUnwind.html" title="struct framehop::MustNotAllocateDuringUnwind">MustNotAllocateDuringUnwind</a></div><div class="desc docblock-short">Require allocation-free unwinding. This is one of the two <a href="trait.AllocationPolicy.html" title="trait framehop::AllocationPolicy"><code>AllocationPolicy</code></a>
+implementations.</div></li><li><div class="item-name"><a class="struct" href="struct.UnwindIterator.html" title="struct framehop::UnwindIterator">UnwindIterator</a></div><div class="desc docblock-short">An iterator for unwinding the entire stack, starting from the initial register values.</div></li></ul><h2 id="enums" class="section-header"><a href="#enums">Enums</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.Error.html" title="enum framehop::Error">Error</a></div><div class="desc docblock-short">The error type used in this crate.</div></li><li><div class="item-name"><a class="enum" href="enum.FrameAddress.html" title="enum framehop::FrameAddress">FrameAddress</a></div><div class="desc docblock-short">An absolute code address for a stack frame. Can either be taken directly from the
+instruction pointer (“program counter”), or from a return address.</div></li></ul><h2 id="traits" class="section-header"><a href="#traits">Traits</a></h2><ul class="item-table"><li><div class="item-name"><a class="trait" href="trait.AllocationPolicy.html" title="trait framehop::AllocationPolicy">AllocationPolicy</a></div><div class="desc docblock-short">A trait which lets you opt into allocation-free unwinding. The two implementations of
+this trait are <a href="struct.MustNotAllocateDuringUnwind.html" title="struct framehop::MustNotAllocateDuringUnwind"><code>MustNotAllocateDuringUnwind</code></a> and <a href="struct.MayAllocateDuringUnwind.html" title="struct framehop::MayAllocateDuringUnwind"><code>MayAllocateDuringUnwind</code></a>.</div></li><li><div class="item-name"><a class="trait" href="trait.ModuleSectionInfo.html" title="trait framehop::ModuleSectionInfo">ModuleSectionInfo</a></div><div class="desc docblock-short">Information about a module’s sections (and segments).</div></li><li><div class="item-name"><a class="trait" href="trait.Unwinder.html" title="trait framehop::Unwinder">Unwinder</a></div><div class="desc docblock-short">Unwinder is the trait that each CPU architecture’s concrete unwinder type implements.
+This trait’s methods are what let you do the actual unwinding.</div></li></ul><h2 id="types" class="section-header"><a href="#types">Type Aliases</a></h2><ul class="item-table"><li><div class="item-name"><a class="type" href="type.CacheNative.html" title="type framehop::CacheNative">CacheNative</a></div><div class="desc docblock-short">The unwinder cache for the native CPU architecture.</div></li><li><div class="item-name"><a class="type" href="type.UnwindRegsNative.html" title="type framehop::UnwindRegsNative">UnwindRegsNative</a></div><div class="desc docblock-short">The unwind registers type for the native CPU architecture.</div></li><li><div class="item-name"><a class="type" href="type.UnwinderNative.html" title="type framehop::UnwinderNative">UnwinderNative</a></div><div class="desc docblock-short">The unwinder type for the native CPU architecture.</div></li></ul></section></div></main></body></html>

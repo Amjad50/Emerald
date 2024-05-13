@@ -484,6 +484,15 @@
 <a href="#482" id="482">482</a>
 <a href="#483" id="483">483</a>
 <a href="#484" id="484">484</a>
+<a href="#485" id="485">485</a>
+<a href="#486" id="486">486</a>
+<a href="#487" id="487">487</a>
+<a href="#488" id="488">488</a>
+<a href="#489" id="489">489</a>
+<a href="#490" id="490">490</a>
+<a href="#491" id="491">491</a>
+<a href="#492" id="492">492</a>
+<a href="#493" id="493">493</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>scheduler;
 <span class="kw">mod </span>syscalls;
 
@@ -495,7 +504,10 @@
 <span class="kw">use crate</span>::{
     cpu::{<span class="self">self</span>, gdt},
     executable::{elf, load_elf_to_vm},
-    fs,
+    fs::{
+        <span class="self">self</span>,
+        path::{Path, PathBuf},
+    },
     graphics::vga,
     memory_management::{
         memory_layout::{align_down, align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
@@ -594,6 +606,7 @@
     file_index_allocator: GoingUpAllocator,
 
     argv: Vec&lt;String&gt;,
+    file_path: PathBuf,
 
     current_dir: fs::Directory,
 
@@ -688,6 +701,7 @@
             open_filesystem_nodes: BTreeMap::new(),
             file_index_allocator: GoingUpAllocator::new(),
             argv,
+            file_path: file.path().to_path_buf(),
             current_dir,
             stack_ptr_end: stack_end - <span class="number">8</span>, <span class="comment">// 8 bytes for padding
             </span>stack_size,
@@ -849,6 +863,10 @@
 
     <span class="kw">pub fn </span>set_priority(<span class="kw-2">&amp;mut </span><span class="self">self</span>, priority: PriorityLevel) {
         <span class="self">self</span>.priority = priority;
+    }
+
+    <span class="kw">pub fn </span>file_path(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Path {
+        <span class="self">self</span>.file_path.as_path()
     }
 }
 

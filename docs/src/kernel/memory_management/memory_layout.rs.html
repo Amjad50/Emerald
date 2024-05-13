@@ -308,6 +308,15 @@
 <a href="#306" id="306">306</a>
 <a href="#307" id="307">307</a>
 <a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span><span class="kw">super</span>::virtual_memory_mapper;
@@ -319,6 +328,7 @@
     <span class="kw">static </span>rodata_end: usize;
     <span class="kw">static </span>data_end: usize;
     <span class="kw">static </span>stack_guard_page: usize;
+    <span class="kw">static </span>__eh_frame: usize;
 }
 
 <span class="comment">// The virtual address of the kernel
@@ -339,7 +349,7 @@
 <span class="kw">pub const </span>KERNEL_HEAP_SIZE: usize = <span class="number">0x100_0000</span>; <span class="comment">// 16MB
 
 // The size of the stack for interrupt handlers
-</span><span class="kw">pub const </span>INTR_STACK_SIZE: usize = PAGE_4K * <span class="number">8</span>;
+</span><span class="kw">pub const </span>INTR_STACK_SIZE: usize = PAGE_4K * <span class="number">32</span>;
 <span class="kw">pub const </span>INTR_STACK_EMPTY_SIZE: usize = PAGE_4K;
 <span class="kw">pub const </span>INTR_STACK_ENTRY_SIZE: usize = INTR_STACK_SIZE + INTR_STACK_EMPTY_SIZE;
 <span class="kw">pub const </span>INTR_STACK_BASE: usize = KERNEL_HEAP_BASE + KERNEL_HEAP_SIZE;
@@ -364,7 +374,7 @@
 // space so that other processes don't override it when being run
 </span><span class="kw">pub const </span>PROCESS_KERNEL_STACK_BASE: usize =
     KERNEL_PROCESS_VIRTUAL_ADDRESS_START + PROCESS_KERNEL_STACK_GUARD;
-<span class="kw">pub const </span>PROCESS_KERNEL_STACK_SIZE: usize = PAGE_4K * <span class="number">8</span>;
+<span class="kw">pub const </span>PROCESS_KERNEL_STACK_SIZE: usize = PAGE_4K * <span class="number">64</span>;
 <span class="kw">pub const </span>PROCESS_KERNEL_STACK_END: usize = PROCESS_KERNEL_STACK_BASE + PROCESS_KERNEL_STACK_SIZE;
 
 <span class="attr">#[allow(dead_code)]
@@ -397,6 +407,14 @@
 
 <span class="kw">pub fn </span>stack_guard_page_ptr() -&gt; usize {
     (<span class="kw">unsafe </span>{ <span class="kw-2">&amp;</span>stack_guard_page } <span class="kw">as </span><span class="kw-2">*const </span>usize <span class="kw">as </span>usize)
+}
+
+<span class="kw">pub fn </span>eh_frame_start() -&gt; usize {
+    (<span class="kw">unsafe </span>{ <span class="kw-2">&amp;</span>__eh_frame } <span class="kw">as </span><span class="kw-2">*const </span>usize <span class="kw">as </span>usize)
+}
+
+<span class="kw">pub fn </span>eh_frame_end() -&gt; usize {
+    (<span class="kw">unsafe </span>{ <span class="kw-2">&amp;</span>rodata_end } <span class="kw">as </span><span class="kw-2">*const </span>usize <span class="kw">as </span>usize)
 }
 
 <span class="kw">pub trait </span>AlignMem: Sized {

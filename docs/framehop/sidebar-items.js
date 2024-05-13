@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Error","FrameAddress"],"mod":["aarch64","x86_64"],"struct":["CacheStats","ExplicitModuleSectionInfo","MayAllocateDuringUnwind","Module","MustNotAllocateDuringUnwind","UnwindIterator"],"trait":["AllocationPolicy","ModuleSectionInfo","Unwinder"],"type":["CacheNative","UnwindRegsNative","UnwinderNative"]};
