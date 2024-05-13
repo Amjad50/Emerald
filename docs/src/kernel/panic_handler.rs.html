@@ -211,28 +211,35 @@
 <a href="#209" id="209">209</a>
 <a href="#210" id="210">210</a>
 <a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
+    any::Any,
     ffi::c_void,
-    hint,
     panic::PanicInfo,
     sync::atomic::{AtomicI32, Ordering},
 };
 
+<span class="kw">use </span>alloc::boxed::Box;
 <span class="kw">use </span>alloc::{string::String, vec::Vec};
 <span class="kw">use </span>framehop::{
     x86_64::{CacheX86_64, UnwindRegsX86_64, UnwinderX86_64},
     ExplicitModuleSectionInfo, Module, Unwinder,
 };
+<span class="kw">use </span>unwinding::abi::{UnwindContext, UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
 
 <span class="kw">use </span>kernel_user_link::process::process_metadata;
-<span class="comment">// for some reason, removing this doesn't make the compiler find `eh_personality` in the `unwinding` crate
-// so keeping it here :D
-</span><span class="attr">#[allow(unused_imports)]
-</span><span class="kw">use </span>unwinding::abi::UnwindContext;
-<span class="kw">use </span>unwinding::abi::{UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
 
 <span class="kw">use crate</span>::{
     cpu::{<span class="self">self</span>, idt::InterruptStackFrame64},
+    hw::qemu,
     memory_management::memory_layout::{
         eh_frame_end, eh_frame_start, kernel_elf_end, kernel_text_end, KERNEL_LINK,
     },
@@ -368,6 +375,15 @@
     }
 }
 
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">pub fn </span>catch_unwind&lt;R, F: FnOnce() -&gt; R&gt;(f: F) -&gt; <span class="prelude-ty">Result</span>&lt;R, Box&lt;<span class="kw">dyn </span>Any + Send&gt;&gt; {
+    unwinding::panic::catch_unwind(f).map_err(|e| {
+        <span class="comment">// reset panic count
+        </span>PANIC_COUNT.store(<span class="number">0</span>, Ordering::Relaxed);
+        e
+    })
+}
+
 <span class="kw">fn </span>stack_trace() {
     cpu::cpu().push_cli();
     <span class="kw">struct </span>CallbackData {
@@ -397,29 +413,31 @@
     cpu::cpu().pop_cli();
 }
 
+<span class="kw">fn </span>panic_trace(msg: Box&lt;<span class="kw">dyn </span>Any + Send&gt;) -&gt; ! {
+    <span class="kw">if </span>PANIC_COUNT.load(Ordering::Relaxed) &gt;= <span class="number">1 </span>{
+        stack_trace();
+        <span class="macro">println!</span>(<span class="string">"thread panicked while processing panic. halting..."</span>);
+
+        qemu::exit(qemu::ExitStatus::Failure);
+    }
+    PANIC_COUNT.store(<span class="number">1</span>, Ordering::Relaxed);
+    stack_trace();
+
+    <span class="kw">let </span>code = unwinding::panic::begin_panic(Box::new(msg));
+    <span class="macro">println!</span>(
+        <span class="string">"failed to initiate panic, maybe, no one is catching it?. got code: {} halting..."</span>,
+        code.<span class="number">0
+    </span>);
+
+    qemu::exit(qemu::ExitStatus::Failure);
+}
+
 <span class="attr">#[panic_handler]
 </span><span class="kw">fn </span>panic(info: <span class="kw-2">&amp;</span>PanicInfo&lt;<span class="lifetime">'_</span>&gt;) -&gt; ! {
     <span class="kw">unsafe </span>{ cpu::clear_interrupts() };
     <span class="macro">println!</span>(<span class="string">"{}"</span>, info);
 
-    <span class="kw">if </span>PANIC_COUNT.load(Ordering::Relaxed) &gt;= <span class="number">1 </span>{
-        <span class="comment">// we can't print the trace, as the panic probably happened while printing the trace
-        </span><span class="macro">println!</span>(<span class="string">"thread panicked while processing panic. halting without backtrace..."</span>);
-        abort();
-    }
-
-    PANIC_COUNT.store(<span class="number">1</span>, Ordering::Relaxed);
-    stack_trace();
-    <span class="macro">println!</span>(<span class="string">"failed to initiate panic, maybe, we don't have `eh_frame` data?. halting..."</span>);
-    abort()
-}
-
-<span class="kw">fn </span>abort() -&gt; ! {
-    <span class="kw">loop </span>{
-        <span class="kw">unsafe </span>{
-            cpu::halt();
-        }
-        hint::spin_loop();
-    }
+    <span class="kw">struct </span>NoPayload;
+    panic_trace(Box::new(NoPayload))
 }
 </code></pre></div></section></main></body></html>

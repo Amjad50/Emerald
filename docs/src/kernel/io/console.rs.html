@@ -508,6 +508,49 @@
 <a href="#506" id="506">506</a>
 <a href="#507" id="507">507</a>
 <a href="#508" id="508">508</a>
+<a href="#509" id="509">509</a>
+<a href="#510" id="510">510</a>
+<a href="#511" id="511">511</a>
+<a href="#512" id="512">512</a>
+<a href="#513" id="513">513</a>
+<a href="#514" id="514">514</a>
+<a href="#515" id="515">515</a>
+<a href="#516" id="516">516</a>
+<a href="#517" id="517">517</a>
+<a href="#518" id="518">518</a>
+<a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
+<a href="#521" id="521">521</a>
+<a href="#522" id="522">522</a>
+<a href="#523" id="523">523</a>
+<a href="#524" id="524">524</a>
+<a href="#525" id="525">525</a>
+<a href="#526" id="526">526</a>
+<a href="#527" id="527">527</a>
+<a href="#528" id="528">528</a>
+<a href="#529" id="529">529</a>
+<a href="#530" id="530">530</a>
+<a href="#531" id="531">531</a>
+<a href="#532" id="532">532</a>
+<a href="#533" id="533">533</a>
+<a href="#534" id="534">534</a>
+<a href="#535" id="535">535</a>
+<a href="#536" id="536">536</a>
+<a href="#537" id="537">537</a>
+<a href="#538" id="538">538</a>
+<a href="#539" id="539">539</a>
+<a href="#540" id="540">540</a>
+<a href="#541" id="541">541</a>
+<a href="#542" id="542">542</a>
+<a href="#543" id="543">543</a>
+<a href="#544" id="544">544</a>
+<a href="#545" id="545">545</a>
+<a href="#546" id="546">546</a>
+<a href="#547" id="547">547</a>
+<a href="#548" id="548">548</a>
+<a href="#549" id="549">549</a>
+<a href="#550" id="550">550</a>
+<a href="#551" id="551">551</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>vga_graphics;
 <span class="kw">mod </span>vga_text;
 
@@ -539,13 +582,13 @@
 <span class="doccomment">/// # SAFETY
 /// the caller must assure that this is not called while not being initialized
 /// at the same time
-</span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>run_with_console&lt;F, U&gt;(f: F) -&gt; U
+</span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>run_with_console&lt;F, U&gt;(<span class="kw-2">mut </span>f: F) -&gt; U
 <span class="kw">where
     </span>F: FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>core::fmt::Write) -&gt; U,
 {
     <span class="comment">// SAFETY: printing is done after initialization steps and not at the same time
     //  look at `io::_print`
-    </span><span class="kw">unsafe </span>{ CONSOLE.run_with(f) }
+    </span><span class="kw">unsafe </span>{ CONSOLE.run_with(|c| f(c)) }
 }
 
 <span class="doccomment">/// Create an early console, this is used before the kernel heap is initialized
@@ -570,6 +613,18 @@
     };
 
     devices::register_device(device);
+}
+
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">pub fn </span>start_capture() -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+    <span class="comment">// SAFETY: we are sure that the console is initialized
+    </span><span class="kw">unsafe </span>{ CONSOLE.run_with(|c| c.start_capture()) }
+}
+
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">pub fn </span>stop_capture() -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+    <span class="comment">// SAFETY: we are sure that the console is initialized
+    </span><span class="kw">unsafe </span>{ CONSOLE.run_with(|c| c.stop_capture()) }
 }
 
 <span class="kw">fn </span>create_video_console(framebuffer: <span class="prelude-ty">Option</span>&lt;multiboot2::Framebuffer&gt;) -&gt; Box&lt;<span class="kw">dyn </span>VideoConsole&gt; {
@@ -660,6 +715,9 @@
 <span class="kw">trait </span>Console: Write {
     <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize;
     <span class="kw">fn </span>read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize;
+    <span class="attr">#[must_use]
+    </span><span class="kw">fn </span>start_capture(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt;;
+    <span class="kw">fn </span>stop_capture(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt;;
 }
 
 <span class="attr">#[allow(clippy::large_enum_variant)]
@@ -717,9 +775,9 @@
         }
     }
 
-    <span class="kw">pub fn </span>run_with&lt;F, U&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="kw-2">mut </span>f: F) -&gt; U
+    <span class="kw">fn </span>run_with&lt;F, U&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="kw-2">mut </span>f: F) -&gt; U
     <span class="kw">where
-        </span>F: FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>core::fmt::Write) -&gt; U,
+        </span>F: FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Console) -&gt; U,
     {
         <span class="kw">let </span>ret = <span class="kw">match </span><span class="self">self </span>{
             ConsoleController::Early(console) =&gt; {
@@ -758,12 +816,14 @@
 
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>EarlyConsole {
     uart: Uart,
+    capture: <span class="prelude-ty">Option</span>&lt;String&gt;,
 }
 
 <span class="kw">impl </span>EarlyConsole {
     <span class="kw">pub const fn </span>empty() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             uart: Uart::new(UartPort::COM1),
+            capture: <span class="prelude-val">None</span>,
         }
     }
 
@@ -786,8 +846,12 @@
 
 <span class="kw">impl </span>Console <span class="kw">for </span>EarlyConsole {
     <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize {
-        <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>src {
-            <span class="self">self</span>.write_byte(c);
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(capture) = <span class="kw-2">&amp;mut </span><span class="self">self</span>.capture {
+            capture.push_str(core::str::from_utf8(src).expect(<span class="string">"Non-UTF8"</span>));
+        } <span class="kw">else </span>{
+            <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>src {
+                <span class="self">self</span>.write_byte(c);
+            }
         }
         src.len()
     }
@@ -796,6 +860,14 @@
         <span class="comment">// we can't read from early console
         </span><span class="number">0
     </span>}
+
+    <span class="kw">fn </span>start_capture(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+        <span class="self">self</span>.capture.replace(String::new())
+    }
+
+    <span class="kw">fn </span>stop_capture(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+        <span class="self">self</span>.capture.take()
+    }
 }
 
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>LateConsole {
@@ -804,6 +876,7 @@
     keyboard: KeyboardReader,
     console_cmd_buffer: <span class="prelude-ty">Option</span>&lt;String&gt;,
     current_attrib: VideoConsoleAttribute,
+    capture: <span class="prelude-ty">Option</span>&lt;String&gt;,
 }
 
 <span class="kw">impl </span>LateConsole {
@@ -815,6 +888,7 @@
             keyboard: keyboard_mouse::get_keyboard_reader(),
             console_cmd_buffer: <span class="prelude-val">None</span>,
             current_attrib: Default::default(),
+            capture: <span class="prelude-val">None</span>,
         };
 
         <span class="comment">// split inputs
@@ -937,8 +1011,12 @@
 
 <span class="kw">impl </span>Console <span class="kw">for </span>LateConsole {
     <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize {
-        <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>src {
-            <span class="self">self</span>.write_byte(c);
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(capture) = <span class="kw-2">&amp;mut </span><span class="self">self</span>.capture {
+            capture.push_str(core::str::from_utf8(src).expect(<span class="string">"Non-UTF8"</span>));
+        } <span class="kw">else </span>{
+            <span class="kw">for </span><span class="kw-2">&amp;</span>c <span class="kw">in </span>src {
+                <span class="self">self</span>.write_byte(c);
+            }
         }
         src.len()
     }
@@ -974,6 +1052,14 @@
             }
         }
         i
+    }
+
+    <span class="kw">fn </span>start_capture(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+        <span class="self">self</span>.capture.replace(String::new())
+    }
+
+    <span class="kw">fn </span>stop_capture(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+        <span class="self">self</span>.capture.take()
     }
 }
 

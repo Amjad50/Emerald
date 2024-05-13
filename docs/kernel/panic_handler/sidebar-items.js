@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["abort","panic","print_kernel_stack_trace","print_originating_stack_trace","print_process_stack_trace","stack_trace"],"static":["PANIC_COUNT"]};
+window.SIDEBAR_ITEMS = {"fn":["catch_unwind","panic","panic_trace","print_kernel_stack_trace","print_originating_stack_trace","print_process_stack_trace","stack_trace"],"static":["PANIC_COUNT"]};
