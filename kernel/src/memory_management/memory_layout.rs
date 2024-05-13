@@ -9,6 +9,7 @@ extern "C" {
     static rodata_end: usize;
     static data_end: usize;
     static stack_guard_page: usize;
+    static __eh_frame: usize;
 }
 
 // The virtual address of the kernel
@@ -29,7 +30,7 @@ pub const KERNEL_HEAP_BASE: usize = KERNEL_END;
 pub const KERNEL_HEAP_SIZE: usize = 0x100_0000; // 16MB
 
 // The size of the stack for interrupt handlers
-pub const INTR_STACK_SIZE: usize = PAGE_4K * 8;
+pub const INTR_STACK_SIZE: usize = PAGE_4K * 32;
 pub const INTR_STACK_EMPTY_SIZE: usize = PAGE_4K;
 pub const INTR_STACK_ENTRY_SIZE: usize = INTR_STACK_SIZE + INTR_STACK_EMPTY_SIZE;
 pub const INTR_STACK_BASE: usize = KERNEL_HEAP_BASE + KERNEL_HEAP_SIZE;
@@ -54,7 +55,7 @@ pub const PROCESS_KERNEL_STACK_GUARD: usize = PAGE_4K;
 // space so that other processes don't override it when being run
 pub const PROCESS_KERNEL_STACK_BASE: usize =
     KERNEL_PROCESS_VIRTUAL_ADDRESS_START + PROCESS_KERNEL_STACK_GUARD;
-pub const PROCESS_KERNEL_STACK_SIZE: usize = PAGE_4K * 8;
+pub const PROCESS_KERNEL_STACK_SIZE: usize = PAGE_4K * 64;
 pub const PROCESS_KERNEL_STACK_END: usize = PROCESS_KERNEL_STACK_BASE + PROCESS_KERNEL_STACK_SIZE;
 
 #[allow(dead_code)]
@@ -87,6 +88,14 @@ pub fn kernel_elf_data_end() -> usize {
 
 pub fn stack_guard_page_ptr() -> usize {
     (unsafe { &stack_guard_page } as *const usize as usize)
+}
+
+pub fn eh_frame_start() -> usize {
+    (unsafe { &__eh_frame } as *const usize as usize)
+}
+
+pub fn eh_frame_end() -> usize {
+    (unsafe { &rodata_end } as *const usize as usize)
 }
 
 pub trait AlignMem: Sized {

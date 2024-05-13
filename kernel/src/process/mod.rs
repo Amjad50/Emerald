@@ -9,7 +9,10 @@ use kernel_user_link::process::{PriorityLevel, ProcessMetadata};
 use crate::{
     cpu::{self, gdt},
     executable::{elf, load_elf_to_vm},
-    fs,
+    fs::{
+        self,
+        path::{Path, PathBuf},
+    },
     graphics::vga,
     memory_management::{
         memory_layout::{align_down, align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
@@ -108,6 +111,7 @@ pub struct Process {
     file_index_allocator: GoingUpAllocator,
 
     argv: Vec<String>,
+    file_path: PathBuf,
 
     current_dir: fs::Directory,
 
@@ -202,6 +206,7 @@ impl Process {
             open_filesystem_nodes: BTreeMap::new(),
             file_index_allocator: GoingUpAllocator::new(),
             argv,
+            file_path: file.path().to_path_buf(),
             current_dir,
             stack_ptr_end: stack_end - 8, // 8 bytes for padding
             stack_size,
@@ -363,6 +368,10 @@ impl Process {
 
     pub fn set_priority(&mut self, priority: PriorityLevel) {
         self.priority = priority;
+    }
+
+    pub fn file_path(&self) -> &Path {
+        self.file_path.as_path()
     }
 }
 

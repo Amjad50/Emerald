@@ -19,11 +19,11 @@ FFFF_FFFF_8000_0000..FFFF_FFFF_8010_0000          nothing
 FFFF_FFFF_8010_0000..FFFF_FFFF_8XXX_XXXX          kernel elf (text, rodata, data, bss)
 FFFF_FFFF_8XXX_XXXX..FFFF_FFFF_8800_0000          (kernel end) physical allocator low (until 128MB mark pre-mapped in `boot`)
 FFFF_FFFF_8800_0000..FFFF_FFFF_8900_0000          kernel heap (16MB)
-FFFF_FFFF_8900_0000..FFFF_FFFF_8903_F000          interrupt stacks
+FFFF_FFFF_8900_0000..FFFF_FFFF_890E_7000          interrupt stacks
     FFFF_FFFF_8900_0000..FFFF_FFFF_8900_1000      interrupt stack 0 guard page (4KB) *not mapped by purpose*
-    FFFF_FFFF_8900_1000..FFFF_FFFF_8900_9000      interrupt stack 0 (8 * 4KB = 32KB)
+    FFFF_FFFF_8900_1000..FFFF_FFFF_8902_1000      interrupt stack 0 (32 * 4KB = 128KB)
     ... *repeat for 6 more stacks*
-FFFF_FFFF_8903_F000..FFFF_FFFF_FFFF_F000          Kernel extra (virtual space, free virtual space to use)
+FFFF_FFFF_890E_7000..FFFF_FFFF_FFFF_F000          Kernel extra (virtual space, free virtual space to use)
 ```
 
 The kernel is loaded by the bootloader at physical address `0x10_0000`, and then it will
@@ -43,7 +43,7 @@ Its very simple, it will take memory from the `kernel extra` space, and map it t
 ### Process specific kernel layout
 ```txt
 FFFF_FF80_0000_0000..FFFF_FF80_0000_1000          process kernel stack guard page (4KB) *not mapped by purpose*
-FFFF_FF80_0000_1000..FFFF_FF80_0000_9000          process kernel stack (8 * 4KB = 32KB)
+FFFF_FF80_0000_1000..FFFF_FF80_0004_1000          process kernel stack (64 * 4KB = 256KB)
 ```
 
 This is a space specific to each process, but reside in kernel space.
