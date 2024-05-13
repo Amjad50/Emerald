@@ -1,4 +1,5 @@
 use core::{
+    ffi::c_void,
     hint,
     panic::PanicInfo,
     sync::atomic::{AtomicI32, Ordering},
@@ -15,6 +16,7 @@ use kernel_user_link::process::process_metadata;
 // so keeping it here :D
 #[allow(unused_imports)]
 use unwinding::abi::UnwindContext;
+use unwinding::abi::{UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
 
 use crate::{
     cpu::{self, idt::InterruptStackFrame64},
@@ -154,7 +156,32 @@ pub fn print_originating_stack_trace(frame: &InterruptStackFrame64, rbp: u64) {
 }
 
 fn stack_trace() {
-    print_kernel_stack_trace(cpu::rip!(), cpu::rsp!(), cpu::rbp!());
+    cpu::cpu().push_cli();
+    struct CallbackData {
+        counter: usize,
+    }
+    extern "C" fn callback(unwind_ctx: &UnwindContext<'_>, arg: *mut c_void) -> UnwindReasonCode {
+        let data = unsafe { &mut *(arg as *mut CallbackData) };
+        data.counter += 1;
+        println!("{:4}:{:#19x}", data.counter, _Unwind_GetIP(unwind_ctx));
+        UnwindReasonCode::NO_REASON
+    }
+    let mut data = CallbackData { counter: 0 };
+    _Unwind_Backtrace(callback, &mut data as *mut _ as _);
+
+    print!("You can use this command to get information about the trace (since we don't have debug symbols here):\n$ addr2line -f -C -e ");
+    #[cfg(debug_assertions)]
+    print!("./target/x86-64-os/debug/kernel");
+    #[cfg(not(debug_assertions))]
+    print!("./target/x86-64-os/release/kernel");
+    extern "C" fn callback2(unwind_ctx: &UnwindContext<'_>, _arg: *mut c_void) -> UnwindReasonCode {
+        print!(" {:#x}", _Unwind_GetIP(unwind_ctx));
+        UnwindReasonCode::NO_REASON
+    }
+    _Unwind_Backtrace(callback2, core::ptr::null_mut() as _);
+    println!("\nhalting...");
+
+    cpu::cpu().pop_cli();
 }
 
 #[panic_handler]
