@@ -11,5 +11,6 @@ increasing_heap_allocator = { version="0.1.3", path = "../libraries/increasing_h
 embedded-graphics = { version = "0.8.1", default-features = false }
 byteorder = { version = "1.5", default-features = false }
 blinkcast = "0.2"
-unwinding = { version = "0.2", features = ['unwinder', 'personality', 'fde-static'], default-features = false }
+unwinding = { version = "0.2", features = ['unwinder', 'panic', 'personality', 'fde-static'], default-features = false }
 framehop =  { version = "0.11.2", default-features = false }
+

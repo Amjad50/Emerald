@@ -4,6 +4,12 @@
 #![feature(linked_list_cursors)]
 #![feature(const_binary_heap_constructor)]
 #![feature(btree_extract_if)]
+#![feature(custom_test_frameworks)]
+#![test_runner(crate::testing::test_runner)]
+#![reexport_test_harness_main = "test_main"]
+// fix warnings when testing (since we are not using the normal `kernel_main`)
+#![cfg_attr(test, allow(dead_code))]
+#![cfg_attr(test, allow(unused_imports))]
 
 extern crate alloc;
 
@@ -22,12 +28,14 @@ mod devices;
 mod executable;
 mod fs;
 mod graphics;
+mod hw;
 mod io;
 mod memory_management;
 mod multiboot2;
 mod panic_handler;
 mod process;
 mod sync;
+mod testing;
 
 use alloc::vec::Vec;
 use cpu::{
@@ -122,6 +130,7 @@ fn load_init_process() {
 
 #[link_section = ".text"]
 #[no_mangle]
+#[cfg(not(test))]
 pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // init console first, so if we panicked, we can still see the output
     console::early_init();
@@ -154,4 +163,22 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
 
     // this will never return
     scheduler::schedule()
+}
+
+#[link_section = ".text"]
+#[no_mangle]
+#[cfg(test)]
+pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
+    // perform necessary initialization, then call the test
+    console::early_init();
+    physical_page_allocator::init(multiboot_info);
+    virtual_memory_mapper::init_kernel_vm();
+
+    test_main();
+
+    loop {
+        unsafe {
+            cpu::halt();
+        }
+    }
 }
