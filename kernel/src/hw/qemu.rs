@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use tracing::error;
+
 use crate::cpu;
 
 const EXIT_FAILURE: u32 = 0; // since ((0 << 1) | 1) = 1.
@@ -24,7 +26,7 @@ pub fn exit(status: ExitStatus) -> ! {
         cpu::io_out(IO_BASE, code);
     }
 
-    println!("Qemu did not exit, halting.");
+    error!("Qemu did not exit, halting.");
 
     // If we didn't exit, just halt
     loop {

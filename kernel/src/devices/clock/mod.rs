@@ -5,6 +5,7 @@ mod tsc;
 use core::fmt;
 
 use alloc::{sync::Arc, vec::Vec};
+use tracing::{info, warn};
 
 use crate::{
     acpi::tables::{self, BiosTables, Facp},
@@ -125,8 +126,8 @@ impl SystemTime {
         // let device_time = device.get_time();
 
         let timestamp = time.seconds_since_unix_epoch().expect("Must be after 1970");
-        println!("Time now: {time} - UTC");
-        println!("System start timestamp: {}", timestamp);
+        info!("Time now: {time} - UTC");
+        info!("System start timestamp: {}", timestamp);
 
         let start_unix = ClockTime {
             nanoseconds: 0,
@@ -190,8 +191,8 @@ impl SystemTime {
             let timestamp = rtc_time
                 .seconds_since_unix_epoch()
                 .expect("Must be after 1970");
-            println!("Adjusted Time now: {rtc_time} - UTC");
-            println!("Adjusted System start timestamp: {}", timestamp);
+            info!("Adjusted Time now: {rtc_time} - UTC");
+            info!("Adjusted System start timestamp: {}", timestamp);
 
             self.last_tick = device_time;
             self.device = Some(device);
@@ -245,7 +246,7 @@ impl Clock {
     }
 
     fn add_device(&self, device: Arc<dyn ClockDevice>) {
-        println!(
+        info!(
             "Adding clock device: {}, rating: {}",
             device.name(),
             device.rating()
@@ -307,7 +308,7 @@ pub fn init(bios_tables: &BiosTables) {
     if let Some(hpet_table) = hpet_table {
         clocks().add_device(hpet::init(hpet_table));
     } else {
-        println!("HPET is not available!");
+        warn!("HPET is not available!");
     }
 
     // init TSC

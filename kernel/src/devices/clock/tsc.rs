@@ -1,5 +1,7 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 
+use tracing::{info, trace};
+
 use crate::{cpu, devices::clock::NANOS_PER_SEC};
 
 use super::ClockDevice;
@@ -118,7 +120,7 @@ impl Tsc {
 
         // at least 1ms (1000_000ns), and no more than 1s (1_000_000_000ns)
         let sleep_time = (granularity * 1000).max(1_000_000).min(NANOS_PER_SEC);
-        eprintln!("Calibrating TSC with sleep time: {}ns", sleep_time);
+        trace!("Calibrating TSC with sleep time: {}ns", sleep_time);
 
         let start_point = self.get_sync_time_point(base, device_latency);
         // sleep
@@ -157,7 +159,7 @@ impl Tsc {
 
         // If the difference is more than 50ms, we need to recalibrate
         if diff > 50_000_000 {
-            println!("TSC recalibration needed, diff: {}ns", diff);
+            info!("TSC recalibration needed, diff: {}ns", diff);
             self.calibrate(base);
         }
         let start_ns = end_point

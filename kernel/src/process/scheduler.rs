@@ -5,6 +5,7 @@ use alloc::{
     collections::{BTreeMap, BinaryHeap},
     vec::Vec,
 };
+use tracing::trace;
 
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
@@ -322,7 +323,7 @@ pub fn exit_current_process(exit_code: i32, all_state: &mut InterruptAllSavedSta
 
     let mut inner_proc = process.process.into_inner();
 
-    eprintln!("Process {} exited with code {}", inner_proc.id, exit_code);
+    trace!("Process {} exited with code {}", inner_proc.id, exit_code);
 
     swap_context(current_cpu.context.as_mut().unwrap(), all_state);
     // Even though this context won't run again
@@ -348,9 +349,10 @@ pub fn sleep_current_process(time: ClockTime, all_state: &mut InterruptAllSavedS
         current_cpu.push_cli();
         let mut inner_proc = p.process.borrow_mut();
         p.state = ProcessState::WaitingForTime(deadline);
-        eprintln!(
+        trace!(
             "Process {} is waiting for time {:?}",
-            inner_proc.id, deadline
+            inner_proc.id,
+            deadline
         );
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
 
@@ -408,7 +410,7 @@ pub fn wait_for_pid(all_state: &mut InterruptAllSavedState, pid: u64) -> bool {
         current_cpu.push_cli();
         let mut inner_proc = p.process.borrow_mut();
         p.state = ProcessState::WaitingForPid(pid);
-        eprintln!("Process {} is waiting for process {}", inner_proc.id, pid);
+        trace!("Process {} is waiting for process {}", inner_proc.id, pid);
 
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
         inner_proc.context = current_cpu.context.take().unwrap();

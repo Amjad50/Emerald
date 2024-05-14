@@ -1,4 +1,5 @@
 use kernel_user_link::process::ProcessMetadata;
+use tracing::trace;
 
 use crate::{cpu, fs, memory_management::virtual_memory_mapper};
 
@@ -42,7 +43,7 @@ pub unsafe fn load_elf_to_vm(
                 };
                 min_address = min_address.min(entry.virtual_address);
                 max_address = max_address.max(entry.virtual_address + entry.size);
-                eprintln!("Mapping segment: {:x?}", entry);
+                trace!("Mapping segment: {:x?}", entry);
                 vm.map(&entry);
 
                 // read the file into the memory

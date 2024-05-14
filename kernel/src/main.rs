@@ -52,6 +52,7 @@ use kernel_user_link::{
 use memory_management::virtual_memory_mapper;
 use multiboot2::MultiBoot2Info;
 use process::scheduler;
+use tracing::info;
 
 use crate::{
     devices::clock,
@@ -74,27 +75,27 @@ fn finish_boot() {
         free_size,
         heap_size,
     } = ALLOCATOR.stats();
-    println!("\n\nBoot finished!");
+    info!("Boot finished!");
     memory_layout::display_kernel_map();
-    println!("Free memory: {}", free_mem);
-    println!(
+    info!("Free memory: {}", free_mem);
+    info!(
         "Used memory: {} ({:0.3}%)",
         used_mem,
         used_mem.0 as f64 / (used_mem.0 + free_mem.0) as f64 * 100.
     );
-    println!("Free heap: {}", MemSize(free_size));
-    println!(
+    info!("Free heap: {}", MemSize(free_size));
+    info!(
         "Used heap: {} ({:0.3}%)",
         MemSize(allocated),
         allocated as f64 / (heap_size) as f64 * 100.
     );
-    println!(
+    info!(
         "From possible heap: {} ({:0.3}%)",
         MemSize(KERNEL_HEAP_SIZE),
         allocated as f64 / KERNEL_HEAP_SIZE as f64 * 100.
     );
     virtual_space::debug_blocks();
-    println!();
+    info!("");
 }
 
 fn load_init_process() {
@@ -124,7 +125,7 @@ fn load_init_process() {
     process.attach_fs_node_to_fd(FD_STDOUT, console.clone_inherit());
     process.attach_fs_node_to_fd(FD_STDERR, console);
 
-    println!("Added `init` process pid={}", process.id());
+    info!("Added `init` process pid={}", process.id());
     scheduler::push_process(process);
 }
 
@@ -147,7 +148,7 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // mount devices map before initializing them
     devices::init_devices_mapping();
     let bios_tables = acpi::get_acpi_tables(multiboot_info).expect("BIOS tables not found");
-    println!("BIOS tables: {}", bios_tables);
+    info!("BIOS tables: {}", bios_tables);
     apic::init(bios_tables);
     clock::init(bios_tables);
     // APIC timer interrupt rely on the clock, so it must be initialized after the clock

@@ -2,6 +2,7 @@ use core::ops;
 
 use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType, OpenOptions};
+use tracing::info;
 
 use crate::{
     devices::{
@@ -624,7 +625,7 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
         first_partition.start_lba,
         first_partition.size_in_sectors,
     )?;
-    println!(
+    info!(
         "Mapping / to FAT filesystem {:?} ({:?}), parition_type: 0x{:02X}",
         filesystem.volume_label(),
         filesystem.fat_type(),

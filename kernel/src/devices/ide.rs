@@ -5,6 +5,7 @@ use core::{
 };
 
 use alloc::sync::Arc;
+use tracing::{error, info};
 
 use crate::{
     cpu::{
@@ -809,14 +810,12 @@ impl IdeDeviceImpl {
                         // device not ready (i.e. not present)
                         return None;
                     } else {
-                        println!("Error: unknown ATAPI device error: Err={err:02x}");
+                        error!("unknown ATAPI device error: Err={err:02x}");
                         return None;
                     }
                 }
             } else {
-                println!(
-                    "Error: unknown IDE device aborted: LBA={lbalo:02x}:{lbamid:02x}:{lbahi:02x}",
-                );
+                error!("unknown IDE device aborted: LBA={lbalo:02x}:{lbamid:02x}:{lbahi:02x}",);
                 return None;
             }
 
@@ -824,7 +823,7 @@ impl IdeDeviceImpl {
             let command = AtaCommand::new(ata::COMMAND_PACKET_IDENTIFY)
                 .with_second_drive(second_device_select);
             if let Err(err) = command.execute_read(&io, &mut identify_data) {
-                println!("Error: unknown ATAPI device aborted: Err={err:02x}",);
+                error!("unknown ATAPI device aborted: Err={err:02x}",);
                 return None;
             }
             device_type = IdeDeviceType::Atapi;
@@ -881,7 +880,7 @@ impl IdeDeviceImpl {
             }
         }
 
-        println!(
+        info!(
             "Initialized IDE device({device_type:?}): size={} ({number_of_sectors} x {sector_size})",
             MemSize(number_of_sectors * sector_size as u64),
         );

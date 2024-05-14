@@ -1,5 +1,7 @@
 use core::{marker::PhantomData, mem};
 
+use tracing::error;
+
 use super::interrupts::stack_index;
 
 core::arch::global_asm!(include_str!("idt_vectors.S"));
@@ -309,7 +311,7 @@ pub extern "cdecl" fn rust_interrupt_handler_for_all_state(mut state: InterruptA
 }
 
 extern "x86-interrupt" fn default_handler<const N: u8>(frame: InterruptStackFrame64) {
-    println!("[{N}] Got exception: \n frame: {:x?}", frame);
+    error!("[{N}] Got exception: \n frame: {:x?}", frame);
 
     crate::panic_handler::print_originating_stack_trace(&frame, super::rbp!());
     panic!("Unhandled exception");
@@ -325,7 +327,7 @@ extern "x86-interrupt" fn default_handler_with_error<const N: u8>(
     }
     let current_cpu = super::cpu();
     let proc_id = current_cpu.context.map(|_| current_cpu.process_id);
-    println!(
+    error!(
         "[{N}] {proc_id:?} Got exception: \n frame: {frame:x?}\n error: {error_code:016X}\n cr2: {cr2:X}",
     );
 
