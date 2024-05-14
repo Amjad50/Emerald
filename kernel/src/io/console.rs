@@ -1,3 +1,4 @@
+pub mod tracing;
 mod vga_graphics;
 mod vga_text;
 

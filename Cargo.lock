@@ -350,6 +350,7 @@ dependencies = [
  "emerald_kernel_user_link",
  "framehop",
  "increasing_heap_allocator",
+ "tracing",
  "unwinding",
 ]
 

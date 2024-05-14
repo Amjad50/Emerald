@@ -139,6 +139,8 @@ pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     physical_page_allocator::init(multiboot_info);
     // must be called next, before GDT, and this must be called before any heap allocations
     virtual_memory_mapper::init_kernel_vm();
+    // require heap allocation
+    console::tracing::init();
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();
