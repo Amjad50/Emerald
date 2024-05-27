@@ -1650,41 +1650,36 @@ impl FatFilesystem {
         //
         // TODO: probably we don't need this for normal disks, but for now, lets keep it as its
         // easier to use vvfat
-
         // create the . and .. entries if this is a directory
-        let cluster = if attributes.directory() {
-            let cluster = self
-                .fat
-                .find_free_cluster()
-                .ok_or(FatError::NotEnoughSpace)?;
-            // must be empty
-            self.write_sectors(
-                self.first_sector_of_cluster(cluster),
-                &vec![0; self.boot_sector.bytes_per_cluster() as usize],
-            )?;
-            self.fat.write_fat_entry(cluster, FatEntry::EndOfChain);
-            self.flush_fat()?;
 
-            normal_entry.first_cluster_lo = (cluster & 0xFFFF) as u16;
-            normal_entry.first_cluster_hi = (cluster >> 16) as u16;
+        let cluster = self
+            .fat
+            .find_free_cluster()
+            .ok_or(FatError::NotEnoughSpace)?;
+        self.fat.write_fat_entry(cluster, FatEntry::EndOfChain);
+        self.flush_fat()?;
+        // lets empty out the first sector only
+        // if its a file, the size is 0 anyway
+        // if its a directory, it will exit since the
+        // first direntry will be zero
+        self.write_sectors(
+            self.first_sector_of_cluster(cluster),
+            &vec![0; self.boot_sector.bytes_per_sector() as usize],
+        )?;
 
-            Some(cluster)
-        } else {
-            None
-        };
+        normal_entry.first_cluster_lo = (cluster & 0xFFFF) as u16;
+        normal_entry.first_cluster_hi = (cluster >> 16) as u16;
 
         let node = self
             .open_dir_inode(parent_inode)
             .and_then(|mut dir| dir.add_entry(normal_entry.clone(), long_name_entries));
 
-        let node = match node {
+        let mut node = match node {
             Ok(node) => node,
             e @ Err(_) => {
                 // revert fat changes
-                if let Some(cluster) = cluster {
-                    self.fat.write_fat_entry(cluster, FatEntry::Free);
-                    self.flush_fat()?;
-                }
+                self.fat.write_fat_entry(cluster, FatEntry::Free);
+                self.flush_fat()?;
                 return e;
             }
         };
@@ -1693,7 +1688,7 @@ impl FatFilesystem {
 
         // create the . and .. entries if this is a directory
         if attributes.directory() {
-            assert!(node.start_cluster() == cluster.unwrap() as u64);
+            assert!(node.start_cluster() == cluster as u64);
             let mut dot_entry = DirectoryEntryNormal {
                 short_name: [0x20; 11],
                 _nt_reserved: 0,
@@ -1747,6 +1742,10 @@ impl FatFilesystem {
         let current_size_in_clusters = (inode.size() + bytes_per_cluster - 1) / bytes_per_cluster;
         let new_size_in_clusters = (size + bytes_per_cluster - 1) / bytes_per_cluster;
 
+        // at least 1 cluster at any point
+        let current_size_in_clusters = current_size_in_clusters.max(1);
+        let new_size_in_clusters = new_size_in_clusters.max(1);
+
         if new_size_in_clusters != current_size_in_clusters {
             // update fat references
             let to_keep = new_size_in_clusters.min(current_size_in_clusters);
@@ -1769,12 +1768,6 @@ impl FatFilesystem {
                 let mut to_delete = current_size_in_clusters - new_size_in_clusters;
                 let mut clusters = Vec::with_capacity(to_delete as usize);
 
-                if new_size_in_clusters == 0 {
-                    // delete the first one
-                    clusters.push(current_cluster);
-                    to_delete -= 1;
-                }
-
                 for _ in 0..to_delete {
                     let next_cluster = self
                         .fat
@@ -1789,42 +1782,12 @@ impl FatFilesystem {
                     self.fat.write_fat_entry(cluster, FatEntry::Free);
                 }
 
-                if new_size_in_clusters == 0 {
-                    inode.set_start_cluster(0);
-                    self.update_directory_entry(inode, |entry| {
-                        assert!(size == 0);
-                        // make sure we are in sync with the fat, an no orphaned cluster is left
-                        entry.file_size = 0;
-                        entry.first_cluster_hi = 0;
-                        entry.first_cluster_lo = 0;
-                    })?;
-                } else {
-                    // mark the current cluster as last
-                    self.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
-                }
+                // mark the current cluster as last
+                self.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
             } else {
                 // adding new clusters
 
                 let mut to_add = new_size_in_clusters - current_size_in_clusters;
-
-                if current_size_in_clusters == 0 {
-                    let new_cluster = self
-                        .fat
-                        .find_free_cluster()
-                        .ok_or(FatError::NotEnoughSpace)?;
-                    inode.set_start_cluster(new_cluster as u64);
-                    self.update_directory_entry(inode, |entry| {
-                        assert!(size > 0);
-                        // make sure we are in sync with the fat, an no orphaned cluster is left
-                        entry.file_size = size as u32;
-                        entry.first_cluster_lo = (new_cluster & 0xFFFF) as u16;
-                        entry.first_cluster_hi = (new_cluster >> 16) as u16;
-                    })?;
-                    // reserve it
-                    self.fat.write_fat_entry(new_cluster, FatEntry::EndOfChain);
-                    last_cluster = new_cluster;
-                    to_add -= 1;
-                }
 
                 for _ in 0..to_add {
                     let new_cluster = self
