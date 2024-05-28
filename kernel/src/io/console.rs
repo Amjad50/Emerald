@@ -1,3 +1,4 @@
+pub mod tracing;
 mod vga_graphics;
 mod vga_text;
 
@@ -329,18 +330,14 @@ pub(super) struct LateConsole {
 impl LateConsole {
     /// SAFETY: must ensure that there is no console running at the same time
     unsafe fn new(uart: Uart, video_console: Box<dyn VideoConsole>) -> Self {
-        let mut s = Self {
+        Self {
             uart,
             video_console,
             keyboard: keyboard_mouse::get_keyboard_reader(),
             console_cmd_buffer: None,
             current_attrib: Default::default(),
             capture: None,
-        };
-
-        // split inputs
-        s.write_byte(b'\n');
-        s
+        }
     }
 
     fn write_byte(&mut self, byte: u8) {

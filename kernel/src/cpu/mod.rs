@@ -252,7 +252,6 @@ pub unsafe fn set_cr4(cr4: u64) {
 
 /// SAFETY: the data pointed to by `gdtr` must be static and never change
 unsafe fn lgdt(gdtr: &GlobalDescriptorTablePointer) {
-    // println!("lgdt: {:p}", gdtr);
     core::arch::asm!("lgdt [rax]", in("rax") gdtr, options(readonly, nostack, preserves_flags));
 }
 

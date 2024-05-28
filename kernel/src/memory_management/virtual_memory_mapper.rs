@@ -3,6 +3,8 @@
 
 use core::{ops::RangeBounds, slice::IterMut};
 
+use tracing::trace;
+
 use crate::{
     cpu,
     memory_management::{
@@ -282,7 +284,7 @@ impl VirtualMemoryMapper {
     }
 
     fn load_vm(base: &PageDirectoryTablePtr) {
-        eprintln!(
+        trace!(
             "Switching to new page map: {:p}",
             base.as_physical() as *const u8
         );
@@ -400,7 +402,7 @@ impl VirtualMemoryMapper {
 
         assert!(size > 0);
 
-        eprintln!(
+        trace!(
             "{} {:08X?}",
             MemSize(size),
             VirtualMemoryMapEntry {
@@ -415,9 +417,10 @@ impl VirtualMemoryMapper {
             let current_physical_address = physical_address.unwrap_or_else(|| {
                 virtual2physical(unsafe { physical_page_allocator::alloc_zeroed() as _ })
             });
-            eprintln!(
+            trace!(
                 "[!] Mapping {:p} to {:p}",
-                virtual_address as *const u8, current_physical_address as *const u8
+                virtual_address as *const u8,
+                current_physical_address as *const u8
             );
             let page_map_l4_index = get_l4(virtual_address);
             let page_directory_pointer_index = get_l3(virtual_address);
@@ -434,9 +437,11 @@ impl VirtualMemoryMapper {
             }
             // add new flags if any
             *page_map_l4_entry |= flags;
-            eprintln!(
+            trace!(
                 "L4[{}]: {:p} = {:x}",
-                page_map_l4_index, page_map_l4_entry, *page_map_l4_entry
+                page_map_l4_index,
+                page_map_l4_entry,
+                *page_map_l4_entry
             );
 
             // Level 3
@@ -454,7 +459,7 @@ impl VirtualMemoryMapper {
 
             // add new flags
             *page_directory_pointer_entry |= flags;
-            eprintln!(
+            trace!(
                 "L3[{}]: {:p} = {:x}",
                 page_directory_pointer_index,
                 page_directory_pointer_entry,
@@ -498,9 +503,11 @@ impl VirtualMemoryMapper {
                     | flags::PTE_PRESENT
                     | flags::PTE_HUGE_PAGE;
 
-                eprintln!(
+                trace!(
                     "L2[{}] huge: {:p} = {:x}",
-                    page_directory_index, page_directory_entry, *page_directory_entry
+                    page_directory_index,
+                    page_directory_entry,
+                    *page_directory_entry
                 );
 
                 size -= PAGE_2M;
@@ -521,9 +528,11 @@ impl VirtualMemoryMapper {
                 }
                 // add new flags
                 *page_directory_entry |= flags;
-                eprintln!(
+                trace!(
                     "L2[{}]: {:p} = {:x}",
-                    page_directory_index, page_directory_entry, *page_directory_entry
+                    page_directory_index,
+                    page_directory_entry,
+                    *page_directory_entry
                 );
 
                 // Level 1
@@ -531,9 +540,11 @@ impl VirtualMemoryMapper {
                 let page_table_entry = &mut page_table.as_mut().entries[page_table_index];
                 *page_table_entry =
                     (current_physical_address & ADDR_MASK) | flags | flags::PTE_PRESENT;
-                eprintln!(
+                trace!(
                     "L1[{}]: {:p} = {:x}",
-                    page_table_index, page_table_entry, *page_table_entry
+                    page_table_index,
+                    page_table_entry,
+                    *page_table_entry
                 );
 
                 size -= PAGE_4K;
@@ -547,7 +558,7 @@ impl VirtualMemoryMapper {
                 }
             }
 
-            eprintln!();
+            trace!("");
         }
     }
 
@@ -568,7 +579,7 @@ impl VirtualMemoryMapper {
 
         assert!(size > 0);
 
-        eprintln!(
+        trace!(
             "{} {:08X?}",
             MemSize(size),
             VirtualMemoryMapEntry {
@@ -597,9 +608,11 @@ impl VirtualMemoryMapper {
             }
             // remove flags
             *page_map_l4_entry &= !flags;
-            eprintln!(
+            trace!(
                 "L4[{}]: {:p} = {:x}",
-                page_map_l4_index, page_map_l4_entry, *page_map_l4_entry
+                page_map_l4_index,
+                page_map_l4_entry,
+                *page_map_l4_entry
             );
 
             // Level 3
@@ -614,7 +627,7 @@ impl VirtualMemoryMapper {
             }
             // remove flags
             *page_directory_pointer_entry &= !flags;
-            eprintln!(
+            trace!(
                 "L3[{}]: {:p} = {:x}",
                 page_directory_pointer_index,
                 page_directory_pointer_entry,
@@ -645,9 +658,11 @@ impl VirtualMemoryMapper {
             }
             // remove whole entry
             *page_table_entry = 0;
-            eprintln!(
+            trace!(
                 "L1[{}]: {:p} = {:x}",
-                page_table_index, page_table_entry, *page_table_entry
+                page_table_index,
+                page_table_entry,
+                *page_table_entry
             );
 
             size -= PAGE_4K;
@@ -672,9 +687,11 @@ impl VirtualMemoryMapper {
         if *page_map_l4_entry & flags::PTE_PRESENT == 0 {
             return false;
         }
-        eprintln!(
+        trace!(
             "L4[{}]: {:p} = {:x}",
-            page_map_l4_index, page_map_l4_entry, *page_map_l4_entry
+            page_map_l4_index,
+            page_map_l4_entry,
+            *page_map_l4_entry
         );
 
         // Level 3
@@ -684,7 +701,7 @@ impl VirtualMemoryMapper {
         if *page_directory_pointer_entry & flags::PTE_PRESENT == 0 {
             return false;
         }
-        eprintln!(
+        trace!(
             "L3[{}]: {:p} = {:x}",
             page_directory_pointer_index,
             page_directory_pointer_entry,
@@ -700,9 +717,11 @@ impl VirtualMemoryMapper {
         if *page_directory_entry & flags::PTE_HUGE_PAGE != 0 {
             return true;
         }
-        eprintln!(
+        trace!(
             "L2[{}]: {:p} = {:x}",
-            page_directory_index, page_directory_entry, *page_directory_entry
+            page_directory_index,
+            page_directory_entry,
+            *page_directory_entry
         );
 
         // Level 1
@@ -711,9 +730,11 @@ impl VirtualMemoryMapper {
         if *page_table_entry & flags::PTE_PRESENT == 0 {
             return false;
         }
-        eprintln!(
+        trace!(
             "L1[{}]: {:p} = {:x}",
-            page_table_index, page_table_entry, *page_table_entry
+            page_table_index,
+            page_table_entry,
+            *page_table_entry
         );
 
         true

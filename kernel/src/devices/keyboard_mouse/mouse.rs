@@ -2,6 +2,7 @@ use super::ps2::Ps2;
 
 use blinkcast::alloc::{Receiver as BlinkcastReceiver, Sender as BlinkcastSender};
 use kernel_user_link::mouse::{MouseEvent, ScrollType};
+use tracing::warn;
 
 #[allow(dead_code)]
 pub mod scaling {
@@ -165,7 +166,7 @@ impl Mouse {
         if let Some(extra) = extra {
             self.ps2.write_prefix(commands::MOUSE_PREFIX);
             if self.ps2.write_command_data(extra).is_none() {
-                println!("[WARN] command {:#X} extra {:#X} failed", command, extra);
+                warn!("command {:#X} extra {:#X} failed", command, extra);
             }
         }
     }

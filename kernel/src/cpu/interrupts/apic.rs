@@ -1,6 +1,7 @@
 use core::borrow::{Borrow, BorrowMut};
 
 use alloc::vec::Vec;
+use tracing::{error, warn};
 
 use crate::{
     acpi::tables::{self, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
@@ -370,8 +371,8 @@ impl Apic {
             .expect("MADT table not found");
 
         if madt_table.local_apic_address as u64 != apic_address {
-            println!(
-                "WARNING: MADT table has a different APIC address (CPU:{:X}, MADT:{:X}), using MADT...",
+            warn!(
+                "MADT table has a different APIC address (CPU:{:X}, MADT:{:X}), using MADT...",
                 apic_address, madt_table.local_apic_address
             );
             apic_address = madt_table.local_apic_address as u64;
@@ -389,9 +390,7 @@ impl Apic {
                         continue;
                     }
                     if n_cpus >= MAX_CPUS {
-                        println!(
-                            "WARNING: too many CPUs, have {MAX_CPUS} already, ignoring the rest"
-                        );
+                        warn!("too many CPUs, have {MAX_CPUS} already, ignoring the rest");
                     } else {
                         // initialize the CPUs
                         // SAFETY: this is safe
@@ -418,8 +417,8 @@ impl Apic {
                     apic_address = s.local_apic_address;
                 }
                 InterruptControllerStruct::Unknown { struct_type, bytes } => {
-                    println!(
-                        "WARNING: unknown interrupt controller struct type {:#X} with {:#X?} bytes",
+                    warn!(
+                        "unknown interrupt controller struct type {:#X} with {:#X?} bytes",
                         struct_type, bytes
                     );
                 }
@@ -583,13 +582,13 @@ impl Apic {
 }
 
 extern "x86-interrupt" fn spurious_handler(_frame: InterruptStackFrame64) {
-    println!("Spurious interrupt");
+    warn!("Spurious interrupt");
     return_from_interrupt();
 }
 
 extern "x86-interrupt" fn error_interrupt_handler(_frame: InterruptStackFrame64) {
     let error_status = APIC.get().lock().mmio.error_status.read();
-    println!("APIC error: {:#X}", error_status);
+    error!("APIC error: {:#X}", error_status);
     // clear the error
     APIC.get().lock().mmio.error_status.write(0);
     return_from_interrupt();

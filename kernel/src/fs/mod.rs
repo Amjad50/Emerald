@@ -2,6 +2,7 @@ use core::ops;
 
 use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType, OpenOptions};
+use tracing::info;
 
 use crate::{
     devices::{
@@ -119,10 +120,6 @@ impl BaseNode {
 
     pub fn start_cluster(&self) -> u64 {
         self.start_cluster
-    }
-
-    pub(self) fn set_start_cluster(&mut self, cluster: u64) {
-        self.start_cluster = cluster;
     }
 
     #[allow(dead_code)]
@@ -456,6 +453,14 @@ pub trait FileSystem: Send + Sync {
         }
     }
 
+    fn flush_file(
+        &self,
+        _inode: &mut FileNode,
+        _access_helper: &mut AccessHelper,
+    ) -> Result<(), FileSystemError> {
+        Err(FileSystemError::WriteNotSupported)
+    }
+
     fn close_file(
         &self,
         _inode: &FileNode,
@@ -624,7 +629,7 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
         first_partition.start_lba,
         first_partition.size_in_sectors,
     )?;
-    println!(
+    info!(
         "Mapping / to FAT filesystem {:?} ({:?}), parition_type: 0x{:02X}",
         filesystem.volume_label(),
         filesystem.fat_type(),
@@ -989,6 +994,15 @@ impl File {
         )?;
         self.position += written;
         Ok(written)
+    }
+
+    pub fn flush(&mut self) -> Result<(), FileSystemError> {
+        if !self.file_access.is_write() {
+            return Err(FileSystemError::WriteNotSupported);
+        }
+
+        self.filesystem
+            .flush_file(&mut self.inode, &mut self.access_helper)
     }
 
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {

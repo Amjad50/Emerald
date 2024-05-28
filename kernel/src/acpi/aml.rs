@@ -7,6 +7,7 @@ use alloc::{
     string::String,
     vec::Vec,
 };
+use tracing::trace;
 
 #[derive(Debug, Clone)]
 pub enum AmlParseError {
@@ -157,7 +158,7 @@ impl ScopeObj {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
 
-        eprintln!("scope name: {}", name);
+        trace!("scope name: {}", name);
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
         Ok(Self { name, term_list })
@@ -175,12 +176,12 @@ pub struct RegionObj {
 impl RegionObj {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let name = parser.parse_name()?;
-        eprintln!("region name: {}", name);
+        trace!("region name: {}", name);
         let region_space = parser.get_next_byte()?;
         let region_offset = parser.parse_term_arg()?;
-        eprintln!("region offset: {:?}", region_offset);
+        trace!("region offset: {:?}", region_offset);
         let region_length = parser.parse_term_arg()?;
-        eprintln!("region length: {:?}", region_length);
+        trace!("region length: {:?}", region_length);
         Ok(Self {
             name,
             region_space,
@@ -201,7 +202,7 @@ impl FieldDef {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
-        eprintln!("field name: {}", name);
+        trace!("field name: {}", name);
         let (flags, field_list) = inner.parse_fields_list_and_flags()?;
         Ok(Self {
             name,
@@ -223,9 +224,9 @@ impl IndexFieldDef {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
-        eprintln!("indexfield name: {}", name);
+        trace!("indexfield name: {}", name);
         let index_name = inner.parse_name()?;
-        eprintln!("indexfield index_name: {}", index_name);
+        trace!("indexfield index_name: {}", index_name);
         let (flags, field_list) = inner.parse_fields_list_and_flags()?;
         Ok(Self {
             name,
@@ -258,9 +259,9 @@ impl MethodObj {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
-        eprintln!("method name: {}", name);
+        trace!("method name: {}", name);
         let flags = inner.get_next_byte()?;
-        eprintln!("method flags: {:x}", flags);
+        trace!("method flags: {:x}", flags);
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
 
@@ -283,7 +284,7 @@ impl PredicateBlock {
         let mut inner = parser.get_inner_parser()?;
 
         let predicate = inner.parse_term_arg()?;
-        eprintln!("pred predicate: {:?}", predicate);
+        trace!("pred predicate: {:?}", predicate);
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
 
@@ -307,18 +308,18 @@ impl ProcessorDeprecated {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
-        eprintln!("processor name: {}", name);
+        trace!("processor name: {}", name);
         let unk1 = inner.get_next_byte()?;
-        eprintln!("processor unk1: {:x}", unk1);
+        trace!("processor unk1: {:x}", unk1);
         let unk2 = u32::from_le_bytes([
             inner.get_next_byte()?,
             inner.get_next_byte()?,
             inner.get_next_byte()?,
             inner.get_next_byte()?,
         ]);
-        eprintln!("processor unk2: {:x}", unk2);
+        trace!("processor unk2: {:x}", unk2);
         let unk3 = inner.get_next_byte()?;
-        eprintln!("processor unk3: {:x}", unk3);
+        trace!("processor unk3: {:x}", unk3);
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
         Ok(Self {
@@ -343,11 +344,11 @@ impl PowerResource {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
-        eprintln!("powerresource name: {}", name);
+        trace!("powerresource name: {}", name);
         let system_level = inner.get_next_byte()?;
-        eprintln!("powerresource system_level: {:x}", system_level);
+        trace!("powerresource system_level: {:x}", system_level);
         let resource_order = u16::from_le_bytes([inner.get_next_byte()?, inner.get_next_byte()?]);
-        eprintln!("powerresource resource_order: {:x}", resource_order);
+        trace!("powerresource resource_order: {:x}", resource_order);
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
         Ok(Self {
@@ -385,28 +386,28 @@ impl<'a> State<'a> {
     }
 
     fn find_name(&self, name: &str) -> bool {
-        eprintln!("finding name {name:?}, {:?}", self.names);
+        trace!("finding name {name:?}, {:?}", self.names);
         let short_name = &name[name.len() - 4..];
         self.names.contains(name) || self.names.contains(short_name)
     }
 
     fn find_method(&self, name: &str) -> Option<usize> {
-        eprintln!("finding method {name:?}");
+        trace!("finding method {name:?}");
         // all methods are shared here, from all scopes
         // we are assuming that methods with similar names have the same number of arguments
         let method_name = &name[name.len() - 4..];
-        eprintln!("methods: {:?}", self.methods);
+        trace!("methods: {:?}", self.methods);
         self.methods.get(method_name).copied()
     }
 
     fn add_method(&mut self, name: &str, arg_count: usize) {
-        eprintln!("adding method {name:?}");
+        trace!("adding method {name:?}");
         let method_name = &name[name.len() - 4..];
         self.methods.insert(String::from(method_name), arg_count);
     }
 
     fn add_name(&mut self, name: String) {
-        eprintln!("adding name {name:?}");
+        trace!("adding name {name:?}");
         self.names.insert(name);
     }
 }
@@ -458,7 +459,7 @@ impl Parser<'_> {
         let lead_byte = self.get_next_byte()?;
         let following_bytes = lead_byte >> 6;
 
-        eprintln!("pkglen: lead byte: {:x}", lead_byte);
+        trace!("pkglen: lead byte: {:x}", lead_byte);
 
         let mut length: usize;
         if following_bytes == 0 {
@@ -471,12 +472,12 @@ impl Parser<'_> {
             }
             length = lead_byte as usize & 0b0000_1111;
         }
-        eprintln!("len now start: {:x}", length);
+        trace!("len now start: {:x}", length);
 
         for i in 0..following_bytes {
             let byte = self.get_next_byte()?;
             length |= (byte as usize) << (8 * i + 4);
-            eprintln!("len now: {:x}", length);
+            trace!("len now: {:x}", length);
         }
         // subtract the bytes used for the length
         Ok(length - following_bytes as usize - 1)
@@ -484,7 +485,7 @@ impl Parser<'_> {
 
     fn get_inner_parser(&mut self) -> Result<Parser, AmlParseError> {
         let pkg_length = self.get_pkg_length()?;
-        eprintln!("inner pkg length: {:x}", pkg_length);
+        trace!("inner pkg length: {:x}", pkg_length);
 
         let inner_parser = Parser {
             code: &self.code[self.pos..self.pos + pkg_length],
@@ -621,7 +622,7 @@ impl Parser<'_> {
     }
 
     fn try_parse_term(&mut self, opcode: u8) -> Result<Option<AmlTerm>, AmlParseError> {
-        eprintln!("opcode: {:x}", opcode);
+        trace!("opcode: {:x}", opcode);
 
         let term = match opcode {
             0x06 => {
@@ -642,7 +643,7 @@ impl Parser<'_> {
                 let mut str = String::new();
                 loop {
                     let byte = self.get_next_byte()?;
-                    eprintln!("byte: {:x}", byte);
+                    trace!("byte: {:x}", byte);
                     if byte == 0 {
                         break;
                     }
@@ -660,11 +661,11 @@ impl Parser<'_> {
             0x12 => {
                 let mut inner = self.get_inner_parser()?;
                 let package_size = inner.get_next_byte()?;
-                eprintln!("package size: {:x}", package_size);
+                trace!("package size: {:x}", package_size);
                 let mut package_elements = Vec::new();
                 while inner.pos < inner.code.len() {
                     package_elements.push(inner.parse_term_arg()?);
-                    eprintln!("package element: {:?}", package_elements.last());
+                    trace!("package element: {:?}", package_elements.last());
                 }
                 inner.check_empty()?;
                 AmlTerm::Package(package_size, package_elements)
@@ -673,10 +674,10 @@ impl Parser<'_> {
                 let mut inner = self.get_inner_parser()?;
                 let package_size = inner.parse_term_arg()?;
                 let mut package_elements = Vec::new();
-                eprintln!("varpackage size: {:x?}", package_size);
+                trace!("varpackage size: {:x?}", package_size);
                 while inner.pos < inner.code.len() {
                     package_elements.push(inner.parse_term_arg()?);
-                    eprintln!("varpackage element: {:?}", package_elements.last());
+                    trace!("varpackage element: {:?}", package_elements.last());
                 }
                 inner.check_empty()?;
                 AmlTerm::VarPackage(package_size, package_elements)
@@ -868,7 +869,7 @@ impl Parser<'_> {
             0xA4 => AmlTerm::Return(self.parse_term_arg_last()?),
             0xA5 => AmlTerm::Break,
             _ => {
-                eprintln!("try parse name");
+                trace!("try parse name");
                 // move back once, since we have consumed this byte
                 self.backward(1)?;
                 let Some(name) = self.try_parse_name()? else {
@@ -888,7 +889,7 @@ impl Parser<'_> {
                 AmlTerm::MethodCall(name, args)
             }
         };
-        eprintln!("{:x?}", term);
+        trace!("{:x?}", term);
 
         Ok(Some(term))
     }
@@ -966,10 +967,10 @@ impl Parser<'_> {
                             if self.state.find_name(&name) {
                                 None
                             } else if can_call_method {
-                                eprintln!("predicting possible args for {name}");
+                                trace!("predicting possible args for {name}");
                                 let possible_args =
                                     self.predict_possible_args(expect_data_after, &name);
-                                eprintln!("got possible args: {possible_args} {name}");
+                                trace!("got possible args: {possible_args} {name}");
                                 // if its 0 and we are inside a method call, probably this is just a named variable
                                 if possible_args == 0 {
                                     self.state.add_name(name.clone());
@@ -1011,7 +1012,7 @@ impl Parser<'_> {
                 }
             }
         };
-        eprintln!("term arg: {:x?}", x);
+        trace!("term arg: {:x?}", x);
         x
     }
 
@@ -1042,7 +1043,7 @@ impl Parser<'_> {
             Ok(str)
         }
 
-        eprintln!("name char byte: {:x}", name_char_byte);
+        trace!("name char byte: {:x}", name_char_byte);
 
         match name_char_byte {
             0 => {
@@ -1162,7 +1163,7 @@ impl Parser<'_> {
                             _ => None,
                         })
                     {
-                        eprintln!("mmmm: {:x?}", term);
+                        trace!("mmmm: {:x?}", term);
                         Ok(term)
                     } else {
                         Err(AmlParseError::InvalidTarget(lead_byte))
@@ -1170,7 +1171,7 @@ impl Parser<'_> {
                 }
             }
         };
-        eprintln!("target: {:x?}", x);
+        trace!("target: {:x?}", x);
         x.map(Box::new)
     }
 
@@ -1188,7 +1189,7 @@ impl Parser<'_> {
 
     fn parse_fields_list_and_flags(mut self) -> Result<(u8, Vec<FieldElement>), AmlParseError> {
         let flags = self.get_next_byte()?;
-        eprintln!("field flags: {:x}", flags);
+        trace!("field flags: {:x}", flags);
         let mut field_list = Vec::new();
 
         while self.pos < self.code.len() {
@@ -1198,7 +1199,7 @@ impl Parser<'_> {
                 0 => {
                     self.forward(1)?;
                     let pkg_length = self.get_pkg_length()?;
-                    eprintln!("reserved field element pkg length: {:x}", pkg_length);
+                    trace!("reserved field element pkg length: {:x}", pkg_length);
                     // add 1 since we are not using it as normal pkg length
                     FieldElement::Reserved(pkg_length + 1)
                 }
@@ -1216,9 +1217,9 @@ impl Parser<'_> {
                     let name = self.parse_name()?;
                     self.state.add_name(name.clone());
                     assert!(self.pos - len_now == 4); // must be a name segment
-                    eprintln!("field element name: {}", name);
+                    trace!("field element name: {}", name);
                     let pkg_length = self.get_pkg_length()?;
-                    eprintln!("field element pkg length: {:x}", pkg_length);
+                    trace!("field element pkg length: {:x}", pkg_length);
                     // add 1 since we are not using it as normal pkg length
                     FieldElement::Named(name, pkg_length + 1)
                 }
@@ -1233,7 +1234,7 @@ impl Parser<'_> {
 
     fn parse_root(&mut self) -> Result<AmlCode, AmlParseError> {
         let term_list = self.parse_term_list()?;
-        eprintln!("{:?}", term_list);
+        trace!("{:?}", term_list);
 
         Ok(AmlCode { term_list })
     }

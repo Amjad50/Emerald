@@ -1,5 +1,7 @@
 use core::fmt;
 
+use tracing::info;
+
 use super::virtual_memory_mapper;
 
 extern "C" {
@@ -171,7 +173,7 @@ pub const fn physical2virtual(addr: u64) -> usize {
 }
 
 pub fn display_kernel_map() {
-    println!("Kernel map:");
+    info!("Kernel map:");
     let nothing = KERNEL_BASE..KERNEL_LINK;
     let kernel_elf_end = align_up(kernel_elf_end(), PAGE_4K);
     let kernel_elf = KERNEL_LINK..kernel_elf_end;
@@ -185,62 +187,62 @@ pub fn display_kernel_map() {
     let kernel_extra_memory =
         KERNEL_EXTRA_MEMORY_BASE..KERNEL_EXTRA_MEMORY_BASE + KERNEL_EXTRA_MEMORY_SIZE;
 
-    println!(
+    info!(
         "  range={:016x}..{:016x}, len={:4}  nothing",
         nothing.start,
         nothing.end,
         MemSize(nothing.len())
     );
-    println!(
+    info!(
         "  range={:016x}..{:016x}, len={:4}  kernel elf",
         kernel_elf.start,
         kernel_elf.end,
         MemSize(kernel_elf.len())
     );
     // inner map for the elf
-    println!(
+    info!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf text",
         kernel_elf_text.start,
         kernel_elf_text.end,
         MemSize(kernel_elf_text.len())
     );
-    println!(
+    info!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf rodata",
         kernel_elf_rodata.start,
         kernel_elf_rodata.end,
         MemSize(kernel_elf_rodata.len())
     );
-    println!(
+    info!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf data",
         kernel_elf_data.start,
         kernel_elf_data.end,
         MemSize(kernel_elf_data.len())
     );
-    println!(
+    info!(
         "    range={:016x}..{:016x}, len={:4}  kernel elf bss",
         kernel_elf_bss.start,
         kernel_elf_bss.end,
         MemSize(kernel_elf_bss.len())
     );
-    println!(
+    info!(
         "  range={:016x}..{:016x}, len={:4}  kernel physical allocator low",
         kernel_physical_allocator_low.start,
         kernel_physical_allocator_low.end,
         MemSize(kernel_physical_allocator_low.len())
     );
-    println!(
+    info!(
         "  range={:016x}..{:016x}, len={:4}  kernel heap",
         kernel_heap.start,
         kernel_heap.end,
         MemSize(kernel_heap.len())
     );
-    println!(
+    info!(
         "  range={:016x}..{:016x}, len={:4}  interrupt stack",
         interrupt_stack.start,
         interrupt_stack.end,
         MemSize(interrupt_stack.len())
     );
-    println!(
+    info!(
         "  range={:016x}..{:016x}, len={:4}  kernel extra (virtual space)",
         kernel_extra_memory.start,
         kernel_extra_memory.end,
@@ -248,12 +250,12 @@ pub fn display_kernel_map() {
     );
 
     // number of bytes approx used from physical memory
-    println!(
+    info!(
         "whole kernel physical size (startup/low): {}",
         MemSize(KERNEL_END - KERNEL_BASE)
     );
     // total addressable virtual kernel memory
-    println!(
+    info!(
         "whole kernel size: {}",
         MemSize(usize::MAX - KERNEL_BASE + 1)
     );

@@ -1,6 +1,7 @@
 use core::{fmt, mem::MaybeUninit, ptr::NonNull};
 
 use alloc::collections::LinkedList;
+use tracing::info;
 
 use crate::{
     memory_management::memory_layout::{
@@ -337,9 +338,9 @@ impl VirtualSpaceAllocator {
     }
 
     fn debug_blocks(&self) {
-        println!("Virtual space blocks:");
+        info!("Virtual space blocks:");
         for entry in self.entries.iter() {
-            println!(
+            info!(
                 "  range={:016x}..{:016x}, len={:4} => {:016X?}",
                 entry.virtual_start,
                 entry.virtual_start + entry.size,

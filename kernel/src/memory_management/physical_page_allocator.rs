@@ -1,5 +1,7 @@
 use core::ptr::NonNull;
 
+use tracing::info;
+
 use super::memory_layout::{align_down, align_up, is_aligned, PAGE_4K};
 use crate::{
     memory_management::memory_layout::{
@@ -84,12 +86,12 @@ impl PhysicalPageAllocator {
             virtual2physical(multiboot_info.end_address() as usize),
             PAGE_4K,
         );
-        println!("multiboot end: {multiboot_end:x}",);
-        println!(
+        info!("multiboot end: {multiboot_end:x}",);
+        info!(
             "physical_kernel_start: {:p}",
             PHYSICAL_KERNEL_START as *mut u8
         );
-        println!("physical_kernel_end: {:p}", physical_kernel_end as *mut u8);
+        info!("physical_kernel_end: {:p}", physical_kernel_end as *mut u8);
 
         // if the multiboot info is after the kernel, make sure we are not allocating it
         if multiboot_end > physical_kernel_end {
@@ -159,7 +161,7 @@ impl PhysicalPageAllocator {
     }
 
     fn init_range(&mut self, start: *mut u8, end: *mut u8) {
-        println!("init physical pages: [{:p}, {:p})", start, end);
+        info!("init physical pages: [{:p}, {:p})", start, end);
         let start = align_up(start as usize, PAGE_4K) as _;
         let end = align_down(end as usize, PAGE_4K) as _;
         assert!(start < end);

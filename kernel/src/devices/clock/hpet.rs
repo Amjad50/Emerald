@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use tracing::warn;
 
 use crate::{
     acpi,
@@ -392,7 +393,7 @@ extern "cdecl" fn timer0_handler(_all_state: &mut InterruptAllSavedState) {
             // clear the interrupt (must for level triggered interrupts)
             clock.ack_interrupt(interrupt);
         } else {
-            println!("[WARN] Looks like we are getting PIT interrupt instead of HPET");
+            warn!("Looks like we are getting PIT interrupt instead of HPET");
         }
     }
 
