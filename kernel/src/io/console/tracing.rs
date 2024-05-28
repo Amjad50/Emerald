@@ -86,11 +86,12 @@ impl LogFile {
             }
         }
 
-        self.file
-            .as_mut()
-            .unwrap()
-            .write(self.buffer.as_bytes())
-            .unwrap();
+        {
+            let file = self.file.as_mut().unwrap();
+
+            file.write(self.buffer.as_bytes()).unwrap();
+            file.flush().unwrap();
+        }
 
         self.buffer.clear();
     }

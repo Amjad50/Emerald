@@ -457,6 +457,14 @@ pub trait FileSystem: Send + Sync {
         }
     }
 
+    fn flush_file(
+        &self,
+        _inode: &mut FileNode,
+        _access_helper: &mut AccessHelper,
+    ) -> Result<(), FileSystemError> {
+        Err(FileSystemError::WriteNotSupported)
+    }
+
     fn close_file(
         &self,
         _inode: &FileNode,
@@ -990,6 +998,15 @@ impl File {
         )?;
         self.position += written;
         Ok(written)
+    }
+
+    pub fn flush(&mut self) -> Result<(), FileSystemError> {
+        if !self.file_access.is_write() {
+            return Err(FileSystemError::WriteNotSupported);
+        }
+
+        self.filesystem
+            .flush_file(&mut self.inode, &mut self.access_helper)
     }
 
     pub fn seek(&mut self, position: u64) -> Result<(), FileSystemError> {

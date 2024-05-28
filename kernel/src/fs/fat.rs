@@ -1475,6 +1475,37 @@ impl FatFilesystem {
         Ok(())
     }
 
+    /// Same as `release_cluster`, but doesn't release it, i.e. the cluster will
+    /// still be used, but the `dirty` flag is removed
+    fn flush_cluster(&mut self, inode: &FileNode, cluster: u32) -> Result<(), FileSystemError> {
+        let mut cluster_data: Option<NoDebug<Vec<u8>>> = None;
+
+        if let Some(cluster) = self.cluster_cache.try_get_cluster_mut(cluster) {
+            if let Some(dirty_range) = cluster.dirty_range.take() {
+                let cluster_num = cluster.cluster;
+                cluster_data = Some(NoDebug(Vec::new()));
+                core::mem::swap(&mut cluster.data, &mut cluster_data.as_mut().unwrap());
+                self.flush_cluster_dirty_range(
+                    inode,
+                    cluster_data.as_ref().unwrap(),
+                    cluster_num,
+                    dirty_range,
+                )?;
+            }
+        }
+        // swap back
+        // This is annoying, and its only used to get around the borrow checker
+        // probably there is a way to better achieve this
+        // FIXME: find better solution
+        if let Some(cluster) = self.cluster_cache.try_get_cluster_mut(cluster) {
+            if let Some(cluster_data) = cluster_data.as_mut() {
+                core::mem::swap(&mut cluster.data, cluster_data);
+            }
+        }
+
+        Ok(())
+    }
+
     fn flush_fat(&mut self) -> Result<(), FileSystemError> {
         if let Some(dirt_iter) = self.fat.dirty_sectors() {
             for (sector, data) in dirt_iter {
@@ -1921,6 +1952,15 @@ impl FileSystem for Mutex<FatFilesystem> {
             FileAccessBuffer::Write(buf),
             access_helper,
         )
+    }
+
+    fn flush_file(
+        &self,
+        inode: &mut FileNode,
+        access_helper: &mut AccessHelper,
+    ) -> Result<(), FileSystemError> {
+        self.lock()
+            .flush_cluster(inode, access_helper.current_cluster as u32)
     }
 
     fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
