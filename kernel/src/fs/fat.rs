@@ -1,4 +1,4 @@
-use core::{fmt, mem};
+use core::{fmt, mem, ops::Range};
 
 use alloc::{
     boxed::Box,
@@ -10,7 +10,9 @@ use alloc::{
 };
 
 use crate::{
-    devices::ide::IdeDevice, io::NoDebug, memory_management::memory_layout::align_up,
+    devices::ide::IdeDevice,
+    io::NoDebug,
+    memory_management::memory_layout::{align_down, align_up},
     sync::spin::mutex::Mutex,
 };
 
@@ -1073,7 +1075,7 @@ struct ClusterCacheEntry {
     cluster: u32,
     /// Number of active users of this cluster
     reference_count: u32,
-    dirty: bool,
+    dirty_range: Option<Range<usize>>,
     data: NoDebug<Vec<u8>>,
 }
 
@@ -1100,7 +1102,7 @@ impl ClusterCache {
             cluster,
             reference_count: 1,
             data: NoDebug(data),
-            dirty: false,
+            dirty_range: None,
         };
         self.entries.entry(cluster).or_insert(entry)
     }
@@ -1418,18 +1420,56 @@ impl FatFilesystem {
         Ok(self.cluster_cache.try_get_cluster_locked(cluster).unwrap())
     }
 
+    /// Helper method to write the dirty parts of a cluster into disk
+    fn flush_cluster_dirty_range(
+        &mut self,
+        inode: &FileNode,
+        cluster_data: &[u8],
+        cluster_num: u32,
+        dirty_range: Range<usize>,
+    ) -> Result<(), FileSystemError> {
+        let start_byte_offset = align_down(
+            dirty_range.start,
+            self.boot_sector.bytes_per_sector() as usize,
+        );
+        let end_byte_offset = align_up(
+            dirty_range.end,
+            self.boot_sector.bytes_per_sector() as usize,
+        );
+        assert!(
+            start_byte_offset < self.boot_sector.bytes_per_cluster() as usize,
+            "start_byte_offset: {start_byte_offset} < {}",
+            self.boot_sector.bytes_per_cluster()
+        );
+        assert!(
+            end_byte_offset <= self.boot_sector.bytes_per_cluster() as usize,
+            "end_byte_offset: {end_byte_offset} < {}",
+            self.boot_sector.bytes_per_cluster()
+        );
+        assert!(
+            start_byte_offset < end_byte_offset,
+            "start_byte_offset, end_byte_offset {start_byte_offset} < {end_byte_offset}"
+        );
+
+        self.flush_fat()?;
+        self.update_directory_entry(inode, |entry| {
+            entry.file_size = inode.size() as u32;
+        })?;
+        // write back
+        let start_sector = self.first_sector_of_cluster(cluster_num)
+            + (start_byte_offset as u32 / self.boot_sector.bytes_per_sector() as u32);
+        self.write_sectors(
+            start_sector,
+            &cluster_data[start_byte_offset..end_byte_offset],
+        )?;
+
+        Ok(())
+    }
+
     fn release_cluster(&mut self, inode: &FileNode, cluster: u32) -> Result<(), FileSystemError> {
         if let Some(cluster) = self.cluster_cache.release_cluster(cluster) {
-            if cluster.dirty {
-                self.flush_fat()?;
-
-                self.update_directory_entry(inode, |entry| {
-                    entry.file_size = inode.size() as u32;
-                })?;
-
-                // write back
-                let start_sector = self.first_sector_of_cluster(cluster.cluster);
-                self.write_sectors(start_sector, &cluster.data)?;
+            if let Some(dirty_range) = cluster.dirty_range {
+                self.flush_cluster_dirty_range(inode, &cluster.data, cluster.cluster, dirty_range)?;
             }
         }
         Ok(())
@@ -1576,7 +1616,15 @@ impl FatFilesystem {
                         .copy_from_slice(&remaining_in_cluster[..to_access]);
                 }
                 FileAccessBuffer::Write(buf) => {
-                    cluster_entry.dirty = true;
+                    let range_start = position_in_cluster as usize;
+                    let range_end = range_start + to_access;
+
+                    if let Some(dirty_range) = cluster_entry.dirty_range.as_mut() {
+                        dirty_range.start = dirty_range.start.min(range_start);
+                        dirty_range.end = dirty_range.end.max(range_end);
+                    } else {
+                        cluster_entry.dirty_range = Some(range_start..range_end);
+                    }
                     remaining_in_cluster[..to_access]
                         .copy_from_slice(&buf[accessed..accessed + to_access]);
                 }
