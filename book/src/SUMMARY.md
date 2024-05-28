@@ -35,6 +35,7 @@
     - [Graphics](./kernel/graphics/index.md)
         - [VGA](./kernel/graphics/vga.md)
     - [Testing](./kernel/testing/index.md)
+    - [Logging](./kernel/logging/index.md)
 - [Userspace](./userspace/index.md)
     - [Programs](./userspace/programs.md)
     - [Libraries](./userspace/libraries.md)
