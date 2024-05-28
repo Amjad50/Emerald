@@ -1247,10 +1247,25 @@
 <a href="#1245" id="1245">1245</a>
 <a href="#1246" id="1246">1246</a>
 <a href="#1247" id="1247">1247</a>
+<a href="#1248" id="1248">1248</a>
+<a href="#1249" id="1249">1249</a>
+<a href="#1250" id="1250">1250</a>
+<a href="#1251" id="1251">1251</a>
+<a href="#1252" id="1252">1252</a>
+<a href="#1253" id="1253">1253</a>
+<a href="#1254" id="1254">1254</a>
+<a href="#1255" id="1255">1255</a>
+<a href="#1256" id="1256">1256</a>
+<a href="#1257" id="1257">1257</a>
+<a href="#1258" id="1258">1258</a>
+<a href="#1259" id="1259">1259</a>
+<a href="#1260" id="1260">1260</a>
+<a href="#1261" id="1261">1261</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::ops;
 
 <span class="kw">use </span>alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 <span class="kw">use </span>kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType, OpenOptions};
+<span class="kw">use </span>tracing::info;
 
 <span class="kw">use crate</span>::{
     devices::{
@@ -1368,10 +1383,6 @@
 
     <span class="kw">pub fn </span>start_cluster(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
         <span class="self">self</span>.start_cluster
-    }
-
-    <span class="kw">pub</span>(<span class="self">self</span>) <span class="kw">fn </span>set_start_cluster(<span class="kw-2">&amp;mut </span><span class="self">self</span>, cluster: u64) {
-        <span class="self">self</span>.start_cluster = cluster;
     }
 
     <span class="attr">#[allow(dead_code)]
@@ -1705,6 +1716,14 @@
         }
     }
 
+    <span class="kw">fn </span>flush_file(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        _inode: <span class="kw-2">&amp;mut </span>FileNode,
+        _access_helper: <span class="kw-2">&amp;mut </span>AccessHelper,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="prelude-val">Err</span>(FileSystemError::WriteNotSupported)
+    }
+
     <span class="kw">fn </span>close_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         _inode: <span class="kw-2">&amp;</span>FileNode,
@@ -1873,7 +1892,7 @@
         first_partition.start_lba,
         first_partition.size_in_sectors,
     )<span class="question-mark">?</span>;
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"Mapping / to FAT filesystem {:?} ({:?}), parition_type: 0x{:02X}"</span>,
         filesystem.volume_label(),
         filesystem.fat_type(),
@@ -2238,6 +2257,15 @@
         )<span class="question-mark">?</span>;
         <span class="self">self</span>.position += written;
         <span class="prelude-val">Ok</span>(written)
+    }
+
+    <span class="kw">pub fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="kw">if </span>!<span class="self">self</span>.file_access.is_write() {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::WriteNotSupported);
+        }
+
+        <span class="self">self</span>.filesystem
+            .flush_file(<span class="kw-2">&amp;mut </span><span class="self">self</span>.inode, <span class="kw-2">&amp;mut </span><span class="self">self</span>.access_helper)
     }
 
     <span class="kw">pub fn </span>seek(<span class="kw-2">&amp;mut </span><span class="self">self</span>, position: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {

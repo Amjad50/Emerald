@@ -351,9 +351,11 @@
 <a href="#349" id="349">349</a>
 <a href="#350" id="350">350</a>
 <a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem::MaybeUninit, ptr::NonNull};
 
 <span class="kw">use </span>alloc::collections::LinkedList;
+<span class="kw">use </span>tracing::info;
 
 <span class="kw">use crate</span>::{
     memory_management::memory_layout::{
@@ -690,9 +692,9 @@
     }
 
     <span class="kw">fn </span>debug_blocks(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="macro">println!</span>(<span class="string">"Virtual space blocks:"</span>);
+        <span class="macro">info!</span>(<span class="string">"Virtual space blocks:"</span>);
         <span class="kw">for </span>entry <span class="kw">in </span><span class="self">self</span>.entries.iter() {
-            <span class="macro">println!</span>(
+            <span class="macro">info!</span>(
                 <span class="string">"  range={:016x}..{:016x}, len={:4} =&gt; {:016X?}"</span>,
                 entry.virtual_start,
                 entry.virtual_start + entry.size,

@@ -147,9 +147,12 @@
 <a href="#145" id="145">145</a>
 <a href="#146" id="146">146</a>
 <a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{collections::BTreeMap, string::String, sync::Arc};
+<span class="kw">use </span>tracing::info;
 
 <span class="kw">use crate</span>::{
     fs::{
@@ -253,6 +256,7 @@
         <span class="string">"Device {} already registered"</span>,
         device.name()
     );
+    <span class="macro">info!</span>(<span class="string">"Registered {} device"</span>, device.name());
     devices.devices.insert(String::from(device.name()), device);
 }
 
@@ -260,7 +264,7 @@
     <span class="kw">let </span>pci_device_iter = PciDevicePropeIterator::new();
     <span class="kw">for </span>device <span class="kw">in </span>pci_device_iter {
         <span class="kw">if </span>probe_pci_driver(<span class="kw-2">&amp;</span>device) {
-            <span class="macro">println!</span>(
+            <span class="macro">info!</span>(
                 <span class="string">"[{:02X}.{:02X}.{:02X}] Driver found for device: {:04X}:{:04X} - {}"</span>,
                 device.bus,
                 device.dev,
@@ -270,7 +274,7 @@
                 device.device_type
             );
         } <span class="kw">else </span>{
-            <span class="macro">println!</span>(
+            <span class="macro">info!</span>(
                 <span class="string">"[{:02X}.{:02X}.{:02X}] No driver found for device: {:04X}:{:04X} - {}"</span>,
                 device.bus,
                 device.dev,

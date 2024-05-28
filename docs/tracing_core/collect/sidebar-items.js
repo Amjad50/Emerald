@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Interest","NoCollector"],"trait":["Collect"]};

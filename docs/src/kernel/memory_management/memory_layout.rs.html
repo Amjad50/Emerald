@@ -317,7 +317,11 @@
 <a href="#315" id="315">315</a>
 <a href="#316" id="316">316</a>
 <a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
+
+<span class="kw">use </span>tracing::info;
 
 <span class="kw">use </span><span class="kw">super</span>::virtual_memory_mapper;
 
@@ -490,7 +494,7 @@
 }
 
 <span class="kw">pub fn </span>display_kernel_map() {
-    <span class="macro">println!</span>(<span class="string">"Kernel map:"</span>);
+    <span class="macro">info!</span>(<span class="string">"Kernel map:"</span>);
     <span class="kw">let </span>nothing = KERNEL_BASE..KERNEL_LINK;
     <span class="kw">let </span>kernel_elf_end = align_up(kernel_elf_end(), PAGE_4K);
     <span class="kw">let </span>kernel_elf = KERNEL_LINK..kernel_elf_end;
@@ -504,62 +508,62 @@
     <span class="kw">let </span>kernel_extra_memory =
         KERNEL_EXTRA_MEMORY_BASE..KERNEL_EXTRA_MEMORY_BASE + KERNEL_EXTRA_MEMORY_SIZE;
 
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  nothing"</span>,
         nothing.start,
         nothing.end,
         MemSize(nothing.len())
     );
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  kernel elf"</span>,
         kernel_elf.start,
         kernel_elf.end,
         MemSize(kernel_elf.len())
     );
     <span class="comment">// inner map for the elf
-    </span><span class="macro">println!</span>(
+    </span><span class="macro">info!</span>(
         <span class="string">"    range={:016x}..{:016x}, len={:4}  kernel elf text"</span>,
         kernel_elf_text.start,
         kernel_elf_text.end,
         MemSize(kernel_elf_text.len())
     );
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"    range={:016x}..{:016x}, len={:4}  kernel elf rodata"</span>,
         kernel_elf_rodata.start,
         kernel_elf_rodata.end,
         MemSize(kernel_elf_rodata.len())
     );
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"    range={:016x}..{:016x}, len={:4}  kernel elf data"</span>,
         kernel_elf_data.start,
         kernel_elf_data.end,
         MemSize(kernel_elf_data.len())
     );
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"    range={:016x}..{:016x}, len={:4}  kernel elf bss"</span>,
         kernel_elf_bss.start,
         kernel_elf_bss.end,
         MemSize(kernel_elf_bss.len())
     );
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  kernel physical allocator low"</span>,
         kernel_physical_allocator_low.start,
         kernel_physical_allocator_low.end,
         MemSize(kernel_physical_allocator_low.len())
     );
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  kernel heap"</span>,
         kernel_heap.start,
         kernel_heap.end,
         MemSize(kernel_heap.len())
     );
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  interrupt stack"</span>,
         interrupt_stack.start,
         interrupt_stack.end,
         MemSize(interrupt_stack.len())
     );
-    <span class="macro">println!</span>(
+    <span class="macro">info!</span>(
         <span class="string">"  range={:016x}..{:016x}, len={:4}  kernel extra (virtual space)"</span>,
         kernel_extra_memory.start,
         kernel_extra_memory.end,
@@ -567,12 +571,12 @@
     );
 
     <span class="comment">// number of bytes approx used from physical memory
-    </span><span class="macro">println!</span>(
+    </span><span class="macro">info!</span>(
         <span class="string">"whole kernel physical size (startup/low): {}"</span>,
         MemSize(KERNEL_END - KERNEL_BASE)
     );
     <span class="comment">// total addressable virtual kernel memory
-    </span><span class="macro">println!</span>(
+    </span><span class="macro">info!</span>(
         <span class="string">"whole kernel size: {}"</span>,
         MemSize(usize::MAX - KERNEL_BASE + <span class="number">1</span>)
     );

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["rebuild_interest_cache","register"],"struct":["Identifier","Registration"],"trait":["Callsite"]};

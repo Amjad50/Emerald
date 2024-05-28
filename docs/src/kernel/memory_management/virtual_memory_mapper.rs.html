@@ -820,10 +820,33 @@
 <a href="#818" id="818">818</a>
 <a href="#819" id="819">819</a>
 <a href="#820" id="820">820</a>
+<a href="#821" id="821">821</a>
+<a href="#822" id="822">822</a>
+<a href="#823" id="823">823</a>
+<a href="#824" id="824">824</a>
+<a href="#825" id="825">825</a>
+<a href="#826" id="826">826</a>
+<a href="#827" id="827">827</a>
+<a href="#828" id="828">828</a>
+<a href="#829" id="829">829</a>
+<a href="#830" id="830">830</a>
+<a href="#831" id="831">831</a>
+<a href="#832" id="832">832</a>
+<a href="#833" id="833">833</a>
+<a href="#834" id="834">834</a>
+<a href="#835" id="835">835</a>
+<a href="#836" id="836">836</a>
+<a href="#837" id="837">837</a>
+<a href="#838" id="838">838</a>
+<a href="#839" id="839">839</a>
+<a href="#840" id="840">840</a>
+<a href="#841" id="841">841</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This very specific to 64-bit x86 architecture, if this is to be ported to other architectures
 //! this will need to be changed
 
 </span><span class="kw">use </span>core::{ops::RangeBounds, slice::IterMut};
+
+<span class="kw">use </span>tracing::trace;
 
 <span class="kw">use crate</span>::{
     cpu,
@@ -1104,7 +1127,7 @@
     }
 
     <span class="kw">fn </span>load_vm(base: <span class="kw-2">&amp;</span>PageDirectoryTablePtr) {
-        <span class="macro">eprintln!</span>(
+        <span class="macro">trace!</span>(
             <span class="string">"Switching to new page map: {:p}"</span>,
             base.as_physical() <span class="kw">as </span><span class="kw-2">*const </span>u8
         );
@@ -1222,7 +1245,7 @@
 
         <span class="macro">assert!</span>(size &gt; <span class="number">0</span>);
 
-        <span class="macro">eprintln!</span>(
+        <span class="macro">trace!</span>(
             <span class="string">"{} {:08X?}"</span>,
             MemSize(size),
             VirtualMemoryMapEntry {
@@ -1237,9 +1260,10 @@
             <span class="kw">let </span>current_physical_address = physical_address.unwrap_or_else(|| {
                 virtual2physical(<span class="kw">unsafe </span>{ physical_page_allocator::alloc_zeroed() <span class="kw">as _ </span>})
             });
-            <span class="macro">eprintln!</span>(
+            <span class="macro">trace!</span>(
                 <span class="string">"[!] Mapping {:p} to {:p}"</span>,
-                virtual_address <span class="kw">as </span><span class="kw-2">*const </span>u8, current_physical_address <span class="kw">as </span><span class="kw-2">*const </span>u8
+                virtual_address <span class="kw">as </span><span class="kw-2">*const </span>u8,
+                current_physical_address <span class="kw">as </span><span class="kw-2">*const </span>u8
             );
             <span class="kw">let </span>page_map_l4_index = get_l4(virtual_address);
             <span class="kw">let </span>page_directory_pointer_index = get_l3(virtual_address);
@@ -1256,9 +1280,11 @@
             }
             <span class="comment">// add new flags if any
             </span><span class="kw-2">*</span>page_map_l4_entry |= flags;
-            <span class="macro">eprintln!</span>(
+            <span class="macro">trace!</span>(
                 <span class="string">"L4[{}]: {:p} = {:x}"</span>,
-                page_map_l4_index, page_map_l4_entry, <span class="kw-2">*</span>page_map_l4_entry
+                page_map_l4_index,
+                page_map_l4_entry,
+                <span class="kw-2">*</span>page_map_l4_entry
             );
 
             <span class="comment">// Level 3
@@ -1276,7 +1302,7 @@
 
             <span class="comment">// add new flags
             </span><span class="kw-2">*</span>page_directory_pointer_entry |= flags;
-            <span class="macro">eprintln!</span>(
+            <span class="macro">trace!</span>(
                 <span class="string">"L3[{}]: {:p} = {:x}"</span>,
                 page_directory_pointer_index,
                 page_directory_pointer_entry,
@@ -1320,9 +1346,11 @@
                     | flags::PTE_PRESENT
                     | flags::PTE_HUGE_PAGE;
 
-                <span class="macro">eprintln!</span>(
+                <span class="macro">trace!</span>(
                     <span class="string">"L2[{}] huge: {:p} = {:x}"</span>,
-                    page_directory_index, page_directory_entry, <span class="kw-2">*</span>page_directory_entry
+                    page_directory_index,
+                    page_directory_entry,
+                    <span class="kw-2">*</span>page_directory_entry
                 );
 
                 size -= PAGE_2M;
@@ -1343,9 +1371,11 @@
                 }
                 <span class="comment">// add new flags
                 </span><span class="kw-2">*</span>page_directory_entry |= flags;
-                <span class="macro">eprintln!</span>(
+                <span class="macro">trace!</span>(
                     <span class="string">"L2[{}]: {:p} = {:x}"</span>,
-                    page_directory_index, page_directory_entry, <span class="kw-2">*</span>page_directory_entry
+                    page_directory_index,
+                    page_directory_entry,
+                    <span class="kw-2">*</span>page_directory_entry
                 );
 
                 <span class="comment">// Level 1
@@ -1353,9 +1383,11 @@
                 <span class="kw">let </span>page_table_entry = <span class="kw-2">&amp;mut </span>page_table.as_mut().entries[page_table_index];
                 <span class="kw-2">*</span>page_table_entry =
                     (current_physical_address &amp; ADDR_MASK) | flags | flags::PTE_PRESENT;
-                <span class="macro">eprintln!</span>(
+                <span class="macro">trace!</span>(
                     <span class="string">"L1[{}]: {:p} = {:x}"</span>,
-                    page_table_index, page_table_entry, <span class="kw-2">*</span>page_table_entry
+                    page_table_index,
+                    page_table_entry,
+                    <span class="kw-2">*</span>page_table_entry
                 );
 
                 size -= PAGE_4K;
@@ -1369,7 +1401,7 @@
                 }
             }
 
-            <span class="macro">eprintln!</span>();
+            <span class="macro">trace!</span>(<span class="string">""</span>);
         }
     }
 
@@ -1390,7 +1422,7 @@
 
         <span class="macro">assert!</span>(size &gt; <span class="number">0</span>);
 
-        <span class="macro">eprintln!</span>(
+        <span class="macro">trace!</span>(
             <span class="string">"{} {:08X?}"</span>,
             MemSize(size),
             VirtualMemoryMapEntry {
@@ -1419,9 +1451,11 @@
             }
             <span class="comment">// remove flags
             </span><span class="kw-2">*</span>page_map_l4_entry &amp;= !flags;
-            <span class="macro">eprintln!</span>(
+            <span class="macro">trace!</span>(
                 <span class="string">"L4[{}]: {:p} = {:x}"</span>,
-                page_map_l4_index, page_map_l4_entry, <span class="kw-2">*</span>page_map_l4_entry
+                page_map_l4_index,
+                page_map_l4_entry,
+                <span class="kw-2">*</span>page_map_l4_entry
             );
 
             <span class="comment">// Level 3
@@ -1436,7 +1470,7 @@
             }
             <span class="comment">// remove flags
             </span><span class="kw-2">*</span>page_directory_pointer_entry &amp;= !flags;
-            <span class="macro">eprintln!</span>(
+            <span class="macro">trace!</span>(
                 <span class="string">"L3[{}]: {:p} = {:x}"</span>,
                 page_directory_pointer_index,
                 page_directory_pointer_entry,
@@ -1467,9 +1501,11 @@
             }
             <span class="comment">// remove whole entry
             </span><span class="kw-2">*</span>page_table_entry = <span class="number">0</span>;
-            <span class="macro">eprintln!</span>(
+            <span class="macro">trace!</span>(
                 <span class="string">"L1[{}]: {:p} = {:x}"</span>,
-                page_table_index, page_table_entry, <span class="kw-2">*</span>page_table_entry
+                page_table_index,
+                page_table_entry,
+                <span class="kw-2">*</span>page_table_entry
             );
 
             size -= PAGE_4K;
@@ -1494,9 +1530,11 @@
         <span class="kw">if </span><span class="kw-2">*</span>page_map_l4_entry &amp; flags::PTE_PRESENT == <span class="number">0 </span>{
             <span class="kw">return </span><span class="bool-val">false</span>;
         }
-        <span class="macro">eprintln!</span>(
+        <span class="macro">trace!</span>(
             <span class="string">"L4[{}]: {:p} = {:x}"</span>,
-            page_map_l4_index, page_map_l4_entry, <span class="kw-2">*</span>page_map_l4_entry
+            page_map_l4_index,
+            page_map_l4_entry,
+            <span class="kw-2">*</span>page_map_l4_entry
         );
 
         <span class="comment">// Level 3
@@ -1506,7 +1544,7 @@
         <span class="kw">if </span><span class="kw-2">*</span>page_directory_pointer_entry &amp; flags::PTE_PRESENT == <span class="number">0 </span>{
             <span class="kw">return </span><span class="bool-val">false</span>;
         }
-        <span class="macro">eprintln!</span>(
+        <span class="macro">trace!</span>(
             <span class="string">"L3[{}]: {:p} = {:x}"</span>,
             page_directory_pointer_index,
             page_directory_pointer_entry,
@@ -1522,9 +1560,11 @@
         <span class="kw">if </span><span class="kw-2">*</span>page_directory_entry &amp; flags::PTE_HUGE_PAGE != <span class="number">0 </span>{
             <span class="kw">return </span><span class="bool-val">true</span>;
         }
-        <span class="macro">eprintln!</span>(
+        <span class="macro">trace!</span>(
             <span class="string">"L2[{}]: {:p} = {:x}"</span>,
-            page_directory_index, page_directory_entry, <span class="kw-2">*</span>page_directory_entry
+            page_directory_index,
+            page_directory_entry,
+            <span class="kw-2">*</span>page_directory_entry
         );
 
         <span class="comment">// Level 1
@@ -1533,9 +1573,11 @@
         <span class="kw">if </span><span class="kw-2">*</span>page_table_entry &amp; flags::PTE_PRESENT == <span class="number">0 </span>{
             <span class="kw">return </span><span class="bool-val">false</span>;
         }
-        <span class="macro">eprintln!</span>(
+        <span class="macro">trace!</span>(
             <span class="string">"L1[{}]: {:p} = {:x}"</span>,
-            page_table_index, page_table_entry, <span class="kw-2">*</span>page_table_entry
+            page_table_index,
+            page_table_entry,
+            <span class="kw-2">*</span>page_table_entry
         );
 
         <span class="bool-val">true

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LOG_FILE_PATH"],"enum":["Buffer"],"fn":["flush_log_file","init","level_str","log_file","move_to_dynamic_buffer"],"static":["CONSOLE_SUBSCRIBER","INITIAL_BUFFER","LOG_FILE"],"struct":["ConsoleSubscriber","LogFile","MultiWriter","Visitor"]};

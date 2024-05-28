@@ -548,10 +548,8 @@
 <a href="#546" id="546">546</a>
 <a href="#547" id="547">547</a>
 <a href="#548" id="548">548</a>
-<a href="#549" id="549">549</a>
-<a href="#550" id="550">550</a>
-<a href="#551" id="551">551</a>
-</pre></div><pre class="rust"><code><span class="kw">mod </span>vga_graphics;
+</pre></div><pre class="rust"><code><span class="kw">pub mod </span>tracing;
+<span class="kw">mod </span>vga_graphics;
 <span class="kw">mod </span>vga_text;
 
 <span class="kw">use </span>core::{
@@ -882,18 +880,14 @@
 <span class="kw">impl </span>LateConsole {
     <span class="doccomment">/// SAFETY: must ensure that there is no console running at the same time
     </span><span class="kw">unsafe fn </span>new(uart: Uart, video_console: Box&lt;<span class="kw">dyn </span>VideoConsole&gt;) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span><span class="kw-2">mut </span>s = <span class="self">Self </span>{
+        <span class="self">Self </span>{
             uart,
             video_console,
             keyboard: keyboard_mouse::get_keyboard_reader(),
             console_cmd_buffer: <span class="prelude-val">None</span>,
             current_attrib: Default::default(),
             capture: <span class="prelude-val">None</span>,
-        };
-
-        <span class="comment">// split inputs
-        </span>s.write_byte(<span class="string">b'\n'</span>);
-        s
+        }
     }
 
     <span class="kw">fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, byte: u8) {

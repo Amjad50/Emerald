@@ -37,9 +37,13 @@
 <a href="#35" id="35">35</a>
 <a href="#36" id="36">36</a>
 <a href="#37" id="37">37</a>
+<a href="#38" id="38">38</a>
+<a href="#39" id="39">39</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(dead_code)]
 
-</span><span class="kw">use </span><span class="kw">crate</span>::cpu;
+</span><span class="kw">use </span>tracing::error;
+
+<span class="kw">use </span><span class="kw">crate</span>::cpu;
 
 <span class="kw">const </span>EXIT_FAILURE: u32 = <span class="number">0</span>; <span class="comment">// since ((0 &lt;&lt; 1) | 1) = 1.
 </span><span class="kw">const </span>EXIT_SUCCESS: u32 = <span class="number">1</span>; <span class="comment">// since ((1 &lt;&lt; 1) | 1) = 3.
@@ -63,7 +67,7 @@
         cpu::io_out(IO_BASE, code);
     }
 
-    <span class="macro">println!</span>(<span class="string">"Qemu did not exit, halting."</span>);
+    <span class="macro">error!</span>(<span class="string">"Qemu did not exit, halting."</span>);
 
     <span class="comment">// If we didn't exit, just halt
     </span><span class="kw">loop </span>{

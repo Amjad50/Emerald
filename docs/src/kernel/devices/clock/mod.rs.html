@@ -322,6 +322,7 @@
 <a href="#320" id="320">320</a>
 <a href="#321" id="321">321</a>
 <a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>hpet;
 <span class="kw">mod </span>rtc;
 <span class="kw">mod </span>tsc;
@@ -329,6 +330,7 @@
 <span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{sync::Arc, vec::Vec};
+<span class="kw">use </span>tracing::{info, warn};
 
 <span class="kw">use crate</span>::{
     acpi::tables::{<span class="self">self</span>, BiosTables, Facp},
@@ -449,8 +451,8 @@
         <span class="comment">// let device_time = device.get_time();
 
         </span><span class="kw">let </span>timestamp = time.seconds_since_unix_epoch().expect(<span class="string">"Must be after 1970"</span>);
-        <span class="macro">println!</span>(<span class="string">"Time now: {time} - UTC"</span>);
-        <span class="macro">println!</span>(<span class="string">"System start timestamp: {}"</span>, timestamp);
+        <span class="macro">info!</span>(<span class="string">"Time now: {time} - UTC"</span>);
+        <span class="macro">info!</span>(<span class="string">"System start timestamp: {}"</span>, timestamp);
 
         <span class="kw">let </span>start_unix = ClockTime {
             nanoseconds: <span class="number">0</span>,
@@ -514,8 +516,8 @@
             <span class="kw">let </span>timestamp = rtc_time
                 .seconds_since_unix_epoch()
                 .expect(<span class="string">"Must be after 1970"</span>);
-            <span class="macro">println!</span>(<span class="string">"Adjusted Time now: {rtc_time} - UTC"</span>);
-            <span class="macro">println!</span>(<span class="string">"Adjusted System start timestamp: {}"</span>, timestamp);
+            <span class="macro">info!</span>(<span class="string">"Adjusted Time now: {rtc_time} - UTC"</span>);
+            <span class="macro">info!</span>(<span class="string">"Adjusted System start timestamp: {}"</span>, timestamp);
 
             <span class="self">self</span>.last_tick = device_time;
             <span class="self">self</span>.device = <span class="prelude-val">Some</span>(device);
@@ -569,7 +571,7 @@
     }
 
     <span class="kw">fn </span>add_device(<span class="kw-2">&amp;</span><span class="self">self</span>, device: Arc&lt;<span class="kw">dyn </span>ClockDevice&gt;) {
-        <span class="macro">println!</span>(
+        <span class="macro">info!</span>(
             <span class="string">"Adding clock device: {}, rating: {}"</span>,
             device.name(),
             device.rating()
@@ -631,7 +633,7 @@
     <span class="kw">if let </span><span class="prelude-val">Some</span>(hpet_table) = hpet_table {
         clocks().add_device(hpet::init(hpet_table));
     } <span class="kw">else </span>{
-        <span class="macro">println!</span>(<span class="string">"HPET is not available!"</span>);
+        <span class="macro">warn!</span>(<span class="string">"HPET is not available!"</span>);
     }
 
     <span class="comment">// init TSC

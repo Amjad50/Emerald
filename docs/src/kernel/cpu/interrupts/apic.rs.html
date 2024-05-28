@@ -595,10 +595,10 @@
 <a href="#593" id="593">593</a>
 <a href="#594" id="594">594</a>
 <a href="#595" id="595">595</a>
-<a href="#596" id="596">596</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::borrow::{Borrow, BorrowMut};
 
 <span class="kw">use </span>alloc::vec::Vec;
+<span class="kw">use </span>tracing::{error, warn};
 
 <span class="kw">use crate</span>::{
     acpi::tables::{<span class="self">self</span>, BiosTables, InterruptControllerStruct, InterruptSourceOverride},
@@ -968,8 +968,8 @@
             .expect(<span class="string">"MADT table not found"</span>);
 
         <span class="kw">if </span>madt_table.local_apic_address <span class="kw">as </span>u64 != apic_address {
-            <span class="macro">println!</span>(
-                <span class="string">"WARNING: MADT table has a different APIC address (CPU:{:X}, MADT:{:X}), using MADT..."</span>,
+            <span class="macro">warn!</span>(
+                <span class="string">"MADT table has a different APIC address (CPU:{:X}, MADT:{:X}), using MADT..."</span>,
                 apic_address, madt_table.local_apic_address
             );
             apic_address = madt_table.local_apic_address <span class="kw">as </span>u64;
@@ -987,9 +987,7 @@
                         </span><span class="kw">continue</span>;
                     }
                     <span class="kw">if </span>n_cpus &gt;= MAX_CPUS {
-                        <span class="macro">println!</span>(
-                            <span class="string">"WARNING: too many CPUs, have {MAX_CPUS} already, ignoring the rest"
-                        </span>);
+                        <span class="macro">warn!</span>(<span class="string">"too many CPUs, have {MAX_CPUS} already, ignoring the rest"</span>);
                     } <span class="kw">else </span>{
                         <span class="comment">// initialize the CPUs
                         // SAFETY: this is safe
@@ -1016,8 +1014,8 @@
                     apic_address = s.local_apic_address;
                 }
                 InterruptControllerStruct::Unknown { struct_type, bytes } =&gt; {
-                    <span class="macro">println!</span>(
-                        <span class="string">"WARNING: unknown interrupt controller struct type {:#X} with {:#X?} bytes"</span>,
+                    <span class="macro">warn!</span>(
+                        <span class="string">"unknown interrupt controller struct type {:#X} with {:#X?} bytes"</span>,
                         struct_type, bytes
                     );
                 }
@@ -1181,13 +1179,13 @@
 }
 
 <span class="kw">extern </span><span class="string">"x86-interrupt" </span><span class="kw">fn </span>spurious_handler(_frame: InterruptStackFrame64) {
-    <span class="macro">println!</span>(<span class="string">"Spurious interrupt"</span>);
+    <span class="macro">warn!</span>(<span class="string">"Spurious interrupt"</span>);
     return_from_interrupt();
 }
 
 <span class="kw">extern </span><span class="string">"x86-interrupt" </span><span class="kw">fn </span>error_interrupt_handler(_frame: InterruptStackFrame64) {
     <span class="kw">let </span>error_status = APIC.get().lock().mmio.error_status.read();
-    <span class="macro">println!</span>(<span class="string">"APIC error: {:#X}"</span>, error_status);
+    <span class="macro">error!</span>(<span class="string">"APIC error: {:#X}"</span>, error_status);
     <span class="comment">// clear the error
     </span>APIC.get().lock().mmio.error_status.write(<span class="number">0</span>);
     return_from_interrupt();

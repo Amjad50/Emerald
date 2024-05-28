@@ -211,7 +211,11 @@
 <a href="#209" id="209">209</a>
 <a href="#210" id="210">210</a>
 <a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::sync::atomic::{AtomicU64, Ordering};
+
+<span class="kw">use </span>tracing::{info, trace};
 
 <span class="kw">use crate</span>::{cpu, devices::clock::NANOS_PER_SEC};
 
@@ -331,7 +335,7 @@
 
         <span class="comment">// at least 1ms (1000_000ns), and no more than 1s (1_000_000_000ns)
         </span><span class="kw">let </span>sleep_time = (granularity * <span class="number">1000</span>).max(<span class="number">1_000_000</span>).min(NANOS_PER_SEC);
-        <span class="macro">eprintln!</span>(<span class="string">"Calibrating TSC with sleep time: {}ns"</span>, sleep_time);
+        <span class="macro">trace!</span>(<span class="string">"Calibrating TSC with sleep time: {}ns"</span>, sleep_time);
 
         <span class="kw">let </span>start_point = <span class="self">self</span>.get_sync_time_point(base, device_latency);
         <span class="comment">// sleep
@@ -370,7 +374,7 @@
 
         <span class="comment">// If the difference is more than 50ms, we need to recalibrate
         </span><span class="kw">if </span>diff &gt; <span class="number">50_000_000 </span>{
-            <span class="macro">println!</span>(<span class="string">"TSC recalibration needed, diff: {}ns"</span>, diff);
+            <span class="macro">info!</span>(<span class="string">"TSC recalibration needed, diff: {}ns"</span>, diff);
             <span class="self">self</span>.calibrate(base);
         }
         <span class="kw">let </span>start_ns = end_point

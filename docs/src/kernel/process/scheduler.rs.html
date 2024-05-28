@@ -480,6 +480,8 @@
 <a href="#478" id="478">478</a>
 <a href="#479" id="479">479</a>
 <a href="#480" id="480">480</a>
+<a href="#481" id="481">481</a>
+<a href="#482" id="482">482</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{cell::RefCell, mem};
 
 <span class="kw">use </span>alloc::{
@@ -487,6 +489,7 @@
     collections::{BTreeMap, BinaryHeap},
     vec::Vec,
 };
+<span class="kw">use </span>tracing::trace;
 
 <span class="kw">use crate</span>::{
     cpu::{<span class="self">self</span>, idt::InterruptAllSavedState, interrupts},
@@ -804,7 +807,7 @@
 
     <span class="kw">let </span><span class="kw-2">mut </span>inner_proc = process.process.into_inner();
 
-    <span class="macro">eprintln!</span>(<span class="string">"Process {} exited with code {}"</span>, inner_proc.id, exit_code);
+    <span class="macro">trace!</span>(<span class="string">"Process {} exited with code {}"</span>, inner_proc.id, exit_code);
 
     swap_context(current_cpu.context.as_mut().unwrap(), all_state);
     <span class="comment">// Even though this context won't run again
@@ -830,9 +833,10 @@
         current_cpu.push_cli();
         <span class="kw">let </span><span class="kw-2">mut </span>inner_proc = p.process.borrow_mut();
         p.state = ProcessState::WaitingForTime(deadline);
-        <span class="macro">eprintln!</span>(
+        <span class="macro">trace!</span>(
             <span class="string">"Process {} is waiting for time {:?}"</span>,
-            inner_proc.id, deadline
+            inner_proc.id,
+            deadline
         );
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
 
@@ -890,7 +894,7 @@
         current_cpu.push_cli();
         <span class="kw">let </span><span class="kw-2">mut </span>inner_proc = p.process.borrow_mut();
         p.state = ProcessState::WaitingForPid(pid);
-        <span class="macro">eprintln!</span>(<span class="string">"Process {} is waiting for process {}"</span>, inner_proc.id, pid);
+        <span class="macro">trace!</span>(<span class="string">"Process {} is waiting for process {}"</span>, inner_proc.id, pid);
 
         swap_context(current_cpu.context.as_mut().unwrap(), all_state);
         inner_proc.context = current_cpu.context.take().unwrap();

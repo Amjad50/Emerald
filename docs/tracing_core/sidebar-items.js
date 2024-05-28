@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["identify_callsite","metadata"],"mod":["callsite","collect","dispatch","event","field","metadata","span"],"struct":["Dispatch","Event","Field","Level","LevelFilter","Metadata"],"trait":["Callsite","Collect"]};

@@ -1092,7 +1092,6 @@
 <a href="#1090" id="1090">1090</a>
 <a href="#1091" id="1091">1091</a>
 <a href="#1092" id="1092">1092</a>
-<a href="#1093" id="1093">1093</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     fmt, hint, mem,
     ptr::{addr_of, addr_of_mut},
@@ -1100,6 +1099,7 @@
 };
 
 <span class="kw">use </span>alloc::sync::Arc;
+<span class="kw">use </span>tracing::{error, info};
 
 <span class="kw">use crate</span>::{
     cpu::{
@@ -1904,14 +1904,12 @@
                         <span class="comment">// device not ready (i.e. not present)
                         </span><span class="kw">return </span><span class="prelude-val">None</span>;
                     } <span class="kw">else </span>{
-                        <span class="macro">println!</span>(<span class="string">"Error: unknown ATAPI device error: Err={err:02x}"</span>);
+                        <span class="macro">error!</span>(<span class="string">"unknown ATAPI device error: Err={err:02x}"</span>);
                         <span class="kw">return </span><span class="prelude-val">None</span>;
                     }
                 }
             } <span class="kw">else </span>{
-                <span class="macro">println!</span>(
-                    <span class="string">"Error: unknown IDE device aborted: LBA={lbalo:02x}:{lbamid:02x}:{lbahi:02x}"</span>,
-                );
+                <span class="macro">error!</span>(<span class="string">"unknown IDE device aborted: LBA={lbalo:02x}:{lbamid:02x}:{lbahi:02x}"</span>,);
                 <span class="kw">return </span><span class="prelude-val">None</span>;
             }
 
@@ -1919,7 +1917,7 @@
             </span><span class="kw">let </span>command = AtaCommand::new(ata::COMMAND_PACKET_IDENTIFY)
                 .with_second_drive(second_device_select);
             <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = command.execute_read(<span class="kw-2">&amp;</span>io, <span class="kw-2">&amp;mut </span>identify_data) {
-                <span class="macro">println!</span>(<span class="string">"Error: unknown ATAPI device aborted: Err={err:02x}"</span>,);
+                <span class="macro">error!</span>(<span class="string">"unknown ATAPI device aborted: Err={err:02x}"</span>,);
                 <span class="kw">return </span><span class="prelude-val">None</span>;
             }
             device_type = IdeDeviceType::Atapi;
@@ -1976,7 +1974,7 @@
             }
         }
 
-        <span class="macro">println!</span>(
+        <span class="macro">info!</span>(
             <span class="string">"Initialized IDE device({device_type:?}): size={} ({number_of_sectors} x {sector_size})"</span>,
             MemSize(number_of_sectors * sector_size <span class="kw">as </span>u64),
         );

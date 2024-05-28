@@ -334,7 +334,11 @@
 <a href="#332" id="332">332</a>
 <a href="#333" id="333">333</a>
 <a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{marker::PhantomData, mem};
+
+<span class="kw">use </span>tracing::error;
 
 <span class="kw">use </span><span class="kw">super</span>::interrupts::stack_index;
 
@@ -645,7 +649,7 @@
 }
 
 <span class="kw">extern </span><span class="string">"x86-interrupt" </span><span class="kw">fn </span>default_handler&lt;<span class="kw">const </span>N: u8&gt;(frame: InterruptStackFrame64) {
-    <span class="macro">println!</span>(<span class="string">"[{N}] Got exception: \n frame: {:x?}"</span>, frame);
+    <span class="macro">error!</span>(<span class="string">"[{N}] Got exception: \n frame: {:x?}"</span>, frame);
 
     <span class="kw">crate</span>::panic_handler::print_originating_stack_trace(<span class="kw-2">&amp;</span>frame, <span class="macro">super::rbp!</span>());
     <span class="macro">panic!</span>(<span class="string">"Unhandled exception"</span>);
@@ -661,7 +665,7 @@
     }
     <span class="kw">let </span>current_cpu = <span class="kw">super</span>::cpu();
     <span class="kw">let </span>proc_id = current_cpu.context.map(|<span class="kw">_</span>| current_cpu.process_id);
-    <span class="macro">println!</span>(
+    <span class="macro">error!</span>(
         <span class="string">"[{N}] {proc_id:?} Got exception: \n frame: {frame:x?}\n error: {error_code:016X}\n cr2: {cr2:X}"</span>,
     );
 

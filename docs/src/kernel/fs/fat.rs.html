@@ -1962,7 +1962,58 @@
 <a href="#1960" id="1960">1960</a>
 <a href="#1961" id="1961">1961</a>
 <a href="#1962" id="1962">1962</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem};
+<a href="#1963" id="1963">1963</a>
+<a href="#1964" id="1964">1964</a>
+<a href="#1965" id="1965">1965</a>
+<a href="#1966" id="1966">1966</a>
+<a href="#1967" id="1967">1967</a>
+<a href="#1968" id="1968">1968</a>
+<a href="#1969" id="1969">1969</a>
+<a href="#1970" id="1970">1970</a>
+<a href="#1971" id="1971">1971</a>
+<a href="#1972" id="1972">1972</a>
+<a href="#1973" id="1973">1973</a>
+<a href="#1974" id="1974">1974</a>
+<a href="#1975" id="1975">1975</a>
+<a href="#1976" id="1976">1976</a>
+<a href="#1977" id="1977">1977</a>
+<a href="#1978" id="1978">1978</a>
+<a href="#1979" id="1979">1979</a>
+<a href="#1980" id="1980">1980</a>
+<a href="#1981" id="1981">1981</a>
+<a href="#1982" id="1982">1982</a>
+<a href="#1983" id="1983">1983</a>
+<a href="#1984" id="1984">1984</a>
+<a href="#1985" id="1985">1985</a>
+<a href="#1986" id="1986">1986</a>
+<a href="#1987" id="1987">1987</a>
+<a href="#1988" id="1988">1988</a>
+<a href="#1989" id="1989">1989</a>
+<a href="#1990" id="1990">1990</a>
+<a href="#1991" id="1991">1991</a>
+<a href="#1992" id="1992">1992</a>
+<a href="#1993" id="1993">1993</a>
+<a href="#1994" id="1994">1994</a>
+<a href="#1995" id="1995">1995</a>
+<a href="#1996" id="1996">1996</a>
+<a href="#1997" id="1997">1997</a>
+<a href="#1998" id="1998">1998</a>
+<a href="#1999" id="1999">1999</a>
+<a href="#2000" id="2000">2000</a>
+<a href="#2001" id="2001">2001</a>
+<a href="#2002" id="2002">2002</a>
+<a href="#2003" id="2003">2003</a>
+<a href="#2004" id="2004">2004</a>
+<a href="#2005" id="2005">2005</a>
+<a href="#2006" id="2006">2006</a>
+<a href="#2007" id="2007">2007</a>
+<a href="#2008" id="2008">2008</a>
+<a href="#2009" id="2009">2009</a>
+<a href="#2010" id="2010">2010</a>
+<a href="#2011" id="2011">2011</a>
+<a href="#2012" id="2012">2012</a>
+<a href="#2013" id="2013">2013</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem, ops::Range};
 
 <span class="kw">use </span>alloc::{
     boxed::Box,
@@ -1974,7 +2025,9 @@
 };
 
 <span class="kw">use crate</span>::{
-    devices::ide::IdeDevice, io::NoDebug, memory_management::memory_layout::align_up,
+    devices::ide::IdeDevice,
+    io::NoDebug,
+    memory_management::memory_layout::{align_down, align_up},
     sync::spin::mutex::Mutex,
 };
 
@@ -3037,7 +3090,7 @@
     </span>cluster: u32,
     <span class="doccomment">/// Number of active users of this cluster
     </span>reference_count: u32,
-    dirty: bool,
+    dirty_range: <span class="prelude-ty">Option</span>&lt;Range&lt;usize&gt;&gt;,
     data: NoDebug&lt;Vec&lt;u8&gt;&gt;,
 }
 
@@ -3064,7 +3117,7 @@
             cluster,
             reference_count: <span class="number">1</span>,
             data: NoDebug(data),
-            dirty: <span class="bool-val">false</span>,
+            dirty_range: <span class="prelude-val">None</span>,
         };
         <span class="self">self</span>.entries.entry(cluster).or_insert(entry)
     }
@@ -3382,20 +3435,89 @@
         <span class="prelude-val">Ok</span>(<span class="self">self</span>.cluster_cache.try_get_cluster_locked(cluster).unwrap())
     }
 
+    <span class="doccomment">/// Helper method to write the dirty parts of a cluster into disk
+    </span><span class="kw">fn </span>flush_cluster_dirty_range(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        inode: <span class="kw-2">&amp;</span>FileNode,
+        cluster_data: <span class="kw-2">&amp;</span>[u8],
+        cluster_num: u32,
+        dirty_range: Range&lt;usize&gt;,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="kw">let </span>start_byte_offset = align_down(
+            dirty_range.start,
+            <span class="self">self</span>.boot_sector.bytes_per_sector() <span class="kw">as </span>usize,
+        );
+        <span class="kw">let </span>end_byte_offset = align_up(
+            dirty_range.end,
+            <span class="self">self</span>.boot_sector.bytes_per_sector() <span class="kw">as </span>usize,
+        );
+        <span class="macro">assert!</span>(
+            start_byte_offset &lt; <span class="self">self</span>.boot_sector.bytes_per_cluster() <span class="kw">as </span>usize,
+            <span class="string">"start_byte_offset: {start_byte_offset} &lt; {}"</span>,
+            <span class="self">self</span>.boot_sector.bytes_per_cluster()
+        );
+        <span class="macro">assert!</span>(
+            end_byte_offset &lt;= <span class="self">self</span>.boot_sector.bytes_per_cluster() <span class="kw">as </span>usize,
+            <span class="string">"end_byte_offset: {end_byte_offset} &lt; {}"</span>,
+            <span class="self">self</span>.boot_sector.bytes_per_cluster()
+        );
+        <span class="macro">assert!</span>(
+            start_byte_offset &lt; end_byte_offset,
+            <span class="string">"start_byte_offset, end_byte_offset {start_byte_offset} &lt; {end_byte_offset}"
+        </span>);
+
+        <span class="self">self</span>.flush_fat()<span class="question-mark">?</span>;
+        <span class="self">self</span>.update_directory_entry(inode, |entry| {
+            entry.file_size = inode.size() <span class="kw">as </span>u32;
+        })<span class="question-mark">?</span>;
+        <span class="comment">// write back
+        </span><span class="kw">let </span>start_sector = <span class="self">self</span>.first_sector_of_cluster(cluster_num)
+            + (start_byte_offset <span class="kw">as </span>u32 / <span class="self">self</span>.boot_sector.bytes_per_sector() <span class="kw">as </span>u32);
+        <span class="self">self</span>.write_sectors(
+            start_sector,
+            <span class="kw-2">&amp;</span>cluster_data[start_byte_offset..end_byte_offset],
+        )<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>(())
+    }
+
     <span class="kw">fn </span>release_cluster(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inode: <span class="kw-2">&amp;</span>FileNode, cluster: u32) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(cluster) = <span class="self">self</span>.cluster_cache.release_cluster(cluster) {
-            <span class="kw">if </span>cluster.dirty {
-                <span class="self">self</span>.flush_fat()<span class="question-mark">?</span>;
-
-                <span class="self">self</span>.update_directory_entry(inode, |entry| {
-                    entry.file_size = inode.size() <span class="kw">as </span>u32;
-                })<span class="question-mark">?</span>;
-
-                <span class="comment">// write back
-                </span><span class="kw">let </span>start_sector = <span class="self">self</span>.first_sector_of_cluster(cluster.cluster);
-                <span class="self">self</span>.write_sectors(start_sector, <span class="kw-2">&amp;</span>cluster.data)<span class="question-mark">?</span>;
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(dirty_range) = cluster.dirty_range {
+                <span class="self">self</span>.flush_cluster_dirty_range(inode, <span class="kw-2">&amp;</span>cluster.data, cluster.cluster, dirty_range)<span class="question-mark">?</span>;
             }
         }
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Same as `release_cluster`, but doesn't release it, i.e. the cluster will
+    /// still be used, but the `dirty` flag is removed
+    </span><span class="kw">fn </span>flush_cluster(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inode: <span class="kw-2">&amp;</span>FileNode, cluster: u32) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>cluster_data: <span class="prelude-ty">Option</span>&lt;NoDebug&lt;Vec&lt;u8&gt;&gt;&gt; = <span class="prelude-val">None</span>;
+
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(cluster) = <span class="self">self</span>.cluster_cache.try_get_cluster_mut(cluster) {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(dirty_range) = cluster.dirty_range.take() {
+                <span class="kw">let </span>cluster_num = cluster.cluster;
+                cluster_data = <span class="prelude-val">Some</span>(NoDebug(Vec::new()));
+                core::mem::swap(<span class="kw-2">&amp;mut </span>cluster.data, cluster_data.as_mut().unwrap());
+                <span class="self">self</span>.flush_cluster_dirty_range(
+                    inode,
+                    cluster_data.as_ref().unwrap(),
+                    cluster_num,
+                    dirty_range,
+                )<span class="question-mark">?</span>;
+            }
+        }
+        <span class="comment">// swap back
+        // This is annoying, and its only used to get around the borrow checker
+        // probably there is a way to better achieve this
+        // FIXME: find better solution
+        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(cluster) = <span class="self">self</span>.cluster_cache.try_get_cluster_mut(cluster) {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(cluster_data) = cluster_data.as_mut() {
+                core::mem::swap(<span class="kw-2">&amp;mut </span>cluster.data, cluster_data);
+            }
+        }
+
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -3540,7 +3662,15 @@
                         .copy_from_slice(<span class="kw-2">&amp;</span>remaining_in_cluster[..to_access]);
                 }
                 FileAccessBuffer::Write(buf) =&gt; {
-                    cluster_entry.dirty = <span class="bool-val">true</span>;
+                    <span class="kw">let </span>range_start = position_in_cluster <span class="kw">as </span>usize;
+                    <span class="kw">let </span>range_end = range_start + to_access;
+
+                    <span class="kw">if let </span><span class="prelude-val">Some</span>(dirty_range) = cluster_entry.dirty_range.as_mut() {
+                        dirty_range.start = dirty_range.start.min(range_start);
+                        dirty_range.end = dirty_range.end.max(range_end);
+                    } <span class="kw">else </span>{
+                        cluster_entry.dirty_range = <span class="prelude-val">Some</span>(range_start..range_end);
+                    }
                     remaining_in_cluster[..to_access]
                         .copy_from_slice(<span class="kw-2">&amp;</span>buf[accessed..accessed + to_access]);
                 }
@@ -3614,28 +3744,25 @@
         //
         // TODO: probably we don't need this for normal disks, but for now, lets keep it as its
         // easier to use vvfat
-
         // create the . and .. entries if this is a directory
-        </span><span class="kw">let </span>cluster = <span class="kw">if </span>attributes.directory() {
-            <span class="kw">let </span>cluster = <span class="self">self
-                </span>.fat
-                .find_free_cluster()
-                .ok_or(FatError::NotEnoughSpace)<span class="question-mark">?</span>;
-            <span class="comment">// must be empty
-            </span><span class="self">self</span>.write_sectors(
-                <span class="self">self</span>.first_sector_of_cluster(cluster),
-                <span class="kw-2">&amp;</span><span class="macro">vec!</span>[<span class="number">0</span>; <span class="self">self</span>.boot_sector.bytes_per_cluster() <span class="kw">as </span>usize],
-            )<span class="question-mark">?</span>;
-            <span class="self">self</span>.fat.write_fat_entry(cluster, FatEntry::EndOfChain);
-            <span class="self">self</span>.flush_fat()<span class="question-mark">?</span>;
 
-            normal_entry.first_cluster_lo = (cluster &amp; <span class="number">0xFFFF</span>) <span class="kw">as </span>u16;
-            normal_entry.first_cluster_hi = (cluster &gt;&gt; <span class="number">16</span>) <span class="kw">as </span>u16;
+        </span><span class="kw">let </span>cluster = <span class="self">self
+            </span>.fat
+            .find_free_cluster()
+            .ok_or(FatError::NotEnoughSpace)<span class="question-mark">?</span>;
+        <span class="self">self</span>.fat.write_fat_entry(cluster, FatEntry::EndOfChain);
+        <span class="self">self</span>.flush_fat()<span class="question-mark">?</span>;
+        <span class="comment">// lets empty out the first sector only
+        // if its a file, the size is 0 anyway
+        // if its a directory, it will exit since the
+        // first direntry will be zero
+        </span><span class="self">self</span>.write_sectors(
+            <span class="self">self</span>.first_sector_of_cluster(cluster),
+            <span class="kw-2">&amp;</span><span class="macro">vec!</span>[<span class="number">0</span>; <span class="self">self</span>.boot_sector.bytes_per_sector() <span class="kw">as </span>usize],
+        )<span class="question-mark">?</span>;
 
-            <span class="prelude-val">Some</span>(cluster)
-        } <span class="kw">else </span>{
-            <span class="prelude-val">None
-        </span>};
+        normal_entry.first_cluster_lo = (cluster &amp; <span class="number">0xFFFF</span>) <span class="kw">as </span>u16;
+        normal_entry.first_cluster_hi = (cluster &gt;&gt; <span class="number">16</span>) <span class="kw">as </span>u16;
 
         <span class="kw">let </span>node = <span class="self">self
             </span>.open_dir_inode(parent_inode)
@@ -3645,10 +3772,8 @@
             <span class="prelude-val">Ok</span>(node) =&gt; node,
             e @ <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
                 <span class="comment">// revert fat changes
-                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(cluster) = cluster {
-                    <span class="self">self</span>.fat.write_fat_entry(cluster, FatEntry::Free);
-                    <span class="self">self</span>.flush_fat()<span class="question-mark">?</span>;
-                }
+                </span><span class="self">self</span>.fat.write_fat_entry(cluster, FatEntry::Free);
+                <span class="self">self</span>.flush_fat()<span class="question-mark">?</span>;
                 <span class="kw">return </span>e;
             }
         };
@@ -3657,7 +3782,7 @@
 
         <span class="comment">// create the . and .. entries if this is a directory
         </span><span class="kw">if </span>attributes.directory() {
-            <span class="macro">assert!</span>(node.start_cluster() == cluster.unwrap() <span class="kw">as </span>u64);
+            <span class="macro">assert!</span>(node.start_cluster() == cluster <span class="kw">as </span>u64);
             <span class="kw">let </span><span class="kw-2">mut </span>dot_entry = DirectoryEntryNormal {
                 short_name: [<span class="number">0x20</span>; <span class="number">11</span>],
                 _nt_reserved: <span class="number">0</span>,
@@ -3711,6 +3836,10 @@
         <span class="kw">let </span>current_size_in_clusters = (inode.size() + bytes_per_cluster - <span class="number">1</span>) / bytes_per_cluster;
         <span class="kw">let </span>new_size_in_clusters = (size + bytes_per_cluster - <span class="number">1</span>) / bytes_per_cluster;
 
+        <span class="comment">// at least 1 cluster at any point
+        </span><span class="kw">let </span>current_size_in_clusters = current_size_in_clusters.max(<span class="number">1</span>);
+        <span class="kw">let </span>new_size_in_clusters = new_size_in_clusters.max(<span class="number">1</span>);
+
         <span class="kw">if </span>new_size_in_clusters != current_size_in_clusters {
             <span class="comment">// update fat references
             </span><span class="kw">let </span>to_keep = new_size_in_clusters.min(current_size_in_clusters);
@@ -3730,14 +3859,8 @@
 
             <span class="kw">if </span>current_size_in_clusters &gt; new_size_in_clusters {
                 <span class="comment">// deleting old clusters
-                </span><span class="kw">let </span><span class="kw-2">mut </span>to_delete = current_size_in_clusters - new_size_in_clusters;
+                </span><span class="kw">let </span>to_delete = current_size_in_clusters - new_size_in_clusters;
                 <span class="kw">let </span><span class="kw-2">mut </span>clusters = Vec::with_capacity(to_delete <span class="kw">as </span>usize);
-
-                <span class="kw">if </span>new_size_in_clusters == <span class="number">0 </span>{
-                    <span class="comment">// delete the first one
-                    </span>clusters.push(current_cluster);
-                    to_delete -= <span class="number">1</span>;
-                }
 
                 <span class="kw">for _ in </span><span class="number">0</span>..to_delete {
                     <span class="kw">let </span>next_cluster = <span class="self">self
@@ -3753,42 +3876,12 @@
                     <span class="self">self</span>.fat.write_fat_entry(cluster, FatEntry::Free);
                 }
 
-                <span class="kw">if </span>new_size_in_clusters == <span class="number">0 </span>{
-                    inode.set_start_cluster(<span class="number">0</span>);
-                    <span class="self">self</span>.update_directory_entry(inode, |entry| {
-                        <span class="macro">assert!</span>(size == <span class="number">0</span>);
-                        <span class="comment">// make sure we are in sync with the fat, an no orphaned cluster is left
-                        </span>entry.file_size = <span class="number">0</span>;
-                        entry.first_cluster_hi = <span class="number">0</span>;
-                        entry.first_cluster_lo = <span class="number">0</span>;
-                    })<span class="question-mark">?</span>;
-                } <span class="kw">else </span>{
-                    <span class="comment">// mark the current cluster as last
-                    </span><span class="self">self</span>.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
-                }
+                <span class="comment">// mark the current cluster as last
+                </span><span class="self">self</span>.fat.write_fat_entry(last_cluster, FatEntry::EndOfChain);
             } <span class="kw">else </span>{
                 <span class="comment">// adding new clusters
 
-                </span><span class="kw">let </span><span class="kw-2">mut </span>to_add = new_size_in_clusters - current_size_in_clusters;
-
-                <span class="kw">if </span>current_size_in_clusters == <span class="number">0 </span>{
-                    <span class="kw">let </span>new_cluster = <span class="self">self
-                        </span>.fat
-                        .find_free_cluster()
-                        .ok_or(FatError::NotEnoughSpace)<span class="question-mark">?</span>;
-                    inode.set_start_cluster(new_cluster <span class="kw">as </span>u64);
-                    <span class="self">self</span>.update_directory_entry(inode, |entry| {
-                        <span class="macro">assert!</span>(size &gt; <span class="number">0</span>);
-                        <span class="comment">// make sure we are in sync with the fat, an no orphaned cluster is left
-                        </span>entry.file_size = size <span class="kw">as </span>u32;
-                        entry.first_cluster_lo = (new_cluster &amp; <span class="number">0xFFFF</span>) <span class="kw">as </span>u16;
-                        entry.first_cluster_hi = (new_cluster &gt;&gt; <span class="number">16</span>) <span class="kw">as </span>u16;
-                    })<span class="question-mark">?</span>;
-                    <span class="comment">// reserve it
-                    </span><span class="self">self</span>.fat.write_fat_entry(new_cluster, FatEntry::EndOfChain);
-                    last_cluster = new_cluster;
-                    to_add -= <span class="number">1</span>;
-                }
+                </span><span class="kw">let </span>to_add = new_size_in_clusters - current_size_in_clusters;
 
                 <span class="kw">for _ in </span><span class="number">0</span>..to_add {
                     <span class="kw">let </span>new_cluster = <span class="self">self
@@ -3874,6 +3967,15 @@
             FileAccessBuffer::Write(buf),
             access_helper,
         )
+    }
+
+    <span class="kw">fn </span>flush_file(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        inode: <span class="kw-2">&amp;mut </span>FileNode,
+        access_helper: <span class="kw-2">&amp;mut </span>AccessHelper,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="self">self</span>.lock()
+            .flush_cluster(inode, access_helper.current_cluster <span class="kw">as </span>u32)
     }
 
     <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt; {

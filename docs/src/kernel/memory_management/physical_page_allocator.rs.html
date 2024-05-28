@@ -285,7 +285,11 @@
 <a href="#283" id="283">283</a>
 <a href="#284" id="284">284</a>
 <a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::ptr::NonNull;
+
+<span class="kw">use </span>tracing::info;
 
 <span class="kw">use </span><span class="kw">super</span>::memory_layout::{align_down, align_up, is_aligned, PAGE_4K};
 <span class="kw">use crate</span>::{
@@ -371,12 +375,12 @@
             virtual2physical(multiboot_info.end_address() <span class="kw">as </span>usize),
             PAGE_4K,
         );
-        <span class="macro">println!</span>(<span class="string">"multiboot end: {multiboot_end:x}"</span>,);
-        <span class="macro">println!</span>(
+        <span class="macro">info!</span>(<span class="string">"multiboot end: {multiboot_end:x}"</span>,);
+        <span class="macro">info!</span>(
             <span class="string">"physical_kernel_start: {:p}"</span>,
             PHYSICAL_KERNEL_START <span class="kw">as </span><span class="kw-2">*mut </span>u8
         );
-        <span class="macro">println!</span>(<span class="string">"physical_kernel_end: {:p}"</span>, physical_kernel_end <span class="kw">as </span><span class="kw-2">*mut </span>u8);
+        <span class="macro">info!</span>(<span class="string">"physical_kernel_end: {:p}"</span>, physical_kernel_end <span class="kw">as </span><span class="kw-2">*mut </span>u8);
 
         <span class="comment">// if the multiboot info is after the kernel, make sure we are not allocating it
         </span><span class="kw">if </span>multiboot_end &gt; physical_kernel_end {
@@ -446,7 +450,7 @@
     }
 
     <span class="kw">fn </span>init_range(<span class="kw-2">&amp;mut </span><span class="self">self</span>, start: <span class="kw-2">*mut </span>u8, end: <span class="kw-2">*mut </span>u8) {
-        <span class="macro">println!</span>(<span class="string">"init physical pages: [{:p}, {:p})"</span>, start, end);
+        <span class="macro">info!</span>(<span class="string">"init physical pages: [{:p}, {:p})"</span>, start, end);
         <span class="kw">let </span>start = align_up(start <span class="kw">as </span>usize, PAGE_4K) <span class="kw">as _</span>;
         <span class="kw">let </span>end = align_down(end <span class="kw">as </span>usize, PAGE_4K) <span class="kw">as _</span>;
         <span class="macro">assert!</span>(start &lt; end);

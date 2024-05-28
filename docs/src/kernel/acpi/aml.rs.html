@@ -1815,6 +1815,7 @@
 <a href="#1813" id="1813">1813</a>
 <a href="#1814" id="1814">1814</a>
 <a href="#1815" id="1815">1815</a>
+<a href="#1816" id="1816">1816</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{
@@ -1824,6 +1825,7 @@
     string::String,
     vec::Vec,
 };
+<span class="kw">use </span>tracing::trace;
 
 <span class="attr">#[derive(Debug, Clone)]
 </span><span class="kw">pub enum </span>AmlParseError {
@@ -1974,7 +1976,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>inner = parser.get_inner_parser()<span class="question-mark">?</span>;
         <span class="kw">let </span>name = inner.parse_name()<span class="question-mark">?</span>;
 
-        <span class="macro">eprintln!</span>(<span class="string">"scope name: {}"</span>, name);
+        <span class="macro">trace!</span>(<span class="string">"scope name: {}"</span>, name);
         <span class="kw">let </span>term_list = inner.parse_term_list()<span class="question-mark">?</span>;
         inner.check_empty()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ name, term_list })
@@ -1992,12 +1994,12 @@
 <span class="kw">impl </span>RegionObj {
     <span class="kw">fn </span>parse(parser: <span class="kw-2">&amp;mut </span>Parser) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, AmlParseError&gt; {
         <span class="kw">let </span>name = parser.parse_name()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"region name: {}"</span>, name);
+        <span class="macro">trace!</span>(<span class="string">"region name: {}"</span>, name);
         <span class="kw">let </span>region_space = parser.get_next_byte()<span class="question-mark">?</span>;
         <span class="kw">let </span>region_offset = parser.parse_term_arg()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"region offset: {:?}"</span>, region_offset);
+        <span class="macro">trace!</span>(<span class="string">"region offset: {:?}"</span>, region_offset);
         <span class="kw">let </span>region_length = parser.parse_term_arg()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"region length: {:?}"</span>, region_length);
+        <span class="macro">trace!</span>(<span class="string">"region length: {:?}"</span>, region_length);
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             name,
             region_space,
@@ -2018,7 +2020,7 @@
     <span class="kw">fn </span>parse(parser: <span class="kw-2">&amp;mut </span>Parser) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, AmlParseError&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>inner = parser.get_inner_parser()<span class="question-mark">?</span>;
         <span class="kw">let </span>name = inner.parse_name()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"field name: {}"</span>, name);
+        <span class="macro">trace!</span>(<span class="string">"field name: {}"</span>, name);
         <span class="kw">let </span>(flags, field_list) = inner.parse_fields_list_and_flags()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             name,
@@ -2040,9 +2042,9 @@
     <span class="kw">fn </span>parse(parser: <span class="kw-2">&amp;mut </span>Parser) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, AmlParseError&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>inner = parser.get_inner_parser()<span class="question-mark">?</span>;
         <span class="kw">let </span>name = inner.parse_name()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"indexfield name: {}"</span>, name);
+        <span class="macro">trace!</span>(<span class="string">"indexfield name: {}"</span>, name);
         <span class="kw">let </span>index_name = inner.parse_name()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"indexfield index_name: {}"</span>, index_name);
+        <span class="macro">trace!</span>(<span class="string">"indexfield index_name: {}"</span>, index_name);
         <span class="kw">let </span>(flags, field_list) = inner.parse_fields_list_and_flags()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             name,
@@ -2075,9 +2077,9 @@
     <span class="kw">fn </span>parse(parser: <span class="kw-2">&amp;mut </span>Parser) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, AmlParseError&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>inner = parser.get_inner_parser()<span class="question-mark">?</span>;
         <span class="kw">let </span>name = inner.parse_name()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"method name: {}"</span>, name);
+        <span class="macro">trace!</span>(<span class="string">"method name: {}"</span>, name);
         <span class="kw">let </span>flags = inner.get_next_byte()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"method flags: {:x}"</span>, flags);
+        <span class="macro">trace!</span>(<span class="string">"method flags: {:x}"</span>, flags);
         <span class="kw">let </span>term_list = inner.parse_term_list()<span class="question-mark">?</span>;
         inner.check_empty()<span class="question-mark">?</span>;
 
@@ -2100,7 +2102,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>inner = parser.get_inner_parser()<span class="question-mark">?</span>;
 
         <span class="kw">let </span>predicate = inner.parse_term_arg()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"pred predicate: {:?}"</span>, predicate);
+        <span class="macro">trace!</span>(<span class="string">"pred predicate: {:?}"</span>, predicate);
         <span class="kw">let </span>term_list = inner.parse_term_list()<span class="question-mark">?</span>;
         inner.check_empty()<span class="question-mark">?</span>;
 
@@ -2124,18 +2126,18 @@
     <span class="kw">fn </span>parse(parser: <span class="kw-2">&amp;mut </span>Parser) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, AmlParseError&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>inner = parser.get_inner_parser()<span class="question-mark">?</span>;
         <span class="kw">let </span>name = inner.parse_name()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"processor name: {}"</span>, name);
+        <span class="macro">trace!</span>(<span class="string">"processor name: {}"</span>, name);
         <span class="kw">let </span>unk1 = inner.get_next_byte()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"processor unk1: {:x}"</span>, unk1);
+        <span class="macro">trace!</span>(<span class="string">"processor unk1: {:x}"</span>, unk1);
         <span class="kw">let </span>unk2 = u32::from_le_bytes([
             inner.get_next_byte()<span class="question-mark">?</span>,
             inner.get_next_byte()<span class="question-mark">?</span>,
             inner.get_next_byte()<span class="question-mark">?</span>,
             inner.get_next_byte()<span class="question-mark">?</span>,
         ]);
-        <span class="macro">eprintln!</span>(<span class="string">"processor unk2: {:x}"</span>, unk2);
+        <span class="macro">trace!</span>(<span class="string">"processor unk2: {:x}"</span>, unk2);
         <span class="kw">let </span>unk3 = inner.get_next_byte()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"processor unk3: {:x}"</span>, unk3);
+        <span class="macro">trace!</span>(<span class="string">"processor unk3: {:x}"</span>, unk3);
         <span class="kw">let </span>term_list = inner.parse_term_list()<span class="question-mark">?</span>;
         inner.check_empty()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
@@ -2160,11 +2162,11 @@
     <span class="kw">fn </span>parse(parser: <span class="kw-2">&amp;mut </span>Parser) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, AmlParseError&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>inner = parser.get_inner_parser()<span class="question-mark">?</span>;
         <span class="kw">let </span>name = inner.parse_name()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"powerresource name: {}"</span>, name);
+        <span class="macro">trace!</span>(<span class="string">"powerresource name: {}"</span>, name);
         <span class="kw">let </span>system_level = inner.get_next_byte()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"powerresource system_level: {:x}"</span>, system_level);
+        <span class="macro">trace!</span>(<span class="string">"powerresource system_level: {:x}"</span>, system_level);
         <span class="kw">let </span>resource_order = u16::from_le_bytes([inner.get_next_byte()<span class="question-mark">?</span>, inner.get_next_byte()<span class="question-mark">?</span>]);
-        <span class="macro">eprintln!</span>(<span class="string">"powerresource resource_order: {:x}"</span>, resource_order);
+        <span class="macro">trace!</span>(<span class="string">"powerresource resource_order: {:x}"</span>, resource_order);
         <span class="kw">let </span>term_list = inner.parse_term_list()<span class="question-mark">?</span>;
         inner.check_empty()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
@@ -2202,28 +2204,28 @@
     }
 
     <span class="kw">fn </span>find_name(<span class="kw-2">&amp;</span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str) -&gt; bool {
-        <span class="macro">eprintln!</span>(<span class="string">"finding name {name:?}, {:?}"</span>, <span class="self">self</span>.names);
+        <span class="macro">trace!</span>(<span class="string">"finding name {name:?}, {:?}"</span>, <span class="self">self</span>.names);
         <span class="kw">let </span>short_name = <span class="kw-2">&amp;</span>name[name.len() - <span class="number">4</span>..];
         <span class="self">self</span>.names.contains(name) || <span class="self">self</span>.names.contains(short_name)
     }
 
     <span class="kw">fn </span>find_method(<span class="kw-2">&amp;</span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-        <span class="macro">eprintln!</span>(<span class="string">"finding method {name:?}"</span>);
+        <span class="macro">trace!</span>(<span class="string">"finding method {name:?}"</span>);
         <span class="comment">// all methods are shared here, from all scopes
         // we are assuming that methods with similar names have the same number of arguments
         </span><span class="kw">let </span>method_name = <span class="kw-2">&amp;</span>name[name.len() - <span class="number">4</span>..];
-        <span class="macro">eprintln!</span>(<span class="string">"methods: {:?}"</span>, <span class="self">self</span>.methods);
+        <span class="macro">trace!</span>(<span class="string">"methods: {:?}"</span>, <span class="self">self</span>.methods);
         <span class="self">self</span>.methods.get(method_name).copied()
     }
 
     <span class="kw">fn </span>add_method(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str, arg_count: usize) {
-        <span class="macro">eprintln!</span>(<span class="string">"adding method {name:?}"</span>);
+        <span class="macro">trace!</span>(<span class="string">"adding method {name:?}"</span>);
         <span class="kw">let </span>method_name = <span class="kw-2">&amp;</span>name[name.len() - <span class="number">4</span>..];
         <span class="self">self</span>.methods.insert(String::from(method_name), arg_count);
     }
 
     <span class="kw">fn </span>add_name(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: String) {
-        <span class="macro">eprintln!</span>(<span class="string">"adding name {name:?}"</span>);
+        <span class="macro">trace!</span>(<span class="string">"adding name {name:?}"</span>);
         <span class="self">self</span>.names.insert(name);
     }
 }
@@ -2275,7 +2277,7 @@
         <span class="kw">let </span>lead_byte = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
         <span class="kw">let </span>following_bytes = lead_byte &gt;&gt; <span class="number">6</span>;
 
-        <span class="macro">eprintln!</span>(<span class="string">"pkglen: lead byte: {:x}"</span>, lead_byte);
+        <span class="macro">trace!</span>(<span class="string">"pkglen: lead byte: {:x}"</span>, lead_byte);
 
         <span class="kw">let </span><span class="kw-2">mut </span>length: usize;
         <span class="kw">if </span>following_bytes == <span class="number">0 </span>{
@@ -2288,12 +2290,12 @@
             }
             length = lead_byte <span class="kw">as </span>usize &amp; <span class="number">0b0000_1111</span>;
         }
-        <span class="macro">eprintln!</span>(<span class="string">"len now start: {:x}"</span>, length);
+        <span class="macro">trace!</span>(<span class="string">"len now start: {:x}"</span>, length);
 
         <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..following_bytes {
             <span class="kw">let </span>byte = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
             length |= (byte <span class="kw">as </span>usize) &lt;&lt; (<span class="number">8 </span>* i + <span class="number">4</span>);
-            <span class="macro">eprintln!</span>(<span class="string">"len now: {:x}"</span>, length);
+            <span class="macro">trace!</span>(<span class="string">"len now: {:x}"</span>, length);
         }
         <span class="comment">// subtract the bytes used for the length
         </span><span class="prelude-val">Ok</span>(length - following_bytes <span class="kw">as </span>usize - <span class="number">1</span>)
@@ -2301,7 +2303,7 @@
 
     <span class="kw">fn </span>get_inner_parser(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Parser, AmlParseError&gt; {
         <span class="kw">let </span>pkg_length = <span class="self">self</span>.get_pkg_length()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"inner pkg length: {:x}"</span>, pkg_length);
+        <span class="macro">trace!</span>(<span class="string">"inner pkg length: {:x}"</span>, pkg_length);
 
         <span class="kw">let </span>inner_parser = Parser {
             code: <span class="kw-2">&amp;</span><span class="self">self</span>.code[<span class="self">self</span>.pos..<span class="self">self</span>.pos + pkg_length],
@@ -2438,7 +2440,7 @@
     }
 
     <span class="kw">fn </span>try_parse_term(<span class="kw-2">&amp;mut </span><span class="self">self</span>, opcode: u8) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;AmlTerm&gt;, AmlParseError&gt; {
-        <span class="macro">eprintln!</span>(<span class="string">"opcode: {:x}"</span>, opcode);
+        <span class="macro">trace!</span>(<span class="string">"opcode: {:x}"</span>, opcode);
 
         <span class="kw">let </span>term = <span class="kw">match </span>opcode {
             <span class="number">0x06 </span>=&gt; {
@@ -2459,7 +2461,7 @@
                 <span class="kw">let </span><span class="kw-2">mut </span>str = String::new();
                 <span class="kw">loop </span>{
                     <span class="kw">let </span>byte = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
-                    <span class="macro">eprintln!</span>(<span class="string">"byte: {:x}"</span>, byte);
+                    <span class="macro">trace!</span>(<span class="string">"byte: {:x}"</span>, byte);
                     <span class="kw">if </span>byte == <span class="number">0 </span>{
                         <span class="kw">break</span>;
                     }
@@ -2477,11 +2479,11 @@
             <span class="number">0x12 </span>=&gt; {
                 <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.get_inner_parser()<span class="question-mark">?</span>;
                 <span class="kw">let </span>package_size = inner.get_next_byte()<span class="question-mark">?</span>;
-                <span class="macro">eprintln!</span>(<span class="string">"package size: {:x}"</span>, package_size);
+                <span class="macro">trace!</span>(<span class="string">"package size: {:x}"</span>, package_size);
                 <span class="kw">let </span><span class="kw-2">mut </span>package_elements = Vec::new();
                 <span class="kw">while </span>inner.pos &lt; inner.code.len() {
                     package_elements.push(inner.parse_term_arg()<span class="question-mark">?</span>);
-                    <span class="macro">eprintln!</span>(<span class="string">"package element: {:?}"</span>, package_elements.last());
+                    <span class="macro">trace!</span>(<span class="string">"package element: {:?}"</span>, package_elements.last());
                 }
                 inner.check_empty()<span class="question-mark">?</span>;
                 AmlTerm::Package(package_size, package_elements)
@@ -2490,10 +2492,10 @@
                 <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.get_inner_parser()<span class="question-mark">?</span>;
                 <span class="kw">let </span>package_size = inner.parse_term_arg()<span class="question-mark">?</span>;
                 <span class="kw">let </span><span class="kw-2">mut </span>package_elements = Vec::new();
-                <span class="macro">eprintln!</span>(<span class="string">"varpackage size: {:x?}"</span>, package_size);
+                <span class="macro">trace!</span>(<span class="string">"varpackage size: {:x?}"</span>, package_size);
                 <span class="kw">while </span>inner.pos &lt; inner.code.len() {
                     package_elements.push(inner.parse_term_arg()<span class="question-mark">?</span>);
-                    <span class="macro">eprintln!</span>(<span class="string">"varpackage element: {:?}"</span>, package_elements.last());
+                    <span class="macro">trace!</span>(<span class="string">"varpackage element: {:?}"</span>, package_elements.last());
                 }
                 inner.check_empty()<span class="question-mark">?</span>;
                 AmlTerm::VarPackage(package_size, package_elements)
@@ -2685,7 +2687,7 @@
             </span><span class="number">0xA4 </span>=&gt; AmlTerm::Return(<span class="self">self</span>.parse_term_arg_last()<span class="question-mark">?</span>),
             <span class="number">0xA5 </span>=&gt; AmlTerm::Break,
             <span class="kw">_ </span>=&gt; {
-                <span class="macro">eprintln!</span>(<span class="string">"try parse name"</span>);
+                <span class="macro">trace!</span>(<span class="string">"try parse name"</span>);
                 <span class="comment">// move back once, since we have consumed this byte
                 </span><span class="self">self</span>.backward(<span class="number">1</span>)<span class="question-mark">?</span>;
                 <span class="kw">let </span><span class="prelude-val">Some</span>(name) = <span class="self">self</span>.try_parse_name()<span class="question-mark">? </span><span class="kw">else </span>{
@@ -2705,7 +2707,7 @@
                 AmlTerm::MethodCall(name, args)
             }
         };
-        <span class="macro">eprintln!</span>(<span class="string">"{:x?}"</span>, term);
+        <span class="macro">trace!</span>(<span class="string">"{:x?}"</span>, term);
 
         <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(term))
     }
@@ -2783,10 +2785,10 @@
                             <span class="kw">if </span><span class="self">self</span>.state.find_name(<span class="kw-2">&amp;</span>name) {
                                 <span class="prelude-val">None
                             </span>} <span class="kw">else if </span>can_call_method {
-                                <span class="macro">eprintln!</span>(<span class="string">"predicting possible args for {name}"</span>);
+                                <span class="macro">trace!</span>(<span class="string">"predicting possible args for {name}"</span>);
                                 <span class="kw">let </span>possible_args =
                                     <span class="self">self</span>.predict_possible_args(expect_data_after, <span class="kw-2">&amp;</span>name);
-                                <span class="macro">eprintln!</span>(<span class="string">"got possible args: {possible_args} {name}"</span>);
+                                <span class="macro">trace!</span>(<span class="string">"got possible args: {possible_args} {name}"</span>);
                                 <span class="comment">// if its 0 and we are inside a method call, probably this is just a named variable
                                 </span><span class="kw">if </span>possible_args == <span class="number">0 </span>{
                                     <span class="self">self</span>.state.add_name(name.clone());
@@ -2828,7 +2830,7 @@
                 }
             }
         };
-        <span class="macro">eprintln!</span>(<span class="string">"term arg: {:x?}"</span>, x);
+        <span class="macro">trace!</span>(<span class="string">"term arg: {:x?}"</span>, x);
         x
     }
 
@@ -2859,7 +2861,7 @@
             <span class="prelude-val">Ok</span>(str)
         }
 
-        <span class="macro">eprintln!</span>(<span class="string">"name char byte: {:x}"</span>, name_char_byte);
+        <span class="macro">trace!</span>(<span class="string">"name char byte: {:x}"</span>, name_char_byte);
 
         <span class="kw">match </span>name_char_byte {
             <span class="number">0 </span>=&gt; {
@@ -2979,7 +2981,7 @@
                             <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
                         })
                     {
-                        <span class="macro">eprintln!</span>(<span class="string">"mmmm: {:x?}"</span>, term);
+                        <span class="macro">trace!</span>(<span class="string">"mmmm: {:x?}"</span>, term);
                         <span class="prelude-val">Ok</span>(term)
                     } <span class="kw">else </span>{
                         <span class="prelude-val">Err</span>(AmlParseError::InvalidTarget(lead_byte))
@@ -2987,7 +2989,7 @@
                 }
             }
         };
-        <span class="macro">eprintln!</span>(<span class="string">"target: {:x?}"</span>, x);
+        <span class="macro">trace!</span>(<span class="string">"target: {:x?}"</span>, x);
         x.map(Box::new)
     }
 
@@ -3005,7 +3007,7 @@
 
     <span class="kw">fn </span>parse_fields_list_and_flags(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(u8, Vec&lt;FieldElement&gt;), AmlParseError&gt; {
         <span class="kw">let </span>flags = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"field flags: {:x}"</span>, flags);
+        <span class="macro">trace!</span>(<span class="string">"field flags: {:x}"</span>, flags);
         <span class="kw">let </span><span class="kw-2">mut </span>field_list = Vec::new();
 
         <span class="kw">while </span><span class="self">self</span>.pos &lt; <span class="self">self</span>.code.len() {
@@ -3015,7 +3017,7 @@
                 <span class="number">0 </span>=&gt; {
                     <span class="self">self</span>.forward(<span class="number">1</span>)<span class="question-mark">?</span>;
                     <span class="kw">let </span>pkg_length = <span class="self">self</span>.get_pkg_length()<span class="question-mark">?</span>;
-                    <span class="macro">eprintln!</span>(<span class="string">"reserved field element pkg length: {:x}"</span>, pkg_length);
+                    <span class="macro">trace!</span>(<span class="string">"reserved field element pkg length: {:x}"</span>, pkg_length);
                     <span class="comment">// add 1 since we are not using it as normal pkg length
                     </span>FieldElement::Reserved(pkg_length + <span class="number">1</span>)
                 }
@@ -3033,9 +3035,9 @@
                     <span class="kw">let </span>name = <span class="self">self</span>.parse_name()<span class="question-mark">?</span>;
                     <span class="self">self</span>.state.add_name(name.clone());
                     <span class="macro">assert!</span>(<span class="self">self</span>.pos - len_now == <span class="number">4</span>); <span class="comment">// must be a name segment
-                    </span><span class="macro">eprintln!</span>(<span class="string">"field element name: {}"</span>, name);
+                    </span><span class="macro">trace!</span>(<span class="string">"field element name: {}"</span>, name);
                     <span class="kw">let </span>pkg_length = <span class="self">self</span>.get_pkg_length()<span class="question-mark">?</span>;
-                    <span class="macro">eprintln!</span>(<span class="string">"field element pkg length: {:x}"</span>, pkg_length);
+                    <span class="macro">trace!</span>(<span class="string">"field element pkg length: {:x}"</span>, pkg_length);
                     <span class="comment">// add 1 since we are not using it as normal pkg length
                     </span>FieldElement::Named(name, pkg_length + <span class="number">1</span>)
                 }
@@ -3050,7 +3052,7 @@
 
     <span class="kw">fn </span>parse_root(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;AmlCode, AmlParseError&gt; {
         <span class="kw">let </span>term_list = <span class="self">self</span>.parse_term_list()<span class="question-mark">?</span>;
-        <span class="macro">eprintln!</span>(<span class="string">"{:?}"</span>, term_list);
+        <span class="macro">trace!</span>(<span class="string">"{:?}"</span>, term_list);
 
         <span class="prelude-val">Ok</span>(AmlCode { term_list })
     }
