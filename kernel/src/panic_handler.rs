@@ -11,7 +11,6 @@ use framehop::{
     x86_64::{CacheX86_64, UnwindRegsX86_64, UnwinderX86_64},
     ExplicitModuleSectionInfo, Module, Unwinder,
 };
-use tracing::error;
 use unwinding::abi::{UnwindContext, UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
 
 use kernel_user_link::process::process_metadata;
@@ -171,7 +170,7 @@ fn stack_trace() {
     extern "C" fn callback(unwind_ctx: &UnwindContext<'_>, arg: *mut c_void) -> UnwindReasonCode {
         let data = unsafe { &mut *(arg as *mut CallbackData) };
         data.counter += 1;
-        error!("{:4}:{:#19x}", data.counter, _Unwind_GetIP(unwind_ctx));
+        println!("{:4}:{:#19x}", data.counter, _Unwind_GetIP(unwind_ctx));
         UnwindReasonCode::NO_REASON
     }
     let mut data = CallbackData { counter: 0 };
@@ -187,7 +186,7 @@ fn stack_trace() {
         UnwindReasonCode::NO_REASON
     }
     _Unwind_Backtrace(callback2, core::ptr::null_mut() as _);
-    error!("\nhalting...");
+    println!("\nhalting...");
 
     cpu::cpu().pop_cli();
 }
@@ -195,7 +194,7 @@ fn stack_trace() {
 fn panic_trace(msg: Box<dyn Any + Send>) -> ! {
     if PANIC_COUNT.load(Ordering::Relaxed) >= 1 {
         stack_trace();
-        error!("thread panicked while processing panic. halting...");
+        println!("thread panicked while processing panic. halting...");
 
         qemu::exit(qemu::ExitStatus::Failure);
     }
@@ -203,7 +202,7 @@ fn panic_trace(msg: Box<dyn Any + Send>) -> ! {
     stack_trace();
 
     let code = unwinding::panic::begin_panic(Box::new(msg));
-    error!(
+    println!(
         "failed to initiate panic, maybe, no one is catching it?. got code: {} halting...",
         code.0
     );
@@ -214,7 +213,7 @@ fn panic_trace(msg: Box<dyn Any + Send>) -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
     unsafe { cpu::clear_interrupts() };
-    error!("{}", info);
+    println!("{}", info);
 
     struct NoPayload;
     panic_trace(Box::new(NoPayload))
