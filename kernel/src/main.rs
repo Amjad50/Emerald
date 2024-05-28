@@ -135,13 +135,14 @@ fn load_init_process() {
 pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
     // init console first, so if we panicked, we can still see the output
     console::early_init();
-    println!("{}", multiboot_info);
+    console::tracing::init();
+    info!("{}", multiboot_info);
     // must be called before any pages can be allocated
     physical_page_allocator::init(multiboot_info);
     // must be called next, before GDT, and this must be called before any heap allocations
     virtual_memory_mapper::init_kernel_vm();
     // require heap allocation
-    console::tracing::init();
+    console::tracing::move_to_dynamic_buffer();
     // must be called before interrupts
     gdt::init_kernel_gdt();
     interrupts::init_interrupts();

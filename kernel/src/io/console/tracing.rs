@@ -2,7 +2,7 @@
 
 use core::fmt::{self, Write};
 
-use alloc::string::String;
+use alloc::vec::Vec;
 use kernel_user_link::file::{BlockingMode, OpenOptions};
 use tracing::{span, Level};
 
@@ -35,12 +35,7 @@ const fn level_str(level: &Level, color: bool) -> &'static str {
 }
 
 fn log_file() -> &'static Mutex<LogFile> {
-    LOG_FILE.get_or_init(|| {
-        Mutex::new(LogFile {
-            file: None,
-            buffer: String::new(),
-        })
-    })
+    LOG_FILE.get_or_init(|| Mutex::new(LogFile::default()))
 }
 
 pub fn flush_log_file() {
@@ -52,15 +47,110 @@ pub fn flush_log_file() {
 /// This require heap allocation sadly, as it uses `Arc` internally, even though it could be done
 /// without it
 pub fn init() {
-    tracing::subscriber::set_global_default(ConsoleSubscriber).unwrap();
+    tracing::dispatch::set_global_default(tracing::Dispatch::from_static(&CONSOLE_SUBSCRIBER))
+        .unwrap();
+}
+
+/// Move the log buffer into the heap, and we can store more data there
+pub fn move_to_dynamic_buffer() {
+    log_file().lock().move_to_dynamic_buffer()
+}
+
+static mut INITIAL_BUFFER: [u8; 0x1000] = [0; 0x1000];
+
+enum Buffer {
+    Static {
+        buffer: &'static mut [u8],
+        len: usize,
+    },
+    Dynamic(Vec<u8>),
+}
+
+impl Buffer {
+    fn static_buf() -> Self {
+        Buffer::Static {
+            // SAFETY: We are the only place where this buffer is used, and the `LogFile` is behind a mutex
+            buffer: unsafe { core::ptr::addr_of_mut!(INITIAL_BUFFER).as_mut().unwrap() },
+            len: 0,
+        }
+    }
+
+    fn move_to_dynamic(&mut self) {
+        match self {
+            Buffer::Static { buffer, len } => {
+                *self = Buffer::Dynamic(buffer[..*len].to_vec());
+            }
+            Buffer::Dynamic(_) => {}
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            Buffer::Static { len, .. } => *len == 0,
+            Buffer::Dynamic(v) => v.is_empty(),
+        }
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        match self {
+            Buffer::Static { buffer, len } => &buffer[..*len],
+            Buffer::Dynamic(v) => v,
+        }
+    }
+
+    fn clear(&mut self) {
+        match self {
+            Buffer::Static { len, .. } => *len = 0,
+            Buffer::Dynamic(v) => v.clear(),
+        }
+    }
+
+    fn push_str(&mut self, s: &str) {
+        match self {
+            Buffer::Static { buffer, len } => {
+                if len == &buffer.len() {
+                    return;
+                }
+
+                let mut i = *len;
+                let new_buf = s.bytes();
+                let needed_end = i + new_buf.len();
+                let end = if needed_end > buffer.len() {
+                    buffer.len()
+                } else {
+                    needed_end
+                };
+
+                if end == buffer.len() {
+                    println!("\n\nWARN: Buffer is full, cannot write more data");
+                }
+
+                for b in new_buf {
+                    buffer[i] = b;
+                    i += 1;
+                    if i == end {
+                        break;
+                    }
+                }
+                *len = i;
+            }
+            Buffer::Dynamic(v) => {
+                v.extend_from_slice(s.as_bytes());
+            }
+        }
+    }
 }
 
 struct LogFile {
     file: Option<crate::fs::File>,
-    buffer: String,
+    buffer: Buffer,
 }
 
 impl LogFile {
+    pub fn move_to_dynamic_buffer(&mut self) {
+        self.buffer.move_to_dynamic();
+    }
+
     pub fn flush(&mut self) {
         if self.buffer.is_empty() {
             return;
@@ -97,6 +187,15 @@ impl LogFile {
     }
 }
 
+impl Default for LogFile {
+    fn default() -> Self {
+        LogFile {
+            file: None,
+            buffer: Buffer::static_buf(),
+        }
+    }
+}
+
 impl Write for LogFile {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         self.buffer.push_str(s);
@@ -117,9 +216,11 @@ impl<'a> Write for MultiWriter<'a> {
     }
 }
 
+static CONSOLE_SUBSCRIBER: ConsoleSubscriber = ConsoleSubscriber;
+
 pub struct ConsoleSubscriber;
 
-impl tracing::Subscriber for ConsoleSubscriber {
+impl tracing::Collect for ConsoleSubscriber {
     fn enabled(&self, _metadata: &tracing::Metadata<'_>) -> bool {
         true
     }
@@ -178,6 +279,10 @@ impl tracing::Subscriber for ConsoleSubscriber {
 
     fn exit(&self, _span: &span::Id) {
         panic!("Spans are not supported")
+    }
+
+    fn current_span(&self) -> tracing_core::span::Current {
+        tracing_core::span::Current::none()
     }
 }
 
