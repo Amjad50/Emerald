@@ -105,6 +105,7 @@ pub fn register_device(device: Arc<dyn Device>) {
         "Device {} already registered",
         device.name()
     );
+    info!("Registered {} device", device.name());
     devices.devices.insert(String::from(device.name()), device);
 }
 
