@@ -122,10 +122,6 @@ impl BaseNode {
         self.start_cluster
     }
 
-    pub(self) fn set_start_cluster(&mut self, cluster: u64) {
-        self.start_cluster = cluster;
-    }
-
     #[allow(dead_code)]
     pub fn attributes(&self) -> FileAttributes {
         self.attributes

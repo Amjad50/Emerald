@@ -1484,7 +1484,7 @@ impl FatFilesystem {
             if let Some(dirty_range) = cluster.dirty_range.take() {
                 let cluster_num = cluster.cluster;
                 cluster_data = Some(NoDebug(Vec::new()));
-                core::mem::swap(&mut cluster.data, &mut cluster_data.as_mut().unwrap());
+                core::mem::swap(&mut cluster.data, cluster_data.as_mut().unwrap());
                 self.flush_cluster_dirty_range(
                     inode,
                     cluster_data.as_ref().unwrap(),
@@ -1753,7 +1753,7 @@ impl FatFilesystem {
             .open_dir_inode(parent_inode)
             .and_then(|mut dir| dir.add_entry(normal_entry.clone(), long_name_entries));
 
-        let mut node = match node {
+        let node = match node {
             Ok(node) => node,
             e @ Err(_) => {
                 // revert fat changes
@@ -1844,7 +1844,7 @@ impl FatFilesystem {
 
             if current_size_in_clusters > new_size_in_clusters {
                 // deleting old clusters
-                let mut to_delete = current_size_in_clusters - new_size_in_clusters;
+                let to_delete = current_size_in_clusters - new_size_in_clusters;
                 let mut clusters = Vec::with_capacity(to_delete as usize);
 
                 for _ in 0..to_delete {
@@ -1866,7 +1866,7 @@ impl FatFilesystem {
             } else {
                 // adding new clusters
 
-                let mut to_add = new_size_in_clusters - current_size_in_clusters;
+                let to_add = new_size_in_clusters - current_size_in_clusters;
 
                 for _ in 0..to_add {
                     let new_cluster = self
