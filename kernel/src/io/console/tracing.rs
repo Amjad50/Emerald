@@ -7,12 +7,12 @@ use kernel_user_link::file::{BlockingMode, OpenOptions};
 use tracing::{span, Level};
 
 use crate::{
+    cmdline,
     io::console,
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
 static LOG_FILE: OnceLock<Mutex<LogFile>> = OnceLock::new();
-const LOG_FILE_PATH: &str = "/kernel.log";
 
 const fn level_str(level: &Level, color: bool) -> &'static str {
     if color {
@@ -158,7 +158,7 @@ impl LogFile {
 
         if self.file.is_none() {
             let file = crate::fs::File::open_blocking(
-                LOG_FILE_PATH,
+                cmdline::cmdline().log_file,
                 BlockingMode::None,
                 OpenOptions::CREATE | OpenOptions::TRUNCATE | OpenOptions::WRITE,
             );
@@ -221,7 +221,11 @@ static CONSOLE_SUBSCRIBER: ConsoleSubscriber = ConsoleSubscriber;
 pub struct ConsoleSubscriber;
 
 impl tracing::Collect for ConsoleSubscriber {
-    fn enabled(&self, _metadata: &tracing::Metadata<'_>) -> bool {
+    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+        let max: Level = cmdline::cmdline().max_log_level.into();
+        if metadata.level() > &max {
+            return false;
+        }
         true
     }
 
@@ -238,12 +242,6 @@ impl tracing::Collect for ConsoleSubscriber {
     }
 
     fn event(&self, event: &tracing::Event<'_>) {
-        // don't log debug and trace messages for now
-        // TODO: use kernel cmdline flags
-        if event.metadata().level() >= &Level::DEBUG {
-            return;
-        }
-
         // TODO: filter by level
         console::run_with_console(|console| {
             let log_file = &mut log_file().lock();
