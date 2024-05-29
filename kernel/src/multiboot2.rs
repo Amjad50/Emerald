@@ -554,6 +554,13 @@ impl MultiBoot2Info {
         }
     }
 
+    pub fn cmdline(&self) -> Option<&str> {
+        self.tags().find_map(|tag| match tag {
+            MultiBootTag::BootCommandLine { cmdline } => Some(cmdline),
+            _ => None,
+        })
+    }
+
     pub fn memory_maps(&self) -> Option<impl Iterator<Item = MemoryMap> + '_> {
         self.tags().find_map(|tag| match tag {
             MultiBootTag::MemoryMap(mmap) => Some(mmap),
