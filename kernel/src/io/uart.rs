@@ -1,6 +1,6 @@
 use core::hint;
 
-use crate::cpu;
+use crate::{cmdline, cpu};
 
 #[repr(u32)]
 #[derive(Clone, Copy)]
@@ -59,17 +59,28 @@ fn init_port(port_addr: UartPort) -> bool {
     // disable FIFO
     write_reg(port_addr, UartReg::InterruptAndFifoControl, 0);
 
+    // compute divisor
+    let rate = if cmdline::cmdline().uart_baud == 0 {
+        cmdline::cmdline().uart_baud
+    } else {
+        115200
+    };
+    let mut divisor = 115200 / rate;
+    if divisor == 0 {
+        divisor = 1;
+    }
+    if divisor >= 0x10000 {
+        divisor = 0xFFFF;
+    }
+
     // set baud rate
-    //   we want baud rate to be 115200
-    //   115200 = 115200 / 1
-    //   so we can use `divisor = 1`
     // enable DLAB (change how Data and InterruptEnable)
     write_reg(port_addr, UartReg::LineControl, LINE_BAUD_LATCH);
-    // set divisor to 0x0001
+    // set divisor
     // low byte
-    write_reg(port_addr, UartReg::Data, 0x01);
+    write_reg(port_addr, UartReg::Data, divisor as u8);
     // high byte
-    write_reg(port_addr, UartReg::InterruptEnable, 0x00);
+    write_reg(port_addr, UartReg::InterruptEnable, (divisor >> 8) as u8);
     // disable DLAB
     // set 8 bits, no parity, one stop bit (8N1)
     write_reg(port_addr, UartReg::LineControl, 0x03);
@@ -121,7 +132,7 @@ impl Uart {
     }
 
     pub fn init(&mut self) {
-        self.is_enabled = init_port(self.port_addr);
+        self.is_enabled = cmdline::cmdline().uart && init_port(self.port_addr);
     }
 
     /// SAFETY: `init` must be called before calling this function

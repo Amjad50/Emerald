@@ -22,6 +22,7 @@ core::arch::global_asm!(include_str!("boot.S"));
 mod macros;
 
 mod acpi;
+mod cmdline;
 mod collections;
 mod cpu;
 mod devices;
@@ -132,10 +133,15 @@ fn load_init_process() {
 #[link_section = ".text"]
 #[no_mangle]
 #[cfg(not(test))]
-pub extern "C" fn kernel_main(multiboot_info: &MultiBoot2Info) -> ! {
+/// `multiboot_info` is essentially `'static`, since it won't ever be removed from the memory
+/// since we don't exit `main` at all.
+pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
+    // uart setup require `cmdline`
+    cmdline::init(multiboot_info);
     // init console first, so if we panicked, we can still see the output
     console::early_init();
     console::tracing::init();
+    cmdline::print_cmdline_parse(multiboot_info);
     info!("{}", multiboot_info);
     // must be called before any pages can be allocated
     physical_page_allocator::init(multiboot_info);
