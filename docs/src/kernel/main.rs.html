@@ -188,6 +188,12 @@
 <a href="#186" id="186">186</a>
 <a href="#187" id="187">187</a>
 <a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
 </pre></div><pre class="rust"><code><span class="attr">#![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
@@ -212,6 +218,7 @@
 </span><span class="kw">mod </span>macros;
 
 <span class="kw">mod </span>acpi;
+<span class="kw">mod </span>cmdline;
 <span class="kw">mod </span>collections;
 <span class="kw">mod </span>cpu;
 <span class="kw">mod </span>devices;
@@ -322,10 +329,15 @@
 <span class="attr">#[link_section = <span class="string">".text"</span>]
 #[no_mangle]
 #[cfg(not(test))]
-</span><span class="kw">pub extern </span><span class="string">"C" </span><span class="kw">fn </span>kernel_main(multiboot_info: <span class="kw-2">&amp;</span>MultiBoot2Info) -&gt; ! {
+</span><span class="doccomment">/// `multiboot_info` is essentially `'static`, since it won't ever be removed from the memory
+/// since we don't exit `main` at all.
+</span><span class="kw">pub extern </span><span class="string">"C" </span><span class="kw">fn </span>kernel_main(multiboot_info: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>MultiBoot2Info) -&gt; ! {
+    <span class="comment">// uart setup require `cmdline`
+    </span>cmdline::init(multiboot_info);
     <span class="comment">// init console first, so if we panicked, we can still see the output
     </span>console::early_init();
     console::tracing::init();
+    cmdline::print_cmdline_parse(multiboot_info);
     <span class="macro">info!</span>(<span class="string">"{}"</span>, multiboot_info);
     <span class="comment">// must be called before any pages can be allocated
     </span>physical_page_allocator::init(multiboot_info);

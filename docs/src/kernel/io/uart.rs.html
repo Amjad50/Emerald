@@ -161,9 +161,20 @@
 <a href="#159" id="159">159</a>
 <a href="#160" id="160">160</a>
 <a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::hint;
 
-<span class="kw">use </span><span class="kw">crate</span>::cpu;
+<span class="kw">use crate</span>::{cmdline, cpu};
 
 <span class="attr">#[repr(u32)]
 #[derive(Clone, Copy)]
@@ -222,17 +233,28 @@
     <span class="comment">// disable FIFO
     </span>write_reg(port_addr, UartReg::InterruptAndFifoControl, <span class="number">0</span>);
 
+    <span class="comment">// compute divisor
+    </span><span class="kw">let </span>rate = <span class="kw">if </span>cmdline::cmdline().uart_baud == <span class="number">0 </span>{
+        cmdline::cmdline().uart_baud
+    } <span class="kw">else </span>{
+        <span class="number">115200
+    </span>};
+    <span class="kw">let </span><span class="kw-2">mut </span>divisor = <span class="number">115200 </span>/ rate;
+    <span class="kw">if </span>divisor == <span class="number">0 </span>{
+        divisor = <span class="number">1</span>;
+    }
+    <span class="kw">if </span>divisor &gt;= <span class="number">0x10000 </span>{
+        divisor = <span class="number">0xFFFF</span>;
+    }
+
     <span class="comment">// set baud rate
-    //   we want baud rate to be 115200
-    //   115200 = 115200 / 1
-    //   so we can use `divisor = 1`
     // enable DLAB (change how Data and InterruptEnable)
     </span>write_reg(port_addr, UartReg::LineControl, LINE_BAUD_LATCH);
-    <span class="comment">// set divisor to 0x0001
+    <span class="comment">// set divisor
     // low byte
-    </span>write_reg(port_addr, UartReg::Data, <span class="number">0x01</span>);
+    </span>write_reg(port_addr, UartReg::Data, divisor <span class="kw">as </span>u8);
     <span class="comment">// high byte
-    </span>write_reg(port_addr, UartReg::InterruptEnable, <span class="number">0x00</span>);
+    </span>write_reg(port_addr, UartReg::InterruptEnable, (divisor &gt;&gt; <span class="number">8</span>) <span class="kw">as </span>u8);
     <span class="comment">// disable DLAB
     // set 8 bits, no parity, one stop bit (8N1)
     </span>write_reg(port_addr, UartReg::LineControl, <span class="number">0x03</span>);
@@ -284,7 +306,7 @@
     }
 
     <span class="kw">pub fn </span>init(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="self">self</span>.is_enabled = init_port(<span class="self">self</span>.port_addr);
+        <span class="self">self</span>.is_enabled = cmdline::cmdline().uart &amp;&amp; init_port(<span class="self">self</span>.port_addr);
     }
 
     <span class="doccomment">/// SAFETY: `init` must be called before calling this function
