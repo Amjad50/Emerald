@@ -164,7 +164,7 @@
 
 <span class="kw">use </span><span class="self">self</span>::{
     keyboard_mouse::{KeyboardDeviceCreator, MouseDeviceCreator},
-    pci::{PciDeviceConfig, PciDevicePropeIterator},
+    pci::{PciDeviceConfig, PciDeviceProbeIterator},
 };
 
 <span class="kw">pub mod </span>clock;
@@ -260,8 +260,8 @@
     devices.devices.insert(String::from(device.name()), device);
 }
 
-<span class="kw">pub fn </span>prope_pci_devices() {
-    <span class="kw">let </span>pci_device_iter = PciDevicePropeIterator::new();
+<span class="kw">pub fn </span>probe_pci_devices() {
+    <span class="kw">let </span>pci_device_iter = PciDeviceProbeIterator::new();
     <span class="kw">for </span>device <span class="kw">in </span>pci_device_iter {
         <span class="kw">if </span>probe_pci_driver(<span class="kw-2">&amp;</span>device) {
             <span class="macro">info!</span>(

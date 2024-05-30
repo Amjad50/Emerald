@@ -352,6 +352,8 @@
 <a href="#350" id="350">350</a>
 <a href="#351" id="351">351</a>
 <a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem::MaybeUninit, ptr::NonNull};
 
 <span class="kw">use </span>alloc::collections::LinkedList;
@@ -576,14 +578,16 @@
                 {
                     <span class="comment">// this has parts of it inside
                     // is it fully inside?
-                    </span><span class="kw">if </span>current_phy_start + entry.size <span class="kw">as </span>u64 &gt;= req_phy_start + req_size <span class="kw">as </span>u64 {
+                    </span><span class="kw">return if </span>current_phy_start + entry.size <span class="kw">as </span>u64
+                        &gt;= req_phy_start + req_size <span class="kw">as </span>u64
+                    {
                         <span class="comment">// yes, it is fully inside
-                        </span><span class="kw">return </span><span class="prelude-val">Some</span>((entry, <span class="bool-val">true</span>));
+                        </span><span class="prelude-val">Some</span>((entry, <span class="bool-val">true</span>))
                     } <span class="kw">else </span>{
                         <span class="comment">// no, it is not fully inside, but there is an overlap
                         // we can't allocate this and we can't relocate
-                        </span><span class="kw">return </span><span class="prelude-val">Some</span>((entry, <span class="bool-val">false</span>));
-                    }
+                        </span><span class="prelude-val">Some</span>((entry, <span class="bool-val">false</span>))
+                    };
                 }
             }
             cursor.move_next();

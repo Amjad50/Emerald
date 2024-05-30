@@ -577,7 +577,7 @@
         </span>console::run_with_console(|console| {
             <span class="kw">let </span>log_file = <span class="kw-2">&amp;mut </span>log_file().lock();
 
-            <span class="comment">// first write the level separatly in order to control the colors
+            <span class="comment">// first write the level separately in order to control the colors
             </span>console.write_char(<span class="string">'['</span>)<span class="question-mark">?</span>;
             log_file.write_char(<span class="string">'['</span>)<span class="question-mark">?</span>;
             console.write_str(level_str(event.metadata().level(), <span class="bool-val">true</span>))<span class="question-mark">?</span>;

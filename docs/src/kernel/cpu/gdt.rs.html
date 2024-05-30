@@ -408,7 +408,7 @@
             <span class="macro">assert!</span>(stack_end_virtual &lt;= INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
             <span class="kw">if </span>i == <span class="number">6 </span>{
                 <span class="comment">// make sure we have allocated everything
-                </span><span class="macro">assert!</span>(stack_end_virtual == INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
+                </span><span class="macro">assert_eq!</span>(stack_end_virtual, INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
             }
             <span class="comment">// make sure that the stack is aligned, so we can easily allocate pages
             </span><span class="macro">assert!</span>(
@@ -594,7 +594,7 @@
     }
 
     <span class="kw">pub fn </span>load_kernel_segments(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="macro">assert!</span>(<span class="self">self</span>.kernel_code_seg.<span class="number">0 </span>!= <span class="number">0</span>);
+        <span class="macro">assert_ne!</span>(<span class="self">self</span>.kernel_code_seg.<span class="number">0</span>, <span class="number">0</span>);
         <span class="kw">unsafe </span>{
             <span class="comment">// load the code segment
             </span><span class="kw">super</span>::set_cs(<span class="self">self</span>.kernel_code_seg);
@@ -604,7 +604,7 @@
     }
 
     <span class="kw">pub fn </span>load_tss(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="macro">assert!</span>(<span class="self">self</span>.tss_seg.<span class="number">0 </span>!= <span class="number">0</span>);
+        <span class="macro">assert_ne!</span>(<span class="self">self</span>.tss_seg.<span class="number">0</span>, <span class="number">0</span>);
         <span class="kw">unsafe </span>{
             <span class="comment">// load the tss segment
             </span><span class="kw">super</span>::ltr(<span class="self">self</span>.tss_seg);
@@ -628,7 +628,7 @@
 
     <span class="doccomment">/// Must make sure that the data is a valid descriptor following the spec
     </span><span class="kw">unsafe fn </span>push_user(<span class="kw-2">&amp;mut </span><span class="self">self</span>, entry: UserDescriptorEntry) -&gt; usize {
-        <span class="macro">assert!</span>(mem::size_of::&lt;UserDescriptorEntry&gt;() == <span class="number">8</span>);
+        <span class="macro">assert_eq!</span>(mem::size_of::&lt;UserDescriptorEntry&gt;(), <span class="number">8</span>);
         <span class="kw">let </span>index = <span class="self">self</span>.index;
         <span class="self">self</span>.index += <span class="number">1</span>;
         <span class="comment">// SAFETY: This is valid because its 8 bytes and
@@ -638,7 +638,7 @@
 
     <span class="doccomment">/// Must make sure that the data is a valid descriptor following the spec
     </span><span class="kw">unsafe fn </span>push_system(<span class="kw-2">&amp;mut </span><span class="self">self</span>, entry: SystemDescriptorEntry) -&gt; usize {
-        <span class="macro">assert!</span>(mem::size_of::&lt;SystemDescriptorEntry&gt;() == <span class="number">16</span>);
+        <span class="macro">assert_eq!</span>(mem::size_of::&lt;SystemDescriptorEntry&gt;(), <span class="number">16</span>);
         <span class="comment">// SAFETY: This is valid because its 16 bytes and
         </span><span class="kw">let </span>data = core::mem::transmute::&lt;<span class="kw">_</span>, [u64; <span class="number">2</span>]&gt;(entry);
         <span class="kw">let </span>index = <span class="self">self</span>.index;

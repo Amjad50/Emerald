@@ -511,14 +511,14 @@
         <span class="self">self</span>.bitmap &amp; (<span class="number">1 </span>&lt;&lt; bit) != <span class="number">0
     </span>}
 
-    <span class="kw">fn </span>enabled_rounts(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = u8&gt; {
+    <span class="kw">fn </span>enabled_routes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = u8&gt; {
         <span class="kw">let </span>s = <span class="kw-2">*</span><span class="self">self</span>;
         (<span class="number">0</span>..<span class="number">32</span>).filter(<span class="kw">move </span>|bit| s.is_set(<span class="kw-2">*</span>bit))
     }
 }
 
 <span class="kw">struct </span>HpetTimerConfig {
-    is_interrupt_level_trigerred: bool,
+    is_interrupt_level_triggered: bool,
     interrupt_enabled: bool,
     is_periodic: bool,
     is_periodic_capable: bool,
@@ -535,7 +535,7 @@
     <span class="kw">fn </span>read(raw_ptr: <span class="kw-2">&amp;</span>u64) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span>data = <span class="kw">unsafe </span>{ (raw_ptr <span class="kw">as </span><span class="kw-2">*const </span>u64).read_volatile() };
         <span class="self">Self </span>{
-            is_interrupt_level_trigerred: data &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0</span>,
+            is_interrupt_level_triggered: data &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0</span>,
             interrupt_enabled: data &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">2</span>) != <span class="number">0</span>,
             is_periodic: data &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) != <span class="number">0</span>,
             is_periodic_capable: data &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">4</span>) != <span class="number">0</span>,
@@ -553,7 +553,7 @@
 
     <span class="kw">fn </span>write(<span class="self">self</span>, raw_ptr: <span class="kw-2">&amp;mut </span>u64) {
         <span class="kw">let </span><span class="kw-2">mut </span>data = <span class="number">0</span>;
-        <span class="kw">if </span><span class="self">self</span>.is_interrupt_level_trigerred {
+        <span class="kw">if </span><span class="self">self</span>.is_interrupt_level_triggered {
             data |= <span class="number">1 </span>&lt;&lt; <span class="number">1</span>;
         }
         <span class="kw">if </span><span class="self">self</span>.interrupt_enabled {
@@ -635,7 +635,7 @@
         </span>cpu::cpu().push_cli();
 
         disable_pit();
-        <span class="macro">assert!</span>(hpet.base_address.address_space_id == <span class="number">0</span>); <span class="comment">// memory space
+        <span class="macro">assert_eq!</span>(hpet.base_address.address_space_id, <span class="number">0</span>); <span class="comment">// memory space
         </span><span class="kw">let </span>mmio = <span class="kw">unsafe </span>{ VirtualSpace::new(hpet.base_address.address).unwrap() };
 
         <span class="comment">// enable the timer
@@ -648,18 +648,18 @@
         <span class="macro">assert!</span>(config.is_periodic_capable); <span class="comment">// must be periodic capable
         </span><span class="macro">assert!</span>(config.is_64bit_capable); <span class="comment">// must be 64-bit capable
 
-        </span>config.is_interrupt_level_trigerred = <span class="bool-val">false</span>;
+        </span>config.is_interrupt_level_triggered = <span class="bool-val">false</span>;
         config.interrupt_enabled = <span class="bool-val">true</span>;
         config.is_periodic = <span class="bool-val">true</span>; <span class="comment">// periodic
         </span>config.force_32bit_mode = <span class="bool-val">false</span>; <span class="comment">// don't force 32-bit mode
         </span>config.interrupt_via_fsb = <span class="bool-val">false</span>; <span class="comment">// don't use FSB
-        </span><span class="kw">let </span>available_routes = config.interrupt_route_capabilities.enabled_rounts();
+        </span><span class="kw">let </span>available_routes = config.interrupt_route_capabilities.enabled_routes();
 
         <span class="kw">let </span><span class="kw-2">mut </span>first_available_route = <span class="prelude-val">None</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>above_15_route = <span class="prelude-val">None</span>;
         <span class="comment">// check if we have available routes that are higher than 15, which
         // is the range of legacy ISA interrupts.
-        // if we have any above those, its best to use them
+        // if we have any above those, it's best to use them
         // otherwise, we will use the first available route
         </span><span class="kw">for </span>route <span class="kw">in </span>available_routes {
             <span class="kw">if </span>first_available_route.is_none() &amp;&amp; !apic::is_irq_assigned(route) {
@@ -674,11 +674,11 @@
             }
         }
 
-        <span class="kw">let </span>choosen_route = above_15_route
+        <span class="kw">let </span>chosen_route = above_15_route
             .or(first_available_route)
             .expect(<span class="string">"No available HPET route"</span>);
 
-        config.interrupt_route = choosen_route;
+        config.interrupt_route = chosen_route;
         config.timer_set_value = <span class="bool-val">true</span>; <span class="comment">// write the timer value
         </span>timer.set_config(config);
         timer.write_comparator_value(ONE_SECOND_IN_FEMTOSECONDS / clock_period);
@@ -687,7 +687,7 @@
         <span class="comment">// setup ioapic
         </span>apic::assign_io_irq_custom(
             timer0_handler <span class="kw">as </span>InterruptHandlerWithAllState,
-            choosen_route,
+            chosen_route,
             cpu::cpu(),
             |entry| entry.with_trigger_mode_level(<span class="bool-val">false</span>),
         );
@@ -791,7 +791,7 @@
     <span class="kw">let </span><span class="kw-2">mut </span>clock = HPET_CLOCK.get().as_ref().lock();
 
     <span class="comment">// if we are level triggered, we must clear the interrupt bit
-    </span><span class="kw">if </span>clock.mmio.timers[<span class="number">0</span>].config().is_interrupt_level_trigerred {
+    </span><span class="kw">if </span>clock.mmio.timers[<span class="number">0</span>].config().is_interrupt_level_triggered {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(interrupt) = clock.status_interrupts_iter().next() {
             <span class="comment">// clear the interrupt (must for level triggered interrupts)
             </span>clock.ack_interrupt(interrupt);

@@ -524,7 +524,7 @@
 </span><span class="attr">#[allow(clippy::identity_op)]
 </span><span class="kw">const </span>HEAP_OFFSET_FROM_ELF_END: usize = <span class="number">1 </span>* MB;
 <span class="attr">#[allow(clippy::identity_op)]
-</span><span class="kw">const </span>DEAFULT_MAX_HEAP_SIZE: usize = <span class="number">1 </span>* GB;
+</span><span class="kw">const </span>DEFAULT_MAX_HEAP_SIZE: usize = <span class="number">1 </span>* GB;
 
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">pub enum </span>ProcessError {
@@ -675,7 +675,7 @@
         <span class="comment">// set it quite a distance from the elf and align it to 2MB pages (we are not using 2MB virtual memory, so its not related)
         </span><span class="kw">let </span>heap_start = align_up(max_addr + HEAP_OFFSET_FROM_ELF_END, PAGE_2M);
         <span class="kw">let </span>heap_size = <span class="number">0</span>; <span class="comment">// start at 0, let user space programs control it
-        </span><span class="kw">let </span>heap_max = DEAFULT_MAX_HEAP_SIZE;
+        </span><span class="kw">let </span>heap_max = DEFAULT_MAX_HEAP_SIZE;
 
         <span class="kw">let </span><span class="kw-2">mut </span>context = ProcessContext::default();
         <span class="kw">let </span>entry = elf.entry_point();
@@ -882,7 +882,7 @@
         </span>cpu::cpu().push_cli();
         <span class="kw">let </span>old_vm = virtual_memory_mapper::get_current_vm();
 
-        <span class="comment">// switch temporaily so we can map the elf
+        <span class="comment">// switch temporarily so we can map the elf
         // SAFETY: this must be called while the current vm and this new vm must share the same
         //         kernel regions
         </span><span class="kw">unsafe </span>{ vm.switch_to_this() };
@@ -964,7 +964,7 @@
         </span>cpu::cpu().push_cli();
         <span class="kw">let </span>old_vm = virtual_memory_mapper::get_current_vm();
 
-        <span class="comment">// switch temporaily so we can map the elf
+        <span class="comment">// switch temporarily so we can map the elf
         // SAFETY: this must be called while the current vm and this new vm must share the same
         //         kernel regions
         </span><span class="kw">unsafe </span>{ vm.switch_to_this() };

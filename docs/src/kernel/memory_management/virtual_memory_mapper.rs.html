@@ -841,6 +841,7 @@
 <a href="#839" id="839">839</a>
 <a href="#840" id="840">840</a>
 <a href="#841" id="841">841</a>
+<a href="#842" id="842">842</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This very specific to 64-bit x86 architecture, if this is to be ported to other architectures
 //! this will need to be changed
 
@@ -964,7 +965,7 @@
     }
 
     <span class="doccomment">/// An ugly hack used in `do_for_every_user_entry` to get a mutable reference to the page directory table
-    </span><span class="kw">fn </span>enteries_from_mut_entry(entry: <span class="kw-2">&amp;mut </span>u64) -&gt; <span class="kw-2">&amp;mut </span>PageDirectoryTable {
+    </span><span class="kw">fn </span>entries_from_mut_entry(entry: <span class="kw-2">&amp;mut </span>u64) -&gt; <span class="kw-2">&amp;mut </span>PageDirectoryTable {
         <span class="kw">let </span>table = physical2virtual(<span class="kw-2">*</span>entry &amp; ADDR_MASK) <span class="kw">as </span><span class="kw-2">*mut </span>PageDirectoryTable;
         <span class="kw">unsafe </span>{ <span class="kw-2">&amp;mut *</span>table }
     }
@@ -1227,8 +1228,8 @@
         virtual_address = aligned_start;
 
         <span class="kw">if </span><span class="self">self</span>.is_user {
-            <span class="macro">assert!</span>(<span class="kw-2">*</span>flags &amp; flags::PTE_USER != <span class="number">0</span>);
-            <span class="macro">assert!</span>(get_l4(virtual_address) != KERNEL_L4_INDEX);
+            <span class="macro">assert_ne!</span>(<span class="kw-2">*</span>flags &amp; flags::PTE_USER, <span class="number">0</span>);
+            <span class="macro">assert_ne!</span>(get_l4(virtual_address), KERNEL_L4_INDEX);
             <span class="kw">let </span>end = virtual_address + size;
             <span class="macro">assert!</span>(end &lt;= MAX_USER_VIRTUAL_ADDRESS);
         }
@@ -1236,7 +1237,7 @@
         <span class="kw">if let </span><span class="prelude-val">Some</span>(start_physical_address) = start_physical_address.as_mut() {
             <span class="kw">let </span>(aligned_start, physical_size, <span class="kw">_</span>) =
                 align_range(<span class="kw-2">*</span>start_physical_address, <span class="kw-2">*</span>requested_size, PAGE_4K);
-            <span class="macro">assert!</span>(physical_size == size);
+            <span class="macro">assert_eq!</span>(physical_size, size);
             <span class="kw-2">*</span>start_physical_address = aligned_start;
         }
 
@@ -1584,7 +1585,7 @@
     </span>}
 
     <span class="comment">// TODO: add tests for this
-    </span><span class="kw">fn </span>do_for_ranges_enteries&lt;R1, R2, F&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l4_ranges: R1, l3_ranges: R2, <span class="kw-2">mut </span>f: F)
+    </span><span class="kw">fn </span>do_for_ranges_entries&lt;R1, R2, F&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l4_ranges: R1, l3_ranges: R2, <span class="kw-2">mut </span>f: F)
     <span class="kw">where
         </span>R1: RangeBounds&lt;usize&gt;,
         R2: RangeBounds&lt;usize&gt;,
@@ -1595,7 +1596,7 @@
         <span class="kw">let </span>present = |entry: &amp;&amp;<span class="kw-2">mut </span>u64| <span class="kw-2">**</span>entry &amp; flags::PTE_PRESENT != <span class="number">0</span>;
 
         <span class="kw">fn </span>as_page_directory_table_flat(entry: <span class="kw-2">&amp;mut </span>u64) -&gt; IterMut&lt;u64&gt; {
-            <span class="kw">let </span>page_directory_table = PageDirectoryTablePtr::enteries_from_mut_entry(entry);
+            <span class="kw">let </span>page_directory_table = PageDirectoryTablePtr::entries_from_mut_entry(entry);
             page_directory_table.entries.iter_mut()
         }
 
@@ -1653,12 +1654,12 @@
 
     <span class="comment">// the handler function definition is `fn(page_entry: &amp;mut u64)`
     </span><span class="kw">fn </span>do_for_every_user_entry(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;mut </span>u64)) {
-        <span class="self">self</span>.do_for_ranges_enteries(<span class="number">0</span>..NUM_USER_L4_INDEXES, <span class="number">0</span>..=<span class="number">0x1FF</span>, f)
+        <span class="self">self</span>.do_for_ranges_entries(<span class="number">0</span>..NUM_USER_L4_INDEXES, <span class="number">0</span>..=<span class="number">0x1FF</span>, f)
     }
 
     <span class="comment">// the handler function definition is `fn(page_entry: &amp;mut u64)`
     </span><span class="kw">fn </span>do_for_kernel_process_entry(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;mut </span>u64)) {
-        <span class="self">self</span>.do_for_ranges_enteries(
+        <span class="self">self</span>.do_for_ranges_entries(
             KERNEL_L4_INDEX..=KERNEL_L4_INDEX,
             KERNEL_L3_PROCESS_INDEX_START..=KERNEL_L3_PROCESS_INDEX_END,
             f,
@@ -1669,8 +1670,9 @@
     // also unmap any process specific kernel memory
     </span><span class="kw">pub fn </span>unmap_process_memory(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">let </span>free_page = |entry: <span class="kw-2">&amp;mut </span>u64| {
-            <span class="macro">assert!</span>(
-                <span class="kw-2">*</span>entry &amp; flags::PTE_HUGE_PAGE == <span class="number">0</span>,
+            <span class="macro">assert_eq!</span>(
+                <span class="kw-2">*</span>entry &amp; flags::PTE_HUGE_PAGE,
+                <span class="number">0</span>,
                 <span class="string">"We haven't implemented 2MB physical pages for user allocation"
             </span>);
             <span class="kw">let </span>page_table_ptr = PageDirectoryTablePtr::from_entry(<span class="kw-2">*</span>entry);

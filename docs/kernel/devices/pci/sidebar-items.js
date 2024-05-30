@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["PciBar","PciDeviceType"],"fn":["read_pci_config","write_pci_config"],"mod":["reg"],"struct":["PciDeviceConfig","PciDevicePropeIterator","PropeExtra"],"trait":["PciDevice"]};
+window.SIDEBAR_ITEMS = {"enum":["PciBar","PciDeviceType"],"fn":["read_pci_config","write_pci_config"],"mod":["reg"],"struct":["PciDeviceConfig","PciDeviceProbeIterator","ProbeExtra"],"trait":["PciDevice"]};

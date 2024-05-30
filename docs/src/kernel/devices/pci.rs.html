@@ -528,15 +528,15 @@
     <span class="kw">pub const </span>INTERRUPT_PIN: u8 = <span class="number">0x3D</span>;
 }
 
-<span class="kw">pub struct </span>PciDevicePropeIterator {
+<span class="kw">pub struct </span>PciDeviceProbeIterator {
     bus: u8,
     dev: u8,
     func: u8,
 }
 
-<span class="kw">impl </span>PciDevicePropeIterator {
-    <span class="kw">pub fn </span>new() -&gt; PciDevicePropeIterator {
-        PciDevicePropeIterator {
+<span class="kw">impl </span>PciDeviceProbeIterator {
+    <span class="kw">pub fn </span>new() -&gt; PciDeviceProbeIterator {
+        PciDeviceProbeIterator {
             bus: <span class="number">0</span>,
             dev: <span class="number">0</span>,
             func: <span class="number">0</span>,
@@ -544,7 +544,7 @@
     }
 }
 
-<span class="kw">impl </span>Iterator <span class="kw">for </span>PciDevicePropeIterator {
+<span class="kw">impl </span>Iterator <span class="kw">for </span>PciDeviceProbeIterator {
     <span class="kw">type </span>Item = PciDeviceConfig;
 
     <span class="kw">fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Item&gt; {
@@ -948,12 +948,12 @@
 // this is used since some PCI devices might produce multiple devices
 // so we use this to select which one to probe and store them individually
 // so that its easier to interact with them
-</span><span class="kw">pub struct </span>PropeExtra {
+</span><span class="kw">pub struct </span>ProbeExtra {
     <span class="kw">pub </span>args: [u64; <span class="number">4</span>],
 }
 
 <span class="kw">pub trait </span>PciDevice {
-    <span class="kw">fn </span>probe_init(config: <span class="kw-2">&amp;</span>PciDeviceConfig, extra: PropeExtra) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt;
+    <span class="kw">fn </span>probe_init(config: <span class="kw-2">&amp;</span>PciDeviceConfig, extra: ProbeExtra) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt;
     <span class="kw">where
         </span><span class="self">Self</span>: Sized;
     <span class="kw">fn </span>device_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str;

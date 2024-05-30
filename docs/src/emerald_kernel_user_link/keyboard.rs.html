@@ -441,7 +441,7 @@
         <span class="kw">let </span>pressed = bytes[<span class="number">0</span>] &amp; modifier::PRESSED != <span class="number">0</span>;
         <span class="kw">let </span>modifiers = bytes[<span class="number">0</span>] &amp; !modifier::PRESSED;
         <span class="comment">// Safety: we know that the `bytes` is a valid representation of `KeyType`
-        //         responsability of the caller to ensure that
+        //         responsibility of the caller to ensure that
         </span><span class="kw">let </span>key_type = core::mem::transmute(bytes[<span class="number">1</span>]);
 
         <span class="self">Self </span>{

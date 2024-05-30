@@ -180,7 +180,7 @@
 <blockquote>
 <p>This is implemented in <a href="/Emerald/docs/kernel/process"><code>process</code></a></p>
 </blockquote>
-<p>This module, implements the process mangement of the kernel, including creating, destroying, and scheduling processes.
+<p>This module, implements the process management of the kernel, including creating, destroying, and scheduling processes.
 As well as managing the process's memory, and the process's resources.</p>
 <p>Currently, when we say <code>process</code>, we also mean <code>thread</code>, as we don't have multi-threading support yet.</p>
 <h2 id="process-data"><a class="header" href="#process-data">Process Data</a></h2>
@@ -195,7 +195,7 @@ is considered invalid and doesn't represent the current state of the process.</l
 <li><code>argv</code>: A string list of the arguments passed to the process.</li>
 <li><code>stack_ptr_end</code>: The end of the stack, the stack grows down, so this is the highest address of the stack, and where the stack starts when the process is created.</li>
 <li><code>stack_size</code>: The current size of the stack, currently, its constant, until we get growing stack support.</li>
-<li><code>heap_start</code>: The start address of the heap, this will be padded by around <code>1MB</code> from the end of the <code>ELF</code> file loadded into memory.</li>
+<li><code>heap_start</code>: The start address of the heap, this will be padded by around <code>1MB</code> from the end of the <code>ELF</code> file loaded into memory.</li>
 <li><code>heap_size</code>: The current size of the heap. The user process can request more heap space with the <a href="./syscalls.html#syscalls-list"><code>inc_dec_heap</code></a> system call.</li>
 <li><code>heap_max</code>: The maximum possible size of the heap, this is not changed, currently set to <code>1GB</code>.</li>
 <li><code>priority</code>: The priority of the process, this is used by the scheduler. see <a href="https://docs.rs/emerald_kernel_user_link/latest/emerald_kernel_user_link/process/enum.PriorityLevel.html"><code>PriorityLevel</code></a>.)</li>

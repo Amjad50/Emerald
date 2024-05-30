@@ -460,14 +460,14 @@
         <span class="comment">// re-read the flags
         </span><span class="kw">let </span>rflags = <span class="kw">unsafe </span>{ rflags() };
         <span class="macro">assert!</span>(<span class="self">self</span>.n_cli &lt; usize::MAX);
-        <span class="macro">assert!</span>(rflags &amp; flags::IF == <span class="number">0</span>);
+        <span class="macro">assert_eq!</span>(rflags &amp; flags::IF, <span class="number">0</span>);
         <span class="self">self</span>.n_cli += <span class="number">1</span>;
     }
 
     <span class="kw">pub fn </span>pop_cli(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">let </span>rflags = <span class="kw">unsafe </span>{ rflags() };
         <span class="macro">assert!</span>(<span class="self">self</span>.n_cli &gt; <span class="number">0</span>);
-        <span class="macro">assert!</span>(rflags &amp; flags::IF == <span class="number">0</span>);
+        <span class="macro">assert_eq!</span>(rflags &amp; flags::IF, <span class="number">0</span>);
 
         <span class="self">self</span>.n_cli -= <span class="number">1</span>;
         <span class="kw">if </span><span class="self">self</span>.n_cli == <span class="number">0 </span>&amp;&amp; <span class="self">self</span>.old_interrupt_enable {

@@ -251,6 +251,41 @@
         }
     }
 
+    <span class="kw">fn </span>set_attrib(<span class="kw-2">&amp;mut </span><span class="self">self</span>, attrib: VideoConsoleAttribute) {
+        <span class="comment">// These colors are used in PowerShell 6 in Windows 10
+        // except for black, changed to all zeros
+        </span><span class="kw">let </span>to_color = |color: u8| <span class="kw">match </span>color {
+            <span class="number">0 </span>=&gt; Rgb888::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>),
+            <span class="number">1 </span>=&gt; Rgb888::new(<span class="number">197</span>, <span class="number">15</span>, <span class="number">31</span>),
+            <span class="number">2 </span>=&gt; Rgb888::new(<span class="number">19</span>, <span class="number">161</span>, <span class="number">14</span>),
+            <span class="number">3 </span>=&gt; Rgb888::new(<span class="number">193</span>, <span class="number">156</span>, <span class="number">0</span>),
+            <span class="number">4 </span>=&gt; Rgb888::new(<span class="number">0</span>, <span class="number">55</span>, <span class="number">218</span>),
+            <span class="number">5 </span>=&gt; Rgb888::new(<span class="number">136</span>, <span class="number">23</span>, <span class="number">152</span>),
+            <span class="number">6 </span>=&gt; Rgb888::new(<span class="number">58</span>, <span class="number">150</span>, <span class="number">221</span>),
+            <span class="number">7 </span>=&gt; Rgb888::new(<span class="number">204</span>, <span class="number">204</span>, <span class="number">204</span>),
+
+            <span class="number">8 </span>=&gt; Rgb888::new(<span class="number">118</span>, <span class="number">118</span>, <span class="number">118</span>),
+            <span class="number">9 </span>=&gt; Rgb888::new(<span class="number">231</span>, <span class="number">72</span>, <span class="number">86</span>),
+            <span class="number">10 </span>=&gt; Rgb888::new(<span class="number">22</span>, <span class="number">198</span>, <span class="number">12</span>),
+            <span class="number">11 </span>=&gt; Rgb888::new(<span class="number">249</span>, <span class="number">241</span>, <span class="number">165</span>),
+            <span class="number">12 </span>=&gt; Rgb888::new(<span class="number">59</span>, <span class="number">120</span>, <span class="number">255</span>),
+            <span class="number">13 </span>=&gt; Rgb888::new(<span class="number">180</span>, <span class="number">0</span>, <span class="number">158</span>),
+            <span class="number">14 </span>=&gt; Rgb888::new(<span class="number">97</span>, <span class="number">214</span>, <span class="number">214</span>),
+            <span class="kw">_ </span>=&gt; Rgb888::new(<span class="number">242</span>, <span class="number">242</span>, <span class="number">242</span>),
+        };
+
+        <span class="self">self</span>.text_style
+            .set_background_color(<span class="prelude-val">Some</span>(to_color(attrib.background <span class="kw">as </span>u8)));
+        <span class="self">self</span>.text_style
+            .set_text_color(<span class="prelude-val">Some</span>(to_color(attrib.foreground <span class="kw">as </span>u8)));
+
+        <span class="kw">if </span>attrib.bold {
+            <span class="self">self</span>.text_style.font = <span class="kw-2">&amp;</span>FONT_9X15_BOLD;
+        } <span class="kw">else </span>{
+            <span class="self">self</span>.text_style.font = <span class="kw-2">&amp;</span>FONT_9X15;
+        }
+    }
+
     <span class="kw">fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: u8) {
         <span class="kw">let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>vga) = <span class="self">self</span>.vga.lock_kernel() <span class="kw">else </span>{
             <span class="comment">// don't change anything if we can't lock the VGA
@@ -297,41 +332,6 @@
             <span class="self">self</span>.text_style.line_height() <span class="kw">as </span>usize,
             Pixel { r: <span class="number">0</span>, g: <span class="number">0</span>, b: <span class="number">0 </span>},
         );
-    }
-
-    <span class="kw">fn </span>set_attrib(<span class="kw-2">&amp;mut </span><span class="self">self</span>, attrib: VideoConsoleAttribute) {
-        <span class="comment">// These colors are used in PowerShell 6 in Windows 10
-        // except for black, changed to all zeros
-        </span><span class="kw">let </span>to_color = |color: u8| <span class="kw">match </span>color {
-            <span class="number">0 </span>=&gt; Rgb888::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>),
-            <span class="number">1 </span>=&gt; Rgb888::new(<span class="number">197</span>, <span class="number">15</span>, <span class="number">31</span>),
-            <span class="number">2 </span>=&gt; Rgb888::new(<span class="number">19</span>, <span class="number">161</span>, <span class="number">14</span>),
-            <span class="number">3 </span>=&gt; Rgb888::new(<span class="number">193</span>, <span class="number">156</span>, <span class="number">0</span>),
-            <span class="number">4 </span>=&gt; Rgb888::new(<span class="number">0</span>, <span class="number">55</span>, <span class="number">218</span>),
-            <span class="number">5 </span>=&gt; Rgb888::new(<span class="number">136</span>, <span class="number">23</span>, <span class="number">152</span>),
-            <span class="number">6 </span>=&gt; Rgb888::new(<span class="number">58</span>, <span class="number">150</span>, <span class="number">221</span>),
-            <span class="number">7 </span>=&gt; Rgb888::new(<span class="number">204</span>, <span class="number">204</span>, <span class="number">204</span>),
-
-            <span class="number">8 </span>=&gt; Rgb888::new(<span class="number">118</span>, <span class="number">118</span>, <span class="number">118</span>),
-            <span class="number">9 </span>=&gt; Rgb888::new(<span class="number">231</span>, <span class="number">72</span>, <span class="number">86</span>),
-            <span class="number">10 </span>=&gt; Rgb888::new(<span class="number">22</span>, <span class="number">198</span>, <span class="number">12</span>),
-            <span class="number">11 </span>=&gt; Rgb888::new(<span class="number">249</span>, <span class="number">241</span>, <span class="number">165</span>),
-            <span class="number">12 </span>=&gt; Rgb888::new(<span class="number">59</span>, <span class="number">120</span>, <span class="number">255</span>),
-            <span class="number">13 </span>=&gt; Rgb888::new(<span class="number">180</span>, <span class="number">0</span>, <span class="number">158</span>),
-            <span class="number">14 </span>=&gt; Rgb888::new(<span class="number">97</span>, <span class="number">214</span>, <span class="number">214</span>),
-            <span class="kw">_ </span>=&gt; Rgb888::new(<span class="number">242</span>, <span class="number">242</span>, <span class="number">242</span>),
-        };
-
-        <span class="self">self</span>.text_style
-            .set_background_color(<span class="prelude-val">Some</span>(to_color(attrib.background <span class="kw">as </span>u8)));
-        <span class="self">self</span>.text_style
-            .set_text_color(<span class="prelude-val">Some</span>(to_color(attrib.foreground <span class="kw">as </span>u8)));
-
-        <span class="kw">if </span>attrib.bold {
-            <span class="self">self</span>.text_style.font = <span class="kw-2">&amp;</span>FONT_9X15_BOLD;
-        } <span class="kw">else </span>{
-            <span class="self">self</span>.text_style.font = <span class="kw-2">&amp;</span>FONT_9X15;
-        }
     }
 }
 </code></pre></div></section></main></body></html>

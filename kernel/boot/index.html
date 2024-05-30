@@ -269,7 +269,7 @@ each <code>4KB</code> in size.</p>
 </ul>
 <p>And then <code>PDT[0..63]</code> is shared between the two and maps the first <code>128MB</code> of physical memory.</p>
 <p>Then, <code>CR3</code> is set to the address of <code>PML4</code> and <code>CR4</code> is set to enable <code>PAE</code>.</p>
-<h4 id="gdt-global-descritor-table"><a class="header" href="#gdt-global-descritor-table">GDT (Global Descritor Table)</a></h4>
+<h4 id="gdt-global-descriptor-table"><a class="header" href="#gdt-global-descriptor-table">GDT (Global Descriptor Table)</a></h4>
 <p>We setup a very basic GDT that contain kernel <code>code</code> and <code>data</code> segments (even though, data probably is not needed).</p>
 <pre><code class="language-asm">.align 16
 gdt64:

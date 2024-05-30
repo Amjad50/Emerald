@@ -243,35 +243,6 @@
         <span class="self">self</span>.clear();
     }
 
-    <span class="kw">fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: u8) {
-        <span class="kw">if </span>c == <span class="string">b'\n' </span>{
-            <span class="self">self</span>.pos.<span class="number">0 </span>= <span class="number">0</span>;
-            <span class="self">self</span>.pos.<span class="number">1 </span>+= <span class="number">1</span>;
-            <span class="self">self</span>.fix_after_advance();
-            <span class="kw">return</span>;
-        }
-        <span class="kw">let </span>i = <span class="self">self</span>.get_arr_pos(<span class="self">self</span>.pos);
-        <span class="self">self</span>.memory[i] = c;
-        <span class="self">self</span>.memory[i + <span class="number">1</span>] = <span class="self">self</span>.attrib;
-        <span class="self">self</span>.pos.<span class="number">0 </span>+= <span class="number">1</span>;
-        <span class="self">self</span>.fix_after_advance();
-    }
-
-    <span class="kw">fn </span>backspace(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="kw">if </span><span class="self">self</span>.pos.<span class="number">0 </span>== <span class="number">0 </span>{
-            <span class="kw">if </span><span class="self">self</span>.pos.<span class="number">1 </span>== <span class="number">0 </span>{
-                <span class="kw">return</span>;
-            }
-            <span class="self">self</span>.pos.<span class="number">0 </span>= <span class="self">self</span>.width - <span class="number">1</span>;
-            <span class="self">self</span>.pos.<span class="number">1 </span>-= <span class="number">1</span>;
-        } <span class="kw">else </span>{
-            <span class="self">self</span>.pos.<span class="number">0 </span>-= <span class="number">1</span>;
-        }
-        <span class="kw">let </span>i = <span class="self">self</span>.get_arr_pos(<span class="self">self</span>.pos);
-        <span class="self">self</span>.memory[i] = <span class="string">b' '</span>;
-        <span class="self">self</span>.memory[i + <span class="number">1</span>] = <span class="self">self</span>.attrib;
-    }
-
     <span class="kw">fn </span>set_attrib(<span class="kw-2">&amp;mut </span><span class="self">self</span>, attrib: VideoConsoleAttribute) {
         <span class="kw">let </span>to_vga_color = |color: u8| {
             <span class="kw">let </span>mappings = <span class="kw-2">&amp;</span>[
@@ -306,6 +277,35 @@
         <span class="kw">let </span>fg = to_vga_color(fg_index);
         <span class="kw">let </span>bg = to_vga_color(attrib.background <span class="kw">as </span>u8);
         <span class="self">self</span>.attrib = (bg &lt;&lt; <span class="number">4</span>) | fg;
+    }
+
+    <span class="kw">fn </span>write_byte(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: u8) {
+        <span class="kw">if </span>c == <span class="string">b'\n' </span>{
+            <span class="self">self</span>.pos.<span class="number">0 </span>= <span class="number">0</span>;
+            <span class="self">self</span>.pos.<span class="number">1 </span>+= <span class="number">1</span>;
+            <span class="self">self</span>.fix_after_advance();
+            <span class="kw">return</span>;
+        }
+        <span class="kw">let </span>i = <span class="self">self</span>.get_arr_pos(<span class="self">self</span>.pos);
+        <span class="self">self</span>.memory[i] = c;
+        <span class="self">self</span>.memory[i + <span class="number">1</span>] = <span class="self">self</span>.attrib;
+        <span class="self">self</span>.pos.<span class="number">0 </span>+= <span class="number">1</span>;
+        <span class="self">self</span>.fix_after_advance();
+    }
+
+    <span class="kw">fn </span>backspace(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="kw">if </span><span class="self">self</span>.pos.<span class="number">0 </span>== <span class="number">0 </span>{
+            <span class="kw">if </span><span class="self">self</span>.pos.<span class="number">1 </span>== <span class="number">0 </span>{
+                <span class="kw">return</span>;
+            }
+            <span class="self">self</span>.pos.<span class="number">0 </span>= <span class="self">self</span>.width - <span class="number">1</span>;
+            <span class="self">self</span>.pos.<span class="number">1 </span>-= <span class="number">1</span>;
+        } <span class="kw">else </span>{
+            <span class="self">self</span>.pos.<span class="number">0 </span>-= <span class="number">1</span>;
+        }
+        <span class="kw">let </span>i = <span class="self">self</span>.get_arr_pos(<span class="self">self</span>.pos);
+        <span class="self">self</span>.memory[i] = <span class="string">b' '</span>;
+        <span class="self">self</span>.memory[i + <span class="number">1</span>] = <span class="self">self</span>.attrib;
     }
 }
 </code></pre></div></section></main></body></html>

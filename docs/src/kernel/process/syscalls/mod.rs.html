@@ -1137,7 +1137,7 @@
     } <span class="kw">else </span>{
         bytes_read
     };
-    SyscallResult::Ok(bytes_read <span class="kw">as </span>u64)
+    SyscallResult::Ok(bytes_read)
 }
 
 <span class="kw">fn </span>sys_close(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) -&gt; SyscallResult {

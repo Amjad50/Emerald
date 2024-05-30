@@ -216,7 +216,7 @@ these pointers/values to the correct types.</li>
 <tr><td><code>stat</code></td><td><code>path: &amp;Path, stat: *mut FileStat</code></td><td><code>()</code></td><td>Gets the file stat of a file</td></tr>
 <tr><td><code>open_dir</code></td><td><code>path: &amp;Path</code></td><td><code>dir_index: usize</code></td><td>Opens a directory</td></tr>
 <tr><td><code>read_dir</code></td><td><code>dir_index: usize, buf: *mut DirEntry, len: usize</code></td><td><code>entries_read: usize</code></td><td>Reads from a directory</td></tr>
-<tr><td><code>get_cwd</code></td><td><code>buf: *mut u8, len: usize</code></td><td><code>needed_bytes: usize</code></td><td>Gets the current working directory, returns fferTooSmall` if the buffer is too small</td></tr>
+<tr><td><code>get_cwd</code></td><td><code>buf: *mut u8, len: usize</code></td><td><code>needed_bytes: usize</code></td><td>Gets the current working directory, returns <code>BufferTooSmall</code> if the buffer is too small</td></tr>
 <tr><td><code>chdir</code></td><td><code>path: &amp;Path</code></td><td><code>()</code></td><td>Changes the current working directory</td></tr>
 <tr><td><code>set_file_meta</code></td><td><code>file_index: usize, meta_id: u64, meta_data: u64</code></td><td><code>()</code></td><td>Sets the file meta</td></tr>
 <tr><td><code>get_file_meta</code></td><td><code>file_index: usize, meta_id: u64, meta_data: *mut u64</code></td><td><code>()</code></td><td>Gets the file meta</td></tr>

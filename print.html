@@ -353,7 +353,7 @@ each <code>4KB</code> in size.</p>
 </ul>
 <p>And then <code>PDT[0..63]</code> is shared between the two and maps the first <code>128MB</code> of physical memory.</p>
 <p>Then, <code>CR3</code> is set to the address of <code>PML4</code> and <code>CR4</code> is set to enable <code>PAE</code>.</p>
-<h4 id="gdt-global-descritor-table"><a class="header" href="#gdt-global-descritor-table">GDT (Global Descritor Table)</a></h4>
+<h4 id="gdt-global-descriptor-table"><a class="header" href="#gdt-global-descriptor-table">GDT (Global Descriptor Table)</a></h4>
 <p>We setup a very basic GDT that contain kernel <code>code</code> and <code>data</code> segments (even though, data probably is not needed).</p>
 <pre><code class="language-asm">.align 16
 gdt64:
@@ -951,7 +951,7 @@ and we use the <code>lidt</code> instruction to load the IDT.</p>
 </ul>
 </li>
 </ul>
-<p>The code segments will have the <code>LONG</code> flag set. Technically, we don't also need the <code>KERNEL_DATA</code> segment, but its included to be
+<p>The code segments will have the <code>LONG</code> flag set. Technically, we don't also need the <code>KERNEL_DATA</code> segment, but It's included to be
 more consistent.</p>
 <blockquote>
 <p>I won't go into details of the flags, you can check the documentation of <a href="https://wiki.osdev.org/Global_Descriptor_Table">GDT</a> or the CPU manual.</p>
@@ -1004,7 +1004,7 @@ which contains data about the ACPI, such as:</p>
 </ul>
 </li>
 </ul>
-<p>It will setup the interrupts with the correct <code>IO APIC</code> based on the argument <code>irq_num</code> provided.</p>
+<p>It will set up the interrupts with the correct <code>IO APIC</code> based on the argument <code>irq_num</code> provided.</p>
 <p>Currently, we have these interrupts configured:</p>
 <ul>
 <li><code>1</code>: Used by the <a href="kernel/processor/../drivers/keyboard.html">keyboard</a> driver.</li>
@@ -1063,7 +1063,7 @@ and get the data we need.</p>
 <p>Generally, most OSes will use <a href="https://acpica.org/"><code>acpica</code></a> which is a tool that can parse and execute <code>AML</code> code.</p>
 <h2 id="some-annoying-parts"><a class="header" href="#some-annoying-parts">Some annoying parts</a></h2>
 <p>Just to share here, since this is a documentation and all.</p>
-<p>Generally, parsing <code>AML</code> is not that hard, its a binary format, we can read the <code>opcode</code> and know what term type we need.</p>
+<p>Generally, parsing <code>AML</code> is not that hard, it's a binary format, we can read the <code>opcode</code> and know what term type we need.</p>
 <p>The issue is one thing, <code>method calls</code>.</p>
 <p>Method calls are encoded as such, <code>NameString</code> followed by <code>N</code> arguments as <code>TermArg</code> (which is a term type).
 The issue is:</p>
@@ -1073,7 +1073,7 @@ The issue is:</p>
 <li>The method can be external (I think).</li>
 </ul>
 <p>So, we have one choice (<a href="https://acpica.org/"><code>acpica</code></a> also does it) and that is to &quot;<strong>guess</strong>&quot; the number of arguments.
-And this is very error prone, as a <code>Term</code> can be also considered an expression, like <code>NameString</code> can be considered as
+And this is very error-prone, as a <code>Term</code> can be also considered an expression, like <code>NameString</code> can be considered as
 a variable if it is not a method call. <em>very messy :'(</em></p>
 <p>The current implementation I have I think is quite good, and I got to fix all the bugs I found, but of course there could be more.</p>
 <blockquote>
@@ -1083,7 +1083,7 @@ a variable if it is not a method call. <em>very messy :'(</em></p>
 <blockquote>
 <p>This is implemented in <a href="kernel/processes//Emerald/docs/kernel/process"><code>process</code></a></p>
 </blockquote>
-<p>This module, implements the process mangement of the kernel, including creating, destroying, and scheduling processes.
+<p>This module, implements the process management of the kernel, including creating, destroying, and scheduling processes.
 As well as managing the process's memory, and the process's resources.</p>
 <p>Currently, when we say <code>process</code>, we also mean <code>thread</code>, as we don't have multi-threading support yet.</p>
 <h2 id="process-data"><a class="header" href="#process-data">Process Data</a></h2>
@@ -1098,7 +1098,7 @@ is considered invalid and doesn't represent the current state of the process.</l
 <li><code>argv</code>: A string list of the arguments passed to the process.</li>
 <li><code>stack_ptr_end</code>: The end of the stack, the stack grows down, so this is the highest address of the stack, and where the stack starts when the process is created.</li>
 <li><code>stack_size</code>: The current size of the stack, currently, its constant, until we get growing stack support.</li>
-<li><code>heap_start</code>: The start address of the heap, this will be padded by around <code>1MB</code> from the end of the <code>ELF</code> file loadded into memory.</li>
+<li><code>heap_start</code>: The start address of the heap, this will be padded by around <code>1MB</code> from the end of the <code>ELF</code> file loaded into memory.</li>
 <li><code>heap_size</code>: The current size of the heap. The user process can request more heap space with the <a href="kernel/processes/./syscalls.html#syscalls-list"><code>inc_dec_heap</code></a> system call.</li>
 <li><code>heap_max</code>: The maximum possible size of the heap, this is not changed, currently set to <code>1GB</code>.</li>
 <li><code>priority</code>: The priority of the process, this is used by the scheduler. see <a href="https://docs.rs/emerald_kernel_user_link/latest/emerald_kernel_user_link/process/enum.PriorityLevel.html"><code>PriorityLevel</code></a>.)</li>
@@ -1263,7 +1263,7 @@ these pointers/values to the correct types.</li>
 <tr><td><code>stat</code></td><td><code>path: &amp;Path, stat: *mut FileStat</code></td><td><code>()</code></td><td>Gets the file stat of a file</td></tr>
 <tr><td><code>open_dir</code></td><td><code>path: &amp;Path</code></td><td><code>dir_index: usize</code></td><td>Opens a directory</td></tr>
 <tr><td><code>read_dir</code></td><td><code>dir_index: usize, buf: *mut DirEntry, len: usize</code></td><td><code>entries_read: usize</code></td><td>Reads from a directory</td></tr>
-<tr><td><code>get_cwd</code></td><td><code>buf: *mut u8, len: usize</code></td><td><code>needed_bytes: usize</code></td><td>Gets the current working directory, returns fferTooSmall` if the buffer is too small</td></tr>
+<tr><td><code>get_cwd</code></td><td><code>buf: *mut u8, len: usize</code></td><td><code>needed_bytes: usize</code></td><td>Gets the current working directory, returns <code>BufferTooSmall</code> if the buffer is too small</td></tr>
 <tr><td><code>chdir</code></td><td><code>path: &amp;Path</code></td><td><code>()</code></td><td>Changes the current working directory</td></tr>
 <tr><td><code>set_file_meta</code></td><td><code>file_index: usize, meta_id: u64, meta_data: u64</code></td><td><code>()</code></td><td>Sets the file meta</td></tr>
 <tr><td><code>get_file_meta</code></td><td><code>file_index: usize, meta_id: u64, meta_data: *mut u64</code></td><td><code>()</code></td><td>Gets the file meta</td></tr>
@@ -1284,7 +1284,7 @@ these pointers/values to the correct types.</li>
 <p>This is implemented in <a href="kernel/processes//Emerald/docs/kernel/executable/elf"><code>elf</code></a></p>
 </blockquote>
 <p>We load elf on process creation, see <a href="kernel/processes/../processes/index.html#process-creation">process creation</a> for more information.</p>
-<p>For now we support very basic loading, no dynamic linking, shared libraries, or relocation.
+<p>For now, we support very basic loading, no dynamic linking, shared libraries, or relocation.
 Just loading segments.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="clocks"><a class="header" href="#clocks">Clocks</a></h1>
 <blockquote>
@@ -1302,7 +1302,7 @@ is not bound to a specific start, but it just guarantees that:</p>
 <ul>
 <li>The time is always increasing.
 <ul>
-<li>TODO: We still haven't handled wrap arounds.</li>
+<li>TODO: We still haven't handled wrap around.</li>
 </ul>
 </li>
 <li>Querying the time at 2 points will give you the time difference based on real time speed.
@@ -1522,7 +1522,7 @@ us behavior similar to a normal terminal in linux.</li>
 will look like exiting from shell, upon exiting the program, the shell will come back up.</p>
 <h3 id="list-of-commandsprograms-1"><a class="header" href="#list-of-commandsprograms-1">List of commands/Programs</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>graphics</code></td><td>Simple graphics demo progam, it will display a red ball and it will bounce around the screen</td></tr>
+<tr><td><code>graphics</code></td><td>Simple graphics demo program, it will display a red ball and it will bounce around the screen</td></tr>
 <tr><td><code>video</code></td><td>Video player, it will take a video in image zip format, that is a zip file with jpg images inside it, check <a href="https://github.com/Amjad50/Emerald/blob/master/tools/video_to_zip.sh"><code>tools/video_to_zip.sh</code></a> for how to convert normal videos to this format. You can specify the fps upon creation (default is <code>30</code>), and specify it as will when running the program.</td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><h1 id="libraries"><a class="header" href="#libraries">Libraries</a></h1>
@@ -1695,7 +1695,7 @@ let (whole_layout, _) = layout_c.extend(layout_a).unwrap(); // whole_layout.alig
 But the issue is that we don't know the address of the <code>free_block</code> we will get, i.e. in order
 for this to work, we must make sure the address of the block we will return be aligned by <code>whole_layout.align()</code>.</p>
 <blockquote>
-<p>And the whole allignment of the returned free_block caused a bug before, which was fixed in <a href="https://github.com/Amjad50/Emerald/commit/471eff0">471eff0</a>.</p>
+<p>And the whole alignment of the returned free_block caused a bug before, which was fixed in <a href="https://github.com/Amjad50/Emerald/commit/471eff0">471eff0</a>.</p>
 </blockquote>
 <p>We know that <code>free_block</code> will always be aligned to <code>AllocatedHeapBlockInfo</code>, since all allocations are aligned to it.</p>
 <p>But if the <code>block</code> we require, needs higher alignment we will probably need to increase the size of <code>allocation_size</code> to account

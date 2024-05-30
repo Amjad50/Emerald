@@ -856,11 +856,11 @@
                             <span class="kw">if </span>sum == <span class="number">0 </span>{
                                 <span class="comment">// Safety: same as above, this pointer is mapped
                                 </span><span class="kw">let </span>rsdp_ref = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span>(rsdp_ptr <span class="kw">as </span><span class="kw-2">*const </span>RsdpV2) };
-                                <span class="kw">if </span>rsdp_ref.rsdp_v1.revision &gt;= <span class="number">2 </span>{
-                                    <span class="kw">return </span><span class="prelude-val">Some</span>(Rsdp::from_v2(rsdp_ref));
+                                <span class="kw">return if </span>rsdp_ref.rsdp_v1.revision &gt;= <span class="number">2 </span>{
+                                    <span class="prelude-val">Some</span>(Rsdp::from_v2(rsdp_ref))
                                 } <span class="kw">else </span>{
-                                    <span class="kw">return </span><span class="prelude-val">Some</span>(Rsdp::from_v1(<span class="kw-2">&amp;</span>rsdp_ref.rsdp_v1));
-                                }
+                                    <span class="prelude-val">Some</span>(Rsdp::from_v1(<span class="kw-2">&amp;</span>rsdp_ref.rsdp_v1))
+                                };
                             }
                         }
                         <span class="comment">// Safety: same as above, this pointer is mapped

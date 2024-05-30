@@ -257,7 +257,7 @@
 
     <span class="kw">let </span>module = Module::new(
         String::from(<span class="string">"kernel"</span>),
-        KERNEL_LINK <span class="kw">as </span>u64..(kernel_elf_end()) <span class="kw">as </span>u64,
+        KERNEL_LINK <span class="kw">as </span>u64..kernel_elf_end() <span class="kw">as </span>u64,
         KERNEL_LINK <span class="kw">as </span>u64,
         ExplicitModuleSectionInfo {
             base_svma: KERNEL_LINK <span class="kw">as _</span>,
@@ -311,7 +311,7 @@
 <span class="kw">pub fn </span>print_process_stack_trace(frame: <span class="kw-2">&amp;</span>InterruptStackFrame64, rbp: u64) {
     cpu::cpu().push_cli();
 
-    <span class="macro">assert!</span>(frame.cs &amp; <span class="number">0x3 </span>== <span class="number">3</span>, <span class="string">"We are in user mode"</span>);
+    <span class="macro">assert_eq!</span>(frame.cs &amp; <span class="number">0x3</span>, <span class="number">3</span>, <span class="string">"We are in user mode"</span>);
 
     <span class="kw">let </span>meta = process_metadata();
 

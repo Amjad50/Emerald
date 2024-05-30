@@ -2010,9 +2010,6 @@
 <a href="#2008" id="2008">2008</a>
 <a href="#2009" id="2009">2009</a>
 <a href="#2010" id="2010">2010</a>
-<a href="#2011" id="2011">2011</a>
-<a href="#2012" id="2012">2012</a>
-<a href="#2013" id="2013">2013</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{fmt, mem, ops::Range};
 
 <span class="kw">use </span>alloc::{
@@ -2231,7 +2228,7 @@
             error: e,
         })<span class="question-mark">?</span>;
 
-    <span class="comment">// SAFETY: This is a valid allocated memory
+    <span class="comment">// SAFETY: This is a valid, allocated memory
     </span><span class="kw">let </span>boot_sector = <span class="kw">unsafe </span>{ sectors.as_ptr().cast::&lt;FatBootSectorRaw&gt;().read() };
     <span class="kw">let </span>boot_sector = FatBootSector::new(boot_sector, size_in_sectors)<span class="question-mark">?</span>;
 
@@ -2616,7 +2613,7 @@
 
 <span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; DirectoryEntry&lt;<span class="lifetime">'a</span>&gt; {
     <span class="kw">pub fn </span>from_raw(raw: <span class="kw-2">&amp;mut </span>[u8]) -&gt; DirectoryEntry {
-        <span class="macro">assert!</span>(raw.len() == DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize);
+        <span class="macro">assert_eq!</span>(raw.len(), DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize);
         <span class="kw">let </span>normal = <span class="kw">unsafe </span>{
             raw.as_mut_ptr()
                 .cast::&lt;DirectoryEntryNormal&gt;()
@@ -2674,7 +2671,7 @@
     }
 
     <span class="kw">fn </span>write_long(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_entry: DirectoryEntryLong) {
-        <span class="macro">assert!</span>(new_entry.attributes &amp; attrs::LONG_NAME == attrs::LONG_NAME);
+        <span class="macro">assert_eq!</span>(new_entry.attributes &amp; attrs::LONG_NAME, attrs::LONG_NAME);
         <span class="kw">match </span><span class="self">self </span>{
             DirectoryEntry::Long(entry) =&gt; {
                 <span class="kw-2">**</span>entry = new_entry;
@@ -2695,7 +2692,7 @@
     }
 
     <span class="kw">fn </span>write_normal(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_entry: DirectoryEntryNormal) {
-        <span class="macro">assert!</span>(new_entry.attributes &amp; attrs::LONG_NAME != attrs::LONG_NAME);
+        <span class="macro">assert_ne!</span>(new_entry.attributes &amp; attrs::LONG_NAME, attrs::LONG_NAME);
         <span class="kw">match </span><span class="self">self </span>{
             DirectoryEntry::Normal(entry) =&gt; {
                 <span class="kw-2">**</span>entry = new_entry;
@@ -2844,7 +2841,7 @@
         <span class="kw">let </span>entry = <span class="kw-2">&amp;mut </span><span class="self">self</span>.current_sector[entry_start..entry_end];
         <span class="self">self</span>.entry_index_in_sector += <span class="number">1</span>;
 
-        <span class="macro">assert!</span>(entry.len() == DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize);
+        <span class="macro">assert_eq!</span>(entry.len(), DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize);
         <span class="prelude-val">Ok</span>(DirectoryEntry::from_raw(entry))
     }
 
@@ -3008,15 +3005,15 @@
             <span class="kw">let </span><span class="kw-2">mut </span>long_entry = entry.as_long().clone();
             <span class="comment">// long file name
             // this should be the last
-            </span><span class="macro">assert!</span>(long_entry.sequence_number &amp; <span class="number">0x40 </span>== <span class="number">0x40</span>);
+            </span><span class="macro">assert_eq!</span>(long_entry.sequence_number &amp; <span class="number">0x40</span>, <span class="number">0x40</span>);
             <span class="kw">let </span>number_of_entries = long_entry.sequence_number &amp; <span class="number">0x3F</span>;
-            <span class="kw">let </span><span class="kw-2">mut </span>long_name_enteries = Vec::with_capacity(number_of_entries <span class="kw">as </span>usize);
+            <span class="kw">let </span><span class="kw-2">mut </span>long_name_entries = Vec::with_capacity(number_of_entries <span class="kw">as </span>usize);
             <span class="comment">// skip all long file name entries
             </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..number_of_entries {
                 <span class="kw">let </span>name_part = long_entry.name();
 
                 <span class="comment">// add to the entries
-                </span>long_name_enteries.push(name_part);
+                </span>long_name_entries.push(name_part);
 
                 <span class="comment">// next entry
                 </span>entry = <span class="self">self</span>.get_next_entry().ok()<span class="question-mark">?</span>;
@@ -3025,7 +3022,7 @@
                 }
             }
             <span class="kw">let </span><span class="kw-2">mut </span>name = String::new();
-            long_name_enteries
+            long_name_entries
                 .into_iter()
                 .rev()
                 .for_each(|s| name.push_str(<span class="kw-2">&amp;</span>s));
@@ -3164,7 +3161,7 @@
 }
 
 <span class="kw">impl </span>Fat {
-    <span class="doccomment">/// A temmporary initilizer for the FAT, will be replaced with [`Fat::load`]
+    <span class="doccomment">/// A temporary initializer for the FAT, will be replaced with [`Fat::load`]
     </span><span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             buffer: NoDebug(Vec::new()),
@@ -3406,7 +3403,7 @@
         <span class="kw">if </span>data.is_empty() {
             <span class="kw">return </span><span class="prelude-val">Ok</span>(());
         }
-        <span class="macro">assert!</span>(data.len() % <span class="self">self</span>.boot_sector.bytes_per_sector() <span class="kw">as </span>usize == <span class="number">0</span>);
+        <span class="macro">assert_eq!</span>(data.len() % <span class="self">self</span>.boot_sector.bytes_per_sector() <span class="kw">as </span>usize, <span class="number">0</span>);
         <span class="kw">let </span>start_lba = (<span class="self">self</span>.start_lba + start_sector) <span class="kw">as </span>u64;
         <span class="self">self</span>.device
             .write_sync(start_lba, data)
@@ -3629,7 +3626,7 @@
             <span class="kw">let </span><span class="kw-2">mut </span>cluster = inode.start_cluster() <span class="kw">as </span>u32;
 
             <span class="comment">// cannot be empty, or be the root
-            </span><span class="macro">assert!</span>(cluster != <span class="number">0</span>);
+            </span><span class="macro">assert_ne!</span>(cluster, <span class="number">0</span>);
 
             <span class="kw">for _ in </span><span class="number">0</span>..cluster_index {
                 cluster = <span class="self">self
@@ -3679,7 +3676,7 @@
             accessed += to_access;
             position_in_cluster += to_access <span class="kw">as </span>u32;
             <span class="kw">if </span>position_in_cluster &gt;= bytes_per_cluster {
-                <span class="macro">assert!</span>(position_in_cluster == bytes_per_cluster);
+                <span class="macro">assert_eq!</span>(position_in_cluster, bytes_per_cluster);
                 position_in_cluster = <span class="number">0</span>;
                 <span class="kw">match </span><span class="self">self</span>.fat.next_cluster(cluster)<span class="question-mark">? </span>{
                     <span class="prelude-val">Some</span>(next_cluster) =&gt; {
@@ -3710,7 +3707,7 @@
         <span class="kw">let </span>end = start + DIRECTORY_ENTRY_SIZE <span class="kw">as </span>usize;
 
         <span class="kw">let </span><span class="kw-2">mut </span>entry = DirectoryEntry::from_raw(<span class="kw-2">&amp;mut </span>sector[start..end]);
-        <span class="macro">assert!</span>(entry.state() == DirectoryEntryState::Used);
+        <span class="macro">assert_eq!</span>(entry.state(), DirectoryEntryState::Used);
 
         <span class="kw">let </span>entry = entry.as_normal_mut();
         <span class="kw">let </span>current = entry.clone();
@@ -3737,7 +3734,7 @@
         // - create the directory (this may fail, if so, rollback)
         // - create the . and .. entries
         // We could have done it more efficiently, by starting with cluster=0
-        // and then allocating and creating directoties if its not existent
+        // and then allocating and creating directories if its not existent
         // but the issue is that qemu vvfat driver will complain and print some debug messages that
         // cluster 0 is used multiple times, so we are here, making sure the cluster is always
         // valid
@@ -3752,9 +3749,9 @@
             .ok_or(FatError::NotEnoughSpace)<span class="question-mark">?</span>;
         <span class="self">self</span>.fat.write_fat_entry(cluster, FatEntry::EndOfChain);
         <span class="self">self</span>.flush_fat()<span class="question-mark">?</span>;
-        <span class="comment">// lets empty out the first sector only
-        // if its a file, the size is 0 anyway
-        // if its a directory, it will exit since the
+        <span class="comment">// let's empty out the first sector only
+        // if it's a file, the size is 0 anyway
+        // if it's a directory, it will exit since the
         // first direntry will be zero
         </span><span class="self">self</span>.write_sectors(
             <span class="self">self</span>.first_sector_of_cluster(cluster),
@@ -3778,11 +3775,11 @@
             }
         };
 
-        <span class="macro">assert!</span>(node.name() == name, <span class="string">"node name: {:?}"</span>, node.name());
+        <span class="macro">assert_eq!</span>(node.name(), name, <span class="string">"node name: {:?}"</span>, node.name());
 
         <span class="comment">// create the . and .. entries if this is a directory
         </span><span class="kw">if </span>attributes.directory() {
-            <span class="macro">assert!</span>(node.start_cluster() == cluster <span class="kw">as </span>u64);
+            <span class="macro">assert_eq!</span>(node.start_cluster(), cluster <span class="kw">as </span>u64);
             <span class="kw">let </span><span class="kw-2">mut </span>dot_entry = DirectoryEntryNormal {
                 short_name: [<span class="number">0x20</span>; <span class="number">11</span>],
                 _nt_reserved: <span class="number">0</span>,
@@ -3816,13 +3813,10 @@
             <span class="kw">let </span>dot_node = dir_iter.add_entry(dot_entry, Vec::new())<span class="question-mark">?</span>;
             <span class="kw">let </span>dot_dot_node = dir_iter.add_entry(dot_dot_entry, Vec::new())<span class="question-mark">?</span>;
 
-            <span class="macro">assert!</span>(
-                dot_node.name() == <span class="string">"."</span>,
-                <span class="string">"dot node name: {:?}"</span>,
-                dot_node.name()
-            );
-            <span class="macro">assert!</span>(
-                dot_dot_node.name() == <span class="string">".."</span>,
+            <span class="macro">assert_eq!</span>(dot_node.name(), <span class="string">"."</span>, <span class="string">"dot node name: {:?}"</span>, dot_node.name());
+            <span class="macro">assert_eq!</span>(
+                dot_dot_node.name(),
+                <span class="string">".."</span>,
                 <span class="string">"dot dot node name: {:?}"</span>,
                 dot_dot_node.name()
             );
@@ -3906,6 +3900,33 @@
 }
 
 <span class="kw">impl </span>FileSystem <span class="kw">for </span>Mutex&lt;FatFilesystem&gt; {
+    <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt; {
+        <span class="self">self</span>.lock().open_root_dir_inode()
+    }
+
+    <span class="kw">fn </span>read_dir(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        inode: <span class="kw-2">&amp;</span>DirectoryNode,
+        handler: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(Node) -&gt; DirTreverse,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="kw">for </span>node <span class="kw">in </span><span class="self">self</span>.lock().open_dir_inode(inode)<span class="question-mark">? </span>{
+            <span class="kw">if let </span>DirTreverse::Stop = handler(node) {
+                <span class="kw">break</span>;
+            }
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">fn </span>create_node(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        parent: <span class="kw-2">&amp;</span>DirectoryNode,
+        name: <span class="kw-2">&amp;</span>str,
+        attributes: FileAttributes,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Node, FileSystemError&gt; {
+        <span class="self">self</span>.lock().add_directory_entry(parent, name, attributes)
+    }
+
     <span class="kw">fn </span>read_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         inode: <span class="kw-2">&amp;</span>FileNode,
@@ -3978,24 +3999,6 @@
             .flush_cluster(inode, access_helper.current_cluster <span class="kw">as </span>u32)
     }
 
-    <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt; {
-        <span class="self">self</span>.lock().open_root_dir_inode()
-    }
-
-    <span class="kw">fn </span>read_dir(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        inode: <span class="kw-2">&amp;</span>DirectoryNode,
-        handler: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(Node) -&gt; DirTreverse,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
-        <span class="kw">for </span>node <span class="kw">in </span><span class="self">self</span>.lock().open_dir_inode(inode)<span class="question-mark">? </span>{
-            <span class="kw">if let </span>DirTreverse::Stop = handler(node) {
-                <span class="kw">break</span>;
-            }
-        }
-
-        <span class="prelude-val">Ok</span>(())
-    }
-
     <span class="kw">fn </span>close_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         inode: <span class="kw-2">&amp;</span>FileNode,
@@ -4015,15 +4018,6 @@
         })<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(())
-    }
-
-    <span class="kw">fn </span>create_node(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        parent: <span class="kw-2">&amp;</span>DirectoryNode,
-        name: <span class="kw-2">&amp;</span>str,
-        attributes: FileAttributes,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;Node, FileSystemError&gt; {
-        <span class="self">self</span>.lock().add_directory_entry(parent, name, attributes)
     }
 }
 </code></pre></div></section></main></body></html>

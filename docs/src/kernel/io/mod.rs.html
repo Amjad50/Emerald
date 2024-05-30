@@ -241,7 +241,7 @@
 </span><span class="attr">#[repr(transparent)]
 </span><span class="kw">pub struct </span>HexArray&lt;T&gt;(<span class="kw">pub </span>T);
 
-<span class="comment">// a private trait to make the compiler happy about usage of `U` constriant
+<span class="comment">// a private trait to make the compiler happy about usage of `U` constraint
 </span><span class="kw">trait </span>ArrayTrait {
     <span class="kw">type </span>Item;
     <span class="kw">fn </span>data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Item];
@@ -306,7 +306,7 @@
 <span class="attr">#[allow(dead_code)]
 </span><span class="kw">pub fn </span>hexdump(buf: <span class="kw-2">&amp;</span>[u8]) {
     <span class="comment">// lock first so that none else can access the console
-    // its ReMutex so we can aquire the lock
+    // its ReMutex, so we can acquire the lock
     </span>console::run_with_console(|inner| {
         <span class="comment">// print hex dump
         </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..buf.len() / <span class="number">16 </span>{

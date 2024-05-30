@@ -482,6 +482,7 @@
 <a href="#480" id="480">480</a>
 <a href="#481" id="481">481</a>
 <a href="#482" id="482">482</a>
+<a href="#483" id="483">483</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{cell::RefCell, mem};
 
 <span class="kw">use </span>alloc::{
@@ -623,8 +624,9 @@
                                     remove = <span class="bool-val">true</span>;
                                     <span class="comment">// put the exit code in rax
                                     // this should return to user mode directly
-                                    </span><span class="macro">assert!</span>(
-                                        inner_proc.context.cs &amp; <span class="number">0x3 </span>== <span class="number">3</span>,
+                                    </span><span class="macro">assert_eq!</span>(
+                                        inner_proc.context.cs &amp; <span class="number">0x3</span>,
+                                        <span class="number">3</span>,
                                         <span class="string">"must be from user only"
                                     </span>);
                                     inner_proc.context.rax = exited_proc.exit_code <span class="kw">as </span>u64;
@@ -696,7 +698,7 @@
         <span class="kw">let </span>top = scheduler.scheduled_processes.pop();
 
         <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>top) = top {
-            <span class="macro">assert!</span>(top.state == ProcessState::Scheduled);
+            <span class="macro">assert_eq!</span>(top.state, ProcessState::Scheduled);
             top.state = ProcessState::Running;
             <span class="kw">let </span>pid;
             {
@@ -708,7 +710,7 @@
                 top.priority_counter -= decrement;
 
                 scheduler.max_priority = top.priority_counter;
-                <span class="comment">// SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
+                <span class="comment">// SAFETY: we are the scheduler and running in kernel space, so it's safe to switch to this vm
                 // as it has clones of our kernel mappings
                 </span><span class="kw">unsafe </span>{ inner_proc.switch_to_this_vm() };
                 current_cpu.process_id = inner_proc.id;
@@ -731,7 +733,7 @@
             // and because of how we implemented syscalls, the result will be in `rax`, so we tell
             // the compiler to ignore `rax` as it may be clobbered after this call
             </span><span class="kw">unsafe </span>{ <span class="macro">core::arch::asm!</span>(<span class="string">"int 0xff"</span>, out(<span class="string">"rax"</span>) <span class="kw">_</span>) }
-            <span class="comment">// SAFETY: we are not running in any process context, so its safe to go back to the kernel
+            <span class="comment">// SAFETY: we are not running in any process context, so it's safe to go back to the kernel
             </span><span class="kw">unsafe </span>{ virtual_memory_mapper::switch_to_kernel() };
         } <span class="kw">else </span>{
             <span class="comment">// no process to run, just wait for interrupts
@@ -750,13 +752,13 @@
         .running_waiting_procs
         .get_mut(<span class="kw-2">&amp;</span>current_cpu.process_id)
         .expect(<span class="string">"current process not found"</span>);
-    <span class="macro">assert!</span>(process.state == ProcessState::Running);
+    <span class="macro">assert_eq!</span>(process.state, ProcessState::Running);
     f(process)
 }
 
 <span class="doccomment">/// # Safety
 /// Must ensure that this is called and handled inside pop_cli and push_cli block, as an interrupt in the middle
-/// causes the `current_process` to be inavailable later on
+/// causes the `current_process` to be unavailable later on
 </span><span class="kw">unsafe fn </span>take_current_process() -&gt; SchedulerProcess {
     <span class="kw">let </span>current_cpu = cpu::cpu();
     <span class="kw">let </span>process = SCHEDULER
@@ -764,7 +766,7 @@
         .running_waiting_procs
         .remove(<span class="kw-2">&amp;</span>current_cpu.process_id)
         .expect(<span class="string">"current process not found"</span>);
-    <span class="macro">assert!</span>(process.state == ProcessState::Running);
+    <span class="macro">assert_eq!</span>(process.state, ProcessState::Running);
     process
 }
 
@@ -849,7 +851,7 @@
 
 <span class="kw">pub fn </span>yield_current_if_any(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) {
     <span class="kw">let </span>current_cpu = cpu::cpu();
-    <span class="comment">// do not yield if we don't have context or we are in the middle of scheduling
+    <span class="comment">// do not yield if we don't have context, or we are in the middle of scheduling
     </span><span class="kw">if </span>current_cpu.context.is_none() || current_cpu.scheduling {
         <span class="kw">return</span>;
     }
@@ -945,7 +947,7 @@
 }
 
 <span class="kw">extern </span><span class="string">"cdecl" </span><span class="kw">fn </span>scheduler_interrupt_handler(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) {
-    <span class="macro">assert!</span>(all_state.frame.cs &amp; <span class="number">0x3 </span>== <span class="number">0</span>, <span class="string">"must be from kernel only"</span>);
+    <span class="macro">assert_eq!</span>(all_state.frame.cs &amp; <span class="number">0x3</span>, <span class="number">0</span>, <span class="string">"must be from kernel only"</span>);
     <span class="kw">let </span>current_cpu = cpu::cpu();
     <span class="macro">assert!</span>(current_cpu.context.is_some());
     <span class="macro">assert!</span>(current_cpu.scheduling);
@@ -958,7 +960,7 @@
 }
 
 <span class="kw">extern </span><span class="string">"cdecl" </span><span class="kw">fn </span>syscall_interrupt_handler(all_state: <span class="kw-2">&amp;mut </span>InterruptAllSavedState) {
-    <span class="macro">assert!</span>(all_state.frame.cs &amp; <span class="number">0x3 </span>== <span class="number">3</span>, <span class="string">"must be from user only"</span>);
+    <span class="macro">assert_eq!</span>(all_state.frame.cs &amp; <span class="number">0x3</span>, <span class="number">3</span>, <span class="string">"must be from user only"</span>);
     <span class="kw">let </span>current_cpu = cpu::cpu();
     <span class="macro">assert!</span>(current_cpu.context.is_some());
 

@@ -1111,7 +1111,7 @@
     sync::spin::mutex::Mutex,
 };
 
-<span class="kw">use </span><span class="kw">super</span>::pci::{<span class="self">self</span>, PciDevice, PciDeviceConfig, PropeExtra};
+<span class="kw">use </span><span class="kw">super</span>::pci::{<span class="self">self</span>, PciDevice, PciDeviceConfig, ProbeExtra};
 
 <span class="kw">static </span><span class="kw-2">mut </span>IDE_DEVICES: [<span class="prelude-ty">Option</span>&lt;Arc&lt;IdeDevice&gt;&gt;; <span class="number">4</span>] = [<span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>];
 <span class="kw">static </span>INTERRUPTS_SETUP: AtomicBool = AtomicBool::new(<span class="bool-val">false</span>);
@@ -1124,12 +1124,12 @@
         </span><span class="kw">for </span>j <span class="kw">in </span><span class="number">0</span>..<span class="number">2 </span>{
             <span class="comment">// j = 0 =&gt; master
             // j = 1 =&gt; slave
-            </span><span class="kw">let </span>extra = PropeExtra { args: [i, j, <span class="number">0</span>, <span class="number">0</span>] };
+            </span><span class="kw">let </span>extra = ProbeExtra { args: [i, j, <span class="number">0</span>, <span class="number">0</span>] };
             <span class="kw">let </span><span class="prelude-val">Some</span>(ide_device) = IdeDevice::probe_init(pci_device, extra) <span class="kw">else </span>{
                 <span class="kw">continue</span>;
             };
 
-            <span class="comment">// SAFETY: we are muting only to add elements, and we are not accessing the old elements or changing thems
+            <span class="comment">// SAFETY: we are muting only to add elements, and we are not accessing the old elements or changing them
             </span><span class="kw">let </span>ide_devices = <span class="kw">unsafe </span>{ <span class="macro">addr_of_mut!</span>(IDE_DEVICES).as_mut().unwrap() };
             <span class="kw">let </span>slot = ide_devices.iter_mut().find(|x| x.is_none());
 
@@ -1225,7 +1225,7 @@
     <span class="kw">pub const </span>ERROR_ID_NOT_FOUND: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>;
     <span class="kw">pub const </span>ERROR_UNCORRECTABLE: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">6</span>;
     <span class="kw">pub const </span>ERROR_BAD_BLOCK: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">7</span>;
-    <span class="comment">// sepcific to SCSI
+    <span class="comment">// specific to SCSI
     </span><span class="kw">pub const </span>ERROR_SENSE_KEY: u8 = <span class="number">0xF </span>&lt;&lt; <span class="number">4</span>;
 
     <span class="kw">pub const </span>SENSE_OK: u8 = <span class="number">0x0</span>;
@@ -1368,7 +1368,7 @@
         <span class="self">self</span>.wait_until_free();
 
         <span class="comment">// TODO: replace with error
-        </span><span class="macro">assert!</span>(<span class="self">self</span>.read_status() &amp; ata::STATUS_DATA_REQUEST == <span class="number">0</span>);
+        </span><span class="macro">assert_eq!</span>(<span class="self">self</span>.read_status() &amp; ata::STATUS_DATA_REQUEST, <span class="number">0</span>);
 
         <span class="prelude-val">Ok</span>(())
     }
@@ -1393,7 +1393,7 @@
         <span class="self">self</span>.wait_until_free();
 
         <span class="comment">// TODO: replace with error
-        </span><span class="macro">assert!</span>(<span class="self">self</span>.read_status() &amp; ata::STATUS_DATA_REQUEST == <span class="number">0</span>);
+        </span><span class="macro">assert_eq!</span>(<span class="self">self</span>.read_status() &amp; ata::STATUS_DATA_REQUEST, <span class="number">0</span>);
 
         <span class="prelude-val">Ok</span>(())
     }
@@ -1456,7 +1456,7 @@
 
     <span class="kw">pub fn </span>execute_read(<span class="kw-2">&amp;</span><span class="self">self</span>, io_port: <span class="kw-2">&amp;</span>IdeIo, data: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), u8&gt; {
         <span class="comment">// must be even since we are receiving 16 bit words
-        </span><span class="macro">assert!</span>(data.len() % <span class="number">2 </span>== <span class="number">0</span>);
+        </span><span class="macro">assert_eq!</span>(data.len() % <span class="number">2</span>, <span class="number">0</span>);
         io_port.wait_until_can_command()<span class="question-mark">?</span>;
         <span class="self">self</span>.write(io_port);
 
@@ -1465,7 +1465,7 @@
 
     <span class="kw">pub fn </span>execute_write(<span class="kw-2">&amp;</span><span class="self">self</span>, io_port: <span class="kw-2">&amp;</span>IdeIo, data: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), u8&gt; {
         <span class="comment">// must be even since we are sending 16 bit words
-        </span><span class="macro">assert!</span>(data.len() % <span class="number">2 </span>== <span class="number">0</span>);
+        </span><span class="macro">assert_eq!</span>(data.len() % <span class="number">2</span>, <span class="number">0</span>);
         io_port.wait_until_can_command()<span class="question-mark">?</span>;
         <span class="self">self</span>.write(io_port);
 
@@ -1565,7 +1565,7 @@
 
     <span class="kw">pub fn </span>execute(<span class="kw-2">&amp;</span><span class="self">self</span>, io_port: <span class="kw-2">&amp;</span>IdeIo, data: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), u8&gt; {
         <span class="comment">// must be even since we are receiving 16 bit words
-        </span><span class="macro">assert!</span>(data.len() % <span class="number">2 </span>== <span class="number">0</span>);
+        </span><span class="macro">assert_eq!</span>(data.len() % <span class="number">2</span>, <span class="number">0</span>);
         io_port.wait_until_can_command()<span class="question-mark">?</span>;
         <span class="self">self</span>.write_packet_command(io_port);
         io_port.wait_until_free();
@@ -1588,7 +1588,7 @@
         <span class="comment">// if for some reason it expects more data
         // push until satisfied
         // since `DATA_REQUEST` is also used to denote that there is data present
-        // we might miss that the device is sending us data and not waiting for more data from us
+        // we might miss that the device is sending us data and not waiting for more data from us,
         // we should break if that's the case
         </span><span class="kw">let </span><span class="kw-2">mut </span>max = <span class="number">32</span>;
         <span class="kw">while </span>io_port.read_status() &amp; ata::STATUS_DATA_REQUEST != <span class="number">0 </span>{
@@ -1639,7 +1639,7 @@
     recommended_multiword_dma_transfer_cycle_time: u16,
     min_pio_transfer_cycle_time_no_flow_control: u16,
     min_pio_transfer_cycle_time_with_ioready: u16,
-    addional_supported: u16,
+    additional_supported: u16,
     reserved: u16,
     <span class="comment">// reserved fir IDENTIFY PACKET DEVICE command
     </span>reserved2: [u16; <span class="number">4</span>],
@@ -1728,7 +1728,7 @@
 
     <span class="kw">fn </span>user_addressable_sectors(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
         <span class="kw">if </span><span class="self">self</span>.is_lba48_supported() {
-            <span class="kw">let </span>extended_number_of_sectors_supported = <span class="self">self</span>.addional_supported &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) != <span class="number">0</span>;
+            <span class="kw">let </span>extended_number_of_sectors_supported = <span class="self">self</span>.additional_supported &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">3</span>) != <span class="number">0</span>;
 
             <span class="kw">if </span>extended_number_of_sectors_supported {
                 <span class="self">self</span>.extended_user_addressable_sectors
@@ -1889,7 +1889,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>device_type = IdeDeviceType::Ata;
 
         <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = command.execute_read(<span class="kw-2">&amp;</span>io, <span class="kw-2">&amp;mut </span>identify_data) {
-            <span class="macro">assert!</span>(err &amp; ata::ERROR_ABORTED != <span class="number">0</span>);
+            <span class="macro">assert_ne!</span>(err &amp; ata::ERROR_ABORTED, <span class="number">0</span>);
             <span class="kw">let </span>lbalo = io.read_command_block(ata::LBA_LO);
             <span class="kw">let </span>lbamid = io.read_command_block(ata::LBA_MID);
             <span class="kw">let </span>lbahi = io.read_command_block(ata::LBA_HI);
@@ -1902,11 +1902,10 @@
                 <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = command.execute(<span class="kw-2">&amp;</span>io, <span class="kw-2">&amp;mut </span>[]) {
                     <span class="kw">if </span>err == ata::SENSE_NOT_READY {
                         <span class="comment">// device not ready (i.e. not present)
-                        </span><span class="kw">return </span><span class="prelude-val">None</span>;
-                    } <span class="kw">else </span>{
+                    </span>} <span class="kw">else </span>{
                         <span class="macro">error!</span>(<span class="string">"unknown ATAPI device error: Err={err:02x}"</span>);
-                        <span class="kw">return </span><span class="prelude-val">None</span>;
                     }
+                    <span class="kw">return </span><span class="prelude-val">None</span>;
                 }
             } <span class="kw">else </span>{
                 <span class="macro">error!</span>(<span class="string">"unknown IDE device aborted: LBA={lbalo:02x}:{lbamid:02x}:{lbahi:02x}"</span>,);
@@ -1923,8 +1922,11 @@
             device_type = IdeDeviceType::Atapi;
         }
 
-        <span class="macro">assert!</span>(mem::size_of::&lt;CommandIdentifyDataRaw&gt;() == identify_data.len());
-        <span class="kw">let </span>identify_data: CommandIdentifyDataRaw = <span class="kw">unsafe </span>{ core::mem::transmute(identify_data) };
+        <span class="macro">assert_eq!</span>(
+            mem::size_of::&lt;CommandIdentifyDataRaw&gt;(),
+            identify_data.len()
+        );
+        <span class="kw">let </span>identify_data: CommandIdentifyDataRaw = <span class="kw">unsafe </span>{ mem::transmute(identify_data) };
 
         <span class="kw">if </span>!identify_data.is_valid() {
             <span class="comment">// device is not valid
@@ -1936,7 +1938,7 @@
             </span>master_io = <span class="prelude-val">None</span>;
         }
         <span class="kw">if </span>!identify_data.is_lba_supported() {
-            <span class="comment">// panic so that its easier to catch
+            <span class="comment">// panic so that it's easier to catch
             </span><span class="macro">panic!</span>(<span class="string">"IDE device does not support LBA mode"</span>);
         }
 
@@ -2053,13 +2055,11 @@
 }
 
 <span class="kw">impl </span>PciDevice <span class="kw">for </span>IdeDevice {
-    <span class="kw">fn </span>probe_init(config: <span class="kw-2">&amp;</span>PciDeviceConfig, extra: PropeExtra) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt;
+    <span class="kw">fn </span>probe_init(config: <span class="kw-2">&amp;</span>PciDeviceConfig, extra: ProbeExtra) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt;
     <span class="kw">where
         </span><span class="self">Self</span>: Sized,
     {
-        <span class="kw">if let </span><span class="kw">super</span>::pci::PciDeviceType::MassStorageController(<span class="number">0x1</span>, prog_if, ..) =
-            config.device_type
-        {
+        <span class="kw">if let </span>pci::PciDeviceType::MassStorageController(<span class="number">0x1</span>, prog_if, ..) = config.device_type {
             <span class="kw">let </span>support_dma = prog_if &amp; pci_cfg::PROG_IF_MASTER != <span class="number">0</span>;
             <span class="kw">let </span><span class="kw-2">mut </span>command = config.read_command();
             command |= pci_cfg::CMD_IO_SPACE;

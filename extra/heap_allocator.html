@@ -324,7 +324,7 @@ let (whole_layout, _) = layout_c.extend(layout_a).unwrap(); // whole_layout.alig
 But the issue is that we don't know the address of the <code>free_block</code> we will get, i.e. in order
 for this to work, we must make sure the address of the block we will return be aligned by <code>whole_layout.align()</code>.</p>
 <blockquote>
-<p>And the whole allignment of the returned free_block caused a bug before, which was fixed in <a href="https://github.com/Amjad50/Emerald/commit/471eff0">471eff0</a>.</p>
+<p>And the whole alignment of the returned free_block caused a bug before, which was fixed in <a href="https://github.com/Amjad50/Emerald/commit/471eff0">471eff0</a>.</p>
 </blockquote>
 <p>We know that <code>free_block</code> will always be aligned to <code>AllocatedHeapBlockInfo</code>, since all allocations are aligned to it.</p>
 <p>But if the <code>block</code> we require, needs higher alignment we will probably need to increase the size of <code>allocation_size</code> to account

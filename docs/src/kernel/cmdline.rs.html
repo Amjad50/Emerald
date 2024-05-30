@@ -156,7 +156,7 @@
     CMDLINE.set(cmdline).expect(<span class="string">"Should only be called once"</span>);
 }
 
-<span class="doccomment">/// This is extra work, but its done purely for debugging purposes
+<span class="doccomment">/// This is extra work, but it's done purely for debugging purposes
 </span><span class="kw">pub fn </span>print_cmdline_parse(multiboot_info: <span class="kw-2">&amp;</span>MultiBoot2Info) {
     <span class="kw">if let </span><span class="prelude-val">Some</span>(cmdline) = multiboot_info.cmdline() {
         <span class="kw">let </span>parsed = parse_cmdline(cmdline);
@@ -169,7 +169,7 @@
 }
 
 <span class="kw">pub fn </span>cmdline() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>Cmd&lt;<span class="lifetime">'static</span>&gt; {
-    <span class="comment">// if we didn't initalize, we will use the default (applies for `test`)
+    <span class="comment">// if we didn't initialize, we will use the default (applies for `test`)
     </span>CMDLINE.get_or_init(default_cmdline)
 }
 

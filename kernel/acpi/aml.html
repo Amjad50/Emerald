@@ -193,7 +193,7 @@ and get the data we need.</p>
 <p>Generally, most OSes will use <a href="https://acpica.org/"><code>acpica</code></a> which is a tool that can parse and execute <code>AML</code> code.</p>
 <h2 id="some-annoying-parts"><a class="header" href="#some-annoying-parts">Some annoying parts</a></h2>
 <p>Just to share here, since this is a documentation and all.</p>
-<p>Generally, parsing <code>AML</code> is not that hard, its a binary format, we can read the <code>opcode</code> and know what term type we need.</p>
+<p>Generally, parsing <code>AML</code> is not that hard, it's a binary format, we can read the <code>opcode</code> and know what term type we need.</p>
 <p>The issue is one thing, <code>method calls</code>.</p>
 <p>Method calls are encoded as such, <code>NameString</code> followed by <code>N</code> arguments as <code>TermArg</code> (which is a term type).
 The issue is:</p>
@@ -203,7 +203,7 @@ The issue is:</p>
 <li>The method can be external (I think).</li>
 </ul>
 <p>So, we have one choice (<a href="https://acpica.org/"><code>acpica</code></a> also does it) and that is to &quot;<strong>guess</strong>&quot; the number of arguments.
-And this is very error prone, as a <code>Term</code> can be also considered an expression, like <code>NameString</code> can be considered as
+And this is very error-prone, as a <code>Term</code> can be also considered an expression, like <code>NameString</code> can be considered as
 a variable if it is not a method call. <em>very messy :'(</em></p>
 <p>The current implementation I have I think is quite good, and I got to fix all the bugs I found, but of course there could be more.</p>
 <blockquote>

@@ -113,7 +113,7 @@
     </span>cpu::cpu().push_cli();
     <span class="kw">let </span>old_vm = virtual_memory_mapper::get_current_vm();
 
-    <span class="comment">// switch temporaily so we can map the elf
+    <span class="comment">// switch temporarily so we can map the elf
     // SAFETY: this must be called while the current vm and this new vm must share the same
     //         kernel regions
     </span>vm.switch_to_this();
@@ -126,7 +126,7 @@
         <span class="kw">match </span>segment.ty() {
             elf::ElfProgramType::Load =&gt; {
                 <span class="kw">let </span>segment_virtual = segment.virtual_address();
-                <span class="macro">assert!</span>(segment_virtual == segment.physical_address());
+                <span class="macro">assert_eq!</span>(segment_virtual, segment.physical_address());
 
                 <span class="kw">let </span><span class="kw-2">mut </span>flags = elf::to_virtual_memory_flags(segment.flags());
                 flags |= virtual_memory_mapper::flags::PTE_USER;

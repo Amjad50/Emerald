@@ -266,11 +266,6 @@
         <span class="prelude-val">Ok</span>(buf.len() <span class="kw">as </span>u64)
     }
 
-    <span class="kw">fn </span>clone_device(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
-        <span class="self">self</span>.clones.fetch_add(<span class="number">1</span>, Ordering::AcqRel);
-        <span class="prelude-val">Ok</span>(())
-    }
-
     <span class="kw">fn </span>close(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
         <span class="comment">// only close the pipe when all clones are closed
         </span><span class="kw">if </span><span class="self">self</span>.clones.fetch_sub(<span class="number">1</span>, Ordering::AcqRel) != <span class="number">1 </span>{
@@ -283,6 +278,11 @@
         } <span class="kw">else </span>{
             pipe.write_side_available = <span class="bool-val">false</span>;
         }
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">fn </span>clone_device(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="self">self</span>.clones.fetch_add(<span class="number">1</span>, Ordering::AcqRel);
         <span class="prelude-val">Ok</span>(())
     }
 }

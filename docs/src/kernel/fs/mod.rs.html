@@ -1694,7 +1694,7 @@
         _access_helper: <span class="kw-2">&amp;mut </span>AccessHelper,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, FileSystemError&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(device) = <span class="kw-2">&amp;</span>inode.device {
-            <span class="macro">assert!</span>(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            <span class="macro">assert_eq!</span>(inode.start_cluster, DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.read(position, buf)
         } <span class="kw">else </span>{
             <span class="prelude-val">Err</span>(FileSystemError::ReadNotSupported)
@@ -1709,7 +1709,7 @@
         _access_helper: <span class="kw-2">&amp;mut </span>AccessHelper,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, FileSystemError&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(device) = <span class="kw-2">&amp;</span>inode.device {
-            <span class="macro">assert!</span>(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            <span class="macro">assert_eq!</span>(inode.start_cluster, DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.write(position, buf)
         } <span class="kw">else </span>{
             <span class="prelude-val">Err</span>(FileSystemError::WriteNotSupported)
@@ -1893,7 +1893,7 @@
         first_partition.size_in_sectors,
     )<span class="question-mark">?</span>;
     <span class="macro">info!</span>(
-        <span class="string">"Mapping / to FAT filesystem {:?} ({:?}), parition_type: 0x{:02X}"</span>,
+        <span class="string">"Mapping / to FAT filesystem {:?} ({:?}), partition_type: 0x{:02X}"</span>,
         filesystem.volume_label(),
         filesystem.fat_type(),
         first_partition.partition_type
@@ -2207,7 +2207,7 @@
             }
             BlockingMode::Block(size) =&gt; {
                 <span class="comment">// TODO: support block size &gt; 1
-                </span><span class="macro">assert!</span>(size == <span class="number">1</span>, <span class="string">"Only block size 1 is supported"</span>);
+                </span><span class="macro">assert_eq!</span>(size, <span class="number">1</span>, <span class="string">"Only block size 1 is supported"</span>);
 
                 <span class="comment">// try to read until we have something
                 </span><span class="kw">loop </span>{
