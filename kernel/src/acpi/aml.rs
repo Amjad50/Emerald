@@ -1300,6 +1300,30 @@ fn display_target(target: &Target, f: &mut fmt::Formatter<'_>, depth: usize) -> 
     }
 }
 
+fn display_terms_list<'a>(
+    terms: impl ExactSizeIterator<Item = &'a TermArg>,
+    depth_divider: Option<usize>,
+    f: &mut fmt::Formatter<'_>,
+    depth: usize,
+) -> fmt::Result {
+    let len = terms.len();
+    for (i, arg) in terms.enumerate() {
+        let mut add_depth = 0;
+        if let Some(depth_divider) = depth_divider {
+            if i % depth_divider == 0 {
+                writeln!(f)?;
+                display_depth(f, depth + 1)?;
+            }
+            add_depth = 1;
+        }
+        display_term_arg(arg, f, depth + add_depth)?;
+        if i != len - 1 {
+            write!(f, ", ")?;
+        }
+    }
+    Ok(())
+}
+
 fn display_call_term_target(
     name: &str,
     args: &[&TermArg],
@@ -1309,12 +1333,7 @@ fn display_call_term_target(
 ) -> fmt::Result {
     write!(f, "{} (", name)?;
     if !args.is_empty() {
-        for (i, arg) in args.iter().enumerate() {
-            display_term_arg(arg, f, depth)?;
-            if i != args.len() - 1 {
-                write!(f, ", ")?;
-            }
-        }
+        display_terms_list(args.iter().copied(), None, f, depth)?;
         if !targets.is_empty() {
             write!(f, ", ")?;
         }
@@ -1455,16 +1474,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::Package(size, elements) => {
             write!(f, "Package (0x{:02X}) {{", size)?;
-            for (i, element) in elements.iter().enumerate() {
-                if i % 4 == 0 {
-                    writeln!(f)?;
-                    display_depth(f, depth + 1)?;
-                }
-                display_term_arg(element, f, depth + 1)?;
-                if i != elements.len() - 1 {
-                    write!(f, ", ")?;
-                }
-            }
+            display_terms_list(elements.iter(), Some(4), f, depth)?;
             writeln!(f)?;
             display_depth(f, depth)?;
             write!(f, "}}")?;
@@ -1473,16 +1483,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
             write!(f, "VarPackage (")?;
             display_term_arg(size, f, depth)?;
             write!(f, ") {{")?;
-            for (i, element) in elements.iter().enumerate() {
-                if i % 4 == 0 {
-                    writeln!(f)?;
-                    display_depth(f, depth + 1)?;
-                }
-                display_term_arg(element, f, depth + 1)?;
-                if i != elements.len() - 1 {
-                    write!(f, ", ")?;
-                }
-            }
+            display_terms_list(elements.iter(), Some(4), f, depth)?;
             writeln!(f)?;
             display_depth(f, depth)?;
             write!(f, "}}")?;
@@ -1767,12 +1768,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::MethodCall(name, args) => {
             write!(f, "{} (", name)?;
-            for (i, arg) in args.iter().enumerate() {
-                display_term_arg(arg, f, depth)?;
-                if i != args.len() - 1 {
-                    write!(f, ", ")?;
-                }
-            }
+            display_terms_list(args.iter(), None, f, depth)?;
             write!(f, ")")?;
         }
         AmlTerm::Concat(term1, term2, target) => {
