@@ -27,7 +27,7 @@ The `APIC` can be used to allocate and assign interrupts to hardware devices. We
     - `with_trigger_mode_level`: Set the trigger mode to level/edge (boolean).
     - `with_mask`: Set the interrupt to be masked or not (boolean).
 
-It will setup the interrupts with the correct `IO APIC` based on the argument `irq_num` provided.
+It will set up the interrupts with the correct `IO APIC` based on the argument `irq_num` provided.
 
 Currently, we have these interrupts configured:
 - `1`: Used by the [keyboard](../drivers/keyboard.md) driver.

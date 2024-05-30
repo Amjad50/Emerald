@@ -110,7 +110,7 @@ pub enum AmlTerm {
     Event(String),
     CondRefOf(Box<Target>, Box<Target>),
     CreateFieldOp(TermArg, TermArg, TermArg, String),
-    Aquire(Box<Target>, u16),
+    Acquire(Box<Target>, u16),
     Signal(Box<Target>),
     Wait(Box<Target>, TermArg),
     Reset(Box<Target>),
@@ -224,9 +224,9 @@ impl IndexFieldDef {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
-        trace!("indexfield name: {}", name);
+        trace!("index-field name: {}", name);
         let index_name = inner.parse_name()?;
-        trace!("indexfield index_name: {}", index_name);
+        trace!("index-field index_name: {}", index_name);
         let (flags, field_list) = inner.parse_fields_list_and_flags()?;
         Ok(Self {
             name,
@@ -344,11 +344,11 @@ impl PowerResource {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
-        trace!("powerresource name: {}", name);
+        trace!("power-resource name: {}", name);
         let system_level = inner.get_next_byte()?;
-        trace!("powerresource system_level: {:x}", system_level);
+        trace!("power-resource system_level: {:x}", system_level);
         let resource_order = u16::from_le_bytes([inner.get_next_byte()?, inner.get_next_byte()?]);
-        trace!("powerresource resource_order: {:x}", resource_order);
+        trace!("power-resource resource_order: {:x}", resource_order);
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
         Ok(Self {
@@ -524,7 +524,7 @@ impl Parser<'_> {
     }
 
     fn predict_possible_args(&mut self, expect_data_after: bool, name: &str) -> usize {
-        // clone ourselves to search futrue nodes
+        // clone ourselves to search future nodes
         // TODO: reduce allocations
         let mut inner = self.clone_parser();
 
@@ -550,7 +550,7 @@ impl Parser<'_> {
                     | AmlTerm::Wait(_, _)
                     | AmlTerm::Sleep(_)
                     | AmlTerm::Stall(_)
-                    | AmlTerm::Aquire(_, _)
+                    | AmlTerm::Acquire(_, _)
                     | AmlTerm::CondRefOf(_, _)
                     | AmlTerm::Break
                     | AmlTerm::Return(_)
@@ -703,7 +703,7 @@ impl Parser<'_> {
                     ),
                     0x21 => AmlTerm::Stall(self.parse_term_arg()?),
                     0x22 => AmlTerm::Sleep(self.parse_term_arg()?),
-                    0x23 => AmlTerm::Aquire(
+                    0x23 => AmlTerm::Acquire(
                         self.parse_target()?,
                         u16::from_le_bytes([self.get_next_byte()?, self.get_next_byte()?]),
                     ),
@@ -865,7 +865,7 @@ impl Parser<'_> {
             }
             0xA2 => AmlTerm::While(PredicateBlock::parse(self)?),
             0xA3 => AmlTerm::Noop,
-            // parse it as if its a method arg, this fixes issues of us mis-representing the term as a name
+            // parse it as if it's a method arg, this fixes issues of us mis-representing the term as a name
             0xA4 => AmlTerm::Return(self.parse_term_arg_last()?),
             0xA5 => AmlTerm::Break,
             _ => {
@@ -979,7 +979,7 @@ impl Parser<'_> {
                                     Some(possible_args)
                                 }
                             } else {
-                                // we didn't find, the name, and we can't use methods, so assume its a name
+                                // we didn't find, the name, and we can't use methods, so assume it's a name
                                 self.state.add_name(name.clone());
                                 None
                             }
@@ -1135,7 +1135,7 @@ impl Parser<'_> {
             0x5b => {
                 self.forward(1)?;
                 let next_byte = self.get_next_byte()?;
-                assert!(next_byte == 0x31);
+                assert_eq!(next_byte, 0x31);
                 Ok(Target::Debug)
             }
             0x71 => {
@@ -1216,7 +1216,7 @@ impl Parser<'_> {
                     let len_now = self.pos;
                     let name = self.parse_name()?;
                     self.state.add_name(name.clone());
-                    assert!(self.pos - len_now == 4); // must be a name segment
+                    assert_eq!(self.pos - len_now, 4); // must be a name segment
                     trace!("field element name: {}", name);
                     let pkg_length = self.get_pkg_length()?;
                     trace!("field element pkg length: {:x}", pkg_length);
@@ -1300,6 +1300,30 @@ fn display_target(target: &Target, f: &mut fmt::Formatter<'_>, depth: usize) -> 
     }
 }
 
+fn display_terms_list<'a>(
+    terms: impl ExactSizeIterator<Item = &'a TermArg>,
+    depth_divider: Option<usize>,
+    f: &mut fmt::Formatter<'_>,
+    depth: usize,
+) -> fmt::Result {
+    let len = terms.len();
+    for (i, arg) in terms.enumerate() {
+        let mut add_depth = 0;
+        if let Some(depth_divider) = depth_divider {
+            if i % depth_divider == 0 {
+                writeln!(f)?;
+                display_depth(f, depth + 1)?;
+            }
+            add_depth = 1;
+        }
+        display_term_arg(arg, f, depth + add_depth)?;
+        if i != len - 1 {
+            write!(f, ", ")?;
+        }
+    }
+    Ok(())
+}
+
 fn display_call_term_target(
     name: &str,
     args: &[&TermArg],
@@ -1309,12 +1333,7 @@ fn display_call_term_target(
 ) -> fmt::Result {
     write!(f, "{} (", name)?;
     if !args.is_empty() {
-        for (i, arg) in args.iter().enumerate() {
-            display_term_arg(arg, f, depth)?;
-            if i != args.len() - 1 {
-                write!(f, ", ")?;
-            }
-        }
+        display_terms_list(args.iter().copied(), None, f, depth)?;
         if !targets.is_empty() {
             write!(f, ", ")?;
         }
@@ -1455,16 +1474,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::Package(size, elements) => {
             write!(f, "Package (0x{:02X}) {{", size)?;
-            for (i, element) in elements.iter().enumerate() {
-                if i % 4 == 0 {
-                    writeln!(f)?;
-                    display_depth(f, depth + 1)?;
-                }
-                display_term_arg(element, f, depth + 1)?;
-                if i != elements.len() - 1 {
-                    write!(f, ", ")?;
-                }
-            }
+            display_terms_list(elements.iter(), Some(4), f, depth)?;
             writeln!(f)?;
             display_depth(f, depth)?;
             write!(f, "}}")?;
@@ -1473,16 +1483,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
             write!(f, "VarPackage (")?;
             display_term_arg(size, f, depth)?;
             write!(f, ") {{")?;
-            for (i, element) in elements.iter().enumerate() {
-                if i % 4 == 0 {
-                    writeln!(f)?;
-                    display_depth(f, depth + 1)?;
-                }
-                display_term_arg(element, f, depth + 1)?;
-                if i != elements.len() - 1 {
-                    write!(f, ", ")?;
-                }
-            }
+            display_terms_list(elements.iter(), Some(4), f, depth)?;
             writeln!(f)?;
             display_depth(f, depth)?;
             write!(f, "}}")?;
@@ -1692,8 +1693,8 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         AmlTerm::Sleep(term) => {
             display_call_term_target("Sleep", &[term], &[], f, depth)?;
         }
-        AmlTerm::Aquire(target, timeout) => {
-            write!(f, "Aquire (")?;
+        AmlTerm::Acquire(target, timeout) => {
+            write!(f, "Acquire (")?;
             display_target(target, f, depth)?;
             write!(f, ", 0x{timeout:04X})")?;
         }
@@ -1767,12 +1768,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         }
         AmlTerm::MethodCall(name, args) => {
             write!(f, "{} (", name)?;
-            for (i, arg) in args.iter().enumerate() {
-                display_term_arg(arg, f, depth)?;
-                if i != args.len() - 1 {
-                    write!(f, ", ")?;
-                }
-            }
+            display_terms_list(args.iter(), None, f, depth)?;
             write!(f, ")")?;
         }
         AmlTerm::Concat(term1, term2, target) => {

@@ -14,7 +14,7 @@ This includes functionalities used in implementing:
 We have several clock sources, and these are devices that provide us with a "**time**", this "**time**"
 is not bound to a specific start, but it just guarantees that:
 - The time is always increasing.
-    - TODO: We still haven't handled wrap arounds.
+    - TODO: We still haven't handled wrap around.
 - Querying the time at 2 points will give you the time difference based on real time speed.
     - This depends on the `granularity` of the source, for example, if we implement it for `RTC`,
       then the `granularity` is 1 second, i.e. querying it within 1 second will mostly give you

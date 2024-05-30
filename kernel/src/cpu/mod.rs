@@ -103,14 +103,14 @@ impl Cpu {
         // re-read the flags
         let rflags = unsafe { rflags() };
         assert!(self.n_cli < usize::MAX);
-        assert!(rflags & flags::IF == 0);
+        assert_eq!(rflags & flags::IF, 0);
         self.n_cli += 1;
     }
 
     pub fn pop_cli(&mut self) {
         let rflags = unsafe { rflags() };
         assert!(self.n_cli > 0);
-        assert!(rflags & flags::IF == 0);
+        assert_eq!(rflags & flags::IF, 0);
 
         self.n_cli -= 1;
         if self.n_cli == 0 && self.old_interrupt_enable {

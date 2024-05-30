@@ -29,7 +29,7 @@ const INITIAL_STACK_SIZE_PAGES: usize = 256; // 1MB
 #[allow(clippy::identity_op)]
 const HEAP_OFFSET_FROM_ELF_END: usize = 1 * MB;
 #[allow(clippy::identity_op)]
-const DEAFULT_MAX_HEAP_SIZE: usize = 1 * GB;
+const DEFAULT_MAX_HEAP_SIZE: usize = 1 * GB;
 
 #[derive(Debug)]
 pub enum ProcessError {
@@ -180,7 +180,7 @@ impl Process {
         // set it quite a distance from the elf and align it to 2MB pages (we are not using 2MB virtual memory, so its not related)
         let heap_start = align_up(max_addr + HEAP_OFFSET_FROM_ELF_END, PAGE_2M);
         let heap_size = 0; // start at 0, let user space programs control it
-        let heap_max = DEAFULT_MAX_HEAP_SIZE;
+        let heap_max = DEFAULT_MAX_HEAP_SIZE;
 
         let mut context = ProcessContext::default();
         let entry = elf.entry_point();
@@ -387,7 +387,7 @@ impl Process {
         cpu::cpu().push_cli();
         let old_vm = virtual_memory_mapper::get_current_vm();
 
-        // switch temporaily so we can map the elf
+        // switch temporarily so we can map the elf
         // SAFETY: this must be called while the current vm and this new vm must share the same
         //         kernel regions
         unsafe { vm.switch_to_this() };
@@ -469,7 +469,7 @@ impl Process {
         cpu::cpu().push_cli();
         let old_vm = virtual_memory_mapper::get_current_vm();
 
-        // switch temporaily so we can map the elf
+        // switch temporarily so we can map the elf
         // SAFETY: this must be called while the current vm and this new vm must share the same
         //         kernel regions
         unsafe { vm.switch_to_this() };

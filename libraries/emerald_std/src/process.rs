@@ -59,7 +59,7 @@ pub unsafe fn wait_for_pid(pid: u64, block: bool) -> Result<i32, SyscallError> {
 
 /// # Safety
 /// This is generally safe, it will return error if the pid is not valid, but its marked as unsafe
-/// because its a syscall
+/// because it's a syscall
 pub unsafe fn priority(
     pid: u64,
     priority_level: Option<PriorityLevel>,

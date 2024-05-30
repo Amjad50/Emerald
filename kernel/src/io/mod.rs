@@ -54,7 +54,7 @@ impl_copy_clone_deref_wrapper!(NoDebug<T>);
 #[repr(transparent)]
 pub struct HexArray<T>(pub T);
 
-// a private trait to make the compiler happy about usage of `U` constriant
+// a private trait to make the compiler happy about usage of `U` constraint
 trait ArrayTrait {
     type Item;
     fn data(&self) -> &[Self::Item];
@@ -119,7 +119,7 @@ impl_copy_clone_deref_wrapper!(ByteStr<T>);
 #[allow(dead_code)]
 pub fn hexdump(buf: &[u8]) {
     // lock first so that none else can access the console
-    // its ReMutex so we can aquire the lock
+    // its ReMutex, so we can acquire the lock
     console::run_with_console(|inner| {
         // print hex dump
         for i in 0..buf.len() / 16 {

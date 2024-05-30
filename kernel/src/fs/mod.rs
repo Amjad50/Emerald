@@ -431,7 +431,7 @@ pub trait FileSystem: Send + Sync {
         _access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         if let Some(device) = &inode.device {
-            assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            assert_eq!(inode.start_cluster, DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.read(position, buf)
         } else {
             Err(FileSystemError::ReadNotSupported)
@@ -446,7 +446,7 @@ pub trait FileSystem: Send + Sync {
         _access_helper: &mut AccessHelper,
     ) -> Result<u64, FileSystemError> {
         if let Some(device) = &inode.device {
-            assert!(inode.start_cluster == DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            assert_eq!(inode.start_cluster, DEVICES_FILESYSTEM_CLUSTER_MAGIC);
             device.write(position, buf)
         } else {
             Err(FileSystemError::WriteNotSupported)
@@ -630,7 +630,7 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
         first_partition.size_in_sectors,
     )?;
     info!(
-        "Mapping / to FAT filesystem {:?} ({:?}), parition_type: 0x{:02X}",
+        "Mapping / to FAT filesystem {:?} ({:?}), partition_type: 0x{:02X}",
         filesystem.volume_label(),
         filesystem.fat_type(),
         first_partition.partition_type
@@ -944,7 +944,7 @@ impl File {
             }
             BlockingMode::Block(size) => {
                 // TODO: support block size > 1
-                assert!(size == 1, "Only block size 1 is supported");
+                assert_eq!(size, 1, "Only block size 1 is supported");
 
                 // try to read until we have something
                 loop {

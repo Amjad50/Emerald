@@ -222,14 +222,16 @@ impl VirtualSpaceAllocator {
                 {
                     // this has parts of it inside
                     // is it fully inside?
-                    if current_phy_start + entry.size as u64 >= req_phy_start + req_size as u64 {
+                    return if current_phy_start + entry.size as u64
+                        >= req_phy_start + req_size as u64
+                    {
                         // yes, it is fully inside
-                        return Some((entry, true));
+                        Some((entry, true))
                     } else {
                         // no, it is not fully inside, but there is an overlap
                         // we can't allocate this and we can't relocate
-                        return Some((entry, false));
-                    }
+                        Some((entry, false))
+                    };
                 }
             }
             cursor.move_next();

@@ -272,9 +272,9 @@ pub struct ElfProgram32 {
     virtual_address: u32,
     // Physical address of beginning of segment (OS-specific)
     physical_address: u32,
-    // Num. of bytes in file image of segment (may be zero)
+    // Num. of bytes in file image of segment (can be zero)
     file_size: u32,
-    // Num. of bytes in mem image of segment (may be zero)
+    // Num. of bytes in mem image of segment (can be zero)
     mem_size: u32,
     // Segment flags
     flags: u32,
@@ -295,9 +295,9 @@ pub struct ElfProgram64 {
     virtual_address: u64,
     // Physical address of beginning of segment (OS-specific)
     physical_address: u64,
-    // Num. of bytes in file image of segment (may be zero)
+    // Num. of bytes in file image of segment (can be zero)
     file_size: u64,
-    // Num. of bytes in mem image of segment (may be zero)
+    // Num. of bytes in mem image of segment (can be zero)
     mem_size: u64,
     // Segment alignment constraint
     alignment: u64,

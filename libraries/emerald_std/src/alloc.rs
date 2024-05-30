@@ -47,7 +47,7 @@ impl PageAllocatorProvider<PAGE_4K> for PageAllocator {
         let Ok(new_addr) = new_addr else {
             return None;
         };
-        assert!(new_addr as usize == last_heap_base);
+        assert_eq!(new_addr as usize, last_heap_base);
 
         self.mapped_pages += pages;
 

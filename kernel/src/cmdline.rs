@@ -36,7 +36,7 @@ pub fn init(multiboot_info: &'static MultiBoot2Info) {
     CMDLINE.set(cmdline).expect("Should only be called once");
 }
 
-/// This is extra work, but its done purely for debugging purposes
+/// This is extra work, but it's done purely for debugging purposes
 pub fn print_cmdline_parse(multiboot_info: &MultiBoot2Info) {
     if let Some(cmdline) = multiboot_info.cmdline() {
         let parsed = parse_cmdline(cmdline);
@@ -49,7 +49,7 @@ pub fn print_cmdline_parse(multiboot_info: &MultiBoot2Info) {
 }
 
 pub fn cmdline() -> &'static Cmd<'static> {
-    // if we didn't initalize, we will use the default (applies for `test`)
+    // if we didn't initialize, we will use the default (applies for `test`)
     CMDLINE.get_or_init(default_cmdline)
 }
 

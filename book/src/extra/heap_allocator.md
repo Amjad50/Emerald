@@ -152,7 +152,7 @@ Which means we can totally just use `allocation_size`, and be done with it.
 But the issue is that we don't know the address of the `free_block` we will get, i.e. in order
 for this to work, we must make sure the address of the block we will return be aligned by `whole_layout.align()`.
 
-> And the whole allignment of the returned free_block caused a bug before, which was fixed in [471eff0].
+> And the whole alignment of the returned free_block caused a bug before, which was fixed in [471eff0].
 
 We know that `free_block` will always be aligned to `AllocatedHeapBlockInfo`, since all allocations are aligned to it.
 

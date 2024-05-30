@@ -121,7 +121,7 @@ impl PageDirectoryTablePtr {
     }
 
     /// An ugly hack used in `do_for_every_user_entry` to get a mutable reference to the page directory table
-    fn enteries_from_mut_entry(entry: &mut u64) -> &mut PageDirectoryTable {
+    fn entries_from_mut_entry(entry: &mut u64) -> &mut PageDirectoryTable {
         let table = physical2virtual(*entry & ADDR_MASK) as *mut PageDirectoryTable;
         unsafe { &mut *table }
     }
@@ -384,8 +384,8 @@ impl VirtualMemoryMapper {
         virtual_address = aligned_start;
 
         if self.is_user {
-            assert!(*flags & flags::PTE_USER != 0);
-            assert!(get_l4(virtual_address) != KERNEL_L4_INDEX);
+            assert_ne!(*flags & flags::PTE_USER, 0);
+            assert_ne!(get_l4(virtual_address), KERNEL_L4_INDEX);
             let end = virtual_address + size;
             assert!(end <= MAX_USER_VIRTUAL_ADDRESS);
         }
@@ -393,7 +393,7 @@ impl VirtualMemoryMapper {
         if let Some(start_physical_address) = start_physical_address.as_mut() {
             let (aligned_start, physical_size, _) =
                 align_range(*start_physical_address, *requested_size, PAGE_4K);
-            assert!(physical_size == size);
+            assert_eq!(physical_size, size);
             *start_physical_address = aligned_start;
         }
 
@@ -741,7 +741,7 @@ impl VirtualMemoryMapper {
     }
 
     // TODO: add tests for this
-    fn do_for_ranges_enteries<R1, R2, F>(&mut self, l4_ranges: R1, l3_ranges: R2, mut f: F)
+    fn do_for_ranges_entries<R1, R2, F>(&mut self, l4_ranges: R1, l3_ranges: R2, mut f: F)
     where
         R1: RangeBounds<usize>,
         R2: RangeBounds<usize>,
@@ -752,7 +752,7 @@ impl VirtualMemoryMapper {
         let present = |entry: &&mut u64| **entry & flags::PTE_PRESENT != 0;
 
         fn as_page_directory_table_flat(entry: &mut u64) -> IterMut<u64> {
-            let page_directory_table = PageDirectoryTablePtr::enteries_from_mut_entry(entry);
+            let page_directory_table = PageDirectoryTablePtr::entries_from_mut_entry(entry);
             page_directory_table.entries.iter_mut()
         }
 
@@ -810,12 +810,12 @@ impl VirtualMemoryMapper {
 
     // the handler function definition is `fn(page_entry: &mut u64)`
     fn do_for_every_user_entry(&mut self, f: impl FnMut(&mut u64)) {
-        self.do_for_ranges_enteries(0..NUM_USER_L4_INDEXES, 0..=0x1FF, f)
+        self.do_for_ranges_entries(0..NUM_USER_L4_INDEXES, 0..=0x1FF, f)
     }
 
     // the handler function definition is `fn(page_entry: &mut u64)`
     fn do_for_kernel_process_entry(&mut self, f: impl FnMut(&mut u64)) {
-        self.do_for_ranges_enteries(
+        self.do_for_ranges_entries(
             KERNEL_L4_INDEX..=KERNEL_L4_INDEX,
             KERNEL_L3_PROCESS_INDEX_START..=KERNEL_L3_PROCESS_INDEX_END,
             f,
@@ -826,8 +826,9 @@ impl VirtualMemoryMapper {
     // also unmap any process specific kernel memory
     pub fn unmap_process_memory(&mut self) {
         let free_page = |entry: &mut u64| {
-            assert!(
-                *entry & flags::PTE_HUGE_PAGE == 0,
+            assert_eq!(
+                *entry & flags::PTE_HUGE_PAGE,
+                0,
                 "We haven't implemented 2MB physical pages for user allocation"
             );
             let page_table_ptr = PageDirectoryTablePtr::from_entry(*entry);

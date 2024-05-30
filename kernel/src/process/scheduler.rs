@@ -139,8 +139,9 @@ impl Scheduler {
                                     remove = true;
                                     // put the exit code in rax
                                     // this should return to user mode directly
-                                    assert!(
-                                        inner_proc.context.cs & 0x3 == 3,
+                                    assert_eq!(
+                                        inner_proc.context.cs & 0x3,
+                                        3,
                                         "must be from user only"
                                     );
                                     inner_proc.context.rax = exited_proc.exit_code as u64;
@@ -212,7 +213,7 @@ pub fn schedule() -> ! {
         let top = scheduler.scheduled_processes.pop();
 
         if let Some(mut top) = top {
-            assert!(top.state == ProcessState::Scheduled);
+            assert_eq!(top.state, ProcessState::Scheduled);
             top.state = ProcessState::Running;
             let pid;
             {
@@ -224,7 +225,7 @@ pub fn schedule() -> ! {
                 top.priority_counter -= decrement;
 
                 scheduler.max_priority = top.priority_counter;
-                // SAFETY: we are the scheduler and running in kernel space, so its safe to switch to this vm
+                // SAFETY: we are the scheduler and running in kernel space, so it's safe to switch to this vm
                 // as it has clones of our kernel mappings
                 unsafe { inner_proc.switch_to_this_vm() };
                 current_cpu.process_id = inner_proc.id;
@@ -247,7 +248,7 @@ pub fn schedule() -> ! {
             // and because of how we implemented syscalls, the result will be in `rax`, so we tell
             // the compiler to ignore `rax` as it may be clobbered after this call
             unsafe { core::arch::asm!("int 0xff", out("rax") _) }
-            // SAFETY: we are not running in any process context, so its safe to go back to the kernel
+            // SAFETY: we are not running in any process context, so it's safe to go back to the kernel
             unsafe { virtual_memory_mapper::switch_to_kernel() };
         } else {
             // no process to run, just wait for interrupts
@@ -266,13 +267,13 @@ where
         .running_waiting_procs
         .get_mut(&current_cpu.process_id)
         .expect("current process not found");
-    assert!(process.state == ProcessState::Running);
+    assert_eq!(process.state, ProcessState::Running);
     f(process)
 }
 
 /// # Safety
 /// Must ensure that this is called and handled inside pop_cli and push_cli block, as an interrupt in the middle
-/// causes the `current_process` to be inavailable later on
+/// causes the `current_process` to be unavailable later on
 unsafe fn take_current_process() -> SchedulerProcess {
     let current_cpu = cpu::cpu();
     let process = SCHEDULER
@@ -280,7 +281,7 @@ unsafe fn take_current_process() -> SchedulerProcess {
         .running_waiting_procs
         .remove(&current_cpu.process_id)
         .expect("current process not found");
-    assert!(process.state == ProcessState::Running);
+    assert_eq!(process.state, ProcessState::Running);
     process
 }
 
@@ -365,7 +366,7 @@ pub fn sleep_current_process(time: ClockTime, all_state: &mut InterruptAllSavedS
 
 pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
     let current_cpu = cpu::cpu();
-    // do not yield if we don't have context or we are in the middle of scheduling
+    // do not yield if we don't have context, or we are in the middle of scheduling
     if current_cpu.context.is_none() || current_cpu.scheduling {
         return;
     }
@@ -461,7 +462,7 @@ pub fn swap_context(context: &mut ProcessContext, all_state: &mut InterruptAllSa
 }
 
 extern "cdecl" fn scheduler_interrupt_handler(all_state: &mut InterruptAllSavedState) {
-    assert!(all_state.frame.cs & 0x3 == 0, "must be from kernel only");
+    assert_eq!(all_state.frame.cs & 0x3, 0, "must be from kernel only");
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
     assert!(current_cpu.scheduling);
@@ -474,7 +475,7 @@ extern "cdecl" fn scheduler_interrupt_handler(all_state: &mut InterruptAllSavedS
 }
 
 extern "cdecl" fn syscall_interrupt_handler(all_state: &mut InterruptAllSavedState) {
-    assert!(all_state.frame.cs & 0x3 == 3, "must be from user only");
+    assert_eq!(all_state.frame.cs & 0x3, 3, "must be from user only");
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
 

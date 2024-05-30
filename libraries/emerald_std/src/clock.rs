@@ -5,7 +5,7 @@ use kernel_user_link::{
 };
 
 /// # Safety
-/// This function assumes that `seconds` and `nanoseconds` are valid, nano seconds should be less than 1_000_000_000.
+/// This function assumes that `seconds` and `nanoseconds` are valid, nanoseconds should be less than 1_000_000_000.
 pub unsafe fn sleep(seconds: u64, nanoseconds: u64) -> Result<(), SyscallError> {
     unsafe {
         call_syscall!(
@@ -19,7 +19,7 @@ pub unsafe fn sleep(seconds: u64, nanoseconds: u64) -> Result<(), SyscallError> 
 
 /// # Safety
 /// There are no safety requirements for this function.
-/// Its just that its a wrapper around a syscall.
+/// Its just that it's a wrapper around a syscall.
 pub unsafe fn get_time(time_type: ClockType) -> Result<ClockTime, SyscallError> {
     let mut time = ClockTime {
         seconds: 0,

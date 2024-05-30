@@ -121,11 +121,6 @@ impl Device for PipeSide {
         Ok(buf.len() as u64)
     }
 
-    fn clone_device(&self) -> Result<(), FileSystemError> {
-        self.clones.fetch_add(1, Ordering::AcqRel);
-        Ok(())
-    }
-
     fn close(&self) -> Result<(), FileSystemError> {
         // only close the pipe when all clones are closed
         if self.clones.fetch_sub(1, Ordering::AcqRel) != 1 {
@@ -138,6 +133,11 @@ impl Device for PipeSide {
         } else {
             pipe.write_side_available = false;
         }
+        Ok(())
+    }
+
+    fn clone_device(&self) -> Result<(), FileSystemError> {
+        self.clones.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 }

@@ -88,7 +88,7 @@ fn finish_boot() {
     info!(
         "Used heap: {} ({:0.3}%)",
         MemSize(allocated),
-        allocated as f64 / (heap_size) as f64 * 100.
+        allocated as f64 / heap_size as f64 * 100.
     );
     info!(
         "From possible heap: {} ({:0.3}%)",
@@ -110,7 +110,7 @@ fn load_init_process() {
         fs::Directory::open("/").expect("No root"),
     )
     .expect("Could not allocate process for `init`");
-    assert!(process.id() == 0, "Must be the first process");
+    assert_eq!(process.id(), 0, "Must be the first process");
 
     // add the console to `init` manually, after that processes will either inherit it or open a pipe or something
     // to act as STDIN/STDOUT/STDERR
@@ -164,7 +164,7 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
     devices::init_legacy_devices();
     graphics::vga::init(multiboot_info.framebuffer());
     console::init_late_device(multiboot_info.framebuffer());
-    devices::prope_pci_devices();
+    devices::probe_pci_devices();
     fs::create_disk_mapping(0).expect("Could not load filesystem");
     finish_boot();
     // -- BOOT FINISHED --

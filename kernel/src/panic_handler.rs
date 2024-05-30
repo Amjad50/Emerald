@@ -35,7 +35,7 @@ pub fn print_kernel_stack_trace(rip: u64, rsp: u64, rbp: u64) {
 
     let module = Module::new(
         String::from("kernel"),
-        KERNEL_LINK as u64..(kernel_elf_end()) as u64,
+        KERNEL_LINK as u64..kernel_elf_end() as u64,
         KERNEL_LINK as u64,
         ExplicitModuleSectionInfo {
             base_svma: KERNEL_LINK as _,
@@ -89,7 +89,7 @@ pub fn print_kernel_stack_trace(rip: u64, rsp: u64, rbp: u64) {
 pub fn print_process_stack_trace(frame: &InterruptStackFrame64, rbp: u64) {
     cpu::cpu().push_cli();
 
-    assert!(frame.cs & 0x3 == 3, "We are in user mode");
+    assert_eq!(frame.cs & 0x3, 3, "We are in user mode");
 
     let meta = process_metadata();
 

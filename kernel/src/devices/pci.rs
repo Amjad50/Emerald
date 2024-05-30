@@ -47,15 +47,15 @@ pub mod reg {
     pub const INTERRUPT_PIN: u8 = 0x3D;
 }
 
-pub struct PciDevicePropeIterator {
+pub struct PciDeviceProbeIterator {
     bus: u8,
     dev: u8,
     func: u8,
 }
 
-impl PciDevicePropeIterator {
-    pub fn new() -> PciDevicePropeIterator {
-        PciDevicePropeIterator {
+impl PciDeviceProbeIterator {
+    pub fn new() -> PciDeviceProbeIterator {
+        PciDeviceProbeIterator {
             bus: 0,
             dev: 0,
             func: 0,
@@ -63,7 +63,7 @@ impl PciDevicePropeIterator {
     }
 }
 
-impl Iterator for PciDevicePropeIterator {
+impl Iterator for PciDeviceProbeIterator {
     type Item = PciDeviceConfig;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -467,12 +467,12 @@ impl PciDeviceConfig {
 // this is used since some PCI devices might produce multiple devices
 // so we use this to select which one to probe and store them individually
 // so that its easier to interact with them
-pub struct PropeExtra {
+pub struct ProbeExtra {
     pub args: [u64; 4],
 }
 
 pub trait PciDevice {
-    fn probe_init(config: &PciDeviceConfig, extra: PropeExtra) -> Option<Self>
+    fn probe_init(config: &PciDeviceConfig, extra: ProbeExtra) -> Option<Self>
     where
         Self: Sized;
     fn device_name(&self) -> &'static str;

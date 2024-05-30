@@ -35,7 +35,7 @@ Currently, we have 4 segments excluding the `NULL` segment:
 - `USER_DATA`: This is the data segment for the userspace.
     - flags: `flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(USER_RING)`
 
-The code segments will have the `LONG` flag set. Technically, we don't also need the `KERNEL_DATA` segment, but its included to be
+The code segments will have the `LONG` flag set. Technically, we don't also need the `KERNEL_DATA` segment, but It's included to be
 more consistent.
 
 > I won't go into details of the flags, you can check the documentation of [GDT] or the CPU manual.

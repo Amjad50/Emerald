@@ -133,7 +133,7 @@ So we setup all of those and the rest of the OS then.
 
 Currently, the main focus for running userspace applications is by having `std` in rust, as all userspace applications
 are build in rust, this is the primary support. Thus, we don't have `libc` for now. We have [`emerald_std`](libraries/emerald_std/)
-which is the main dependancy for that `std` uses.
+which is the main dependency for that `std` uses.
 
 We have our own target `x86_64-unknown-emerald` which is a custom target for our OS, added to custom fork
 of `rustc` in here: [`rust`].

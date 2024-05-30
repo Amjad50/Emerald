@@ -18,7 +18,7 @@ pub unsafe fn load_elf_to_vm(
     cpu::cpu().push_cli();
     let old_vm = virtual_memory_mapper::get_current_vm();
 
-    // switch temporaily so we can map the elf
+    // switch temporarily so we can map the elf
     // SAFETY: this must be called while the current vm and this new vm must share the same
     //         kernel regions
     vm.switch_to_this();
@@ -31,7 +31,7 @@ pub unsafe fn load_elf_to_vm(
         match segment.ty() {
             elf::ElfProgramType::Load => {
                 let segment_virtual = segment.virtual_address();
-                assert!(segment_virtual == segment.physical_address());
+                assert_eq!(segment_virtual, segment.physical_address());
 
                 let mut flags = elf::to_virtual_memory_flags(segment.flags());
                 flags |= virtual_memory_mapper::flags::PTE_USER;

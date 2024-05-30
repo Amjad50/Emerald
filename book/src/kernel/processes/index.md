@@ -4,7 +4,7 @@
 
 > This is implemented in [`process`][process]
 
-This module, implements the process mangement of the kernel, including creating, destroying, and scheduling processes.
+This module, implements the process management of the kernel, including creating, destroying, and scheduling processes.
 As well as managing the process's memory, and the process's resources.
 
 Currently, when we say `process`, we also mean `thread`, as we don't have multi-threading support yet.
@@ -20,7 +20,7 @@ The process structure [`Process`][process_structure] contain all the information
 - `argv`: A string list of the arguments passed to the process.
 - `stack_ptr_end`: The end of the stack, the stack grows down, so this is the highest address of the stack, and where the stack starts when the process is created.
 - `stack_size`: The current size of the stack, currently, its constant, until we get growing stack support.
-- `heap_start`: The start address of the heap, this will be padded by around `1MB` from the end of the `ELF` file loadded into memory.
+- `heap_start`: The start address of the heap, this will be padded by around `1MB` from the end of the `ELF` file loaded into memory.
 - `heap_size`: The current size of the heap. The user process can request more heap space with the [`inc_dec_heap`](./syscalls.md#syscalls-list) system call.
 - `heap_max`: The maximum possible size of the heap, this is not changed, currently set to `1GB`.
 - `priority`: The priority of the process, this is used by the scheduler. see [`PriorityLevel`](https://docs.rs/emerald_kernel_user_link/latest/emerald_kernel_user_link/process/enum.PriorityLevel.html).)

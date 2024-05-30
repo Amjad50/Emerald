@@ -400,8 +400,8 @@ impl<'a> Iterator for MultiBootTagIter<'a> {
         let tag = match tag.ty {
             0 => {
                 // end
-                assert!(tag.size as usize == mem::size_of::<MultiBootTagRaw>());
-                assert!(self.remaining == 0);
+                assert_eq!(tag.size as usize, mem::size_of::<MultiBootTagRaw>());
+                assert_eq!(self.remaining, 0);
                 return None;
             }
             1 => {

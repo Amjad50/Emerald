@@ -216,7 +216,7 @@ pub fn load_fat_filesystem(
             error: e,
         })?;
 
-    // SAFETY: This is a valid allocated memory
+    // SAFETY: This is a valid, allocated memory
     let boot_sector = unsafe { sectors.as_ptr().cast::<FatBootSectorRaw>().read() };
     let boot_sector = FatBootSector::new(boot_sector, size_in_sectors)?;
 
@@ -601,7 +601,7 @@ enum DirectoryEntry<'a> {
 
 impl<'a> DirectoryEntry<'a> {
     pub fn from_raw(raw: &mut [u8]) -> DirectoryEntry {
-        assert!(raw.len() == DIRECTORY_ENTRY_SIZE as usize);
+        assert_eq!(raw.len(), DIRECTORY_ENTRY_SIZE as usize);
         let normal = unsafe {
             raw.as_mut_ptr()
                 .cast::<DirectoryEntryNormal>()
@@ -659,7 +659,7 @@ impl<'a> DirectoryEntry<'a> {
     }
 
     fn write_long(&mut self, new_entry: DirectoryEntryLong) {
-        assert!(new_entry.attributes & attrs::LONG_NAME == attrs::LONG_NAME);
+        assert_eq!(new_entry.attributes & attrs::LONG_NAME, attrs::LONG_NAME);
         match self {
             DirectoryEntry::Long(entry) => {
                 **entry = new_entry;
@@ -680,7 +680,7 @@ impl<'a> DirectoryEntry<'a> {
     }
 
     fn write_normal(&mut self, new_entry: DirectoryEntryNormal) {
-        assert!(new_entry.attributes & attrs::LONG_NAME != attrs::LONG_NAME);
+        assert_ne!(new_entry.attributes & attrs::LONG_NAME, attrs::LONG_NAME);
         match self {
             DirectoryEntry::Normal(entry) => {
                 **entry = new_entry;
@@ -829,7 +829,7 @@ impl DirectoryIterator<'_> {
         let entry = &mut self.current_sector[entry_start..entry_end];
         self.entry_index_in_sector += 1;
 
-        assert!(entry.len() == DIRECTORY_ENTRY_SIZE as usize);
+        assert_eq!(entry.len(), DIRECTORY_ENTRY_SIZE as usize);
         Ok(DirectoryEntry::from_raw(entry))
     }
 
@@ -993,15 +993,15 @@ impl Iterator for DirectoryIterator<'_> {
             let mut long_entry = entry.as_long().clone();
             // long file name
             // this should be the last
-            assert!(long_entry.sequence_number & 0x40 == 0x40);
+            assert_eq!(long_entry.sequence_number & 0x40, 0x40);
             let number_of_entries = long_entry.sequence_number & 0x3F;
-            let mut long_name_enteries = Vec::with_capacity(number_of_entries as usize);
+            let mut long_name_entries = Vec::with_capacity(number_of_entries as usize);
             // skip all long file name entries
             for i in 0..number_of_entries {
                 let name_part = long_entry.name();
 
                 // add to the entries
-                long_name_enteries.push(name_part);
+                long_name_entries.push(name_part);
 
                 // next entry
                 entry = self.get_next_entry().ok()?;
@@ -1010,7 +1010,7 @@ impl Iterator for DirectoryIterator<'_> {
                 }
             }
             let mut name = String::new();
-            long_name_enteries
+            long_name_entries
                 .into_iter()
                 .rev()
                 .for_each(|s| name.push_str(&s));
@@ -1149,7 +1149,7 @@ struct Fat {
 }
 
 impl Fat {
-    /// A temmporary initilizer for the FAT, will be replaced with [`Fat::load`]
+    /// A temporary initializer for the FAT, will be replaced with [`Fat::load`]
     fn new() -> Self {
         Self {
             buffer: NoDebug(Vec::new()),
@@ -1391,7 +1391,7 @@ impl FatFilesystem {
         if data.is_empty() {
             return Ok(());
         }
-        assert!(data.len() % self.boot_sector.bytes_per_sector() as usize == 0);
+        assert_eq!(data.len() % self.boot_sector.bytes_per_sector() as usize, 0);
         let start_lba = (self.start_lba + start_sector) as u64;
         self.device
             .write_sync(start_lba, data)
@@ -1614,7 +1614,7 @@ impl FatFilesystem {
             let mut cluster = inode.start_cluster() as u32;
 
             // cannot be empty, or be the root
-            assert!(cluster != 0);
+            assert_ne!(cluster, 0);
 
             for _ in 0..cluster_index {
                 cluster = self
@@ -1664,7 +1664,7 @@ impl FatFilesystem {
             accessed += to_access;
             position_in_cluster += to_access as u32;
             if position_in_cluster >= bytes_per_cluster {
-                assert!(position_in_cluster == bytes_per_cluster);
+                assert_eq!(position_in_cluster, bytes_per_cluster);
                 position_in_cluster = 0;
                 match self.fat.next_cluster(cluster)? {
                     Some(next_cluster) => {
@@ -1695,7 +1695,7 @@ impl FatFilesystem {
         let end = start + DIRECTORY_ENTRY_SIZE as usize;
 
         let mut entry = DirectoryEntry::from_raw(&mut sector[start..end]);
-        assert!(entry.state() == DirectoryEntryState::Used);
+        assert_eq!(entry.state(), DirectoryEntryState::Used);
 
         let entry = entry.as_normal_mut();
         let current = entry.clone();
@@ -1722,7 +1722,7 @@ impl FatFilesystem {
         // - create the directory (this may fail, if so, rollback)
         // - create the . and .. entries
         // We could have done it more efficiently, by starting with cluster=0
-        // and then allocating and creating directoties if its not existent
+        // and then allocating and creating directories if its not existent
         // but the issue is that qemu vvfat driver will complain and print some debug messages that
         // cluster 0 is used multiple times, so we are here, making sure the cluster is always
         // valid
@@ -1737,9 +1737,9 @@ impl FatFilesystem {
             .ok_or(FatError::NotEnoughSpace)?;
         self.fat.write_fat_entry(cluster, FatEntry::EndOfChain);
         self.flush_fat()?;
-        // lets empty out the first sector only
-        // if its a file, the size is 0 anyway
-        // if its a directory, it will exit since the
+        // let's empty out the first sector only
+        // if it's a file, the size is 0 anyway
+        // if it's a directory, it will exit since the
         // first direntry will be zero
         self.write_sectors(
             self.first_sector_of_cluster(cluster),
@@ -1763,11 +1763,11 @@ impl FatFilesystem {
             }
         };
 
-        assert!(node.name() == name, "node name: {:?}", node.name());
+        assert_eq!(node.name(), name, "node name: {:?}", node.name());
 
         // create the . and .. entries if this is a directory
         if attributes.directory() {
-            assert!(node.start_cluster() == cluster as u64);
+            assert_eq!(node.start_cluster(), cluster as u64);
             let mut dot_entry = DirectoryEntryNormal {
                 short_name: [0x20; 11],
                 _nt_reserved: 0,
@@ -1801,13 +1801,10 @@ impl FatFilesystem {
             let dot_node = dir_iter.add_entry(dot_entry, Vec::new())?;
             let dot_dot_node = dir_iter.add_entry(dot_dot_entry, Vec::new())?;
 
-            assert!(
-                dot_node.name() == ".",
-                "dot node name: {:?}",
-                dot_node.name()
-            );
-            assert!(
-                dot_dot_node.name() == "..",
+            assert_eq!(dot_node.name(), ".", "dot node name: {:?}", dot_node.name());
+            assert_eq!(
+                dot_dot_node.name(),
+                "..",
                 "dot dot node name: {:?}",
                 dot_dot_node.name()
             );
@@ -1891,6 +1888,33 @@ impl FatFilesystem {
 }
 
 impl FileSystem for Mutex<FatFilesystem> {
+    fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
+        self.lock().open_root_dir_inode()
+    }
+
+    fn read_dir(
+        &self,
+        inode: &DirectoryNode,
+        handler: &mut dyn FnMut(Node) -> DirTreverse,
+    ) -> Result<(), FileSystemError> {
+        for node in self.lock().open_dir_inode(inode)? {
+            if let DirTreverse::Stop = handler(node) {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn create_node(
+        &self,
+        parent: &DirectoryNode,
+        name: &str,
+        attributes: FileAttributes,
+    ) -> Result<Node, FileSystemError> {
+        self.lock().add_directory_entry(parent, name, attributes)
+    }
+
     fn read_file(
         &self,
         inode: &FileNode,
@@ -1963,24 +1987,6 @@ impl FileSystem for Mutex<FatFilesystem> {
             .flush_cluster(inode, access_helper.current_cluster as u32)
     }
 
-    fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
-        self.lock().open_root_dir_inode()
-    }
-
-    fn read_dir(
-        &self,
-        inode: &DirectoryNode,
-        handler: &mut dyn FnMut(Node) -> DirTreverse,
-    ) -> Result<(), FileSystemError> {
-        for node in self.lock().open_dir_inode(inode)? {
-            if let DirTreverse::Stop = handler(node) {
-                break;
-            }
-        }
-
-        Ok(())
-    }
-
     fn close_file(
         &self,
         inode: &FileNode,
@@ -2000,14 +2006,5 @@ impl FileSystem for Mutex<FatFilesystem> {
         })?;
 
         Ok(())
-    }
-
-    fn create_node(
-        &self,
-        parent: &DirectoryNode,
-        name: &str,
-        attributes: FileAttributes,
-    ) -> Result<Node, FileSystemError> {
-        self.lock().add_directory_entry(parent, name, attributes)
     }
 }

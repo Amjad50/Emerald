@@ -13,7 +13,7 @@ use crate::{
 
 use self::{
     keyboard_mouse::{KeyboardDeviceCreator, MouseDeviceCreator},
-    pci::{PciDeviceConfig, PciDevicePropeIterator},
+    pci::{PciDeviceConfig, PciDeviceProbeIterator},
 };
 
 pub mod clock;
@@ -109,8 +109,8 @@ pub fn register_device(device: Arc<dyn Device>) {
     devices.devices.insert(String::from(device.name()), device);
 }
 
-pub fn prope_pci_devices() {
-    let pci_device_iter = PciDevicePropeIterator::new();
+pub fn probe_pci_devices() {
+    let pci_device_iter = PciDeviceProbeIterator::new();
     for device in pci_device_iter {
         if probe_pci_driver(&device) {
             info!(

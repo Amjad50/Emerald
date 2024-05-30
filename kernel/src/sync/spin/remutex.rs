@@ -10,7 +10,7 @@ use crate::cpu;
 
 use super::lock;
 
-/// A mutex that can be intered more than once by the same CPU
+/// A mutex that can be entered more than once by the same CPU
 ///
 /// Only provides `Deref`, and not `DerefMut`, because the data
 /// would then be mutated with inconsistent data.

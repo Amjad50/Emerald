@@ -76,7 +76,7 @@ pub fn init_kernel_gdt() {
             assert!(stack_end_virtual <= INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
             if i == 6 {
                 // make sure we have allocated everything
-                assert!(stack_end_virtual == INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
+                assert_eq!(stack_end_virtual, INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
             }
             // make sure that the stack is aligned, so we can easily allocate pages
             assert!(
@@ -262,7 +262,7 @@ impl GlobalDescriptorManager {
     }
 
     pub fn load_kernel_segments(&self) {
-        assert!(self.kernel_code_seg.0 != 0);
+        assert_ne!(self.kernel_code_seg.0, 0);
         unsafe {
             // load the code segment
             super::set_cs(self.kernel_code_seg);
@@ -272,7 +272,7 @@ impl GlobalDescriptorManager {
     }
 
     pub fn load_tss(&self) {
-        assert!(self.tss_seg.0 != 0);
+        assert_ne!(self.tss_seg.0, 0);
         unsafe {
             // load the tss segment
             super::ltr(self.tss_seg);
@@ -296,7 +296,7 @@ impl GlobalDescriptorTable {
 
     /// Must make sure that the data is a valid descriptor following the spec
     unsafe fn push_user(&mut self, entry: UserDescriptorEntry) -> usize {
-        assert!(mem::size_of::<UserDescriptorEntry>() == 8);
+        assert_eq!(mem::size_of::<UserDescriptorEntry>(), 8);
         let index = self.index;
         self.index += 1;
         // SAFETY: This is valid because its 8 bytes and
@@ -306,7 +306,7 @@ impl GlobalDescriptorTable {
 
     /// Must make sure that the data is a valid descriptor following the spec
     unsafe fn push_system(&mut self, entry: SystemDescriptorEntry) -> usize {
-        assert!(mem::size_of::<SystemDescriptorEntry>() == 16);
+        assert_eq!(mem::size_of::<SystemDescriptorEntry>(), 16);
         // SAFETY: This is valid because its 16 bytes and
         let data = core::mem::transmute::<_, [u64; 2]>(entry);
         let index = self.index;
