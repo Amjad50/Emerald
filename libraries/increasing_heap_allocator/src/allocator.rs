@@ -349,7 +349,7 @@ where
         }
 
         // work on the pointer and add the info of the block before it, and handle alignment
-        // so we can use it to deallocate later
+        // so, we can use it to deallocate later
         let base = free_block as usize;
         // this should never fail, we are allocating of `block_info_layout.align()` alignment always
         assert!(is_aligned(base, block_info_layout.align()));
@@ -394,8 +394,8 @@ where
         let free_block_end = free_block as usize + allocation_size;
         let new_free_block = free_block_end as *mut HeapFreeBlock;
 
-        // we have to make sure that the block after us has enough space to write the metadat
-        // and we won't corrupt the block that comes after (if there is anys)
+        // we have to make sure that the block after us has enough space to write the metadata,
+        // and we won't corrupt the block that comes after (if there is any)
         let required_safe_size = allocation_size + mem::size_of::<HeapFreeBlock>();
 
         // store the actual size of the block

@@ -224,8 +224,8 @@ fill_pdt_loop:
     loop fill_pdt_loop
 
 # -------------------
-# Perform CPU intialization
-# intialize the cpu to a known state, setup long mode, and jump to the kernel
+# Perform CPU initialization
+# initialize the cpu to a known state, setup long mode, and jump to the kernel
 # Setup empty IDT
     lidt [idtr - 0xFFFFFFFF80000000]
 
@@ -326,7 +326,7 @@ kernel_main_low:
     mov rax, offset stack_end - 8
     mov rsp, rax
 
-    # (first argument) rdi = multiboot info (we haven't toched ebx, so it should have the same value since `entry`)
+    # (first argument) rdi = multiboot info (we haven't touched ebx, so it should have the same value since `entry`)
     mov rdi, rbx
     # convert to virtual address
     add rdi, 0xFFFFFFFF80000000

@@ -38,12 +38,12 @@ last value will be used.
 Here is the supported properties:
 
 
-| Property | Type | Description | Default |
-|----------|------|-------------|---------|
-| `uart` | `bool` | Enable UART/serial interface | `true` |
-| `uart_baud` | `u32` | UART baud rate | `115200` |
-| `max_log_level` | `LogLevel` (`trace/debug/info/warn/error`) | Maximum log level | `LogLevel::Info` |
-| `log_file` | `&str` | Log file path | `"/kernel.log"` |
+| Property        | Type                                       | Description                  | Default          |
+|-----------------|--------------------------------------------|------------------------------|------------------|
+| `uart`          | `bool`                                     | Enable UART/serial interface | `true`           |
+| `uart_baud`     | `u32`                                      | UART baud rate               | `115200`         |
+| `max_log_level` | `LogLevel` (`trace/debug/info/warn/error`) | Maximum log level            | `LogLevel::Info` |
+| `log_file`      | `&str`                                     | Log file path                | `"/kernel.log"`  |
 
 
 If we write these in a command line, it will look like:

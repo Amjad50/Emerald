@@ -35,29 +35,29 @@ ls >> file.txt
 
 ### List of commands/programs
 
-| Name | Description |
-| ---- | ----------- |
-| `cd` (internal) | Change directory |
-| `pwd` (internal) | Print working directory |
-| `exit` (internal) | Exit the shell, which will just cause another to come back up |
-| `touch` (internal) | Create a file, if not present |
-| `ls` | List directory contents |
-| `tree` | List directory contents recursively |
-| `echo` | Write arguments to the standard output |
-| `cat` | Print 1 file on the standard output (no concat yet XD) |
-| `xxd` | Hexdump utility |
-| `keyboard` | Keyboard test program |
-| `mouse` | Mouse test program |
+| Name               | Description                                                   |
+|--------------------|---------------------------------------------------------------|
+| `cd` (internal)    | Change directory                                              |
+| `pwd` (internal)   | Print working directory                                       |
+| `exit` (internal)  | Exit the shell, which will just cause another to come back up |
+| `touch` (internal) | Create a file, if not present                                 |
+| `ls`               | List directory contents                                       |
+| `tree`             | List directory contents recursively                           |
+| `echo`             | Write arguments to the standard output                        |
+| `cat`              | Print 1 file on the standard output (no concat yet XD)        |
+| `xxd`              | Hexdump utility                                               |
+| `keyboard`         | Keyboard test program                                         |
+| `mouse`            | Mouse test program                                            |
 
 ## `graphics`
 Here we have simple graphics programs that will take control of the graphics controller from the kernel and thus
 will look like exiting from shell, upon exiting the program, the shell will come back up.
 
 ### List of commands/Programs
-| Name | Description |
-| ---- | ----------- |
-| `graphics` | Simple graphics demo progam, it will display a red ball and it will bounce around the screen |
-| `video` | Video player, it will take a video in image zip format, that is a zip file with jpg images inside it, check [`tools/video_to_zip.sh`] for how to convert normal videos to this format. You can specify the fps upon creation (default is `30`), and specify it as will when running the program. |
+| Name       | Description                                                                                                                                                                                                                                                                                      |
+|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `graphics` | Simple graphics demo program, it will display a red ball and it will bounce around the screen                                                                                                                                                                                                    |
+| `video`    | Video player, it will take a video in image zip format, that is a zip file with jpg images inside it, check [`tools/video_to_zip.sh`] for how to convert normal videos to this format. You can specify the fps upon creation (default is `30`), and specify it as will when running the program. |
 
 [`tools/video_to_zip.sh`]: https://github.com/Amjad50/Emerald/blob/master/tools/video_to_zip.sh
 

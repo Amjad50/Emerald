@@ -24,7 +24,7 @@ Generally, most OSes will use [`acpica`] which is a tool that can parse and exec
 
 Just to share here, since this is a documentation and all.
 
-Generally, parsing `AML` is not that hard, its a binary format, we can read the `opcode` and know what term type we need.
+Generally, parsing `AML` is not that hard, it's a binary format, we can read the `opcode` and know what term type we need.
 
 The issue is one thing, `method calls`.
 
@@ -35,7 +35,7 @@ The issue is:
 - The method can be external (I think).
 
 So, we have one choice ([`acpica`] also does it) and that is to "**guess**" the number of arguments.
-And this is very error prone, as a `Term` can be also considered an expression, like `NameString` can be considered as
+And this is very error-prone, as a `Term` can be also considered an expression, like `NameString` can be considered as
 a variable if it is not a method call. *very messy :'(*
 
 The current implementation I have I think is quite good, and I got to fix all the bugs I found, but of course there could be more.

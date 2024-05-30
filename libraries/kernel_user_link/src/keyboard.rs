@@ -207,7 +207,7 @@ impl Key {
         let pressed = bytes[0] & modifier::PRESSED != 0;
         let modifiers = bytes[0] & !modifier::PRESSED;
         // Safety: we know that the `bytes` is a valid representation of `KeyType`
-        //         responsability of the caller to ensure that
+        //         responsibility of the caller to ensure that
         let key_type = core::mem::transmute(bytes[1]);
 
         Self {

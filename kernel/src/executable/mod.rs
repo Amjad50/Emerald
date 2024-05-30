@@ -18,7 +18,7 @@ pub unsafe fn load_elf_to_vm(
     cpu::cpu().push_cli();
     let old_vm = virtual_memory_mapper::get_current_vm();
 
-    // switch temporaily so we can map the elf
+    // switch temporarily so we can map the elf
     // SAFETY: this must be called while the current vm and this new vm must share the same
     //         kernel regions
     vm.switch_to_this();

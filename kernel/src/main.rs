@@ -164,7 +164,7 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
     devices::init_legacy_devices();
     graphics::vga::init(multiboot_info.framebuffer());
     console::init_late_device(multiboot_info.framebuffer());
-    devices::prope_pci_devices();
+    devices::probe_pci_devices();
     fs::create_disk_mapping(0).expect("Could not load filesystem");
     finish_boot();
     // -- BOOT FINISHED --

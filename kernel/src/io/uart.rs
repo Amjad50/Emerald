@@ -41,7 +41,7 @@ const IE_TX_READY: u8 = 1 << 1;
 
 /// Got data
 const LINE_RX_READY: u8 = 1 << 0;
-/// Trasmitter is empty
+/// Transmitter is empty
 const LINE_TX_EMPTY: u8 = 1 << 5;
 
 fn write_reg(port_addr: UartPort, reg: UartReg, val: u8) {

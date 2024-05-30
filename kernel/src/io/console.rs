@@ -206,7 +206,7 @@ impl ConsoleController {
                 );
                 // SAFETY: we are relying on the caller calling this function alone
                 //  since we are taking ownership of the early console, and we are sure that
-                //  its not being used anywhere, this is fine
+                //  it's not being used anywhere, this is fine
                 let late_console = LateConsole::new(uart, video_console);
                 *self = Self::Late(Arc::new(ReMutex::new(RefCell::new(late_console))));
             }
@@ -490,7 +490,7 @@ impl Console for LateConsole {
             {
                 dst[i] = c;
                 i += 1;
-                // ignore if its not a valid char
+                // ignore if it's not a valid char
             } else {
                 break;
             }

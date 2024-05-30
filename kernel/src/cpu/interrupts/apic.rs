@@ -170,7 +170,7 @@ struct ApicMmio {
     _pad5: ApicReg,
     extended_apic_features: ApicReg,
     extended_apic_control: ApicReg,
-    specifc_end_of_interrupt: ApicReg,
+    specific_end_of_interrupt: ApicReg,
     _pad6: [ApicReg; 5],
     interrupt_enable: [ApicReg; 8],
     extended_interrupt_local_vector_tables: [ApicReg; 4],
@@ -219,7 +219,7 @@ impl IoApicRedirectionBuilder {
         self
     }
 
-    pub fn with_interrupt_polartiy_low(mut self, polarity: bool) -> Self {
+    pub fn with_interrupt_polarity_low(mut self, polarity: bool) -> Self {
         self.reg = (self.reg & !io_apic::RDR_PIN_POLARITY_MASK) | (polarity as u64) << 13;
         self
     }
@@ -570,7 +570,7 @@ impl Apic {
         let b = IoApicRedirectionBuilder::default()
             .with_vector(vector_num)
             .with_delivery_mode(0) // fixed
-            .with_interrupt_polartiy_low(false) // active high
+            .with_interrupt_polarity_low(false) // active high
             .with_trigger_mode_level(false) // edge
             .with_mask(false) // not masked
             .with_destination(DestinationType::Physical(cpu.apic_id));

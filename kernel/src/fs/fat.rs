@@ -216,7 +216,7 @@ pub fn load_fat_filesystem(
             error: e,
         })?;
 
-    // SAFETY: This is a valid allocated memory
+    // SAFETY: This is a valid, allocated memory
     let boot_sector = unsafe { sectors.as_ptr().cast::<FatBootSectorRaw>().read() };
     let boot_sector = FatBootSector::new(boot_sector, size_in_sectors)?;
 
@@ -995,13 +995,13 @@ impl Iterator for DirectoryIterator<'_> {
             // this should be the last
             assert!(long_entry.sequence_number & 0x40 == 0x40);
             let number_of_entries = long_entry.sequence_number & 0x3F;
-            let mut long_name_enteries = Vec::with_capacity(number_of_entries as usize);
+            let mut long_name_entries = Vec::with_capacity(number_of_entries as usize);
             // skip all long file name entries
             for i in 0..number_of_entries {
                 let name_part = long_entry.name();
 
                 // add to the entries
-                long_name_enteries.push(name_part);
+                long_name_entries.push(name_part);
 
                 // next entry
                 entry = self.get_next_entry().ok()?;
@@ -1010,7 +1010,7 @@ impl Iterator for DirectoryIterator<'_> {
                 }
             }
             let mut name = String::new();
-            long_name_enteries
+            long_name_entries
                 .into_iter()
                 .rev()
                 .for_each(|s| name.push_str(&s));
@@ -1149,7 +1149,7 @@ struct Fat {
 }
 
 impl Fat {
-    /// A temmporary initilizer for the FAT, will be replaced with [`Fat::load`]
+    /// A temporary initializer for the FAT, will be replaced with [`Fat::load`]
     fn new() -> Self {
         Self {
             buffer: NoDebug(Vec::new()),
@@ -1722,7 +1722,7 @@ impl FatFilesystem {
         // - create the directory (this may fail, if so, rollback)
         // - create the . and .. entries
         // We could have done it more efficiently, by starting with cluster=0
-        // and then allocating and creating directoties if its not existent
+        // and then allocating and creating directories if its not existent
         // but the issue is that qemu vvfat driver will complain and print some debug messages that
         // cluster 0 is used multiple times, so we are here, making sure the cluster is always
         // valid
@@ -1737,9 +1737,9 @@ impl FatFilesystem {
             .ok_or(FatError::NotEnoughSpace)?;
         self.fat.write_fat_entry(cluster, FatEntry::EndOfChain);
         self.flush_fat()?;
-        // lets empty out the first sector only
-        // if its a file, the size is 0 anyway
-        // if its a directory, it will exit since the
+        // let's empty out the first sector only
+        // if it's a file, the size is 0 anyway
+        // if it's a directory, it will exit since the
         // first direntry will be zero
         self.write_sectors(
             self.first_sector_of_cluster(cluster),

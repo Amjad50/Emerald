@@ -110,7 +110,7 @@ And then `PDT[0..63]` is shared between the two and maps the first `128MB` of ph
 
 Then, `CR3` is set to the address of `PML4` and `CR4` is set to enable `PAE`.
 
-#### GDT (Global Descritor Table)
+#### GDT (Global Descriptor Table)
 
 We setup a very basic GDT that contain kernel `code` and `data` segments (even though, data probably is not needed).
 

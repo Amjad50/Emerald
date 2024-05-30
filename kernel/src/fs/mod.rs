@@ -630,7 +630,7 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
         first_partition.size_in_sectors,
     )?;
     info!(
-        "Mapping / to FAT filesystem {:?} ({:?}), parition_type: 0x{:02X}",
+        "Mapping / to FAT filesystem {:?} ({:?}), partition_type: 0x{:02X}",
         filesystem.volume_label(),
         filesystem.fat_type(),
         first_partition.partition_type

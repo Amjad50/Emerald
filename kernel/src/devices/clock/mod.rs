@@ -92,7 +92,7 @@ trait ClockDevice: Send + Sync {
     /// Returns the name of the device
     fn name(&self) -> &'static str;
     /// Returns the current time of the device with no relation to anything
-    /// The system will use consequtive calls to determine the time
+    /// The system will use consecutive calls to determine the time
     fn get_time(&self) -> ClockTime;
     /// Returns the granularity of the device in nanoseconds, i.e. the smallest time unit it can measure
     /// Must be at least 1

@@ -15,7 +15,7 @@ The [ELF] file is the executable format used by most of the Unix-like systems, a
 
 We load elf on process creation, see [process creation](../processes/index.md#process-creation) for more information.
 
-For now we support very basic loading, no dynamic linking, shared libraries, or relocation.
+For now, we support very basic loading, no dynamic linking, shared libraries, or relocation.
 Just loading segments.
 
 [ELF]: https://en.wikipedia.org/wiki/Executable_and_Linkable_Format

@@ -190,7 +190,7 @@ fn main() {
             continue;
         }
 
-        // if this cmd exsist in the current directory, use it
+        // if this cmd exist in the current directory, use it
         // otherwise, use the root
         let cmd_path: Cow<'_, str> = if Path::new(cmd).exists() {
             cmd.into()

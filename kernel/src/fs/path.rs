@@ -49,7 +49,7 @@ use alloc::{
     sync::Arc,
 };
 
-/// use unix pathes seperator
+/// use unix paths separator
 pub const SEPARATOR: char = '/';
 
 pub fn is_separator(c: char) -> bool {

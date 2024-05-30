@@ -19,7 +19,7 @@ use std::thread::sleep;
 
 const RECT_WIDTH: i32 = 3;
 const PROGRESS_PADDING: u32 = 100;
-const PRGRESS_HEIGHT: u32 = 30;
+const PROGRESS_HEIGHT: u32 = 30;
 const MOUSE_RADIUS: u32 = 10;
 
 fn main() {
@@ -91,7 +91,7 @@ fn main() {
             PROGRESS_PADDING as i32,
             graphics.size().height as i32 - padding_top as i32,
         ),
-        Size::new(0, PRGRESS_HEIGHT),
+        Size::new(0, PROGRESS_HEIGHT),
     );
     let progress_border = Rectangle::new(
         Point::new(
@@ -100,7 +100,7 @@ fn main() {
         ),
         Size::new(
             graphics.size().width - PROGRESS_PADDING * 2 + RECT_WIDTH as u32 * 2,
-            PRGRESS_HEIGHT + RECT_WIDTH as u32 * 2,
+            PROGRESS_HEIGHT + RECT_WIDTH as u32 * 2,
         ),
     );
 

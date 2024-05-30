@@ -108,14 +108,14 @@ impl InterruptRouteCapabilityBitmap {
         self.bitmap & (1 << bit) != 0
     }
 
-    fn enabled_rounts(&self) -> impl Iterator<Item = u8> {
+    fn enabled_routes(&self) -> impl Iterator<Item = u8> {
         let s = *self;
         (0..32).filter(move |bit| s.is_set(*bit))
     }
 }
 
 struct HpetTimerConfig {
-    is_interrupt_level_trigerred: bool,
+    is_interrupt_level_triggered: bool,
     interrupt_enabled: bool,
     is_periodic: bool,
     is_periodic_capable: bool,
@@ -132,7 +132,7 @@ impl HpetTimerConfig {
     fn read(raw_ptr: &u64) -> Self {
         let data = unsafe { (raw_ptr as *const u64).read_volatile() };
         Self {
-            is_interrupt_level_trigerred: data & (1 << 1) != 0,
+            is_interrupt_level_triggered: data & (1 << 1) != 0,
             interrupt_enabled: data & (1 << 2) != 0,
             is_periodic: data & (1 << 3) != 0,
             is_periodic_capable: data & (1 << 4) != 0,
@@ -150,7 +150,7 @@ impl HpetTimerConfig {
 
     fn write(self, raw_ptr: &mut u64) {
         let mut data = 0;
-        if self.is_interrupt_level_trigerred {
+        if self.is_interrupt_level_triggered {
             data |= 1 << 1;
         }
         if self.interrupt_enabled {
@@ -245,18 +245,18 @@ impl Hpet {
         assert!(config.is_periodic_capable); // must be periodic capable
         assert!(config.is_64bit_capable); // must be 64-bit capable
 
-        config.is_interrupt_level_trigerred = false;
+        config.is_interrupt_level_triggered = false;
         config.interrupt_enabled = true;
         config.is_periodic = true; // periodic
         config.force_32bit_mode = false; // don't force 32-bit mode
         config.interrupt_via_fsb = false; // don't use FSB
-        let available_routes = config.interrupt_route_capabilities.enabled_rounts();
+        let available_routes = config.interrupt_route_capabilities.enabled_routes();
 
         let mut first_available_route = None;
         let mut above_15_route = None;
         // check if we have available routes that are higher than 15, which
         // is the range of legacy ISA interrupts.
-        // if we have any above those, its best to use them
+        // if we have any above those, it's best to use them
         // otherwise, we will use the first available route
         for route in available_routes {
             if first_available_route.is_none() && !apic::is_irq_assigned(route) {
@@ -271,11 +271,11 @@ impl Hpet {
             }
         }
 
-        let choosen_route = above_15_route
+        let chosen_route = above_15_route
             .or(first_available_route)
             .expect("No available HPET route");
 
-        config.interrupt_route = choosen_route;
+        config.interrupt_route = chosen_route;
         config.timer_set_value = true; // write the timer value
         timer.set_config(config);
         timer.write_comparator_value(ONE_SECOND_IN_FEMTOSECONDS / clock_period);
@@ -284,7 +284,7 @@ impl Hpet {
         // setup ioapic
         apic::assign_io_irq_custom(
             timer0_handler as InterruptHandlerWithAllState,
-            choosen_route,
+            chosen_route,
             cpu::cpu(),
             |entry| entry.with_trigger_mode_level(false),
         );
@@ -388,7 +388,7 @@ extern "cdecl" fn timer0_handler(_all_state: &mut InterruptAllSavedState) {
     let mut clock = HPET_CLOCK.get().as_ref().lock();
 
     // if we are level triggered, we must clear the interrupt bit
-    if clock.mmio.timers[0].config().is_interrupt_level_trigerred {
+    if clock.mmio.timers[0].config().is_interrupt_level_triggered {
         if let Some(interrupt) = clock.status_interrupts_iter().next() {
             // clear the interrupt (must for level triggered interrupts)
             clock.ack_interrupt(interrupt);

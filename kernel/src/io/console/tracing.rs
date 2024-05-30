@@ -246,7 +246,7 @@ impl tracing::Collect for ConsoleSubscriber {
         console::run_with_console(|console| {
             let log_file = &mut log_file().lock();
 
-            // first write the level separatly in order to control the colors
+            // first write the level separately in order to control the colors
             console.write_char('[')?;
             log_file.write_char('[')?;
             console.write_str(level_str(event.metadata().level(), true))?;
