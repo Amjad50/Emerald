@@ -258,9 +258,6 @@ impl IoApicRedirectionBuilder {
 struct IoApicMmio {
     register_select: ApicReg,
     data: ApicReg,
-    irq_pin_assersion: ApicReg,
-    _pad: ApicReg,
-    return_of_interrupt: ApicReg,
 }
 
 impl IoApicMmio {
