@@ -154,10 +154,10 @@ impl Default for VideoConsoleAttribute {
 }
 
 trait VideoConsole: Send + Sync {
-    fn write_byte(&mut self, c: u8);
-    fn backspace(&mut self);
     fn init(&mut self);
     fn set_attrib(&mut self, attrib: VideoConsoleAttribute);
+    fn write_byte(&mut self, c: u8);
+    fn backspace(&mut self);
 }
 
 trait Console: Write {

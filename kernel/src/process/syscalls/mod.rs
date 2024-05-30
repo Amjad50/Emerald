@@ -294,7 +294,7 @@ fn sys_read(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     } else {
         bytes_read
     };
-    SyscallResult::Ok(bytes_read as u64)
+    SyscallResult::Ok(bytes_read)
 }
 
 fn sys_close(all_state: &mut InterruptAllSavedState) -> SyscallResult {

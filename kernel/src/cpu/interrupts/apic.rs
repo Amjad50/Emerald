@@ -320,8 +320,9 @@ impl IoApic {
 impl From<tables::IoApic> for IoApic {
     fn from(table: tables::IoApic) -> Self {
         assert!(table.io_apic_address != 0, "IO APIC address is 0");
-        assert!(
-            table.io_apic_address & 0xF == 0,
+        assert_eq!(
+            table.io_apic_address & 0xF,
+            0,
             "IO APIC address is not aligned"
         );
         let mut s = Self {
@@ -433,8 +434,8 @@ impl Apic {
             !io_apics.is_empty(),
             "no IO APICs found in the MADT table, cannot continue"
         );
-        assert!(apic_address != 0, "APIC address is 0, cannot continue");
-        assert!(apic_address & 0xF == 0, "APIC address is not aligned");
+        assert_ne!(apic_address, 0, "APIC address is 0, cannot continue");
+        assert_eq!(apic_address & 0xF, 0, "APIC address is not aligned");
 
         // reset all interrupts
         io_apics.iter_mut().for_each(|io_apic: &mut IoApic| {

@@ -1135,7 +1135,7 @@ impl Parser<'_> {
             0x5b => {
                 self.forward(1)?;
                 let next_byte = self.get_next_byte()?;
-                assert!(next_byte == 0x31);
+                assert_eq!(next_byte, 0x31);
                 Ok(Target::Debug)
             }
             0x71 => {
@@ -1216,7 +1216,7 @@ impl Parser<'_> {
                     let len_now = self.pos;
                     let name = self.parse_name()?;
                     self.state.add_name(name.clone());
-                    assert!(self.pos - len_now == 4); // must be a name segment
+                    assert_eq!(self.pos - len_now, 4); // must be a name segment
                     trace!("field element name: {}", name);
                     let pkg_length = self.get_pkg_length()?;
                     trace!("field element pkg length: {:x}", pkg_length);

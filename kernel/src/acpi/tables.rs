@@ -114,11 +114,11 @@ pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<&'static BiosT
                             if sum == 0 {
                                 // Safety: same as above, this pointer is mapped
                                 let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
-                                if rsdp_ref.rsdp_v1.revision >= 2 {
-                                    return Some(Rsdp::from_v2(rsdp_ref));
+                                return if rsdp_ref.rsdp_v1.revision >= 2 {
+                                    Some(Rsdp::from_v2(rsdp_ref))
                                 } else {
-                                    return Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1));
-                                }
+                                    Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1))
+                                };
                             }
                         }
                         // Safety: same as above, this pointer is mapped

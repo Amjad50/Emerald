@@ -31,7 +31,7 @@ pub unsafe fn load_elf_to_vm(
         match segment.ty() {
             elf::ElfProgramType::Load => {
                 let segment_virtual = segment.virtual_address();
-                assert!(segment_virtual == segment.physical_address());
+                assert_eq!(segment_virtual, segment.physical_address());
 
                 let mut flags = elf::to_virtual_memory_flags(segment.flags());
                 flags |= virtual_memory_mapper::flags::PTE_USER;

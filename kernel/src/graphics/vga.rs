@@ -153,10 +153,7 @@ impl VgaDisplay {
         else {
             panic!("Only RGB framebuffer is supported");
         };
-        assert!(
-            framebuffer.bpp % 8 == 0,
-            "Only byte aligned bpp is supported"
-        );
+        assert_eq!(framebuffer.bpp % 8, 0, "Only byte aligned bpp is supported");
         assert!(
             red_field_position % 8 == 0
                 && green_field_position % 8 == 0
@@ -213,10 +210,10 @@ impl VgaDisplay {
 
         // assert no overlap
         assert!(
-            (src_x + width <= dest_x
+            src_x + width <= dest_x
                 || dest_x + width <= src_x
                 || src_y + height <= dest_y
-                || dest_y + height <= src_y)
+                || dest_y + height <= src_y
         );
 
         let chunk_size = width * self.fb_info.byte_per_pixel as usize;

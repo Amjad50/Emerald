@@ -232,7 +232,7 @@ impl Hpet {
         cpu::cpu().push_cli();
 
         disable_pit();
-        assert!(hpet.base_address.address_space_id == 0); // memory space
+        assert_eq!(hpet.base_address.address_space_id, 0); // memory space
         let mmio = unsafe { VirtualSpace::new(hpet.base_address.address).unwrap() };
 
         // enable the timer

@@ -274,7 +274,7 @@ impl IdeIo {
         self.wait_until_free();
 
         // TODO: replace with error
-        assert!(self.read_status() & ata::STATUS_DATA_REQUEST == 0);
+        assert_eq!(self.read_status() & ata::STATUS_DATA_REQUEST, 0);
 
         Ok(())
     }
@@ -299,7 +299,7 @@ impl IdeIo {
         self.wait_until_free();
 
         // TODO: replace with error
-        assert!(self.read_status() & ata::STATUS_DATA_REQUEST == 0);
+        assert_eq!(self.read_status() & ata::STATUS_DATA_REQUEST, 0);
 
         Ok(())
     }
@@ -362,7 +362,7 @@ impl AtaCommand {
 
     pub fn execute_read(&self, io_port: &IdeIo, data: &mut [u8]) -> Result<(), u8> {
         // must be even since we are receiving 16 bit words
-        assert!(data.len() % 2 == 0);
+        assert_eq!(data.len() % 2, 0);
         io_port.wait_until_can_command()?;
         self.write(io_port);
 
@@ -371,7 +371,7 @@ impl AtaCommand {
 
     pub fn execute_write(&self, io_port: &IdeIo, data: &[u8]) -> Result<(), u8> {
         // must be even since we are sending 16 bit words
-        assert!(data.len() % 2 == 0);
+        assert_eq!(data.len() % 2, 0);
         io_port.wait_until_can_command()?;
         self.write(io_port);
 
@@ -471,7 +471,7 @@ impl AtapiPacketCommand {
 
     pub fn execute(&self, io_port: &IdeIo, data: &mut [u8]) -> Result<(), u8> {
         // must be even since we are receiving 16 bit words
-        assert!(data.len() % 2 == 0);
+        assert_eq!(data.len() % 2, 0);
         io_port.wait_until_can_command()?;
         self.write_packet_command(io_port);
         io_port.wait_until_free();
@@ -795,7 +795,7 @@ impl IdeDeviceImpl {
         let mut device_type = IdeDeviceType::Ata;
 
         if let Err(err) = command.execute_read(&io, &mut identify_data) {
-            assert!(err & ata::ERROR_ABORTED != 0);
+            assert_ne!(err & ata::ERROR_ABORTED, 0);
             let lbalo = io.read_command_block(ata::LBA_LO);
             let lbamid = io.read_command_block(ata::LBA_MID);
             let lbahi = io.read_command_block(ata::LBA_HI);
@@ -808,11 +808,10 @@ impl IdeDeviceImpl {
                 if let Err(err) = command.execute(&io, &mut []) {
                     if err == ata::SENSE_NOT_READY {
                         // device not ready (i.e. not present)
-                        return None;
                     } else {
                         error!("unknown ATAPI device error: Err={err:02x}");
-                        return None;
                     }
+                    return None;
                 }
             } else {
                 error!("unknown IDE device aborted: LBA={lbalo:02x}:{lbamid:02x}:{lbahi:02x}",);
@@ -829,8 +828,11 @@ impl IdeDeviceImpl {
             device_type = IdeDeviceType::Atapi;
         }
 
-        assert!(mem::size_of::<CommandIdentifyDataRaw>() == identify_data.len());
-        let identify_data: CommandIdentifyDataRaw = unsafe { core::mem::transmute(identify_data) };
+        assert_eq!(
+            mem::size_of::<CommandIdentifyDataRaw>(),
+            identify_data.len()
+        );
+        let identify_data: CommandIdentifyDataRaw = unsafe { mem::transmute(identify_data) };
 
         if !identify_data.is_valid() {
             // device is not valid
@@ -963,9 +965,7 @@ impl PciDevice for IdeDevice {
     where
         Self: Sized,
     {
-        if let super::pci::PciDeviceType::MassStorageController(0x1, prog_if, ..) =
-            config.device_type
-        {
+        if let pci::PciDeviceType::MassStorageController(0x1, prog_if, ..) = config.device_type {
             let support_dma = prog_if & pci_cfg::PROG_IF_MASTER != 0;
             let mut command = config.read_command();
             command |= pci_cfg::CMD_IO_SPACE;

@@ -82,6 +82,41 @@ impl VideoConsole for VgaGraphics {
         }
     }
 
+    fn set_attrib(&mut self, attrib: VideoConsoleAttribute) {
+        // These colors are used in PowerShell 6 in Windows 10
+        // except for black, changed to all zeros
+        let to_color = |color: u8| match color {
+            0 => Rgb888::new(0, 0, 0),
+            1 => Rgb888::new(197, 15, 31),
+            2 => Rgb888::new(19, 161, 14),
+            3 => Rgb888::new(193, 156, 0),
+            4 => Rgb888::new(0, 55, 218),
+            5 => Rgb888::new(136, 23, 152),
+            6 => Rgb888::new(58, 150, 221),
+            7 => Rgb888::new(204, 204, 204),
+
+            8 => Rgb888::new(118, 118, 118),
+            9 => Rgb888::new(231, 72, 86),
+            10 => Rgb888::new(22, 198, 12),
+            11 => Rgb888::new(249, 241, 165),
+            12 => Rgb888::new(59, 120, 255),
+            13 => Rgb888::new(180, 0, 158),
+            14 => Rgb888::new(97, 214, 214),
+            _ => Rgb888::new(242, 242, 242),
+        };
+
+        self.text_style
+            .set_background_color(Some(to_color(attrib.background as u8)));
+        self.text_style
+            .set_text_color(Some(to_color(attrib.foreground as u8)));
+
+        if attrib.bold {
+            self.text_style.font = &FONT_9X15_BOLD;
+        } else {
+            self.text_style.font = &FONT_9X15;
+        }
+    }
+
     fn write_byte(&mut self, c: u8) {
         let Some(mut vga) = self.vga.lock_kernel() else {
             // don't change anything if we can't lock the VGA
@@ -128,40 +163,5 @@ impl VideoConsole for VgaGraphics {
             self.text_style.line_height() as usize,
             Pixel { r: 0, g: 0, b: 0 },
         );
-    }
-
-    fn set_attrib(&mut self, attrib: VideoConsoleAttribute) {
-        // These colors are used in PowerShell 6 in Windows 10
-        // except for black, changed to all zeros
-        let to_color = |color: u8| match color {
-            0 => Rgb888::new(0, 0, 0),
-            1 => Rgb888::new(197, 15, 31),
-            2 => Rgb888::new(19, 161, 14),
-            3 => Rgb888::new(193, 156, 0),
-            4 => Rgb888::new(0, 55, 218),
-            5 => Rgb888::new(136, 23, 152),
-            6 => Rgb888::new(58, 150, 221),
-            7 => Rgb888::new(204, 204, 204),
-
-            8 => Rgb888::new(118, 118, 118),
-            9 => Rgb888::new(231, 72, 86),
-            10 => Rgb888::new(22, 198, 12),
-            11 => Rgb888::new(249, 241, 165),
-            12 => Rgb888::new(59, 120, 255),
-            13 => Rgb888::new(180, 0, 158),
-            14 => Rgb888::new(97, 214, 214),
-            _ => Rgb888::new(242, 242, 242),
-        };
-
-        self.text_style
-            .set_background_color(Some(to_color(attrib.background as u8)));
-        self.text_style
-            .set_text_color(Some(to_color(attrib.foreground as u8)));
-
-        if attrib.bold {
-            self.text_style.font = &FONT_9X15_BOLD;
-        } else {
-            self.text_style.font = &FONT_9X15;
-        }
     }
 }

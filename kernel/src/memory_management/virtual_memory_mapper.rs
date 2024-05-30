@@ -384,8 +384,8 @@ impl VirtualMemoryMapper {
         virtual_address = aligned_start;
 
         if self.is_user {
-            assert!(*flags & flags::PTE_USER != 0);
-            assert!(get_l4(virtual_address) != KERNEL_L4_INDEX);
+            assert_ne!(*flags & flags::PTE_USER, 0);
+            assert_ne!(get_l4(virtual_address), KERNEL_L4_INDEX);
             let end = virtual_address + size;
             assert!(end <= MAX_USER_VIRTUAL_ADDRESS);
         }
@@ -393,7 +393,7 @@ impl VirtualMemoryMapper {
         if let Some(start_physical_address) = start_physical_address.as_mut() {
             let (aligned_start, physical_size, _) =
                 align_range(*start_physical_address, *requested_size, PAGE_4K);
-            assert!(physical_size == size);
+            assert_eq!(physical_size, size);
             *start_physical_address = aligned_start;
         }
 
@@ -826,8 +826,9 @@ impl VirtualMemoryMapper {
     // also unmap any process specific kernel memory
     pub fn unmap_process_memory(&mut self) {
         let free_page = |entry: &mut u64| {
-            assert!(
-                *entry & flags::PTE_HUGE_PAGE == 0,
+            assert_eq!(
+                *entry & flags::PTE_HUGE_PAGE,
+                0,
                 "We haven't implemented 2MB physical pages for user allocation"
             );
             let page_table_ptr = PageDirectoryTablePtr::from_entry(*entry);
