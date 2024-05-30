@@ -2,7 +2,8 @@
 
 - [Introduction](./index.md)
 - [Kernel](./kernel/index.md)
-    - [Boot](./kernel/boot.md)
+    - [Boot](./kernel/boot/index.md)
+        - [Command Line](./kernel/boot/cmdline.md)
     - [Memory](./kernel/memory/index.md)
         - [Memory Layout](./kernel/memory/memory_layout.md)
         - [Physical Allocator](./kernel/memory/physical_allocator.md)
