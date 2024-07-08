@@ -33,6 +33,10 @@ pub struct RunKernel {
     #[argh(description = "run with gdb")]
     pub gdb: bool,
 
+    #[argh(switch, long = "no-graphics")]
+    #[argh(description = "disable graphics")]
+    pub no_graphics: bool,
+
     #[argh(positional)]
     pub extra: Vec<String>,
 }

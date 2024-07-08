@@ -65,6 +65,7 @@ fn main() -> anyhow::Result<()> {
                 .with_serial(true)
                 .with_gdb(run.gdb)
                 .with_debug_port(true)
+                .with_graphics(!run.no_graphics)
                 .run(&run.extra)?;
 
             std::process::exit(result);
