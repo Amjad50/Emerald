@@ -1,8 +1,9 @@
-use core::{fmt, mem, ops::Range};
+use core::{cell::Cell, fmt, mem, ops::Range};
 
 use alloc::{
     boxed::Box,
     collections::BTreeMap,
+    format,
     string::{String, ToString},
     sync::Arc,
     vec,
@@ -67,6 +68,12 @@ fn file_attribute_to_fat(attributes: FileAttributes) -> u8 {
         fat_attributes |= attrs::ARCHIVE;
     }
     fat_attributes
+}
+
+fn long_entries_name_merge(entries: impl DoubleEndedIterator<Item = String>) -> String {
+    let mut name = String::new();
+    entries.rev().for_each(|s| name.push_str(&s));
+    name
 }
 
 fn create_dir_entries(
@@ -183,6 +190,35 @@ fn create_dir_entries(
     }
 
     (normal_entry, long_name_entries)
+}
+
+fn increment_short_name(short_name: &mut [u8; 11]) {
+    let base_name = &mut short_name[..8];
+
+    let mut telda_pos = base_name
+        .iter()
+        .position(|c| *c == b'~')
+        .expect("Telda position be present");
+
+    assert!(telda_pos <= 6);
+    let current_num_size = 8 - telda_pos - 1;
+    let current_num = base_name[telda_pos + 1..].iter().fold(0u32, |acc, x| {
+        assert!(*x >= b'0' && *x <= b'9');
+        acc * 10 + (x - b'0') as u32
+    });
+
+    let new_num = current_num + 1;
+    if new_num > 999999 {
+        panic!("Short name exceeded limit 999999");
+    }
+
+    let new_num_str = format!("{}", new_num);
+    if new_num_str.len() > current_num_size {
+        telda_pos -= 1;
+    }
+
+    assert_eq!(base_name[telda_pos + 1..].len(), new_num_str.len());
+    base_name[telda_pos + 1..].copy_from_slice(new_num_str.as_bytes());
 }
 
 #[derive(Debug)]
@@ -933,11 +969,13 @@ impl DirectoryIterator<'_> {
 
     fn add_entry(
         &mut self,
-        entry: DirectoryEntryNormal,
+        mut entry: DirectoryEntryNormal,
         long_entries: Vec<DirectoryEntryLong>,
     ) -> Result<Node, FileSystemError> {
         // used to check if the entry is already in the directory
-        let new_entry_short_name = entry.short_name;
+        let mut new_entry_short_name = entry.short_name;
+        let new_entry_long_name =
+            long_entries_name_merge(long_entries.iter().map(DirectoryEntryLong::name));
 
         let needed_entries = long_entries.len() + 1;
 
@@ -945,11 +983,37 @@ impl DirectoryIterator<'_> {
 
         let mut first_free = None;
         let mut running_free = 0;
+        let mut current_long_entries_name = Vec::new();
+        let long_entries_require_free = Cell::new(false);
+
+        let mut is_already_exists = |entry: DirectoryEntry| -> bool {
+            if entry.is_long() {
+                if long_entries_require_free.get() {
+                    long_entries_require_free.set(false);
+                    current_long_entries_name.clear();
+                }
+                current_long_entries_name.push(entry.as_long().name());
+            } else {
+                let long_name = long_entries_name_merge(current_long_entries_name.drain(..));
+
+                if long_name.eq_ignore_ascii_case(&new_entry_long_name) {
+                    return true;
+                }
+                // long name doesn't match, but short one matches, meaning the short name got clipped
+                if entry.as_normal().short_name == new_entry_short_name {
+                    increment_short_name(&mut new_entry_short_name);
+                }
+            }
+
+            false
+        };
 
         loop {
             let entry = self.get_next_entry()?;
             match entry.state() {
                 DirectoryEntryState::FreeAndLast => {
+                    long_entries_require_free.set(true);
+
                     is_last = true;
                     // this is the first and last entry
                     if first_free.is_none() {
@@ -958,6 +1022,8 @@ impl DirectoryIterator<'_> {
                     break;
                 }
                 DirectoryEntryState::Free => {
+                    long_entries_require_free.set(true);
+
                     // make sure we have enough free entries
                     if first_free.is_none() {
                         first_free = Some(self.save_current());
@@ -971,7 +1037,7 @@ impl DirectoryIterator<'_> {
                     // reset the running free
                     running_free = 0;
                     first_free = None;
-                    if !entry.is_long() && entry.as_normal().short_name == new_entry_short_name {
+                    if is_already_exists(entry) {
                         return Err(FileSystemError::AlreadyExists);
                     }
                 }
@@ -985,8 +1051,7 @@ impl DirectoryIterator<'_> {
                 match entry.state() {
                     DirectoryEntryState::FreeAndLast => break,
                     DirectoryEntryState::Used => {
-                        if !entry.is_long() && entry.as_normal().short_name == new_entry_short_name
-                        {
+                        if is_already_exists(entry) {
                             return Err(FileSystemError::AlreadyExists);
                         }
                     }
@@ -994,6 +1059,9 @@ impl DirectoryIterator<'_> {
                 }
             }
         }
+
+        // update the short_name if it changed/incremented
+        entry.short_name = new_entry_short_name;
 
         assert!(first_free.is_some());
         let first_free = first_free.unwrap();
@@ -1069,12 +1137,8 @@ impl Iterator for DirectoryIterator<'_> {
                     long_entry = entry.as_long().clone();
                 }
             }
-            let mut name = String::new();
-            long_name_entries
-                .into_iter()
-                .rev()
-                .for_each(|s| name.push_str(&s));
-            Some(name)
+
+            Some(long_entries_name_merge(long_name_entries.into_iter()))
         } else {
             None
         };
