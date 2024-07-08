@@ -41,6 +41,10 @@ jobs:
     name: Toolchain
     runs-on: ubuntu-latest
     steps:
+      - name: Install dependencies
+        run: >
+          sudo apt update -y &&
+          sudo apt install -y ninja-build
       # Checkout the repository without submodules, we will do it manually
       - uses: actions/checkout@v4
         with:

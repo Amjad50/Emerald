@@ -6,7 +6,7 @@
 change-id = 124501
 
 [llvm]
-download-ci-llvm = true
+download-ci-llvm = "if-unchanged"
 # targets = "X86"
 
 [build]
