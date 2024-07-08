@@ -543,8 +543,31 @@ struct DirectoryEntryNormal {
 }
 
 impl DirectoryEntryNormal {
-    pub fn attributes(&self) -> u8 {
-        self.attributes
+    pub fn name(&self) -> String {
+        let base_name = &self.short_name[..8];
+        let base_name_end = 8 - base_name.iter().rev().position(|&c| c != 0x20).unwrap();
+        let extension = &self.short_name[8..11];
+
+        let mut name = String::with_capacity(13);
+        let mut i = 0;
+        while i < base_name_end {
+            name.push(base_name[i] as char);
+            i += 1;
+        }
+        let extension_present = extension[0] != 0x20;
+        if extension_present {
+            name.push('.');
+            i = 0;
+            while i < extension.len() && extension[i] != 0x20 {
+                name.push(extension[i] as char);
+                i += 1;
+            }
+        }
+        name
+    }
+
+    pub fn first_cluster(&self) -> u32 {
+        ((self.first_cluster_hi as u32) << 16) | self.first_cluster_lo as u32
     }
 
     pub fn name_checksum(&self) -> u8 {
@@ -698,6 +721,43 @@ impl<'a> DirectoryEntry<'a> {
                 }
             }
         }
+    }
+}
+
+/// A custom version of `fs::Node` for fat systems
+pub struct FatNode {
+    normal_entry: DirectoryEntryNormal,
+    long_name: Option<String>,
+
+    parent_dir_sector: u64,
+    parent_dir_index: u16,
+}
+
+impl FatNode {
+    pub fn matches(&self, matcher: &str) -> bool {
+        // First, check if we have a long name and if it matches
+        if let Some(long_name) = &self.long_name {
+            if long_name.eq_ignore_ascii_case(matcher) {
+                return true;
+            }
+        }
+
+        // If no long name match, check the short name
+        let short_name = self.normal_entry.name();
+        short_name.eq_ignore_ascii_case(matcher)
+    }
+}
+
+impl From<FatNode> for Node {
+    fn from(value: FatNode) -> Self {
+        Node::new(
+            value.long_name.unwrap_or(value.normal_entry.name()),
+            file_attribute_from_fat(value.normal_entry.attributes),
+            value.normal_entry.first_cluster().into(),
+            value.normal_entry.file_size.into(),
+            value.parent_dir_sector,
+            value.parent_dir_index,
+        )
     }
 }
 
@@ -967,12 +1027,12 @@ impl DirectoryIterator<'_> {
             self.restore_at(pos)?;
         }
 
-        Ok(node.expect("node should be created"))
+        Ok(node.expect("node should be created").into())
     }
 }
 
 impl Iterator for DirectoryIterator<'_> {
-    type Item = Node;
+    type Item = FatNode;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut entry = self.get_next_entry().ok()?;
@@ -989,7 +1049,7 @@ impl Iterator for DirectoryIterator<'_> {
             }
         }
 
-        let name = if entry.is_long() {
+        let long_name = if entry.is_long() {
             let mut long_entry = entry.as_long().clone();
             // long file name
             // this should be the last
@@ -1014,52 +1074,20 @@ impl Iterator for DirectoryIterator<'_> {
                 .into_iter()
                 .rev()
                 .for_each(|s| name.push_str(&s));
-            name
+            Some(name)
         } else {
-            // short file name
-            let normal_entry = entry.as_normal();
-            let short_name = &normal_entry.short_name;
-            let base_name = &short_name[..8];
-            let base_name_end = 8 - base_name.iter().rev().position(|&c| c != 0x20).unwrap();
-            let extension = &short_name[8..11];
-
-            let mut name = String::with_capacity(13);
-            let mut i = 0;
-            while i < base_name_end {
-                name.push(base_name[i] as char);
-                i += 1;
-            }
-            let extension_present = extension[0] != 0x20;
-            if extension_present {
-                name.push('.');
-                i = 0;
-                while i < extension.len() && extension[i] != 0x20 {
-                    name.push(extension[i] as char);
-                    i += 1;
-                }
-            }
-            name
+            None
         };
 
-        let entry = entry.as_normal();
-        let cluster_hi = entry.first_cluster_hi as u32;
-        let cluster_lo = entry.first_cluster_lo as u32;
-        let size = entry.file_size;
-        let start_cluster = (cluster_hi << 16) | cluster_lo;
-
-        let attributes = entry.attributes();
-
+        let normal_entry = entry.as_normal().clone();
         assert!(self.entry_index_in_sector > 0);
-        let inode = Node::new(
-            name,
-            file_attribute_from_fat(attributes),
-            start_cluster.into(),
-            size.into(),
-            self.current_sector_index.into(),
-            self.entry_index_in_sector - 1,
-        );
 
-        Some(inode)
+        Some(FatNode {
+            normal_entry,
+            long_name,
+            parent_dir_sector: self.current_sector_index.into(),
+            parent_dir_index: self.entry_index_in_sector - 1,
+        })
     }
 }
 
@@ -1898,12 +1926,22 @@ impl FileSystem for Mutex<FatFilesystem> {
         handler: &mut dyn FnMut(Node) -> DirTreverse,
     ) -> Result<(), FileSystemError> {
         for node in self.lock().open_dir_inode(inode)? {
-            if let DirTreverse::Stop = handler(node) {
+            if let DirTreverse::Stop = handler(node.into()) {
                 break;
             }
         }
 
         Ok(())
+    }
+
+    fn treverse_dir(&self, inode: &DirectoryNode, matcher: &str) -> Result<Node, FileSystemError> {
+        for node in self.lock().open_dir_inode(inode)? {
+            if node.matches(matcher) {
+                return Ok(node.into());
+            }
+        }
+
+        Err(FileSystemError::FileNotFound)
     }
 
     fn create_node(

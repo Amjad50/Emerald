@@ -414,6 +414,19 @@ pub trait FileSystem: Send + Sync {
         handler: &mut dyn FnMut(Node) -> DirTreverse,
     ) -> Result<(), FileSystemError>;
 
+    fn treverse_dir(&self, inode: &DirectoryNode, matcher: &str) -> Result<Node, FileSystemError> {
+        let mut entry = None;
+        self.read_dir(inode, &mut |inode| {
+            if inode.name() == matcher {
+                entry = Some(inode);
+                DirTreverse::Stop
+            } else {
+                DirTreverse::Continue
+            }
+        })?;
+        entry.ok_or(FileSystemError::FileNotFound)
+    }
+
     fn create_node(
         &self,
         _parent: &DirectoryNode,
@@ -694,16 +707,7 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
 
     let open_component_inode =
         |inode: &DirectoryNode, component: &str| -> Result<Node, FileSystemError> {
-            let mut entry = None;
-            filesystem.read_dir(inode, &mut |inode| {
-                if inode.name() == component {
-                    entry = Some(inode);
-                    DirTreverse::Stop
-                } else {
-                    DirTreverse::Continue
-                }
-            })?;
-            entry.ok_or(FileSystemError::FileNotFound)
+            filesystem.treverse_dir(inode, component)
         };
 
     let mut dir = root;
