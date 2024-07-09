@@ -347,6 +347,11 @@ impl<'a> Components<'a> {
             }
         }
     }
+
+    pub fn peek(&self) -> Option<Component<'a>> {
+        // this is a lie, but it works, the clone cost isn't very high, so should be okay
+        self.clone().next()
+    }
 }
 
 impl AsRef<Path> for Components<'_> {
