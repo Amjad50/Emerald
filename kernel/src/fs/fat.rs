@@ -1,8 +1,9 @@
-use core::{fmt, mem, ops::Range};
+use core::{cell::Cell, fmt, mem, ops::Range};
 
 use alloc::{
     boxed::Box,
     collections::BTreeMap,
+    format,
     string::{String, ToString},
     sync::Arc,
     vec,
@@ -67,6 +68,12 @@ fn file_attribute_to_fat(attributes: FileAttributes) -> u8 {
         fat_attributes |= attrs::ARCHIVE;
     }
     fat_attributes
+}
+
+fn long_entries_name_merge(entries: impl DoubleEndedIterator<Item = String>) -> String {
+    let mut name = String::new();
+    entries.rev().for_each(|s| name.push_str(&s));
+    name
 }
 
 fn create_dir_entries(
@@ -183,6 +190,35 @@ fn create_dir_entries(
     }
 
     (normal_entry, long_name_entries)
+}
+
+fn increment_short_name(short_name: &mut [u8; 11]) {
+    let base_name = &mut short_name[..8];
+
+    let mut telda_pos = base_name
+        .iter()
+        .position(|c| *c == b'~')
+        .expect("Telda position be present");
+
+    assert!(telda_pos <= 6);
+    let current_num_size = 8 - telda_pos - 1;
+    let current_num = base_name[telda_pos + 1..].iter().fold(0u32, |acc, x| {
+        assert!(*x >= b'0' && *x <= b'9');
+        acc * 10 + (x - b'0') as u32
+    });
+
+    let new_num = current_num + 1;
+    if new_num > 999999 {
+        panic!("Short name exceeded limit 999999");
+    }
+
+    let new_num_str = format!("{}", new_num);
+    if new_num_str.len() > current_num_size {
+        telda_pos -= 1;
+    }
+
+    assert_eq!(base_name[telda_pos + 1..].len(), new_num_str.len());
+    base_name[telda_pos + 1..].copy_from_slice(new_num_str.as_bytes());
 }
 
 #[derive(Debug)]
@@ -543,8 +579,31 @@ struct DirectoryEntryNormal {
 }
 
 impl DirectoryEntryNormal {
-    pub fn attributes(&self) -> u8 {
-        self.attributes
+    pub fn name(&self) -> String {
+        let base_name = &self.short_name[..8];
+        let base_name_end = 8 - base_name.iter().rev().position(|&c| c != 0x20).unwrap();
+        let extension = &self.short_name[8..11];
+
+        let mut name = String::with_capacity(13);
+        let mut i = 0;
+        while i < base_name_end {
+            name.push(base_name[i] as char);
+            i += 1;
+        }
+        let extension_present = extension[0] != 0x20;
+        if extension_present {
+            name.push('.');
+            i = 0;
+            while i < extension.len() && extension[i] != 0x20 {
+                name.push(extension[i] as char);
+                i += 1;
+            }
+        }
+        name
+    }
+
+    pub fn first_cluster(&self) -> u32 {
+        ((self.first_cluster_hi as u32) << 16) | self.first_cluster_lo as u32
     }
 
     pub fn name_checksum(&self) -> u8 {
@@ -698,6 +757,43 @@ impl<'a> DirectoryEntry<'a> {
                 }
             }
         }
+    }
+}
+
+/// A custom version of `fs::Node` for fat systems
+pub struct FatNode {
+    normal_entry: DirectoryEntryNormal,
+    long_name: Option<String>,
+
+    parent_dir_sector: u64,
+    parent_dir_index: u16,
+}
+
+impl FatNode {
+    pub fn matches(&self, matcher: &str) -> bool {
+        // First, check if we have a long name and if it matches
+        if let Some(long_name) = &self.long_name {
+            if long_name.eq_ignore_ascii_case(matcher) {
+                return true;
+            }
+        }
+
+        // If no long name match, check the short name
+        let short_name = self.normal_entry.name();
+        short_name.eq_ignore_ascii_case(matcher)
+    }
+}
+
+impl From<FatNode> for Node {
+    fn from(value: FatNode) -> Self {
+        Node::new(
+            value.long_name.unwrap_or(value.normal_entry.name()),
+            file_attribute_from_fat(value.normal_entry.attributes),
+            value.normal_entry.first_cluster().into(),
+            value.normal_entry.file_size.into(),
+            value.parent_dir_sector,
+            value.parent_dir_index,
+        )
     }
 }
 
@@ -873,11 +969,13 @@ impl DirectoryIterator<'_> {
 
     fn add_entry(
         &mut self,
-        entry: DirectoryEntryNormal,
+        mut entry: DirectoryEntryNormal,
         long_entries: Vec<DirectoryEntryLong>,
     ) -> Result<Node, FileSystemError> {
         // used to check if the entry is already in the directory
-        let new_entry_short_name = entry.short_name;
+        let mut new_entry_short_name = entry.short_name;
+        let new_entry_long_name =
+            long_entries_name_merge(long_entries.iter().map(DirectoryEntryLong::name));
 
         let needed_entries = long_entries.len() + 1;
 
@@ -885,11 +983,37 @@ impl DirectoryIterator<'_> {
 
         let mut first_free = None;
         let mut running_free = 0;
+        let mut current_long_entries_name = Vec::new();
+        let long_entries_require_free = Cell::new(false);
+
+        let mut is_already_exists = |entry: DirectoryEntry| -> bool {
+            if entry.is_long() {
+                if long_entries_require_free.get() {
+                    long_entries_require_free.set(false);
+                    current_long_entries_name.clear();
+                }
+                current_long_entries_name.push(entry.as_long().name());
+            } else {
+                let long_name = long_entries_name_merge(current_long_entries_name.drain(..));
+
+                if long_name.eq_ignore_ascii_case(&new_entry_long_name) {
+                    return true;
+                }
+                // long name doesn't match, but short one matches, meaning the short name got clipped
+                if entry.as_normal().short_name == new_entry_short_name {
+                    increment_short_name(&mut new_entry_short_name);
+                }
+            }
+
+            false
+        };
 
         loop {
             let entry = self.get_next_entry()?;
             match entry.state() {
                 DirectoryEntryState::FreeAndLast => {
+                    long_entries_require_free.set(true);
+
                     is_last = true;
                     // this is the first and last entry
                     if first_free.is_none() {
@@ -898,6 +1022,8 @@ impl DirectoryIterator<'_> {
                     break;
                 }
                 DirectoryEntryState::Free => {
+                    long_entries_require_free.set(true);
+
                     // make sure we have enough free entries
                     if first_free.is_none() {
                         first_free = Some(self.save_current());
@@ -911,7 +1037,7 @@ impl DirectoryIterator<'_> {
                     // reset the running free
                     running_free = 0;
                     first_free = None;
-                    if !entry.is_long() && entry.as_normal().short_name == new_entry_short_name {
+                    if is_already_exists(entry) {
                         return Err(FileSystemError::AlreadyExists);
                     }
                 }
@@ -925,8 +1051,7 @@ impl DirectoryIterator<'_> {
                 match entry.state() {
                     DirectoryEntryState::FreeAndLast => break,
                     DirectoryEntryState::Used => {
-                        if !entry.is_long() && entry.as_normal().short_name == new_entry_short_name
-                        {
+                        if is_already_exists(entry) {
                             return Err(FileSystemError::AlreadyExists);
                         }
                     }
@@ -934,6 +1059,9 @@ impl DirectoryIterator<'_> {
                 }
             }
         }
+
+        // update the short_name if it changed/incremented
+        entry.short_name = new_entry_short_name;
 
         assert!(first_free.is_some());
         let first_free = first_free.unwrap();
@@ -967,12 +1095,12 @@ impl DirectoryIterator<'_> {
             self.restore_at(pos)?;
         }
 
-        Ok(node.expect("node should be created"))
+        Ok(node.expect("node should be created").into())
     }
 }
 
 impl Iterator for DirectoryIterator<'_> {
-    type Item = Node;
+    type Item = FatNode;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut entry = self.get_next_entry().ok()?;
@@ -989,7 +1117,7 @@ impl Iterator for DirectoryIterator<'_> {
             }
         }
 
-        let name = if entry.is_long() {
+        let long_name = if entry.is_long() {
             let mut long_entry = entry.as_long().clone();
             // long file name
             // this should be the last
@@ -1009,57 +1137,21 @@ impl Iterator for DirectoryIterator<'_> {
                     long_entry = entry.as_long().clone();
                 }
             }
-            let mut name = String::new();
-            long_name_entries
-                .into_iter()
-                .rev()
-                .for_each(|s| name.push_str(&s));
-            name
-        } else {
-            // short file name
-            let normal_entry = entry.as_normal();
-            let short_name = &normal_entry.short_name;
-            let base_name = &short_name[..8];
-            let base_name_end = 8 - base_name.iter().rev().position(|&c| c != 0x20).unwrap();
-            let extension = &short_name[8..11];
 
-            let mut name = String::with_capacity(13);
-            let mut i = 0;
-            while i < base_name_end {
-                name.push(base_name[i] as char);
-                i += 1;
-            }
-            let extension_present = extension[0] != 0x20;
-            if extension_present {
-                name.push('.');
-                i = 0;
-                while i < extension.len() && extension[i] != 0x20 {
-                    name.push(extension[i] as char);
-                    i += 1;
-                }
-            }
-            name
+            Some(long_entries_name_merge(long_name_entries.into_iter()))
+        } else {
+            None
         };
 
-        let entry = entry.as_normal();
-        let cluster_hi = entry.first_cluster_hi as u32;
-        let cluster_lo = entry.first_cluster_lo as u32;
-        let size = entry.file_size;
-        let start_cluster = (cluster_hi << 16) | cluster_lo;
-
-        let attributes = entry.attributes();
-
+        let normal_entry = entry.as_normal().clone();
         assert!(self.entry_index_in_sector > 0);
-        let inode = Node::new(
-            name,
-            file_attribute_from_fat(attributes),
-            start_cluster.into(),
-            size.into(),
-            self.current_sector_index.into(),
-            self.entry_index_in_sector - 1,
-        );
 
-        Some(inode)
+        Some(FatNode {
+            normal_entry,
+            long_name,
+            parent_dir_sector: self.current_sector_index.into(),
+            parent_dir_index: self.entry_index_in_sector - 1,
+        })
     }
 }
 
@@ -1898,12 +1990,22 @@ impl FileSystem for Mutex<FatFilesystem> {
         handler: &mut dyn FnMut(Node) -> DirTreverse,
     ) -> Result<(), FileSystemError> {
         for node in self.lock().open_dir_inode(inode)? {
-            if let DirTreverse::Stop = handler(node) {
+            if let DirTreverse::Stop = handler(node.into()) {
                 break;
             }
         }
 
         Ok(())
+    }
+
+    fn treverse_dir(&self, inode: &DirectoryNode, matcher: &str) -> Result<Node, FileSystemError> {
+        for node in self.lock().open_dir_inode(inode)? {
+            if node.matches(matcher) {
+                return Ok(node.into());
+            }
+        }
+
+        Err(FileSystemError::FileNotFound)
     }
 
     fn create_node(
