@@ -246,7 +246,7 @@
         })))
         .expect(<span class="string">"Devices already initialized"</span>);
 
-    fs::mount(<span class="string">"/devices"</span>, DEVICES.get().clone());
+    fs::mapping::mount(<span class="string">"/devices"</span>, DEVICES.get().clone()).expect(<span class="string">"Mapping failed"</span>);
 }
 
 <span class="kw">pub fn </span>register_device(device: Arc&lt;<span class="kw">dyn </span>Device&gt;) {

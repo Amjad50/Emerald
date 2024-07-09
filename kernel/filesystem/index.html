@@ -196,7 +196,10 @@ And this is achieved by the <a href="#mapping">mapping</a> system.</p>
 <p>With these, you can create new files and choose which mode to open them with. Of course the filesystem may refuse to create the file if the
 operation is not supported, such as with <code>/devices</code> directory mappings.</p>
 <h2 id="mapping"><a class="header" href="#mapping">Mapping</a></h2>
-<p>The mapping, is a dictionary that maps a path prefix to a <code>Filesystem</code> manager.
+<blockquote>
+<p>This is implemented in <a href="/Emerald/docs/kernel/fs/mapping/index.html"><code>fs::mapping</code></a></p>
+</blockquote>
+<p>The mapping, is a structure we use to map a path prefix to a <code>Filesystem</code>.
 For example, currently we have the following mappings:</p>
 <pre><code>'/' -&gt; FAT (filesystem backed by disk)
 '/devices' -&gt; Devices (a virtual filesystem)
@@ -204,6 +207,30 @@ For example, currently we have the following mappings:</p>
 <p>When you open a path, it will find the best mapping, i.e. the longest prefix that matches the path.
 Then will use the resulting <a href="/Emerald/docs/kernel/fs/trait.FileSystem.html"><code>Filesystem</code></a> manager to open the file.</p>
 <p>For example, if you open the path <code>/devices/console</code>, it will use the <code>Devices</code> filesystem manager to open the file <code>/console</code>.</p>
+<p>Internally, this mapping is stored in a recursive tree structure of <a href="/Emerald/docs/kernel/fs/mapping/struct.MappingNode.html"><code>MappingNode</code></a>,
+each will contain:</p>
+<ul>
+<li>The <a href="/Emerald/docs/kernel/fs/trait.FileSystem.html"><code>Filesystem</code></a> object.</li>
+<li>Weak ref to parent (to not get into trouble when dropping)</li>
+<li>childern BTreeMap (child component name -&gt; <a href="/Emerald/docs/kernel/fs/mapping/struct.MappingNode.html"><code>MappingNode</code></a>)</li>
+</ul>
+<p>So, it will be something like this:</p>
+<pre><code class="language-txt">- / (root) = {
+  fs: object
+  parent: None
+  children: {
+    &quot;devices&quot;: {
+      fs: object
+      parent: /
+      children: {}
+    }
+  }
+}
+</code></pre>
+<p>This is used so that we can treverse between two mappings easily.
+i.e., if we are at the beginning of the mapping, and encountered <code>..</code> path, we can go back to the parent mapping.
+Also, when going forward in mapping, we can check if the component is a child mapping of this mapping and switch to it easily.</p>
+<p>With this treversal, we can build canonical path for a node.</p>
 <h3 id="filesystem-trait"><a class="header" href="#filesystem-trait">Filesystem trait</a></h3>
 <p>The &quot;manager&quot; here is an implementor of the <a href="/Emerald/docs/kernel/fs/trait.FileSystem.html"><code>Filesystem</code></a> trait, which is a simple interface that controls all
 the filesystem operations.</p>
@@ -211,9 +238,11 @@ the filesystem operations.</p>
 <ul>
 <li><code>open_root</code> - Open the root directory, this is the entry point when treversing the filesystem.</li>
 <li><code>read_dir</code> - Read the directory entries from a <a href="/Emerald/docs/kernel/fs/struct.DirectoryNode.html"><code>DirectoryNode</code></a>.</li>
+<li><code>treverse_dir</code> - Look through the dir, and return <code>Node</code> that matches the entry name or error if not found.</li>
 <li><code>create_node</code> - Create a new file or directory inside a <a href="/Emerald/docs/kernel/fs/struct.DirectoryNode.html"><code>DirectoryNode</code></a>.</li>
 <li><code>read_file</code> - Read the file contents from a <a href="/Emerald/docs/kernel/fs/struct.FileNode.html"><code>FileNode</code></a>.</li>
 <li><code>write_file</code> - Write the file contents to a <a href="/Emerald/docs/kernel/fs/struct.FileNode.html"><code>FileNode</code></a>.</li>
+<li><code>flush_file</code> - Force the driver to flush the content to physical media (i.e. clear cache if any).</li>
 <li><code>close_file</code> - Send a message that we are closing the file, if you notice, we don't have <code>open_file</code>, but instead, the user can 
 treverse the filesystem with <code>open_root</code> and <code>read_dir</code> until the file node is found, then it can be used directly. This function
 is used to alert the filesystem to clean up any resources that it might have allocated for this file.</li>

@@ -1166,109 +1166,17 @@
 <a href="#1164" id="1164">1164</a>
 <a href="#1165" id="1165">1165</a>
 <a href="#1166" id="1166">1166</a>
-<a href="#1167" id="1167">1167</a>
-<a href="#1168" id="1168">1168</a>
-<a href="#1169" id="1169">1169</a>
-<a href="#1170" id="1170">1170</a>
-<a href="#1171" id="1171">1171</a>
-<a href="#1172" id="1172">1172</a>
-<a href="#1173" id="1173">1173</a>
-<a href="#1174" id="1174">1174</a>
-<a href="#1175" id="1175">1175</a>
-<a href="#1176" id="1176">1176</a>
-<a href="#1177" id="1177">1177</a>
-<a href="#1178" id="1178">1178</a>
-<a href="#1179" id="1179">1179</a>
-<a href="#1180" id="1180">1180</a>
-<a href="#1181" id="1181">1181</a>
-<a href="#1182" id="1182">1182</a>
-<a href="#1183" id="1183">1183</a>
-<a href="#1184" id="1184">1184</a>
-<a href="#1185" id="1185">1185</a>
-<a href="#1186" id="1186">1186</a>
-<a href="#1187" id="1187">1187</a>
-<a href="#1188" id="1188">1188</a>
-<a href="#1189" id="1189">1189</a>
-<a href="#1190" id="1190">1190</a>
-<a href="#1191" id="1191">1191</a>
-<a href="#1192" id="1192">1192</a>
-<a href="#1193" id="1193">1193</a>
-<a href="#1194" id="1194">1194</a>
-<a href="#1195" id="1195">1195</a>
-<a href="#1196" id="1196">1196</a>
-<a href="#1197" id="1197">1197</a>
-<a href="#1198" id="1198">1198</a>
-<a href="#1199" id="1199">1199</a>
-<a href="#1200" id="1200">1200</a>
-<a href="#1201" id="1201">1201</a>
-<a href="#1202" id="1202">1202</a>
-<a href="#1203" id="1203">1203</a>
-<a href="#1204" id="1204">1204</a>
-<a href="#1205" id="1205">1205</a>
-<a href="#1206" id="1206">1206</a>
-<a href="#1207" id="1207">1207</a>
-<a href="#1208" id="1208">1208</a>
-<a href="#1209" id="1209">1209</a>
-<a href="#1210" id="1210">1210</a>
-<a href="#1211" id="1211">1211</a>
-<a href="#1212" id="1212">1212</a>
-<a href="#1213" id="1213">1213</a>
-<a href="#1214" id="1214">1214</a>
-<a href="#1215" id="1215">1215</a>
-<a href="#1216" id="1216">1216</a>
-<a href="#1217" id="1217">1217</a>
-<a href="#1218" id="1218">1218</a>
-<a href="#1219" id="1219">1219</a>
-<a href="#1220" id="1220">1220</a>
-<a href="#1221" id="1221">1221</a>
-<a href="#1222" id="1222">1222</a>
-<a href="#1223" id="1223">1223</a>
-<a href="#1224" id="1224">1224</a>
-<a href="#1225" id="1225">1225</a>
-<a href="#1226" id="1226">1226</a>
-<a href="#1227" id="1227">1227</a>
-<a href="#1228" id="1228">1228</a>
-<a href="#1229" id="1229">1229</a>
-<a href="#1230" id="1230">1230</a>
-<a href="#1231" id="1231">1231</a>
-<a href="#1232" id="1232">1232</a>
-<a href="#1233" id="1233">1233</a>
-<a href="#1234" id="1234">1234</a>
-<a href="#1235" id="1235">1235</a>
-<a href="#1236" id="1236">1236</a>
-<a href="#1237" id="1237">1237</a>
-<a href="#1238" id="1238">1238</a>
-<a href="#1239" id="1239">1239</a>
-<a href="#1240" id="1240">1240</a>
-<a href="#1241" id="1241">1241</a>
-<a href="#1242" id="1242">1242</a>
-<a href="#1243" id="1243">1243</a>
-<a href="#1244" id="1244">1244</a>
-<a href="#1245" id="1245">1245</a>
-<a href="#1246" id="1246">1246</a>
-<a href="#1247" id="1247">1247</a>
-<a href="#1248" id="1248">1248</a>
-<a href="#1249" id="1249">1249</a>
-<a href="#1250" id="1250">1250</a>
-<a href="#1251" id="1251">1251</a>
-<a href="#1252" id="1252">1252</a>
-<a href="#1253" id="1253">1253</a>
-<a href="#1254" id="1254">1254</a>
-<a href="#1255" id="1255">1255</a>
-<a href="#1256" id="1256">1256</a>
-<a href="#1257" id="1257">1257</a>
-<a href="#1258" id="1258">1258</a>
-<a href="#1259" id="1259">1259</a>
-<a href="#1260" id="1260">1260</a>
-<a href="#1261" id="1261">1261</a>
-<a href="#1262" id="1262">1262</a>
-<a href="#1263" id="1263">1263</a>
-<a href="#1264" id="1264">1264</a>
-<a href="#1265" id="1265">1265</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::ops;
+</pre></div><pre class="rust"><code><span class="kw">mod </span>fat;
+<span class="kw">pub mod </span>mapping;
+<span class="kw">mod </span>mbr;
+<span class="kw">pub mod </span>path;
+
+<span class="kw">use </span>core::ops;
 
 <span class="kw">use </span>alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 <span class="kw">use </span>kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType, OpenOptions};
+<span class="kw">use </span>mapping::MappingError;
+<span class="kw">use </span>path::PathBuf;
 <span class="kw">use </span>tracing::info;
 
 <span class="kw">use crate</span>::{
@@ -1284,17 +1192,9 @@
     path::{Component, Path},
 };
 
-<span class="kw">mod </span>fat;
-<span class="kw">mod </span>mbr;
-<span class="kw">pub mod </span>path;
-
 <span class="doccomment">/// This is not used at all, just an indicator in [`Directory::fetch_entries`]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC: u64 = <span class="number">0xf11356573e</span>;
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>NO_PARENT_DIR_SECTOR: u64 = <span class="number">0xFFFF_FFFF_FFFF_FFFF</span>;
-
-<span class="kw">static </span>FILESYSTEM_MAPPING: Mutex&lt;FileSystemMapping&gt; = Mutex::new(FileSystemMapping {
-    mappings: Vec::new(),
-});
 
 <span class="kw">static </span>EMPTY_FILESYSTEM: OnceLock&lt;Arc&lt;EmptyFileSystem&gt;&gt; = OnceLock::new();
 
@@ -1770,95 +1670,6 @@
     }
 }
 
-<span class="kw">struct </span>FileSystemMapping {
-    mappings: Vec&lt;(Box&lt;Path&gt;, Arc&lt;<span class="kw">dyn </span>FileSystem&gt;)&gt;,
-}
-
-<span class="kw">impl </span>FileSystemMapping {
-    <span class="doccomment">/// Retrieves the file system mapping for a given path.
-    ///
-    /// This function iterates over the stored mappings in reverse order and returns the first
-    /// file system and the stripped path for which the given path has a prefix that matches
-    /// the file system's path.
-    ///
-    /// # Parameters
-    ///
-    /// * `path`: A reference to the path for which to find the file system mapping.
-    ///
-    /// # Returns
-    ///
-    /// * A tuple containing the stripped path and an `Arc` to the file system, if a matching mapping is found.
-    /// * `FileSystemError::FileNotFound` if no matching mapping is found.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Assume fs_map has been populated with some mappings
-    /// let mut fs_map = FileSystemMap::new();
-    ///
-    /// let path = Path::new("/some/path");
-    /// match fs_map.get_mapping(&amp;path) {
-    ///     Ok((stripped_path, fs)) =&gt; {
-    ///         println!("Found file system: {:?}", fs);
-    ///         println!("Stripped path: {:?}", stripped_path);
-    ///     }
-    ///     Err(FileSystemError::FileNotFound) =&gt; {
-    ///         println!("No file system found for path: {:?}", path);
-    ///     }
-    ///     _ =&gt; {}
-    /// }
-    /// ```
-    </span><span class="kw">fn </span>get_mapping&lt;<span class="lifetime">'p</span>&gt;(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        path: <span class="kw-2">&amp;</span><span class="lifetime">'p </span>Path,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="kw-2">&amp;</span><span class="lifetime">'p </span>Path, Arc&lt;<span class="kw">dyn </span>FileSystem&gt;), FileSystemError&gt; {
-        <span class="kw">let </span>(stripped_path, filesystem) = <span class="self">self
-            </span>.mappings
-            .iter()
-            <span class="comment">// look from the back for best match
-            </span>.rev()
-            .find_map(|(fs_path, fs)| <span class="prelude-val">Some</span>((path.strip_prefix(fs_path).ok()<span class="question-mark">?</span>, fs.clone())))
-            .ok_or(FileSystemError::FileNotFound)<span class="question-mark">?</span>;
-
-        <span class="prelude-val">Ok</span>((stripped_path, filesystem.clone()))
-    }
-
-    <span class="kw">fn </span>get_all_matching_mappings&lt;<span class="lifetime">'a</span>, <span class="lifetime">'p</span>&gt;(
-        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span><span class="self">self</span>,
-        path: <span class="kw-2">&amp;</span><span class="lifetime">'p </span>Path,
-    ) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Path, Arc&lt;<span class="kw">dyn </span>FileSystem&gt;)&gt;
-    <span class="kw">where
-        </span><span class="lifetime">'p</span>: <span class="lifetime">'a</span>,
-    {
-        <span class="self">self</span>.mappings.iter().filter_map(<span class="kw">move </span>|(fs_path, fs)| {
-            <span class="kw">let </span>stripped = fs_path.strip_prefix(path).ok()<span class="question-mark">?</span>;
-            <span class="kw">if </span>stripped.is_empty() {
-                <span class="kw">return </span><span class="prelude-val">None</span>;
-            }
-            <span class="prelude-val">Some</span>((stripped, fs.clone()))
-        })
-    }
-
-    <span class="kw">fn </span>mount&lt;P: AsRef&lt;Path&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, arg: P, filesystem: Arc&lt;<span class="kw">dyn </span>FileSystem&gt;) {
-        <span class="comment">// TODO: replace with error
-        </span><span class="macro">assert!</span>(
-            !<span class="self">self
-                </span>.mappings
-                .iter()
-                .any(|(fs_path, <span class="kw">_</span>)| fs_path.as_ref() == arg.as_ref()),
-            <span class="string">"Mounting {:?} twice"</span>,
-            arg.as_ref().display()
-        );
-
-        <span class="self">self</span>.mappings.push((arg.as_ref().into(), filesystem));
-
-        <span class="comment">// must be kept sorted by length, so we can find the best/correct mapping,
-        // as mappings can be inside each other in structure
-        </span><span class="self">self</span>.mappings
-            .sort_unstable_by(|(a, <span class="kw">_</span>), (b, <span class="kw">_</span>)| a.as_str().len().cmp(<span class="kw-2">&amp;</span>b.as_str().len()));
-    }
-}
-
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">pub enum </span>FileSystemError {
     PartitionTableNotFound,
@@ -1877,14 +1688,7 @@
     EndOfFile,
     BufferNotLargeEnough(usize),
     AlreadyExists,
-}
-
-<span class="kw">fn </span>get_mapping(path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="kw-2">&amp;</span>Path, Arc&lt;<span class="kw">dyn </span>FileSystem&gt;), FileSystemError&gt; {
-    FILESYSTEM_MAPPING.lock().get_mapping(path)
-}
-
-<span class="kw">pub fn </span>mount(arg: <span class="kw-2">&amp;</span>str, filesystem: Arc&lt;<span class="kw">dyn </span>FileSystem&gt;) {
-    FILESYSTEM_MAPPING.lock().mount(arg, filesystem);
+    MappingError(MappingError),
 }
 
 <span class="doccomment">/// Loads the hard disk specified in the argument
@@ -1915,7 +1719,7 @@
         filesystem.fat_type(),
         first_partition.partition_type
     );
-    mount(<span class="string">"/"</span>, Arc::new(Mutex::new(filesystem)));
+    mapping::mount(<span class="string">"/"</span>, Arc::new(Mutex::new(filesystem)))<span class="question-mark">?</span>;
 
     <span class="prelude-val">Ok</span>(())
 }
@@ -1925,90 +1729,89 @@
 /// This function must be called with an absolute path. Otherwise it will return [`FileSystemError::MustBeAbsolute`].
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>open_inode&lt;P: AsRef&lt;Path&gt;&gt;(
     path: P,
-) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;<span class="kw">dyn </span>FileSystem&gt;, Node), FileSystemError&gt; {
+) -&gt; <span class="prelude-ty">Result</span>&lt;(PathBuf, Arc&lt;<span class="kw">dyn </span>FileSystem&gt;, Node), FileSystemError&gt; {
     <span class="kw">if </span>!path.as_ref().is_absolute() {
         <span class="comment">// this is an internal kernel only result, this function must be called with an absolute path
         </span><span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::MustBeAbsolute);
     }
-    <span class="kw">let </span>(remaining, filesystem) = get_mapping(path.as_ref())<span class="question-mark">?</span>;
+
+    <span class="kw">let </span>(<span class="kw-2">mut </span>canonical_path, remaining, <span class="kw-2">mut </span>mapping_node) = mapping::get_mapping(path.as_ref())<span class="question-mark">?</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>filesystem = mapping_node.filesystem();
 
     <span class="kw">let </span>opening_dir = path.as_ref().has_last_separator();
-    <span class="kw">let </span><span class="kw-2">mut </span>comp = remaining.components();
-    <span class="kw">let </span>filename;
-    <span class="kw">let </span>parent;
-    <span class="comment">// remove leading `.` and `..` from the path
-    // TODO: this actually causes a bug where doing `/devices/../../..` will boil to `/devices` and not `/` as it should\
-    //       Fix it
-    </span><span class="kw">loop </span>{
-        <span class="kw">match </span>comp.next_back() {
-            <span class="prelude-val">Some</span>(Component::Normal(segment)) =&gt; {
-                filename = segment;
-                parent = comp.as_path();
-                <span class="kw">break</span>;
-            }
-            <span class="prelude-val">Some</span>(Component::RootDir) | <span class="prelude-val">None </span>=&gt; {
-                <span class="comment">// we reached root, return it directly
-                </span><span class="kw">return </span>filesystem
-                    .open_root()
-                    .map(|inode| (filesystem, inode.into()));
-            }
-            <span class="prelude-val">Some</span>(Component::CurDir) =&gt; {
-                <span class="comment">// ignore
-            </span>}
-            <span class="prelude-val">Some</span>(Component::ParentDir) =&gt; {
-                <span class="comment">// ignore
-                // drop next component
-                // FIXME: there is a bug here, `/welcome/../..` will be treated as `/welcome`
-                //       as the first `..` will drop the second `..`
-                //       implement better handling of this and make it global, probably in [`Path`]
-                </span>comp.next_back();
-            }
-        }
+    <span class="kw">let </span><span class="kw-2">mut </span>remaining_components = remaining.components().peekable();
+
+    <span class="kw">let </span><span class="kw-2">mut </span>dir = filesystem.open_root()<span class="question-mark">?</span>;
+    <span class="kw">if </span>remaining.is_root() || remaining.is_empty() {
+        <span class="kw">return </span><span class="prelude-val">Ok</span>((canonical_path, filesystem, dir.into()));
     }
 
-    <span class="kw">let </span>full_path = parent.join(filename);
-    <span class="kw">let </span>root = filesystem.open_root()<span class="question-mark">?</span>;
-    <span class="kw">if </span>full_path.is_empty() || full_path.is_root() {
-        <span class="kw">return </span><span class="prelude-val">Ok</span>((filesystem, root.into()));
-    }
-
-    <span class="kw">let </span>open_component_inode =
-        |inode: <span class="kw-2">&amp;</span>DirectoryNode, component: <span class="kw-2">&amp;</span>str| -&gt; <span class="prelude-ty">Result</span>&lt;Node, FileSystemError&gt; {
-            filesystem.treverse_dir(inode, component)
-        };
-
-    <span class="kw">let </span><span class="kw-2">mut </span>dir = root;
-    <span class="kw">for </span>component <span class="kw">in </span>parent.components() {
-        <span class="kw">let </span>component = <span class="kw">match </span>component {
-            Component::RootDir | Component::CurDir =&gt; {
+    <span class="comment">// used to know when to switch to different mappings
+    </span><span class="kw">let </span><span class="kw-2">mut </span>children_after_mapping = <span class="number">0</span>;
+    <span class="kw">while let </span><span class="prelude-val">Some</span>(component) = remaining_components.next() {
+        <span class="kw">let </span>name = <span class="kw">match </span>component {
+            Component::RootDir | Component::CurDir =&gt; <span class="kw">continue</span>,
+            Component::Normal(<span class="string">""</span>) =&gt; <span class="kw">continue</span>,
+            Component::ParentDir =&gt; {
+                <span class="kw">if </span>children_after_mapping == <span class="number">0 </span>{
+                    <span class="comment">// reached the end, i.e. this exceeded the filesystem mapping
+                    // we should get another mapping
+                    </span><span class="kw">let </span>parent = mapping_node.parent();
+                    <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = parent {
+                        mapping_node = parent.clone();
+                        <span class="macro">assert!</span>(canonical_path.pop(), <span class="string">"must have parent"</span>);
+                        filesystem = mapping_node.filesystem();
+                        dir = filesystem.open_root()<span class="question-mark">?</span>;
+                    }
+                } <span class="kw">else </span>{
+                    children_after_mapping -= <span class="number">1</span>;
+                    <span class="macro">assert!</span>(canonical_path.pop(), <span class="string">"must have parent"</span>);
+                }
                 <span class="kw">continue</span>;
             }
-            keep @ (Component::ParentDir | Component::Normal(<span class="kw">_</span>)) =&gt; keep.as_str(),
+            Component::Normal(name) =&gt; name,
         };
-        <span class="kw">if </span>component.is_empty() {
-            <span class="kw">continue</span>;
+        <span class="comment">// if we are still at the end of the mapping
+        </span><span class="kw">if </span>children_after_mapping == <span class="number">0 </span>{
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(child_mapping) = mapping_node.try_find_child(name) {
+                mapping_node = child_mapping;
+                canonical_path.push(name);
+                filesystem = mapping_node.filesystem();
+                children_after_mapping = <span class="number">0</span>;
+                dir = filesystem.open_root()<span class="question-mark">?</span>;
+                <span class="kw">continue</span>;
+            }
         }
-        <span class="kw">let </span>entry = open_component_inode(<span class="kw-2">&amp;</span>dir, component)<span class="question-mark">?</span>;
-        <span class="kw">if let </span>Node::Directory(dir_node) = entry {
-            dir = dir_node;
+
+        children_after_mapping += <span class="number">1</span>;
+        canonical_path.push(name);
+
+        <span class="kw">let </span><span class="kw-2">mut </span>entry = filesystem.treverse_dir(<span class="kw-2">&amp;</span>dir, name)<span class="question-mark">?</span>;
+
+        <span class="kw">if </span>remaining_components.peek().is_some() {
+            <span class="kw">if let </span>Node::Directory(dir_node) = entry {
+                dir = dir_node;
+            } <span class="kw">else </span>{
+                <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::IsNotDirectory);
+            }
         } <span class="kw">else </span>{
-            <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::IsNotDirectory);
+            <span class="kw">return if </span>opening_dir {
+                <span class="kw">if </span>entry.is_dir() {
+                    <span class="prelude-val">Ok</span>((canonical_path, filesystem, entry))
+                } <span class="kw">else </span>{
+                    <span class="prelude-val">Err</span>(FileSystemError::IsNotDirectory)
+                }
+            } <span class="kw">else </span>{
+                <span class="comment">// open the device if it is a device
+                </span>entry.try_open_device()<span class="question-mark">?</span>;
+                <span class="prelude-val">Ok</span>((canonical_path, filesystem, entry))
+            };
         }
     }
 
-    <span class="comment">// open the file inside `dir`
-    </span><span class="kw">let </span><span class="kw-2">mut </span>entry = open_component_inode(<span class="kw-2">&amp;</span>dir, filename)<span class="question-mark">?</span>;
-    <span class="kw">if </span>opening_dir {
-        <span class="kw">if </span>entry.is_dir() {
-            <span class="prelude-val">Ok</span>((filesystem, entry))
-        } <span class="kw">else </span>{
-            <span class="prelude-val">Err</span>(FileSystemError::IsNotDirectory)
-        }
-    } <span class="kw">else </span>{
-        <span class="comment">// open the device if it is a device
-        </span>entry.try_open_device()<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>((filesystem, entry))
-    }
+    <span class="comment">// should never reach here, but for some reason, if we got some path length but no components
+    // we should just return the root entry
+    </span><span class="prelude-val">Ok</span>((canonical_path, filesystem, dir.into()))
 }
 
 <span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2092,19 +1895,20 @@
         blocking_mode: BlockingMode,
         open_options: OpenOptions,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FileSystemError&gt; {
-        <span class="kw">let </span>(<span class="kw-2">mut </span>node, filesystem) = <span class="kw">match </span>open_inode(path.as_ref()) {
-            <span class="prelude-val">Ok</span>((filesystem, inode)) =&gt; {
+        <span class="kw">let </span>(canonical_path, <span class="kw-2">mut </span>node, filesystem) = <span class="kw">match </span>open_inode(path.as_ref()) {
+            <span class="prelude-val">Ok</span>((canonical_path, filesystem, inode)) =&gt; {
                 <span class="kw">if </span>open_options.is_create_new() {
                     <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::AlreadyExists);
                 }
 
-                (inode.into_file()<span class="question-mark">?</span>, filesystem)
+                (canonical_path, inode.into_file()<span class="question-mark">?</span>, filesystem)
             }
             <span class="prelude-val">Err</span>(FileSystemError::FileNotFound)
                 <span class="kw">if </span>open_options.is_create() || open_options.is_create_new() =&gt;
             {
                 <span class="kw">let </span>path = path.as_ref();
-                <span class="kw">let </span>(filesystem, parent_inode) = open_inode(path.parent().unwrap())<span class="question-mark">?</span>;
+                <span class="kw">let </span>(canonical_path, filesystem, parent_inode) =
+                    open_inode(path.parent().unwrap())<span class="question-mark">?</span>;
                 <span class="kw">let </span>filename = path.file_name().unwrap();
                 <span class="kw">if </span>filename == <span class="string">"." </span>|| filename == <span class="string">".." </span>|| filename == <span class="string">"/" </span>{
                     <span class="kw">return </span><span class="prelude-val">Err</span>(FileSystemError::InvalidPath);
@@ -2115,6 +1919,7 @@
                     FileAttributes::EMPTY,
                 )<span class="question-mark">?</span>;
                 (
+                    canonical_path,
                     node.into_file()
                         .expect(<span class="string">"This should be a valid file, we created it"</span>),
                     filesystem,
@@ -2139,7 +1944,7 @@
 
         <span class="kw">let </span>access = FileAccess::new(open_options.is_read(), open_options.is_write());
 
-        <span class="self">Self</span>::from_inode(node, path, filesystem, pos, blocking_mode, access)
+        <span class="self">Self</span>::from_inode(node, canonical_path, filesystem, pos, blocking_mode, access)
     }
 
     <span class="kw">pub fn </span>from_inode&lt;P: AsRef&lt;Path&gt;&gt;(
@@ -2375,9 +2180,9 @@
 <span class="attr">#[allow(dead_code)]
 </span><span class="kw">impl </span>Directory {
     <span class="kw">pub fn </span>open&lt;P: AsRef&lt;Path&gt;&gt;(path: P) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FileSystemError&gt; {
-        <span class="kw">let </span>(filesystem, inode) = open_inode(path.as_ref())<span class="question-mark">?</span>;
+        <span class="kw">let </span>(canonical_path, filesystem, inode) = open_inode(path.as_ref())<span class="question-mark">?</span>;
 
-        <span class="self">Self</span>::from_inode(inode.into_dir()<span class="question-mark">?</span>, path, filesystem, <span class="number">0</span>)
+        <span class="self">Self</span>::from_inode(inode.into_dir()<span class="question-mark">?</span>, canonical_path, filesystem, <span class="number">0</span>)
     }
 
     <span class="kw">pub fn </span>from_inode&lt;P: AsRef&lt;Path&gt;&gt;(
@@ -2403,10 +2208,7 @@
                 DirTreverse::Continue
             })<span class="question-mark">?</span>;
             <span class="comment">// add entries from the root mappings
-            </span><span class="kw">for </span>(path, _fs) <span class="kw">in </span>FILESYSTEM_MAPPING
-                .lock()
-                .get_all_matching_mappings(<span class="kw-2">&amp;</span><span class="self">self</span>.path)
-            {
+            </span>mapping::on_all_matching_mappings(<span class="kw-2">&amp;</span><span class="self">self</span>.path, |path, _fs| {
                 <span class="comment">// only add path with one component
                 </span><span class="kw">if </span>path.components().count() == <span class="number">1 </span>{
                     dir_entries.push(
@@ -2418,7 +2220,7 @@
                         .into(),
                     );
                 }
-            }
+            })<span class="question-mark">?</span>;
 
             <span class="self">self</span>.dir_entries = <span class="prelude-val">Some</span>(dir_entries);
         }

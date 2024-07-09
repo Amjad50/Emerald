@@ -841,6 +841,7 @@
 <a href="#839" id="839">839</a>
 <a href="#840" id="840">840</a>
 <a href="#841" id="841">841</a>
+<a href="#842" id="842">842</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{ffi::CStr, mem};
 
 <span class="kw">use </span>alloc::{borrow::Cow, string::String, vec::Vec};
@@ -913,6 +914,7 @@
             FileSystemError::OperationNotSupported =&gt; SyscallError::OperationNotSupported,
             FileSystemError::DiskReadError { .. }
             | FileSystemError::FatError(<span class="kw">_</span>)
+            | FileSystemError::MappingError(<span class="kw">_</span>)
             | FileSystemError::DeviceNotFound
             | FileSystemError::MustBeAbsolute   <span class="comment">// should not happen from user mode
             </span>| FileSystemError::PartitionTableNotFound =&gt; <span class="macro">panic!</span>(<span class="string">"should not happen?"</span>),
@@ -1329,7 +1331,7 @@
     <span class="kw">let </span>stat_ptr = ptr_as_mut(stat_ptr).map_err(|err| <span class="macro">to_arg_err!</span>(<span class="number">1</span>, err))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>absolute_path = path_to_proc_absolute_path(path);
-    <span class="kw">let </span>(<span class="kw">_</span>, inode) = fs::open_inode(absolute_path)<span class="question-mark">?</span>;
+    <span class="kw">let </span>(<span class="kw">_</span>, <span class="kw">_</span>, inode) = fs::open_inode(absolute_path)<span class="question-mark">?</span>;
 
     <span class="kw">unsafe </span>{
         <span class="kw-2">*</span>stat_ptr = inode.as_file_stat();

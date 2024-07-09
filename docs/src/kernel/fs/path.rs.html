@@ -1662,6 +1662,11 @@
 <a href="#1660" id="1660">1660</a>
 <a href="#1661" id="1661">1661</a>
 <a href="#1662" id="1662">1662</a>
+<a href="#1663" id="1663">1663</a>
+<a href="#1664" id="1664">1664</a>
+<a href="#1665" id="1665">1665</a>
+<a href="#1666" id="1666">1666</a>
+<a href="#1667" id="1667">1667</a>
 </pre></div><pre class="rust"><code><span class="comment">// This is taken and heavily modified of `unix_path`
 // which is modified from the standard library.
 // source: https://gitlab.com/SnejUgal/unix_path
@@ -2010,6 +2015,11 @@
                 <span class="self">self</span>.path = <span class="kw-2">&amp;</span><span class="self">self</span>.path[..<span class="self">self</span>.path.len() - size];
             }
         }
+    }
+
+    <span class="kw">pub fn </span>peek(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Component&lt;<span class="lifetime">'a</span>&gt;&gt; {
+        <span class="comment">// this is a lie, but it works, the clone cost isn't very high, so should be okay
+        </span><span class="self">self</span>.clone().next()
     }
 }
 
