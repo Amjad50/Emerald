@@ -50,3 +50,5 @@
 [framebufferinfo]: {ROOT_PATH}docs/kernel/graphics/vga/struct.FrameBufferInfo.html
 [fs_open_options]: {ROOT_PATH}docs/emerald_kernel_user_link/file/struct.OpenOptions.html
 [kernel_cmdline]: {ROOT_PATH}docs/kernel/cmdline/struct.Cmd.html
+[kernel_fs_mapping]: {ROOT_PATH}docs/kernel/fs/mapping/index.html
+[kernel_fs_mapping_node]: {ROOT_PATH}docs/kernel/fs/mapping/struct.MappingNode.html

@@ -24,7 +24,9 @@ operation is not supported, such as with `/devices` directory mappings.
 
 ## Mapping
 
-The mapping, is a dictionary that maps a path prefix to a `Filesystem` manager.
+> This is implemented in [`fs::mapping`][kernel_fs_mapping]
+
+The mapping, is a structure we use to map a path prefix to a `Filesystem`.
 For example, currently we have the following mappings:
 ```
 '/' -> FAT (filesystem backed by disk)
@@ -36,6 +38,34 @@ Then will use the resulting [`Filesystem`][kernel_fs_trait] manager to open the 
 
 For example, if you open the path `/devices/console`, it will use the `Devices` filesystem manager to open the file `/console`.
 
+Internally, this mapping is stored in a recursive tree structure of [`MappingNode`][kernel_fs_mapping_node],
+each will contain:
+- The [`Filesystem`][kernel_fs_trait] object.
+- Weak ref to parent (to not get into trouble when dropping)
+- childern BTreeMap (child component name -> [`MappingNode`][kernel_fs_mapping_node])
+
+So, it will be something like this:
+```txt
+- / (root) = {
+  fs: object
+  parent: None
+  children: {
+    "devices": {
+      fs: object
+      parent: /
+      children: {}
+    }
+  }
+}
+```
+
+This is used so that we can treverse between two mappings easily.
+i.e., if we are at the beginning of the mapping, and encountered `..` path, we can go back to the parent mapping.
+Also, when going forward in mapping, we can check if the component is a child mapping of this mapping and switch to it easily.
+
+With this treversal, we can build canonical path for a node.
+
+
 ### Filesystem trait
 
 The "manager" here is an implementor of the [`Filesystem`][kernel_fs_trait] trait, which is a simple interface that controls all
@@ -44,9 +74,11 @@ the filesystem operations.
 Operations supported are:
 - `open_root` - Open the root directory, this is the entry point when treversing the filesystem.
 - `read_dir` - Read the directory entries from a [`DirectoryNode`][kernel_fs_dirnode].
+- `treverse_dir` - Look through the dir, and return `Node` that matches the entry name or error if not found.
 - `create_node` - Create a new file or directory inside a [`DirectoryNode`][kernel_fs_dirnode].
 - `read_file` - Read the file contents from a [`FileNode`][kernel_fs_filenode].
 - `write_file` - Write the file contents to a [`FileNode`][kernel_fs_filenode].
+- `flush_file` - Force the driver to flush the content to physical media (i.e. clear cache if any).
 - `close_file` - Send a message that we are closing the file, if you notice, we don't have `open_file`, but instead, the user can 
   treverse the filesystem with `open_root` and `read_dir` until the file node is found, then it can be used directly. This function
   is used to alert the filesystem to clean up any resources that it might have allocated for this file.
