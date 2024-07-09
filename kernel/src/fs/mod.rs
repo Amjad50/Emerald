@@ -8,6 +8,7 @@ use core::ops;
 use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType, OpenOptions};
 use mapping::MappingError;
+use path::PathBuf;
 use tracing::info;
 
 use crate::{
@@ -560,91 +561,89 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
 /// This function must be called with an absolute path. Otherwise it will return [`FileSystemError::MustBeAbsolute`].
 pub(crate) fn open_inode<P: AsRef<Path>>(
     path: P,
-) -> Result<(Arc<dyn FileSystem>, Node), FileSystemError> {
+) -> Result<(PathBuf, Arc<dyn FileSystem>, Node), FileSystemError> {
     if !path.as_ref().is_absolute() {
         // this is an internal kernel only result, this function must be called with an absolute path
         return Err(FileSystemError::MustBeAbsolute);
     }
-    let (_, remaining, mapping_node) = mapping::get_mapping(path.as_ref())?;
-    let filesystem = mapping_node.filesystem();
+
+    let (mut canonical_path, remaining, mut mapping_node) = mapping::get_mapping(path.as_ref())?;
+    let mut filesystem = mapping_node.filesystem();
 
     let opening_dir = path.as_ref().has_last_separator();
-    let mut comp = remaining.components();
-    let filename;
-    let parent;
-    // remove leading `.` and `..` from the path
-    // TODO: this actually causes a bug where doing `/devices/../../..` will boil to `/devices` and not `/` as it should\
-    //       Fix it
-    loop {
-        match comp.next_back() {
-            Some(Component::Normal(segment)) => {
-                filename = segment;
-                parent = comp.as_path();
-                break;
-            }
-            Some(Component::RootDir) | None => {
-                // we reached root, return it directly
-                return filesystem
-                    .open_root()
-                    .map(|inode| (filesystem, inode.into()));
-            }
-            Some(Component::CurDir) => {
-                // ignore
-            }
-            Some(Component::ParentDir) => {
-                // ignore
-                // drop next component
-                // FIXME: there is a bug here, `/welcome/../..` will be treated as `/welcome`
-                //       as the first `..` will drop the second `..`
-                //       implement better handling of this and make it global, probably in [`Path`]
-                comp.next_back();
-            }
-        }
+    let mut remaining_components = remaining.components().peekable();
+
+    let mut dir = filesystem.open_root()?;
+    if remaining.is_root() || remaining.is_empty() {
+        return Ok((canonical_path, filesystem, dir.into()));
     }
 
-    let full_path = parent.join(filename);
-    let root = filesystem.open_root()?;
-    if full_path.is_empty() || full_path.is_root() {
-        return Ok((filesystem, root.into()));
-    }
-
-    let open_component_inode =
-        |inode: &DirectoryNode, component: &str| -> Result<Node, FileSystemError> {
-            filesystem.treverse_dir(inode, component)
-        };
-
-    let mut dir = root;
-    for component in parent.components() {
-        let component = match component {
-            Component::RootDir | Component::CurDir => {
+    // used to know when to switch to different mappings
+    let mut children_after_mapping = 0;
+    while let Some(component) = remaining_components.next() {
+        let name = match component {
+            Component::RootDir | Component::CurDir => continue,
+            Component::Normal("") => continue,
+            Component::ParentDir => {
+                if children_after_mapping == 0 {
+                    // reached the end, i.e. this exceeded the filesystem mapping
+                    // we should get another mapping
+                    let parent = mapping_node.parent();
+                    if let Some(parent) = parent {
+                        mapping_node = parent.clone();
+                        assert!(canonical_path.pop(), "must have parent");
+                        filesystem = mapping_node.filesystem();
+                        dir = filesystem.open_root()?;
+                    }
+                } else {
+                    children_after_mapping -= 1;
+                    assert!(canonical_path.pop(), "must have parent");
+                }
                 continue;
             }
-            keep @ (Component::ParentDir | Component::Normal(_)) => keep.as_str(),
+            Component::Normal(name) => name,
         };
-        if component.is_empty() {
-            continue;
+        // if we are still at the end of the mapping
+        if children_after_mapping == 0 {
+            if let Some(child_mapping) = mapping_node.try_find_child(name) {
+                mapping_node = child_mapping;
+                canonical_path.push(name);
+                filesystem = mapping_node.filesystem();
+                children_after_mapping = 0;
+                dir = filesystem.open_root()?;
+                continue;
+            }
         }
-        let entry = open_component_inode(&dir, component)?;
-        if let Node::Directory(dir_node) = entry {
-            dir = dir_node;
+
+        children_after_mapping += 1;
+        canonical_path.push(name);
+
+        let mut entry = filesystem.treverse_dir(&dir, name)?;
+
+        if remaining_components.peek().is_some() {
+            if let Node::Directory(dir_node) = entry {
+                dir = dir_node;
+            } else {
+                return Err(FileSystemError::IsNotDirectory);
+            }
         } else {
-            return Err(FileSystemError::IsNotDirectory);
+            return if opening_dir {
+                if entry.is_dir() {
+                    Ok((canonical_path, filesystem, entry))
+                } else {
+                    Err(FileSystemError::IsNotDirectory)
+                }
+            } else {
+                // open the device if it is a device
+                entry.try_open_device()?;
+                Ok((canonical_path, filesystem, entry))
+            };
         }
     }
 
-    // open the file inside `dir`
-    let mut entry = open_component_inode(&dir, filename)?;
-    if opening_dir {
-        if entry.is_dir() {
-            Ok((filesystem, entry))
-        } else {
-            Err(FileSystemError::IsNotDirectory)
-        }
-    } else {
-        // open the device if it is a device
-        entry.try_open_device()?;
-        Ok((filesystem, entry))
-    }
+    // should never reach here, but for some reason, if we got some path length but no components
+    // we should just return the root entry
+    Ok((canonical_path, filesystem, dir.into()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -728,19 +727,20 @@ impl File {
         blocking_mode: BlockingMode,
         open_options: OpenOptions,
     ) -> Result<Self, FileSystemError> {
-        let (mut node, filesystem) = match open_inode(path.as_ref()) {
-            Ok((filesystem, inode)) => {
+        let (canonical_path, mut node, filesystem) = match open_inode(path.as_ref()) {
+            Ok((canonical_path, filesystem, inode)) => {
                 if open_options.is_create_new() {
                     return Err(FileSystemError::AlreadyExists);
                 }
 
-                (inode.into_file()?, filesystem)
+                (canonical_path, inode.into_file()?, filesystem)
             }
             Err(FileSystemError::FileNotFound)
                 if open_options.is_create() || open_options.is_create_new() =>
             {
                 let path = path.as_ref();
-                let (filesystem, parent_inode) = open_inode(path.parent().unwrap())?;
+                let (canonical_path, filesystem, parent_inode) =
+                    open_inode(path.parent().unwrap())?;
                 let filename = path.file_name().unwrap();
                 if filename == "." || filename == ".." || filename == "/" {
                     return Err(FileSystemError::InvalidPath);
@@ -751,6 +751,7 @@ impl File {
                     FileAttributes::EMPTY,
                 )?;
                 (
+                    canonical_path,
                     node.into_file()
                         .expect("This should be a valid file, we created it"),
                     filesystem,
@@ -775,7 +776,7 @@ impl File {
 
         let access = FileAccess::new(open_options.is_read(), open_options.is_write());
 
-        Self::from_inode(node, path, filesystem, pos, blocking_mode, access)
+        Self::from_inode(node, canonical_path, filesystem, pos, blocking_mode, access)
     }
 
     pub fn from_inode<P: AsRef<Path>>(
@@ -1011,9 +1012,9 @@ impl Drop for File {
 #[allow(dead_code)]
 impl Directory {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
-        let (filesystem, inode) = open_inode(path.as_ref())?;
+        let (canonical_path, filesystem, inode) = open_inode(path.as_ref())?;
 
-        Self::from_inode(inode.into_dir()?, path, filesystem, 0)
+        Self::from_inode(inode.into_dir()?, canonical_path, filesystem, 0)
     }
 
     pub fn from_inode<P: AsRef<Path>>(

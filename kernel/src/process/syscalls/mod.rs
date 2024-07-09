@@ -487,7 +487,7 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let stat_ptr = ptr_as_mut(stat_ptr).map_err(|err| to_arg_err!(1, err))?;
 
     let absolute_path = path_to_proc_absolute_path(path);
-    let (_, inode) = fs::open_inode(absolute_path)?;
+    let (_, _, inode) = fs::open_inode(absolute_path)?;
 
     unsafe {
         *stat_ptr = inode.as_file_stat();
