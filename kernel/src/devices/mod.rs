@@ -95,7 +95,7 @@ pub fn init_devices_mapping() {
         })))
         .expect("Devices already initialized");
 
-    fs::mount("/devices", DEVICES.get().clone());
+    fs::mapping::mount("/devices", DEVICES.get().clone()).expect("Mapping failed");
 }
 
 pub fn register_device(device: Arc<dyn Device>) {

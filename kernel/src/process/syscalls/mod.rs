@@ -70,6 +70,7 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::OperationNotSupported => SyscallError::OperationNotSupported,
             FileSystemError::DiskReadError { .. }
             | FileSystemError::FatError(_)
+            | FileSystemError::MappingError(_)
             | FileSystemError::DeviceNotFound
             | FileSystemError::MustBeAbsolute   // should not happen from user mode
             | FileSystemError::PartitionTableNotFound => panic!("should not happen?"),

@@ -1,7 +1,13 @@
+mod fat;
+pub mod mapping;
+mod mbr;
+pub mod path;
+
 use core::ops;
 
 use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType, OpenOptions};
+use mapping::MappingError;
 use tracing::info;
 
 use crate::{
@@ -17,17 +23,9 @@ use self::{
     path::{Component, Path},
 };
 
-mod fat;
-mod mbr;
-pub mod path;
-
 /// This is not used at all, just an indicator in [`Directory::fetch_entries`]
 pub(crate) const ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC: u64 = 0xf11356573e;
 pub(crate) const NO_PARENT_DIR_SECTOR: u64 = 0xFFFF_FFFF_FFFF_FFFF;
-
-static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
-    mappings: Vec::new(),
-});
 
 static EMPTY_FILESYSTEM: OnceLock<Arc<EmptyFileSystem>> = OnceLock::new();
 
@@ -503,95 +501,6 @@ impl FileSystem for EmptyFileSystem {
     }
 }
 
-struct FileSystemMapping {
-    mappings: Vec<(Box<Path>, Arc<dyn FileSystem>)>,
-}
-
-impl FileSystemMapping {
-    /// Retrieves the file system mapping for a given path.
-    ///
-    /// This function iterates over the stored mappings in reverse order and returns the first
-    /// file system and the stripped path for which the given path has a prefix that matches
-    /// the file system's path.
-    ///
-    /// # Parameters
-    ///
-    /// * `path`: A reference to the path for which to find the file system mapping.
-    ///
-    /// # Returns
-    ///
-    /// * A tuple containing the stripped path and an `Arc` to the file system, if a matching mapping is found.
-    /// * `FileSystemError::FileNotFound` if no matching mapping is found.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Assume fs_map has been populated with some mappings
-    /// let mut fs_map = FileSystemMap::new();
-    ///
-    /// let path = Path::new("/some/path");
-    /// match fs_map.get_mapping(&path) {
-    ///     Ok((stripped_path, fs)) => {
-    ///         println!("Found file system: {:?}", fs);
-    ///         println!("Stripped path: {:?}", stripped_path);
-    ///     }
-    ///     Err(FileSystemError::FileNotFound) => {
-    ///         println!("No file system found for path: {:?}", path);
-    ///     }
-    ///     _ => {}
-    /// }
-    /// ```
-    fn get_mapping<'p>(
-        &mut self,
-        path: &'p Path,
-    ) -> Result<(&'p Path, Arc<dyn FileSystem>), FileSystemError> {
-        let (stripped_path, filesystem) = self
-            .mappings
-            .iter()
-            // look from the back for best match
-            .rev()
-            .find_map(|(fs_path, fs)| Some((path.strip_prefix(fs_path).ok()?, fs.clone())))
-            .ok_or(FileSystemError::FileNotFound)?;
-
-        Ok((stripped_path, filesystem.clone()))
-    }
-
-    fn get_all_matching_mappings<'a, 'p>(
-        &'a mut self,
-        path: &'p Path,
-    ) -> impl Iterator<Item = (&'a Path, Arc<dyn FileSystem>)>
-    where
-        'p: 'a,
-    {
-        self.mappings.iter().filter_map(move |(fs_path, fs)| {
-            let stripped = fs_path.strip_prefix(path).ok()?;
-            if stripped.is_empty() {
-                return None;
-            }
-            Some((stripped, fs.clone()))
-        })
-    }
-
-    fn mount<P: AsRef<Path>>(&mut self, arg: P, filesystem: Arc<dyn FileSystem>) {
-        // TODO: replace with error
-        assert!(
-            !self
-                .mappings
-                .iter()
-                .any(|(fs_path, _)| fs_path.as_ref() == arg.as_ref()),
-            "Mounting {:?} twice",
-            arg.as_ref().display()
-        );
-
-        self.mappings.push((arg.as_ref().into(), filesystem));
-
-        // must be kept sorted by length, so we can find the best/correct mapping,
-        // as mappings can be inside each other in structure
-        self.mappings
-            .sort_unstable_by(|(a, _), (b, _)| a.as_str().len().cmp(&b.as_str().len()));
-    }
-}
-
 #[derive(Debug)]
 pub enum FileSystemError {
     PartitionTableNotFound,
@@ -610,14 +519,7 @@ pub enum FileSystemError {
     EndOfFile,
     BufferNotLargeEnough(usize),
     AlreadyExists,
-}
-
-fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
-    FILESYSTEM_MAPPING.lock().get_mapping(path)
-}
-
-pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) {
-    FILESYSTEM_MAPPING.lock().mount(arg, filesystem);
+    MappingError(MappingError),
 }
 
 /// Loads the hard disk specified in the argument
@@ -648,7 +550,7 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
         filesystem.fat_type(),
         first_partition.partition_type
     );
-    mount("/", Arc::new(Mutex::new(filesystem)));
+    mapping::mount("/", Arc::new(Mutex::new(filesystem)))?;
 
     Ok(())
 }
@@ -663,7 +565,8 @@ pub(crate) fn open_inode<P: AsRef<Path>>(
         // this is an internal kernel only result, this function must be called with an absolute path
         return Err(FileSystemError::MustBeAbsolute);
     }
-    let (remaining, filesystem) = get_mapping(path.as_ref())?;
+    let (_, remaining, mapping_node) = mapping::get_mapping(path.as_ref())?;
+    let filesystem = mapping_node.filesystem();
 
     let opening_dir = path.as_ref().has_last_separator();
     let mut comp = remaining.components();
@@ -1136,10 +1039,7 @@ impl Directory {
                 DirTreverse::Continue
             })?;
             // add entries from the root mappings
-            for (path, _fs) in FILESYSTEM_MAPPING
-                .lock()
-                .get_all_matching_mappings(&self.path)
-            {
+            mapping::on_all_matching_mappings(&self.path, |path, _fs| {
                 // only add path with one component
                 if path.components().count() == 1 {
                     dir_entries.push(
@@ -1151,7 +1051,7 @@ impl Directory {
                         .into(),
                     );
                 }
-            }
+            })?;
 
             self.dir_entries = Some(dir_entries);
         }
