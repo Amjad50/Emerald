@@ -310,7 +310,7 @@ struct AtaCommand {
     command: u8,
     drive: u8,
     lba: u64,
-    sector_count: u16,
+    sector_count: u8,
     features: u8,
 }
 
@@ -345,14 +345,14 @@ impl AtaCommand {
         self
     }
 
-    pub fn with_sector_count(mut self, sector_count: u16) -> Self {
+    pub fn with_sector_count(mut self, sector_count: u8) -> Self {
         self.sector_count = sector_count;
         self
     }
 
     pub fn write(&self, io_port: &IdeIo) {
         io_port.write_command_block(ata::FEATURES, self.features);
-        io_port.write_command_block(ata::SECTOR_COUNT, self.sector_count as u8);
+        io_port.write_command_block(ata::SECTOR_COUNT, self.sector_count);
         io_port.write_command_block(ata::LBA_LO, (self.lba & 0xFF) as u8);
         io_port.write_command_block(ata::LBA_MID, ((self.lba >> 8) & 0xFF) as u8);
         io_port.write_command_block(ata::LBA_HI, ((self.lba >> 16) & 0xFF) as u8);
@@ -719,24 +719,42 @@ impl IdeDevice {
         self.sector_size
     }
 
-    pub fn read_sync(&self, start_sector: u64, data: &mut [u8]) -> Result<(), IdeError> {
+    pub fn read_sync(&self, mut start_sector: u64, mut data: &mut [u8]) -> Result<(), IdeError> {
         let sector_size = self.sector_size as u64;
         let buffer_len = data.len() as u64;
 
         if buffer_len % sector_size != 0 {
             return Err(IdeError::UnalignedSize);
         }
-        if start_sector >= self.number_of_sectors {
+        let mut number_of_sectors = buffer_len / sector_size;
+
+        if start_sector
+            .checked_add(number_of_sectors)
+            .ok_or(IdeError::BoundsExceeded)?
+            >= self.number_of_sectors
+        {
             return Err(IdeError::BoundsExceeded);
         }
 
-        let number_of_sectors = buffer_len / sector_size;
-
         if self.device_type == IdeDeviceType::Ata {
-            self.device_impl
-                .lock()
-                .read_sync_ata(start_sector, number_of_sectors, data)
-                .map_err(IdeError::DeviceError)
+            let mut device = self.device_impl.lock();
+
+            while number_of_sectors != 0 {
+                let num_now = number_of_sectors.min(255);
+                assert!(number_of_sectors >= num_now);
+                number_of_sectors -= num_now;
+
+                let (now_data, afterward) = data.split_at_mut((num_now * sector_size) as usize);
+
+                device
+                    .read_sync_ata(start_sector, num_now, now_data)
+                    .map_err(IdeError::DeviceError)?;
+
+                start_sector += num_now;
+                data = afterward;
+            }
+
+            Ok(())
         } else {
             self.device_impl
                 .lock()
@@ -745,24 +763,42 @@ impl IdeDevice {
         }
     }
 
-    pub fn write_sync(&self, start_sector: u64, data: &[u8]) -> Result<(), IdeError> {
+    pub fn write_sync(&self, mut start_sector: u64, mut data: &[u8]) -> Result<(), IdeError> {
         let sector_size = self.sector_size as u64;
         let buffer_len = data.len() as u64;
 
         if buffer_len % sector_size != 0 {
             return Err(IdeError::UnalignedSize);
         }
-        if start_sector >= self.number_of_sectors {
+        let mut number_of_sectors = buffer_len / sector_size;
+
+        if start_sector
+            .checked_add(number_of_sectors)
+            .ok_or(IdeError::BoundsExceeded)?
+            >= self.number_of_sectors
+        {
             return Err(IdeError::BoundsExceeded);
         }
 
-        let number_of_sectors = buffer_len / sector_size;
-
         if self.device_type == IdeDeviceType::Ata {
-            self.device_impl
-                .lock()
-                .write_sync_ata(start_sector, number_of_sectors, data)
-                .map_err(IdeError::DeviceError)
+            let mut device = self.device_impl.lock();
+
+            while number_of_sectors != 0 {
+                let num_now = number_of_sectors.min(255);
+                assert!(number_of_sectors >= num_now);
+                number_of_sectors -= num_now;
+
+                let (now_data, afterward) = data.split_at((num_now * sector_size) as usize);
+
+                device
+                    .write_sync_ata(start_sector, num_now, now_data)
+                    .map_err(IdeError::DeviceError)?;
+
+                start_sector += num_now;
+                data = afterward;
+            }
+
+            Ok(())
         } else {
             todo!("write_sync for ATAPI");
         }
@@ -908,11 +944,11 @@ impl IdeDeviceImpl {
         len_sectors: u64,
         data: &mut [u8],
     ) -> Result<(), u8> {
-        assert!(len_sectors <= u16::MAX as u64);
+        assert!(len_sectors <= u8::MAX as u64);
         // the buffer is enough to hold the data (see read_sync)
         let command = AtaCommand::new(ata::COMMAND_READ_SECTORS)
             .with_lba(start_sector)
-            .with_sector_count(len_sectors as u16)
+            .with_sector_count(len_sectors as u8)
             .with_second_drive(self.second_device_select);
 
         command.execute_read(&self.io, data)
@@ -944,11 +980,11 @@ impl IdeDeviceImpl {
         len_sectors: u64,
         data: &[u8],
     ) -> Result<(), u8> {
-        assert!(len_sectors <= u16::MAX as u64);
+        assert!(len_sectors <= u8::MAX as u64);
         // the buffer is enough to hold the data (see write_sync)
         let command = AtaCommand::new(ata::COMMAND_WRITE_SECTORS)
             .with_lba(start_sector)
-            .with_sector_count(len_sectors as u16)
+            .with_sector_count(len_sectors as u8)
             .with_second_drive(self.second_device_select);
 
         command.execute_write(&self.io, data)
