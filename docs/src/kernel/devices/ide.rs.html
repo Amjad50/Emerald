@@ -1092,6 +1092,42 @@
 <a href="#1090" id="1090">1090</a>
 <a href="#1091" id="1091">1091</a>
 <a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
+<a href="#1096" id="1096">1096</a>
+<a href="#1097" id="1097">1097</a>
+<a href="#1098" id="1098">1098</a>
+<a href="#1099" id="1099">1099</a>
+<a href="#1100" id="1100">1100</a>
+<a href="#1101" id="1101">1101</a>
+<a href="#1102" id="1102">1102</a>
+<a href="#1103" id="1103">1103</a>
+<a href="#1104" id="1104">1104</a>
+<a href="#1105" id="1105">1105</a>
+<a href="#1106" id="1106">1106</a>
+<a href="#1107" id="1107">1107</a>
+<a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
+<a href="#1110" id="1110">1110</a>
+<a href="#1111" id="1111">1111</a>
+<a href="#1112" id="1112">1112</a>
+<a href="#1113" id="1113">1113</a>
+<a href="#1114" id="1114">1114</a>
+<a href="#1115" id="1115">1115</a>
+<a href="#1116" id="1116">1116</a>
+<a href="#1117" id="1117">1117</a>
+<a href="#1118" id="1118">1118</a>
+<a href="#1119" id="1119">1119</a>
+<a href="#1120" id="1120">1120</a>
+<a href="#1121" id="1121">1121</a>
+<a href="#1122" id="1122">1122</a>
+<a href="#1123" id="1123">1123</a>
+<a href="#1124" id="1124">1124</a>
+<a href="#1125" id="1125">1125</a>
+<a href="#1126" id="1126">1126</a>
+<a href="#1127" id="1127">1127</a>
+<a href="#1128" id="1128">1128</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     fmt, hint, mem,
     ptr::{addr_of, addr_of_mut},
@@ -1404,7 +1440,7 @@
     command: u8,
     drive: u8,
     lba: u64,
-    sector_count: u16,
+    sector_count: u8,
     features: u8,
 }
 
@@ -1439,14 +1475,14 @@
         <span class="self">self
     </span>}
 
-    <span class="kw">pub fn </span>with_sector_count(<span class="kw-2">mut </span><span class="self">self</span>, sector_count: u16) -&gt; <span class="self">Self </span>{
+    <span class="kw">pub fn </span>with_sector_count(<span class="kw-2">mut </span><span class="self">self</span>, sector_count: u8) -&gt; <span class="self">Self </span>{
         <span class="self">self</span>.sector_count = sector_count;
         <span class="self">self
     </span>}
 
     <span class="kw">pub fn </span>write(<span class="kw-2">&amp;</span><span class="self">self</span>, io_port: <span class="kw-2">&amp;</span>IdeIo) {
         io_port.write_command_block(ata::FEATURES, <span class="self">self</span>.features);
-        io_port.write_command_block(ata::SECTOR_COUNT, <span class="self">self</span>.sector_count <span class="kw">as </span>u8);
+        io_port.write_command_block(ata::SECTOR_COUNT, <span class="self">self</span>.sector_count);
         io_port.write_command_block(ata::LBA_LO, (<span class="self">self</span>.lba &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8);
         io_port.write_command_block(ata::LBA_MID, ((<span class="self">self</span>.lba &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8);
         io_port.write_command_block(ata::LBA_HI, ((<span class="self">self</span>.lba &gt;&gt; <span class="number">16</span>) &amp; <span class="number">0xFF</span>) <span class="kw">as </span>u8);
@@ -1813,24 +1849,42 @@
         <span class="self">self</span>.sector_size
     }
 
-    <span class="kw">pub fn </span>read_sync(<span class="kw-2">&amp;</span><span class="self">self</span>, start_sector: u64, data: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), IdeError&gt; {
+    <span class="kw">pub fn </span>read_sync(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="kw-2">mut </span>start_sector: u64, <span class="kw-2">mut </span>data: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), IdeError&gt; {
         <span class="kw">let </span>sector_size = <span class="self">self</span>.sector_size <span class="kw">as </span>u64;
         <span class="kw">let </span>buffer_len = data.len() <span class="kw">as </span>u64;
 
         <span class="kw">if </span>buffer_len % sector_size != <span class="number">0 </span>{
             <span class="kw">return </span><span class="prelude-val">Err</span>(IdeError::UnalignedSize);
         }
-        <span class="kw">if </span>start_sector &gt;= <span class="self">self</span>.number_of_sectors {
+        <span class="kw">let </span><span class="kw-2">mut </span>number_of_sectors = buffer_len / sector_size;
+
+        <span class="kw">if </span>start_sector
+            .checked_add(number_of_sectors)
+            .ok_or(IdeError::BoundsExceeded)<span class="question-mark">?
+            </span>&gt;= <span class="self">self</span>.number_of_sectors
+        {
             <span class="kw">return </span><span class="prelude-val">Err</span>(IdeError::BoundsExceeded);
         }
 
-        <span class="kw">let </span>number_of_sectors = buffer_len / sector_size;
-
         <span class="kw">if </span><span class="self">self</span>.device_type == IdeDeviceType::Ata {
-            <span class="self">self</span>.device_impl
-                .lock()
-                .read_sync_ata(start_sector, number_of_sectors, data)
-                .map_err(IdeError::DeviceError)
+            <span class="kw">let </span><span class="kw-2">mut </span>device = <span class="self">self</span>.device_impl.lock();
+
+            <span class="kw">while </span>number_of_sectors != <span class="number">0 </span>{
+                <span class="kw">let </span>num_now = number_of_sectors.min(<span class="number">255</span>);
+                <span class="macro">assert!</span>(number_of_sectors &gt;= num_now);
+                number_of_sectors -= num_now;
+
+                <span class="kw">let </span>(now_data, afterward) = data.split_at_mut((num_now * sector_size) <span class="kw">as </span>usize);
+
+                device
+                    .read_sync_ata(start_sector, num_now, now_data)
+                    .map_err(IdeError::DeviceError)<span class="question-mark">?</span>;
+
+                start_sector += num_now;
+                data = afterward;
+            }
+
+            <span class="prelude-val">Ok</span>(())
         } <span class="kw">else </span>{
             <span class="self">self</span>.device_impl
                 .lock()
@@ -1839,24 +1893,42 @@
         }
     }
 
-    <span class="kw">pub fn </span>write_sync(<span class="kw-2">&amp;</span><span class="self">self</span>, start_sector: u64, data: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), IdeError&gt; {
+    <span class="kw">pub fn </span>write_sync(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="kw-2">mut </span>start_sector: u64, <span class="kw-2">mut </span>data: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), IdeError&gt; {
         <span class="kw">let </span>sector_size = <span class="self">self</span>.sector_size <span class="kw">as </span>u64;
         <span class="kw">let </span>buffer_len = data.len() <span class="kw">as </span>u64;
 
         <span class="kw">if </span>buffer_len % sector_size != <span class="number">0 </span>{
             <span class="kw">return </span><span class="prelude-val">Err</span>(IdeError::UnalignedSize);
         }
-        <span class="kw">if </span>start_sector &gt;= <span class="self">self</span>.number_of_sectors {
+        <span class="kw">let </span><span class="kw-2">mut </span>number_of_sectors = buffer_len / sector_size;
+
+        <span class="kw">if </span>start_sector
+            .checked_add(number_of_sectors)
+            .ok_or(IdeError::BoundsExceeded)<span class="question-mark">?
+            </span>&gt;= <span class="self">self</span>.number_of_sectors
+        {
             <span class="kw">return </span><span class="prelude-val">Err</span>(IdeError::BoundsExceeded);
         }
 
-        <span class="kw">let </span>number_of_sectors = buffer_len / sector_size;
-
         <span class="kw">if </span><span class="self">self</span>.device_type == IdeDeviceType::Ata {
-            <span class="self">self</span>.device_impl
-                .lock()
-                .write_sync_ata(start_sector, number_of_sectors, data)
-                .map_err(IdeError::DeviceError)
+            <span class="kw">let </span><span class="kw-2">mut </span>device = <span class="self">self</span>.device_impl.lock();
+
+            <span class="kw">while </span>number_of_sectors != <span class="number">0 </span>{
+                <span class="kw">let </span>num_now = number_of_sectors.min(<span class="number">255</span>);
+                <span class="macro">assert!</span>(number_of_sectors &gt;= num_now);
+                number_of_sectors -= num_now;
+
+                <span class="kw">let </span>(now_data, afterward) = data.split_at((num_now * sector_size) <span class="kw">as </span>usize);
+
+                device
+                    .write_sync_ata(start_sector, num_now, now_data)
+                    .map_err(IdeError::DeviceError)<span class="question-mark">?</span>;
+
+                start_sector += num_now;
+                data = afterward;
+            }
+
+            <span class="prelude-val">Ok</span>(())
         } <span class="kw">else </span>{
             <span class="macro">todo!</span>(<span class="string">"write_sync for ATAPI"</span>);
         }
@@ -2002,11 +2074,11 @@
         len_sectors: u64,
         data: <span class="kw-2">&amp;mut </span>[u8],
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(), u8&gt; {
-        <span class="macro">assert!</span>(len_sectors &lt;= u16::MAX <span class="kw">as </span>u64);
+        <span class="macro">assert!</span>(len_sectors &lt;= u8::MAX <span class="kw">as </span>u64);
         <span class="comment">// the buffer is enough to hold the data (see read_sync)
         </span><span class="kw">let </span>command = AtaCommand::new(ata::COMMAND_READ_SECTORS)
             .with_lba(start_sector)
-            .with_sector_count(len_sectors <span class="kw">as </span>u16)
+            .with_sector_count(len_sectors <span class="kw">as </span>u8)
             .with_second_drive(<span class="self">self</span>.second_device_select);
 
         command.execute_read(<span class="kw-2">&amp;</span><span class="self">self</span>.io, data)
@@ -2038,11 +2110,11 @@
         len_sectors: u64,
         data: <span class="kw-2">&amp;</span>[u8],
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(), u8&gt; {
-        <span class="macro">assert!</span>(len_sectors &lt;= u16::MAX <span class="kw">as </span>u64);
+        <span class="macro">assert!</span>(len_sectors &lt;= u8::MAX <span class="kw">as </span>u64);
         <span class="comment">// the buffer is enough to hold the data (see write_sync)
         </span><span class="kw">let </span>command = AtaCommand::new(ata::COMMAND_WRITE_SECTORS)
             .with_lba(start_sector)
-            .with_sector_count(len_sectors <span class="kw">as </span>u16)
+            .with_sector_count(len_sectors <span class="kw">as </span>u8)
             .with_second_drive(<span class="self">self</span>.second_device_select);
 
         command.execute_write(<span class="kw-2">&amp;</span><span class="self">self</span>.io, data)
