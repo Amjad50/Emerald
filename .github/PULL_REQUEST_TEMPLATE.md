@@ -18,5 +18,6 @@ Mention the type of each change. i.e. `Addition`, `Bug Fix`, `Documentation`, et
 ## Checklist
 
 - [ ] The changes are tested and works as expected (mention if not)
+- [ ] Tests if applicable (new features, regression tests, etc...)
 - [ ] Documentation
 - [ ] Needed README changes
