@@ -1261,6 +1261,10 @@
 <a href="#1259" id="1259">1259</a>
 <a href="#1260" id="1260">1260</a>
 <a href="#1261" id="1261">1261</a>
+<a href="#1262" id="1262">1262</a>
+<a href="#1263" id="1263">1263</a>
+<a href="#1264" id="1264">1264</a>
+<a href="#1265" id="1265">1265</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::ops;
 
 <span class="kw">use </span>alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
@@ -1677,6 +1681,19 @@
         handler: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(Node) -&gt; DirTreverse,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt;;
 
+    <span class="kw">fn </span>treverse_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, inode: <span class="kw-2">&amp;</span>DirectoryNode, matcher: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Node, FileSystemError&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>entry = <span class="prelude-val">None</span>;
+        <span class="self">self</span>.read_dir(inode, <span class="kw-2">&amp;mut </span>|inode| {
+            <span class="kw">if </span>inode.name() == matcher {
+                entry = <span class="prelude-val">Some</span>(inode);
+                DirTreverse::Stop
+            } <span class="kw">else </span>{
+                DirTreverse::Continue
+            }
+        })<span class="question-mark">?</span>;
+        entry.ok_or(FileSystemError::FileNotFound)
+    }
+
     <span class="kw">fn </span>create_node(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         _parent: <span class="kw-2">&amp;</span>DirectoryNode,
@@ -1957,16 +1974,7 @@
 
     <span class="kw">let </span>open_component_inode =
         |inode: <span class="kw-2">&amp;</span>DirectoryNode, component: <span class="kw-2">&amp;</span>str| -&gt; <span class="prelude-ty">Result</span>&lt;Node, FileSystemError&gt; {
-            <span class="kw">let </span><span class="kw-2">mut </span>entry = <span class="prelude-val">None</span>;
-            filesystem.read_dir(inode, <span class="kw-2">&amp;mut </span>|inode| {
-                <span class="kw">if </span>inode.name() == component {
-                    entry = <span class="prelude-val">Some</span>(inode);
-                    DirTreverse::Stop
-                } <span class="kw">else </span>{
-                    DirTreverse::Continue
-                }
-            })<span class="question-mark">?</span>;
-            entry.ok_or(FileSystemError::FileNotFound)
+            filesystem.treverse_dir(inode, component)
         };
 
     <span class="kw">let </span><span class="kw-2">mut </span>dir = root;
