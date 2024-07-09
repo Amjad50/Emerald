@@ -1,7 +1,14 @@
+mod fat;
+pub mod mapping;
+mod mbr;
+pub mod path;
+
 use core::ops;
 
 use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use kernel_user_link::file::{BlockingMode, DirEntry, FileStat, FileType, OpenOptions};
+use mapping::MappingError;
+use path::PathBuf;
 use tracing::info;
 
 use crate::{
@@ -17,17 +24,9 @@ use self::{
     path::{Component, Path},
 };
 
-mod fat;
-mod mbr;
-pub mod path;
-
 /// This is not used at all, just an indicator in [`Directory::fetch_entries`]
 pub(crate) const ANOTHER_FILESYSTEM_MAPPING_INODE_MAGIC: u64 = 0xf11356573e;
 pub(crate) const NO_PARENT_DIR_SECTOR: u64 = 0xFFFF_FFFF_FFFF_FFFF;
-
-static FILESYSTEM_MAPPING: Mutex<FileSystemMapping> = Mutex::new(FileSystemMapping {
-    mappings: Vec::new(),
-});
 
 static EMPTY_FILESYSTEM: OnceLock<Arc<EmptyFileSystem>> = OnceLock::new();
 
@@ -503,95 +502,6 @@ impl FileSystem for EmptyFileSystem {
     }
 }
 
-struct FileSystemMapping {
-    mappings: Vec<(Box<Path>, Arc<dyn FileSystem>)>,
-}
-
-impl FileSystemMapping {
-    /// Retrieves the file system mapping for a given path.
-    ///
-    /// This function iterates over the stored mappings in reverse order and returns the first
-    /// file system and the stripped path for which the given path has a prefix that matches
-    /// the file system's path.
-    ///
-    /// # Parameters
-    ///
-    /// * `path`: A reference to the path for which to find the file system mapping.
-    ///
-    /// # Returns
-    ///
-    /// * A tuple containing the stripped path and an `Arc` to the file system, if a matching mapping is found.
-    /// * `FileSystemError::FileNotFound` if no matching mapping is found.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Assume fs_map has been populated with some mappings
-    /// let mut fs_map = FileSystemMap::new();
-    ///
-    /// let path = Path::new("/some/path");
-    /// match fs_map.get_mapping(&path) {
-    ///     Ok((stripped_path, fs)) => {
-    ///         println!("Found file system: {:?}", fs);
-    ///         println!("Stripped path: {:?}", stripped_path);
-    ///     }
-    ///     Err(FileSystemError::FileNotFound) => {
-    ///         println!("No file system found for path: {:?}", path);
-    ///     }
-    ///     _ => {}
-    /// }
-    /// ```
-    fn get_mapping<'p>(
-        &mut self,
-        path: &'p Path,
-    ) -> Result<(&'p Path, Arc<dyn FileSystem>), FileSystemError> {
-        let (stripped_path, filesystem) = self
-            .mappings
-            .iter()
-            // look from the back for best match
-            .rev()
-            .find_map(|(fs_path, fs)| Some((path.strip_prefix(fs_path).ok()?, fs.clone())))
-            .ok_or(FileSystemError::FileNotFound)?;
-
-        Ok((stripped_path, filesystem.clone()))
-    }
-
-    fn get_all_matching_mappings<'a, 'p>(
-        &'a mut self,
-        path: &'p Path,
-    ) -> impl Iterator<Item = (&'a Path, Arc<dyn FileSystem>)>
-    where
-        'p: 'a,
-    {
-        self.mappings.iter().filter_map(move |(fs_path, fs)| {
-            let stripped = fs_path.strip_prefix(path).ok()?;
-            if stripped.is_empty() {
-                return None;
-            }
-            Some((stripped, fs.clone()))
-        })
-    }
-
-    fn mount<P: AsRef<Path>>(&mut self, arg: P, filesystem: Arc<dyn FileSystem>) {
-        // TODO: replace with error
-        assert!(
-            !self
-                .mappings
-                .iter()
-                .any(|(fs_path, _)| fs_path.as_ref() == arg.as_ref()),
-            "Mounting {:?} twice",
-            arg.as_ref().display()
-        );
-
-        self.mappings.push((arg.as_ref().into(), filesystem));
-
-        // must be kept sorted by length, so we can find the best/correct mapping,
-        // as mappings can be inside each other in structure
-        self.mappings
-            .sort_unstable_by(|(a, _), (b, _)| a.as_str().len().cmp(&b.as_str().len()));
-    }
-}
-
 #[derive(Debug)]
 pub enum FileSystemError {
     PartitionTableNotFound,
@@ -610,14 +520,7 @@ pub enum FileSystemError {
     EndOfFile,
     BufferNotLargeEnough(usize),
     AlreadyExists,
-}
-
-fn get_mapping(path: &Path) -> Result<(&Path, Arc<dyn FileSystem>), FileSystemError> {
-    FILESYSTEM_MAPPING.lock().get_mapping(path)
-}
-
-pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) {
-    FILESYSTEM_MAPPING.lock().mount(arg, filesystem);
+    MappingError(MappingError),
 }
 
 /// Loads the hard disk specified in the argument
@@ -648,7 +551,7 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
         filesystem.fat_type(),
         first_partition.partition_type
     );
-    mount("/", Arc::new(Mutex::new(filesystem)));
+    mapping::mount("/", Arc::new(Mutex::new(filesystem)))?;
 
     Ok(())
 }
@@ -658,90 +561,89 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
 /// This function must be called with an absolute path. Otherwise it will return [`FileSystemError::MustBeAbsolute`].
 pub(crate) fn open_inode<P: AsRef<Path>>(
     path: P,
-) -> Result<(Arc<dyn FileSystem>, Node), FileSystemError> {
+) -> Result<(PathBuf, Arc<dyn FileSystem>, Node), FileSystemError> {
     if !path.as_ref().is_absolute() {
         // this is an internal kernel only result, this function must be called with an absolute path
         return Err(FileSystemError::MustBeAbsolute);
     }
-    let (remaining, filesystem) = get_mapping(path.as_ref())?;
+
+    let (mut canonical_path, remaining, mut mapping_node) = mapping::get_mapping(path.as_ref())?;
+    let mut filesystem = mapping_node.filesystem();
 
     let opening_dir = path.as_ref().has_last_separator();
-    let mut comp = remaining.components();
-    let filename;
-    let parent;
-    // remove leading `.` and `..` from the path
-    // TODO: this actually causes a bug where doing `/devices/../../..` will boil to `/devices` and not `/` as it should\
-    //       Fix it
-    loop {
-        match comp.next_back() {
-            Some(Component::Normal(segment)) => {
-                filename = segment;
-                parent = comp.as_path();
-                break;
-            }
-            Some(Component::RootDir) | None => {
-                // we reached root, return it directly
-                return filesystem
-                    .open_root()
-                    .map(|inode| (filesystem, inode.into()));
-            }
-            Some(Component::CurDir) => {
-                // ignore
-            }
-            Some(Component::ParentDir) => {
-                // ignore
-                // drop next component
-                // FIXME: there is a bug here, `/welcome/../..` will be treated as `/welcome`
-                //       as the first `..` will drop the second `..`
-                //       implement better handling of this and make it global, probably in [`Path`]
-                comp.next_back();
-            }
-        }
+    let mut remaining_components = remaining.components().peekable();
+
+    let mut dir = filesystem.open_root()?;
+    if remaining.is_root() || remaining.is_empty() {
+        return Ok((canonical_path, filesystem, dir.into()));
     }
 
-    let full_path = parent.join(filename);
-    let root = filesystem.open_root()?;
-    if full_path.is_empty() || full_path.is_root() {
-        return Ok((filesystem, root.into()));
-    }
-
-    let open_component_inode =
-        |inode: &DirectoryNode, component: &str| -> Result<Node, FileSystemError> {
-            filesystem.treverse_dir(inode, component)
-        };
-
-    let mut dir = root;
-    for component in parent.components() {
-        let component = match component {
-            Component::RootDir | Component::CurDir => {
+    // used to know when to switch to different mappings
+    let mut children_after_mapping = 0;
+    while let Some(component) = remaining_components.next() {
+        let name = match component {
+            Component::RootDir | Component::CurDir => continue,
+            Component::Normal("") => continue,
+            Component::ParentDir => {
+                if children_after_mapping == 0 {
+                    // reached the end, i.e. this exceeded the filesystem mapping
+                    // we should get another mapping
+                    let parent = mapping_node.parent();
+                    if let Some(parent) = parent {
+                        mapping_node = parent.clone();
+                        assert!(canonical_path.pop(), "must have parent");
+                        filesystem = mapping_node.filesystem();
+                        dir = filesystem.open_root()?;
+                    }
+                } else {
+                    children_after_mapping -= 1;
+                    assert!(canonical_path.pop(), "must have parent");
+                }
                 continue;
             }
-            keep @ (Component::ParentDir | Component::Normal(_)) => keep.as_str(),
+            Component::Normal(name) => name,
         };
-        if component.is_empty() {
-            continue;
+        // if we are still at the end of the mapping
+        if children_after_mapping == 0 {
+            if let Some(child_mapping) = mapping_node.try_find_child(name) {
+                mapping_node = child_mapping;
+                canonical_path.push(name);
+                filesystem = mapping_node.filesystem();
+                children_after_mapping = 0;
+                dir = filesystem.open_root()?;
+                continue;
+            }
         }
-        let entry = open_component_inode(&dir, component)?;
-        if let Node::Directory(dir_node) = entry {
-            dir = dir_node;
+
+        children_after_mapping += 1;
+        canonical_path.push(name);
+
+        let mut entry = filesystem.treverse_dir(&dir, name)?;
+
+        if remaining_components.peek().is_some() {
+            if let Node::Directory(dir_node) = entry {
+                dir = dir_node;
+            } else {
+                return Err(FileSystemError::IsNotDirectory);
+            }
         } else {
-            return Err(FileSystemError::IsNotDirectory);
+            return if opening_dir {
+                if entry.is_dir() {
+                    Ok((canonical_path, filesystem, entry))
+                } else {
+                    Err(FileSystemError::IsNotDirectory)
+                }
+            } else {
+                // open the device if it is a device
+                entry.try_open_device()?;
+                Ok((canonical_path, filesystem, entry))
+            };
         }
     }
 
-    // open the file inside `dir`
-    let mut entry = open_component_inode(&dir, filename)?;
-    if opening_dir {
-        if entry.is_dir() {
-            Ok((filesystem, entry))
-        } else {
-            Err(FileSystemError::IsNotDirectory)
-        }
-    } else {
-        // open the device if it is a device
-        entry.try_open_device()?;
-        Ok((filesystem, entry))
-    }
+    // should never reach here, but for some reason, if we got some path length but no components
+    // we should just return the root entry
+    Ok((canonical_path, filesystem, dir.into()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -825,19 +727,20 @@ impl File {
         blocking_mode: BlockingMode,
         open_options: OpenOptions,
     ) -> Result<Self, FileSystemError> {
-        let (mut node, filesystem) = match open_inode(path.as_ref()) {
-            Ok((filesystem, inode)) => {
+        let (canonical_path, mut node, filesystem) = match open_inode(path.as_ref()) {
+            Ok((canonical_path, filesystem, inode)) => {
                 if open_options.is_create_new() {
                     return Err(FileSystemError::AlreadyExists);
                 }
 
-                (inode.into_file()?, filesystem)
+                (canonical_path, inode.into_file()?, filesystem)
             }
             Err(FileSystemError::FileNotFound)
                 if open_options.is_create() || open_options.is_create_new() =>
             {
                 let path = path.as_ref();
-                let (filesystem, parent_inode) = open_inode(path.parent().unwrap())?;
+                let (canonical_path, filesystem, parent_inode) =
+                    open_inode(path.parent().unwrap())?;
                 let filename = path.file_name().unwrap();
                 if filename == "." || filename == ".." || filename == "/" {
                     return Err(FileSystemError::InvalidPath);
@@ -848,6 +751,7 @@ impl File {
                     FileAttributes::EMPTY,
                 )?;
                 (
+                    canonical_path,
                     node.into_file()
                         .expect("This should be a valid file, we created it"),
                     filesystem,
@@ -872,7 +776,7 @@ impl File {
 
         let access = FileAccess::new(open_options.is_read(), open_options.is_write());
 
-        Self::from_inode(node, path, filesystem, pos, blocking_mode, access)
+        Self::from_inode(node, canonical_path, filesystem, pos, blocking_mode, access)
     }
 
     pub fn from_inode<P: AsRef<Path>>(
@@ -1108,9 +1012,9 @@ impl Drop for File {
 #[allow(dead_code)]
 impl Directory {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, FileSystemError> {
-        let (filesystem, inode) = open_inode(path.as_ref())?;
+        let (canonical_path, filesystem, inode) = open_inode(path.as_ref())?;
 
-        Self::from_inode(inode.into_dir()?, path, filesystem, 0)
+        Self::from_inode(inode.into_dir()?, canonical_path, filesystem, 0)
     }
 
     pub fn from_inode<P: AsRef<Path>>(
@@ -1136,10 +1040,7 @@ impl Directory {
                 DirTreverse::Continue
             })?;
             // add entries from the root mappings
-            for (path, _fs) in FILESYSTEM_MAPPING
-                .lock()
-                .get_all_matching_mappings(&self.path)
-            {
+            mapping::on_all_matching_mappings(&self.path, |path, _fs| {
                 // only add path with one component
                 if path.components().count() == 1 {
                     dir_entries.push(
@@ -1151,7 +1052,7 @@ impl Directory {
                         .into(),
                     );
                 }
-            }
+            })?;
 
             self.dir_entries = Some(dir_entries);
         }

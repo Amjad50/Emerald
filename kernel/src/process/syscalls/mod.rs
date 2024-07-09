@@ -70,6 +70,7 @@ impl From<FileSystemError> for SyscallError {
             FileSystemError::OperationNotSupported => SyscallError::OperationNotSupported,
             FileSystemError::DiskReadError { .. }
             | FileSystemError::FatError(_)
+            | FileSystemError::MappingError(_)
             | FileSystemError::DeviceNotFound
             | FileSystemError::MustBeAbsolute   // should not happen from user mode
             | FileSystemError::PartitionTableNotFound => panic!("should not happen?"),
@@ -486,7 +487,7 @@ fn sys_stat(all_state: &mut InterruptAllSavedState) -> SyscallResult {
     let stat_ptr = ptr_as_mut(stat_ptr).map_err(|err| to_arg_err!(1, err))?;
 
     let absolute_path = path_to_proc_absolute_path(path);
-    let (_, inode) = fs::open_inode(absolute_path)?;
+    let (_, _, inode) = fs::open_inode(absolute_path)?;
 
     unsafe {
         *stat_ptr = inode.as_file_stat();
