@@ -127,7 +127,11 @@ impl Tsc {
         {
             let mut time = base.get_time();
             let start_ns = time.seconds * NANOS_PER_SEC + time.nanoseconds;
-            while time.seconds * NANOS_PER_SEC + time.nanoseconds - start_ns < sleep_time {
+            // FIXME: this is just a temporary solution added to the PIT
+            //        having small counter which wraps around quickly
+            while time.seconds * NANOS_PER_SEC + time.nanoseconds.saturating_sub(start_ns)
+                < sleep_time
+            {
                 time = base.get_time();
             }
         }

@@ -1,11 +1,11 @@
-mod hpet;
+mod hardware_timer;
 mod rtc;
 mod tsc;
 
 use core::fmt;
 
 use alloc::{sync::Arc, vec::Vec};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::{
     acpi::tables::{self, BiosTables, Facp},
@@ -16,6 +16,8 @@ use crate::{
 use self::rtc::Rtc;
 
 pub const NANOS_PER_SEC: u64 = 1_000_000_000;
+pub const FEMTOS_PER_SEC: u64 = 1_000_000_000_000_000;
+pub const NANOS_PER_FEMTO: u64 = 1_000_000;
 
 static CLOCKS: OnceLock<Clock> = OnceLock::new();
 
@@ -305,11 +307,9 @@ pub fn init(bios_tables: &BiosTables) {
 
     // init HPET
     let hpet_table = bios_tables.rsdt.get_table::<tables::Hpet>();
-    if let Some(hpet_table) = hpet_table {
-        clocks().add_device(hpet::init(hpet_table));
-    } else {
-        warn!("HPET is not available!");
-    }
+
+    let hardware_timer = hardware_timer::HardwareTimer::init(hpet_table);
+    clocks().add_device(hardware_timer);
 
     // init TSC
     if let Some(tsc) = tsc::Tsc::new(
