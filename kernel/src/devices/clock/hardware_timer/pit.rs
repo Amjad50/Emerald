@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicU16, AtomicU64, Ordering};
+
 use alloc::sync::Arc;
 
 use crate::{
@@ -7,16 +9,16 @@ use crate::{
         interrupts::apic,
     },
     devices::clock::{ClockDevice, ClockTime, FEMTOS_PER_SEC, NANOS_PER_FEMTO},
-    sync::{once::OnceLock, spin::mutex::Mutex},
+    sync::once::OnceLock,
 };
 
-static PIT_CLOCK: OnceLock<Arc<Mutex<Pit>>> = OnceLock::new();
+static PIT_CLOCK: OnceLock<Arc<Pit>> = OnceLock::new();
 
 const PIT_TICK_PERIOD_FEMTOS: u64 = 838095345;
 const PIT_TICK_PERIOD_NANOS: u64 = PIT_TICK_PERIOD_FEMTOS / NANOS_PER_FEMTO;
 
 #[allow(dead_code)]
-pub mod pit {
+pub mod pit_io {
     // Port Addresses
     pub const PORT_CONTROL: u16 = 0x43;
     pub const PORT_CHANNEL_0: u16 = 0x40;
@@ -71,17 +73,17 @@ pub fn disable() {
         // trigger the interrupt immediately, and then never again.
         // Since we don't have interrupt handler now, we just ignore it.
         cpu::io_out(
-            pit::PORT_CONTROL,
-            pit::SELECT_CHANNEL_0
-                | pit::ACCESS_LOBYTE
-                | pit::MODE_INTERRUPT_ON_TERMINAL_COUNT
-                | pit::MODE_BINARY,
+            pit_io::PORT_CONTROL,
+            pit_io::SELECT_CHANNEL_0
+                | pit_io::ACCESS_LOBYTE
+                | pit_io::MODE_INTERRUPT_ON_TERMINAL_COUNT
+                | pit_io::MODE_BINARY,
         );
-        cpu::io_out(pit::PORT_CHANNEL_0, 1u8);
+        cpu::io_out(pit_io::PORT_CHANNEL_0, 1u8);
     }
 }
 
-pub fn init() -> Arc<Mutex<Pit>> {
+pub fn init() -> Arc<Pit> {
     // make sure we don't get interrupted before `PIT_CLOCK`
     // is initialized
     cpu::cpu().push_cli();
@@ -91,17 +93,17 @@ pub fn init() -> Arc<Mutex<Pit>> {
         panic!("PIT already initialized");
     }
 
-    let clock = PIT_CLOCK.get_or_init(|| {
-        let pit = Pit::new();
-        Arc::new(Mutex::new(pit))
-    });
+    let clock = PIT_CLOCK.get_or_init(|| Arc::new(Pit::new()));
 
     cpu::cpu().pop_cli();
 
     clock.clone()
 }
 
-pub struct Pit {}
+pub struct Pit {
+    total_counter: AtomicU64,
+    last_counter: AtomicU16,
+}
 
 impl Pit {
     pub fn new() -> Pit {
@@ -115,51 +117,77 @@ impl Pit {
         // on the hardware
         unsafe {
             cpu::io_out(
-                pit::PORT_CONTROL,
-                pit::SELECT_CHANNEL_0
-                    | pit::ACCESS_LOBYTE_HIBYTE
-                    | pit::MODE_SQUARE_WAVE_GENERATOR
-                    | pit::MODE_BINARY,
+                pit_io::PORT_CONTROL,
+                pit_io::SELECT_CHANNEL_0
+                    | pit_io::ACCESS_LOBYTE_HIBYTE
+                    | pit_io::MODE_RATE_GENERATOR
+                    | pit_io::MODE_BINARY,
             );
 
-            cpu::io_out(pit::PORT_CHANNEL_0, (RELOAD_VALUE & 0xFF) as u8);
-            cpu::io_out(pit::PORT_CHANNEL_0, (RELOAD_VALUE >> 8) as u8);
+            cpu::io_out(pit_io::PORT_CHANNEL_0, (RELOAD_VALUE & 0xFF) as u8);
+            cpu::io_out(pit_io::PORT_CHANNEL_0, (RELOAD_VALUE >> 8) as u8);
         }
 
         apic::assign_io_irq(
             pit_interrupt as BasicInterruptHandler,
-            pit::DEFAULT_INTERRUPT,
+            pit_io::DEFAULT_INTERRUPT,
             cpu::cpu(),
         );
 
-        Pit {}
+        Pit {
+            last_counter: AtomicU16::new(0),
+            total_counter: AtomicU64::new(0),
+        }
     }
 
-    fn read_counter(&self) -> u64 {
+    fn read_counter(&self) -> u16 {
+        let lo;
+        let hi;
+
+        cpu::cpu().push_cli();
+
         // SAFETY: this is unsafe because it does I/O operations
         // on the hardware
         unsafe {
             cpu::io_out(
-                pit::PORT_CONTROL,
-                pit::SELECT_CHANNEL_0 | pit::ACCESS_LATCH_COUNT | pit::MODE_BINARY,
+                pit_io::PORT_CONTROL,
+                pit_io::SELECT_CHANNEL_0 | pit_io::ACCESS_LATCH_COUNT | pit_io::MODE_BINARY,
             );
 
-            let lo = cpu::io_in::<u8>(pit::PORT_CHANNEL_0) as u64;
-            let hi = cpu::io_in::<u8>(pit::PORT_CHANNEL_0) as u64;
-
-            (hi << 8) | lo
+            lo = cpu::io_in::<u8>(pit_io::PORT_CHANNEL_0) as u16;
+            hi = cpu::io_in::<u8>(pit_io::PORT_CHANNEL_0) as u16;
         }
+        cpu::cpu().pop_cli();
+
+        (hi << 8) | lo
+    }
+
+    fn get_elapsed(&self) -> u64 {
+        let counter = self.read_counter();
+
+        self.last_counter
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |_| Some(counter))
+            .unwrap()
+            .wrapping_sub(counter) as u64
+    }
+
+    /// Ticks and returns the total number of ticks since creation
+    fn tick_total_counter(&self) -> u64 {
+        self.total_counter
+            .fetch_add(self.get_elapsed(), Ordering::Relaxed);
+
+        self.total_counter.load(Ordering::Relaxed)
     }
 }
 
-impl ClockDevice for Mutex<Pit> {
+impl ClockDevice for Pit {
     fn name(&self) -> &'static str {
         "PIT"
     }
 
     fn get_time(&self) -> ClockTime {
-        let clock = self.lock();
-        let counter = clock.read_counter();
+        let counter = self.tick_total_counter();
+
         let seconds_divider = FEMTOS_PER_SEC / PIT_TICK_PERIOD_FEMTOS;
         let seconds = counter / seconds_divider;
         let nanoseconds = (counter % seconds_divider) * PIT_TICK_PERIOD_NANOS;
@@ -184,6 +212,8 @@ impl ClockDevice for Mutex<Pit> {
 }
 
 extern "x86-interrupt" fn pit_interrupt(_stack_frame: InterruptStackFrame64) {
+    PIT_CLOCK.get().tick_total_counter();
+
     // nothing to do here really
     apic::return_from_interrupt();
 }

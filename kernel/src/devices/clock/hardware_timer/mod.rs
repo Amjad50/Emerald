@@ -17,7 +17,7 @@ mod pit;
 
 pub enum HardwareTimer {
     Hpet(Arc<Mutex<Hpet>>),
-    Pit(Arc<Mutex<Pit>>),
+    Pit(Arc<Pit>),
 }
 impl HardwareTimer {
     pub fn init(hpet_table: Option<&acpi::tables::Hpet>) -> Arc<dyn ClockDevice> {
