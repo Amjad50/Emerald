@@ -32,6 +32,7 @@
     - [Clocks](./kernel/clocks/index.md)
         - [RTC](./kernel/clocks/rtc.md)
         - [HPET](./kernel/clocks/hpet.md)
+        - [PIT](./kernel/clocks/pit.md)
         - [TSC](./kernel/clocks/tsc.md)
     - [Graphics](./kernel/graphics/index.md)
         - [VGA](./kernel/graphics/vga.md)

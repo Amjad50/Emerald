@@ -42,9 +42,10 @@
 [executable]: {ROOT_PATH}docs/kernel/executable
 [elf]: {ROOT_PATH}docs/kernel/executable/elf
 [syscalls]: {ROOT_PATH}docs/kernel/process/syscalls
-[hpet]: {ROOT_PATH}docs/kernel/devices/clock/hpet
-[rtc]: {ROOT_PATH}docs/kernel/devices/clock/rtc
-[tsc]: {ROOT_PATH}docs/kernel/devices/clock/tsc
+[kernel_hpet]: {ROOT_PATH}docs/kernel/devices/clock/hardware_timer/hpet
+[kernel_pit]: {ROOT_PATH}docs/kernel/devices/clock/hardware_timer/pit
+[kernel_rtc]: {ROOT_PATH}docs/kernel/devices/clock/rtc
+[kernel_tsc]: {ROOT_PATH}docs/kernel/devices/clock/tsc
 [clocks]: {ROOT_PATH}docs/kernel/devices/clock
 [vga]: {ROOT_PATH}docs/kernel/graphics/vga
 [framebufferinfo]: {ROOT_PATH}docs/kernel/graphics/vga/struct.FrameBufferInfo.html

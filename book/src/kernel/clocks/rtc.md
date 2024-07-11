@@ -2,7 +2,7 @@
 
 # RTC
 
-> This is implemented in [`rtc`][rtc].
+> This is implemented in [`rtc`][kernel_rtc].
 
 The RTC (Real Time Clock) is a hardware clock that is used to provide the current time and date for the system.
 
