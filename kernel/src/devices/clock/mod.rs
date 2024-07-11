@@ -1,11 +1,11 @@
-mod hpet;
+mod hardware_timer;
 mod rtc;
 mod tsc;
 
 use core::fmt;
 
 use alloc::{sync::Arc, vec::Vec};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::{
     acpi::tables::{self, BiosTables, Facp},
@@ -16,6 +16,8 @@ use crate::{
 use self::rtc::Rtc;
 
 pub const NANOS_PER_SEC: u64 = 1_000_000_000;
+pub const FEMTOS_PER_SEC: u64 = 1_000_000_000_000_000;
+pub const NANOS_PER_FEMTO: u64 = 1_000_000;
 
 static CLOCKS: OnceLock<Clock> = OnceLock::new();
 
@@ -23,7 +25,7 @@ pub fn clocks() -> &'static Clock {
     CLOCKS.get()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ClockTime {
     /// nanoseconds added to `seconds`
     pub nanoseconds: u64,
@@ -85,6 +87,12 @@ impl core::ops::Add for ClockTime {
             nanoseconds: nanoseconds % 1_000_000_000,
             seconds,
         }
+    }
+}
+
+impl core::ops::AddAssign for ClockTime {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
     }
 }
 
@@ -152,7 +160,7 @@ impl SystemTime {
         if let Some(device) = &self.device {
             let time = device.get_time();
             let diff = time - self.last_tick;
-            self.startup_offset = self.startup_offset + diff;
+            self.startup_offset += diff;
             self.last_tick = time;
         }
     }
@@ -168,7 +176,7 @@ impl SystemTime {
             let time = current_device.get_time();
             let new_time = device.get_time();
             let diff = time - self.last_tick;
-            self.startup_offset = self.startup_offset + diff;
+            self.startup_offset += diff;
 
             self.device = Some(device);
             self.last_tick = new_time
@@ -305,11 +313,9 @@ pub fn init(bios_tables: &BiosTables) {
 
     // init HPET
     let hpet_table = bios_tables.rsdt.get_table::<tables::Hpet>();
-    if let Some(hpet_table) = hpet_table {
-        clocks().add_device(hpet::init(hpet_table));
-    } else {
-        warn!("HPET is not available!");
-    }
+
+    let hardware_timer = hardware_timer::HardwareTimer::init(hpet_table);
+    clocks().add_device(hardware_timer);
 
     // init TSC
     if let Some(tsc) = tsc::Tsc::new(

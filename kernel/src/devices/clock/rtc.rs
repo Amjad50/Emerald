@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::cpu;
+use crate::{cpu, testing};
 
 pub const CURRENT_CENTURY: u16 = 2000 / 100;
 
@@ -20,13 +20,10 @@ pub const RTC_STATUS_B: u8 = 0x0B;
 pub const SECONDS_PER_MINUTE: u64 = 60;
 pub const SECONDS_PER_HOUR: u64 = 60 * SECONDS_PER_MINUTE;
 pub const SECONDS_PER_DAY: u64 = 24 * SECONDS_PER_HOUR;
-/// This is very inaccurate, but we only use it for `ClockDevice` which
-/// doesn't care about the start of time, just a forward moving time
-pub const SECONDS_PER_MONTH: u64 = 30 * SECONDS_PER_DAY;
-/// (365.25925925925924 * SECONDS_PER_DAY);
-/// idk why this works better than what we think it should be, i.e. `365.242374`
-/// This number produce more accurate unix time conversion
-pub const SECONDS_PER_YEAR: u64 = 31558400;
+pub const DAYS_PER_MONTH_ARRAY: [u64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+
+/// This is used to offset the calculated seconds for all days from unix time
+const UNIX_EPOCH_IN_SECONDS: u64 = 62135596800;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RtcTime {
@@ -45,16 +42,24 @@ impl RtcTime {
             return None;
         }
 
-        let timestamp_since_0 = self.year as u64 * SECONDS_PER_YEAR
-            + ((self.month - 1) as u64 * SECONDS_PER_MONTH)
-            + ((self.day_of_month - 1) as u64 * SECONDS_PER_DAY)
+        let is_year_leap =
+            self.month > 2 && self.year % 4 == 0 && (self.year % 100 != 0 || self.year % 400 == 0);
+
+        let last_year = (self.year - 1) as u64;
+        let days_in_last_years =
+            (last_year * 365) + (last_year / 4) - (last_year / 100) + (last_year / 400);
+        let this_year_days = DAYS_PER_MONTH_ARRAY[self.month as usize - 1]
+            + self.day_of_month as u64
+            - !is_year_leap as u64;
+
+        let total_days = days_in_last_years + this_year_days;
+
+        let timestamp_since_unix = total_days * SECONDS_PER_DAY
             + self.hours as u64 * SECONDS_PER_HOUR
             + self.minutes as u64 * SECONDS_PER_MINUTE
             + self.seconds as u64;
 
-        const UNIX_EPOCH: u64 = 1970 * SECONDS_PER_YEAR;
-
-        Some(timestamp_since_0 - UNIX_EPOCH)
+        Some(timestamp_since_unix - UNIX_EPOCH_IN_SECONDS)
     }
 }
 
@@ -162,5 +167,29 @@ impl Rtc {
         t.year += century * 100;
 
         t
+    }
+}
+
+testing::test! {
+    fn test_seconds_since_unix_epoch() {
+        const TESTS: [((u16, u8, u8, u8, u8, u8), u64); 5] = [
+            ((2024, 1, 1, 12, 3, 45), 1704110625),
+            ((1987, 11, 28, 0, 0, 0), 565056000),
+            ((5135, 3, 4, 9, 33, 45), 99883100025),
+            ((2811, 3, 4, 9, 33, 45), 26544792825),
+            ((2404, 2, 29, 9, 33, 45), 13700828025),
+        ];
+
+        for ((year, month, day, hours, minutes, seconds), expected) in TESTS {
+            let t = RtcTime {
+                seconds,
+                minutes,
+                hours,
+                day_of_month: day,
+                month,
+                year: year as u16,
+            };
+            assert_eq!(t.seconds_since_unix_epoch(), Some(expected));
+        }
     }
 }

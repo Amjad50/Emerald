@@ -8,21 +8,20 @@ use crate::{
         idt::{InterruptAllSavedState, InterruptHandlerWithAllState},
         interrupts::apic,
     },
+    devices::clock::{hardware_timer::pit, ClockTime, FEMTOS_PER_SEC, NANOS_PER_FEMTO},
     memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
-use super::ClockDevice;
-
-const LEGACY_PIT_IO_PORT_CONTROL: u16 = 0x43;
-const LEGACY_PIT_IO_PORT_CHANNEL_0: u16 = 0x40;
-
-const ONE_SECOND_IN_FEMTOSECONDS: u64 = 1_000_000_000_000_000;
-const ONE_NANOSECOND_IN_FEMTOSECONDS: u64 = 1_000_000;
+use super::super::ClockDevice;
 
 static HPET_CLOCK: OnceLock<Arc<Mutex<Hpet>>> = OnceLock::new();
 
 pub fn init(hpet_table: &acpi::tables::Hpet) -> Arc<Mutex<Hpet>> {
+    // make sure we don't get interrupted before `HPET_CLOCK`
+    // is initialized
+    cpu::cpu().push_cli();
+
     // just to make sure that we don't initialize it twice
     if HPET_CLOCK.try_get().is_some() {
         panic!("HPET already initialized");
@@ -30,48 +29,13 @@ pub fn init(hpet_table: &acpi::tables::Hpet) -> Arc<Mutex<Hpet>> {
 
     let clock = HPET_CLOCK.get_or_init(|| {
         // only executed once
-        let hpet = Hpet::create_disabled(hpet_table);
+        let hpet = Hpet::new(hpet_table);
         Arc::new(Mutex::new(hpet))
     });
 
-    // must enable after putting in the `OnceLock`
-    // as this will be used by the interrupt right away
-    clock.lock().set_enabled(true);
+    cpu::cpu().pop_cli();
 
     clock.clone()
-}
-
-fn disable_pit() {
-    // disable PIT (timer)
-    unsafe {
-        // The value being written:
-        // 0x32 = 0001 0000
-        //        |||| ||||
-        //        |||| |||+- BCD/binary mode: 0 == 16-bit binary (not important)
-        //        |||| +++-- Operating mode: 0b000 == interrupt on terminal count
-        //        ||++------ Access mode: 0b01 == lobyte only
-        //        ++-------- Select channel: 0 == channel 0
-        //
-        // Disable the PIT, we are using HPET instead
-        // Not sure if this is an intended way to do it, but what we do here is:
-        // 1. Select channel 0 (main one)
-        // 2. Set access mode to lobyte (we only need this)
-        // 3. Set operating mode to `interrupt on terminal count` (one shot)
-        // 4. Reload value with 1 only, which will just trigger the interrupt immediately
-        //    and then never again.
-        //
-        // Docs on Mode 0 (interrupt on terminal count):
-        //  the mode/command register is written the output signal goes low and the PIT waits
-        //  for the reload register to be set by software.
-        //  When the current count decrements from one to zero, the output goes high and remains
-        //  high until another mode/command register is written or the reload register is set again.
-        //
-        // How this works is that we select this mode, with the reload value of 1, which will
-        // trigger the interrupt immediately, and then never again.
-        // Since we don't have interrupt handler now, we just ignore it.
-        cpu::io_out(LEGACY_PIT_IO_PORT_CONTROL, 0x10u8);
-        cpu::io_out(LEGACY_PIT_IO_PORT_CHANNEL_0, 1u8);
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -227,11 +191,8 @@ pub struct Hpet {
 }
 
 impl Hpet {
-    fn create_disabled(hpet: &acpi::tables::Hpet) -> Self {
-        // don't interrupt me
-        cpu::cpu().push_cli();
-
-        disable_pit();
+    fn new(hpet: &acpi::tables::Hpet) -> Self {
+        pit::disable();
         assert_eq!(hpet.base_address.address_space_id, 0); // memory space
         let mmio = unsafe { VirtualSpace::new(hpet.base_address.address).unwrap() };
 
@@ -278,23 +239,19 @@ impl Hpet {
         config.interrupt_route = chosen_route;
         config.timer_set_value = true; // write the timer value
         timer.set_config(config);
-        timer.write_comparator_value(ONE_SECOND_IN_FEMTOSECONDS / clock_period);
-        timer.write_comparator_value(ONE_SECOND_IN_FEMTOSECONDS / clock_period);
+        timer.write_comparator_value(FEMTOS_PER_SEC / clock_period);
+        timer.write_comparator_value(FEMTOS_PER_SEC / clock_period);
 
         // setup ioapic
-        apic::assign_io_irq_custom(
+        apic::assign_io_irq(
             timer0_handler as InterruptHandlerWithAllState,
             chosen_route,
             cpu::cpu(),
-            |entry| entry.with_trigger_mode_level(false),
         );
 
-        s.set_enabled(false);
+        s.set_enabled(true);
         // use normal routing
         s.set_enable_legacy_replacement_route(false);
-
-        // enable interrupts
-        cpu::cpu().pop_cli();
 
         s
     }
@@ -351,23 +308,23 @@ impl ClockDevice for Mutex<Hpet> {
         "HPET"
     }
 
-    fn get_time(&self) -> super::ClockTime {
+    fn get_time(&self) -> ClockTime {
         let clock = self.lock();
         let counter = clock.current_counter();
         let femtos_per_tick = clock.counter_clock_period();
-        let nanos_per_tick = femtos_per_tick / ONE_NANOSECOND_IN_FEMTOSECONDS;
-        let seconds_divider = ONE_SECOND_IN_FEMTOSECONDS / femtos_per_tick;
+        let nanos_per_tick = femtos_per_tick / NANOS_PER_FEMTO;
+        let seconds_divider = FEMTOS_PER_SEC / femtos_per_tick;
         let seconds = counter / seconds_divider;
         let nanoseconds = (counter % seconds_divider) * nanos_per_tick;
 
-        super::ClockTime {
+        ClockTime {
             seconds,
             nanoseconds,
         }
     }
 
     fn granularity(&self) -> u64 {
-        let granularity = self.lock().counter_clock_period() / ONE_NANOSECOND_IN_FEMTOSECONDS;
+        let granularity = self.lock().counter_clock_period() / NANOS_PER_FEMTO;
         if granularity == 0 {
             1
         } else {

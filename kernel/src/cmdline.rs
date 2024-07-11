@@ -21,6 +21,7 @@ const fn default_cmdline() -> Cmd<'static> {
         uart_baud: 115200,
         max_log_level: LogLevel::Info,
         log_file: "/kernel.log",
+        allow_hpet: true,
     }
 }
 
@@ -56,13 +57,21 @@ pub fn cmdline() -> &'static Cmd<'static> {
 macros::cmdline_struct! {
     #[derive(Debug)]
     pub struct Cmd<'a> {
+        /// Enable the UART
         #[default = true]
         pub uart: bool,
+        /// UART baudrate
         #[default = 115200]
         pub uart_baud: u32,
+        /// Log level
+        #[default = LogLevel::Info]
         pub max_log_level: LogLevel,
+        /// Log file
         #[default = "/kernel.log"]
         pub log_file: &'a str,
+        /// Allow `HPET` (if present), otherwise always use `PIT`
+        #[default = true]
+        pub allow_hpet: bool,
     }
 }
 
