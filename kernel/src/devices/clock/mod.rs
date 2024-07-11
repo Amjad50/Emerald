@@ -25,7 +25,7 @@ pub fn clocks() -> &'static Clock {
     CLOCKS.get()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ClockTime {
     /// nanoseconds added to `seconds`
     pub nanoseconds: u64,
@@ -87,6 +87,12 @@ impl core::ops::Add for ClockTime {
             nanoseconds: nanoseconds % 1_000_000_000,
             seconds,
         }
+    }
+}
+
+impl core::ops::AddAssign for ClockTime {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
     }
 }
 
@@ -154,7 +160,7 @@ impl SystemTime {
         if let Some(device) = &self.device {
             let time = device.get_time();
             let diff = time - self.last_tick;
-            self.startup_offset = self.startup_offset + diff;
+            self.startup_offset += diff;
             self.last_tick = time;
         }
     }
@@ -170,7 +176,7 @@ impl SystemTime {
             let time = current_device.get_time();
             let new_time = device.get_time();
             let diff = time - self.last_tick;
-            self.startup_offset = self.startup_offset + diff;
+            self.startup_offset += diff;
 
             self.device = Some(device);
             self.last_tick = new_time
