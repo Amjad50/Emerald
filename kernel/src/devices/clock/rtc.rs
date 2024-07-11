@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::cpu;
+use crate::{cpu, testing};
 
 pub const CURRENT_CENTURY: u16 = 2000 / 100;
 
@@ -167,5 +167,29 @@ impl Rtc {
         t.year += century * 100;
 
         t
+    }
+}
+
+testing::test! {
+    fn test_seconds_since_unix_epoch() {
+        const TESTS: [((u16, u8, u8, u8, u8, u8), u64); 5] = [
+            ((2024, 1, 1, 12, 3, 45), 1704110625),
+            ((1987, 11, 28, 0, 0, 0), 565056000),
+            ((5135, 3, 4, 9, 33, 45), 99883100025),
+            ((2811, 3, 4, 9, 33, 45), 26544792825),
+            ((2404, 2, 29, 9, 33, 45), 13700828025),
+        ];
+
+        for ((year, month, day, hours, minutes, seconds), expected) in TESTS {
+            let t = RtcTime {
+                seconds,
+                minutes,
+                hours,
+                day_of_month: day,
+                month,
+                year: year as u16,
+            };
+            assert_eq!(t.seconds_since_unix_epoch(), Some(expected));
+        }
     }
 }
