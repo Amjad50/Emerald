@@ -20,13 +20,10 @@ pub const RTC_STATUS_B: u8 = 0x0B;
 pub const SECONDS_PER_MINUTE: u64 = 60;
 pub const SECONDS_PER_HOUR: u64 = 60 * SECONDS_PER_MINUTE;
 pub const SECONDS_PER_DAY: u64 = 24 * SECONDS_PER_HOUR;
-/// This is very inaccurate, but we only use it for `ClockDevice` which
-/// doesn't care about the start of time, just a forward moving time
-pub const SECONDS_PER_MONTH: u64 = 30 * SECONDS_PER_DAY;
-/// (365.25925925925924 * SECONDS_PER_DAY);
-/// idk why this works better than what we think it should be, i.e. `365.242374`
-/// This number produce more accurate unix time conversion
-pub const SECONDS_PER_YEAR: u64 = 31558400;
+pub const DAYS_PER_MONTH_ARRAY: [u64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+
+/// This is used to offset the calculated seconds for all days from unix time
+const UNIX_EPOCH_IN_SECONDS: u64 = 62135596800;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RtcTime {
@@ -45,16 +42,24 @@ impl RtcTime {
             return None;
         }
 
-        let timestamp_since_0 = self.year as u64 * SECONDS_PER_YEAR
-            + ((self.month - 1) as u64 * SECONDS_PER_MONTH)
-            + ((self.day_of_month - 1) as u64 * SECONDS_PER_DAY)
+        let is_year_leap =
+            self.month > 2 && self.year % 4 == 0 && (self.year % 100 != 0 || self.year % 400 == 0);
+
+        let last_year = (self.year - 1) as u64;
+        let days_in_last_years =
+            (last_year * 365) + (last_year / 4) - (last_year / 100) + (last_year / 400);
+        let this_year_days = DAYS_PER_MONTH_ARRAY[self.month as usize - 1]
+            + self.day_of_month as u64
+            - !is_year_leap as u64;
+
+        let total_days = days_in_last_years + this_year_days;
+
+        let timestamp_since_unix = total_days * SECONDS_PER_DAY
             + self.hours as u64 * SECONDS_PER_HOUR
             + self.minutes as u64 * SECONDS_PER_MINUTE
             + self.seconds as u64;
 
-        const UNIX_EPOCH: u64 = 1970 * SECONDS_PER_YEAR;
-
-        Some(timestamp_since_0 - UNIX_EPOCH)
+        Some(timestamp_since_unix - UNIX_EPOCH_IN_SECONDS)
     }
 }
 
