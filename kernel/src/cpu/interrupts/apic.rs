@@ -48,6 +48,7 @@ pub fn assign_io_irq<H: InterruptHandler>(handler: H, interrupt_num: u8, cpu: &C
     APIC.get().lock().assign_io_irq(handler, interrupt_num, cpu)
 }
 
+#[allow(dead_code)]
 pub fn assign_io_irq_custom<H: InterruptHandler, F>(
     handler: H,
     interrupt_num: u8,

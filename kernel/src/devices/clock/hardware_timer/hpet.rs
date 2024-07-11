@@ -18,6 +18,10 @@ use super::super::ClockDevice;
 static HPET_CLOCK: OnceLock<Arc<Mutex<Hpet>>> = OnceLock::new();
 
 pub fn init(hpet_table: &acpi::tables::Hpet) -> Arc<Mutex<Hpet>> {
+    // make sure we don't get interrupted before `HPET_CLOCK`
+    // is initialized
+    cpu::cpu().push_cli();
+
     // just to make sure that we don't initialize it twice
     if HPET_CLOCK.try_get().is_some() {
         panic!("HPET already initialized");
@@ -25,13 +29,11 @@ pub fn init(hpet_table: &acpi::tables::Hpet) -> Arc<Mutex<Hpet>> {
 
     let clock = HPET_CLOCK.get_or_init(|| {
         // only executed once
-        let hpet = Hpet::create_disabled(hpet_table);
+        let hpet = Hpet::new(hpet_table);
         Arc::new(Mutex::new(hpet))
     });
 
-    // must enable after putting in the `OnceLock`
-    // as this will be used by the interrupt right away
-    clock.lock().set_enabled(true);
+    cpu::cpu().pop_cli();
 
     clock.clone()
 }
@@ -189,10 +191,7 @@ pub struct Hpet {
 }
 
 impl Hpet {
-    fn create_disabled(hpet: &acpi::tables::Hpet) -> Self {
-        // don't interrupt me
-        cpu::cpu().push_cli();
-
+    fn new(hpet: &acpi::tables::Hpet) -> Self {
         pit::disable();
         assert_eq!(hpet.base_address.address_space_id, 0); // memory space
         let mmio = unsafe { VirtualSpace::new(hpet.base_address.address).unwrap() };
@@ -244,19 +243,15 @@ impl Hpet {
         timer.write_comparator_value(FEMTOS_PER_SEC / clock_period);
 
         // setup ioapic
-        apic::assign_io_irq_custom(
+        apic::assign_io_irq(
             timer0_handler as InterruptHandlerWithAllState,
             chosen_route,
             cpu::cpu(),
-            |entry| entry.with_trigger_mode_level(false),
         );
 
-        s.set_enabled(false);
+        s.set_enabled(true);
         // use normal routing
         s.set_enable_legacy_replacement_route(false);
-
-        // enable interrupts
-        cpu::cpu().pop_cli();
 
         s
     }
