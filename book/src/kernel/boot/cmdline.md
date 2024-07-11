@@ -28,9 +28,12 @@ last value will be used.
 >         pub uart: bool,
 >         #[default = 115200]
 >         pub uart_baud: u32,
+>         #[default = LogLevel::Info]
 >         pub max_log_level: LogLevel,
 >         #[default = "/kernel.log"]
 >         pub log_file: &'a str,
+>         #[default = true]
+>         pub allow_hpet: bool,
 >     }
 > }
 > ```
@@ -38,15 +41,16 @@ last value will be used.
 Here is the supported properties:
 
 
-| Property        | Type                                       | Description                  | Default          |
-|-----------------|--------------------------------------------|------------------------------|------------------|
-| `uart`          | `bool`                                     | Enable UART/serial interface | `true`           |
-| `uart_baud`     | `u32`                                      | UART baud rate               | `115200`         |
-| `max_log_level` | `LogLevel` (`trace/debug/info/warn/error`) | Maximum log level            | `LogLevel::Info` |
-| `log_file`      | `&str`                                     | Log file path                | `"/kernel.log"`  |
+| Property        | Type                                       | Description                                           | Default          |
+|-----------------|--------------------------------------------|-------------------------------------------------------|------------------|
+| `uart`          | `bool`                                     | Enable UART/serial interface                          | `true`           |
+| `uart_baud`     | `u32`                                      | UART baud rate                                        | `115200`         |
+| `max_log_level` | `LogLevel` (`trace/debug/info/warn/error`) | Maximum log level                                     | `LogLevel::Info` |
+| `log_file`      | `&str`                                     | Log file path                                         | `"/kernel.log"`  |
+| `allow_hpet`    | `bool`                                     | Allow `HPET` (if present), otherwise always use `PIT` | `true`           |
 
 
 If we write these in a command line, it will look like:
 ```
-uart=false uart_baud=115200 max_log_level=info log_file=/kernel.log
+uart=true uart_baud=115200 max_log_level=info log_file=/kernel.log allow_hpet=true
 ```

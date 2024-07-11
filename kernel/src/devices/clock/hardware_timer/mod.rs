@@ -8,7 +8,7 @@ use hpet::Hpet;
 use pit::Pit;
 use tracing::warn;
 
-use crate::{acpi, sync::spin::mutex::Mutex};
+use crate::{acpi, cmdline, sync::spin::mutex::Mutex};
 
 use super::ClockDevice;
 
@@ -22,7 +22,10 @@ pub enum HardwareTimer {
 impl HardwareTimer {
     pub fn init(hpet_table: Option<&acpi::tables::Hpet>) -> Arc<dyn ClockDevice> {
         Arc::new(match hpet_table {
-            Some(hpet_table) => HardwareTimer::Hpet(hpet::init(hpet_table)),
+            Some(hpet_table) if cmdline::cmdline().allow_hpet => {
+                HardwareTimer::Hpet(hpet::init(hpet_table))
+            }
+            Some(_) => HardwareTimer::Pit(pit::init()),
             None => {
                 warn!("HPET clock not found, falling back to PIT");
                 HardwareTimer::Pit(pit::init())
