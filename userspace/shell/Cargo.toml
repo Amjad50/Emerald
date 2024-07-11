@@ -41,6 +41,11 @@ path = "src/tree.rs"
 name = "time"
 path = "src/time.rs"
 
+[[bin]]
+name = "clock"
+path = "src/clock.rs"
+
 [dependencies]
 colored = "2.1.0"
+chrono = "0.4"
 emerald_runtime = { path = "../../libraries/emerald_runtime"}
