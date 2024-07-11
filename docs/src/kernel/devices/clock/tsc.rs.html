@@ -215,7 +215,7 @@
 <a href="#213" id="213">213</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::sync::atomic::{AtomicU64, Ordering};
 
-<span class="kw">use </span>tracing::{info, trace};
+<span class="kw">use </span>tracing::info;
 
 <span class="kw">use crate</span>::{cpu, devices::clock::NANOS_PER_SEC};
 
@@ -335,7 +335,7 @@
 
         <span class="comment">// at least 1ms (1000_000ns), and no more than 1s (1_000_000_000ns)
         </span><span class="kw">let </span>sleep_time = (granularity * <span class="number">1000</span>).max(<span class="number">1_000_000</span>).min(NANOS_PER_SEC);
-        <span class="macro">trace!</span>(<span class="string">"Calibrating TSC with sleep time: {}ns"</span>, sleep_time);
+        <span class="macro">info!</span>(<span class="string">"Calibrating TSC with sleep time: {}ns"</span>, sleep_time);
 
         <span class="kw">let </span>start_point = <span class="self">self</span>.get_sync_time_point(base, device_latency);
         <span class="comment">// sleep

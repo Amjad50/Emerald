@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init","timer0_handler"],"static":["HPET_CLOCK"],"struct":["Hpet","HpetInterruptStatus","HpetMmio","HpetTimerConfig","HpetTimerMmio","InterruptRouteCapabilityBitmap"]};

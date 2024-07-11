@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["NANOS_PER_SEC"],"fn":["clocks","init"],"mod":["hpet","rtc","tsc"],"static":["CLOCKS"],"struct":["Clock","ClockTime","SystemTime"],"trait":["ClockDevice"]};
+window.SIDEBAR_ITEMS = {"constant":["FEMTOS_PER_SEC","NANOS_PER_FEMTO","NANOS_PER_SEC"],"fn":["clocks","init"],"mod":["hardware_timer","rtc","tsc"],"static":["CLOCKS"],"struct":["Clock","ClockTime","SystemTime"],"trait":["ClockDevice"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["LEGACY_PIT_IO_PORT_CHANNEL_0","LEGACY_PIT_IO_PORT_CONTROL","ONE_NANOSECOND_IN_FEMTOSECONDS","ONE_SECOND_IN_FEMTOSECONDS"],"fn":["disable_pit","init","timer0_handler"],"static":["HPET_CLOCK"],"struct":["Hpet","HpetInterruptStatus","HpetMmio","HpetTimerConfig","HpetTimerMmio","InterruptRouteCapabilityBitmap"]};

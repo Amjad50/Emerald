@@ -118,6 +118,15 @@
 <a href="#116" id="116">116</a>
 <a href="#117" id="117">117</a>
 <a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
+<a href="#122" id="122">122</a>
+<a href="#123" id="123">123</a>
+<a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>parser::{CmdlineParse, ParseError, ParseErrorKind, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>tokenizer::Tokenizer;
 <span class="kw">use </span>tracing::{error, info};
@@ -141,6 +150,7 @@
         uart_baud: <span class="number">115200</span>,
         max_log_level: LogLevel::Info,
         log_file: <span class="string">"/kernel.log"</span>,
+        allow_hpet: <span class="bool-val">true</span>,
     }
 }
 
@@ -176,13 +186,21 @@
 <span class="macro">macros::cmdline_struct! </span>{
     <span class="attr">#[derive(Debug)]
     </span><span class="kw">pub struct </span>Cmd&lt;<span class="lifetime">'a</span>&gt; {
-        <span class="attr">#[default = <span class="bool-val">true</span>]
+        <span class="doccomment">/// Enable the UART
+        </span><span class="attr">#[default = <span class="bool-val">true</span>]
         </span><span class="kw">pub </span>uart: bool,
-        <span class="attr">#[default = <span class="number">115200</span>]
+        <span class="doccomment">/// UART baudrate
+        </span><span class="attr">#[default = <span class="number">115200</span>]
         </span><span class="kw">pub </span>uart_baud: u32,
-        <span class="kw">pub </span>max_log_level: LogLevel,
-        <span class="attr">#[default = <span class="string">"/kernel.log"</span>]
+        <span class="doccomment">/// Log level
+        </span><span class="attr">#[default = LogLevel::Info]
+        </span><span class="kw">pub </span>max_log_level: LogLevel,
+        <span class="doccomment">/// Log file
+        </span><span class="attr">#[default = <span class="string">"/kernel.log"</span>]
         </span><span class="kw">pub </span>log_file: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+        <span class="doccomment">/// Allow `HPET` (if present), otherwise always use `PIT`
+        </span><span class="attr">#[default = <span class="bool-val">true</span>]
+        </span><span class="kw">pub </span>allow_hpet: bool,
     }
 }
 

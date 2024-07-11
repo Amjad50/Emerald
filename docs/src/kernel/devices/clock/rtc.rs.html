@@ -166,9 +166,38 @@
 <a href="#164" id="164">164</a>
 <a href="#165" id="165">165</a>
 <a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
-<span class="kw">use </span><span class="kw">crate</span>::cpu;
+<span class="kw">use crate</span>::{cpu, testing};
 
 <span class="kw">pub const </span>CURRENT_CENTURY: u16 = <span class="number">2000 </span>/ <span class="number">100</span>;
 
@@ -188,13 +217,10 @@
 <span class="kw">pub const </span>SECONDS_PER_MINUTE: u64 = <span class="number">60</span>;
 <span class="kw">pub const </span>SECONDS_PER_HOUR: u64 = <span class="number">60 </span>* SECONDS_PER_MINUTE;
 <span class="kw">pub const </span>SECONDS_PER_DAY: u64 = <span class="number">24 </span>* SECONDS_PER_HOUR;
-<span class="doccomment">/// This is very inaccurate, but we only use it for `ClockDevice` which
-/// doesn't care about the start of time, just a forward moving time
-</span><span class="kw">pub const </span>SECONDS_PER_MONTH: u64 = <span class="number">30 </span>* SECONDS_PER_DAY;
-<span class="doccomment">/// (365.25925925925924 * SECONDS_PER_DAY);
-/// idk why this works better than what we think it should be, i.e. `365.242374`
-/// This number produce more accurate unix time conversion
-</span><span class="kw">pub const </span>SECONDS_PER_YEAR: u64 = <span class="number">31558400</span>;
+<span class="kw">pub const </span>DAYS_PER_MONTH_ARRAY: [u64; <span class="number">12</span>] = [<span class="number">0</span>, <span class="number">31</span>, <span class="number">59</span>, <span class="number">90</span>, <span class="number">120</span>, <span class="number">151</span>, <span class="number">181</span>, <span class="number">212</span>, <span class="number">243</span>, <span class="number">273</span>, <span class="number">304</span>, <span class="number">334</span>];
+
+<span class="doccomment">/// This is used to offset the calculated seconds for all days from unix time
+</span><span class="kw">const </span>UNIX_EPOCH_IN_SECONDS: u64 = <span class="number">62135596800</span>;
 
 <span class="attr">#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>RtcTime {
@@ -213,16 +239,24 @@
             <span class="kw">return </span><span class="prelude-val">None</span>;
         }
 
-        <span class="kw">let </span>timestamp_since_0 = <span class="self">self</span>.year <span class="kw">as </span>u64 * SECONDS_PER_YEAR
-            + ((<span class="self">self</span>.month - <span class="number">1</span>) <span class="kw">as </span>u64 * SECONDS_PER_MONTH)
-            + ((<span class="self">self</span>.day_of_month - <span class="number">1</span>) <span class="kw">as </span>u64 * SECONDS_PER_DAY)
+        <span class="kw">let </span>is_year_leap =
+            <span class="self">self</span>.month &gt; <span class="number">2 </span>&amp;&amp; <span class="self">self</span>.year % <span class="number">4 </span>== <span class="number">0 </span>&amp;&amp; (<span class="self">self</span>.year % <span class="number">100 </span>!= <span class="number">0 </span>|| <span class="self">self</span>.year % <span class="number">400 </span>== <span class="number">0</span>);
+
+        <span class="kw">let </span>last_year = (<span class="self">self</span>.year - <span class="number">1</span>) <span class="kw">as </span>u64;
+        <span class="kw">let </span>days_in_last_years =
+            (last_year * <span class="number">365</span>) + (last_year / <span class="number">4</span>) - (last_year / <span class="number">100</span>) + (last_year / <span class="number">400</span>);
+        <span class="kw">let </span>this_year_days = DAYS_PER_MONTH_ARRAY[<span class="self">self</span>.month <span class="kw">as </span>usize - <span class="number">1</span>]
+            + <span class="self">self</span>.day_of_month <span class="kw">as </span>u64
+            - !is_year_leap <span class="kw">as </span>u64;
+
+        <span class="kw">let </span>total_days = days_in_last_years + this_year_days;
+
+        <span class="kw">let </span>timestamp_since_unix = total_days * SECONDS_PER_DAY
             + <span class="self">self</span>.hours <span class="kw">as </span>u64 * SECONDS_PER_HOUR
             + <span class="self">self</span>.minutes <span class="kw">as </span>u64 * SECONDS_PER_MINUTE
             + <span class="self">self</span>.seconds <span class="kw">as </span>u64;
 
-        <span class="kw">const </span>UNIX_EPOCH: u64 = <span class="number">1970 </span>* SECONDS_PER_YEAR;
-
-        <span class="prelude-val">Some</span>(timestamp_since_0 - UNIX_EPOCH)
+        <span class="prelude-val">Some</span>(timestamp_since_unix - UNIX_EPOCH_IN_SECONDS)
     }
 }
 
@@ -330,6 +364,30 @@
         t.year += century * <span class="number">100</span>;
 
         t
+    }
+}
+
+<span class="macro">testing::test! </span>{
+    <span class="kw">fn </span>test_seconds_since_unix_epoch() {
+        <span class="kw">const </span>TESTS: [((u16, u8, u8, u8, u8, u8), u64); <span class="number">5</span>] = [
+            ((<span class="number">2024</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">12</span>, <span class="number">3</span>, <span class="number">45</span>), <span class="number">1704110625</span>),
+            ((<span class="number">1987</span>, <span class="number">11</span>, <span class="number">28</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="number">565056000</span>),
+            ((<span class="number">5135</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">99883100025</span>),
+            ((<span class="number">2811</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">26544792825</span>),
+            ((<span class="number">2404</span>, <span class="number">2</span>, <span class="number">29</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">13700828025</span>),
+        ];
+
+        <span class="kw">for </span>((year, month, day, hours, minutes, seconds), expected) <span class="kw">in </span>TESTS {
+            <span class="kw">let </span>t = RtcTime {
+                seconds,
+                minutes,
+                hours,
+                day_of_month: day,
+                month,
+                year: year <span class="kw">as </span>u16,
+            };
+            <span class="macro">assert_eq!</span>(t.seconds_since_unix_epoch(), <span class="prelude-val">Some</span>(expected));
+        }
     }
 }
 </code></pre></div></section></main></body></html>
