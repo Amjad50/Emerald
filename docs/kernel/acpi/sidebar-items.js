@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["aml","tables"]};
+window.SIDEBAR_ITEMS = {"fn":["acpi_handler","setup_enable_acpi"],"mod":["aml","tables"]};

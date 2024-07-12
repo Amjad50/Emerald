@@ -1079,6 +1079,10 @@ or we search for it in memory, and this just points to the <code>RSDT</code> or 
 </blockquote>
 <p>We use <a href="kernel/acpi/../memory/virtual_space.html">virtual space</a> to map <code>APIC</code> tables, and then we copy
 them to the heap, this will make it easier to use, and we can reclaim <code>ACPI</code> memory later.</p>
+<h2 id="acpi-control"><a class="header" href="#acpi-control">ACPI Control</a></h2>
+<p>During boot, we take control of ACPI registers, and also register an interrupt for ACPI events. (Implemented in <a href="kernel/acpi//Emerald/docs/kernel/acpi/fn.setup_enable_acpi.html">acpi::setup_enable_acpi</a>).</p>
+<p>So, currently, we can get ACPI events, such as <code>PowerButton pressed</code>, and so on, but we need to implement
+shutdown behavior to correctly react to it and not just print it in the logs.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="acpi-machine-language-aml"><a class="header" href="#acpi-machine-language-aml">ACPI Machine Language (AML)</a></h1>
 <blockquote>
 <p>This is implemented in <a href="kernel/acpi//Emerald/docs/kernel/acpi/aml"><code>aml</code></a>.</p>

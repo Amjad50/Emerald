@@ -1,6 +1,6 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/acpi/tables.rs`."><title>tables.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-4e54bb2b497cc83f.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.77.0-nightly (139fb2214 2024-01-03)" data-channel="nightly" data-search-js="search-c17e98913a53b3b7.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../static.files/storage-f2adc0d6ca4d09fb.js"></script><script defer src="../../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-0b2e2def73e61cbe.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-04d5337699b92874.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/acpi/tables/mod.rs`."><title>mod.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-4e54bb2b497cc83f.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.77.0-nightly (139fb2214 2024-01-03)" data-channel="nightly" data-search-js="search-c17e98913a53b3b7.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../../static.files/storage-f2adc0d6ca4d09fb.js"></script><script defer src="../../../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-0b2e2def73e61cbe.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-04d5337699b92874.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title">
             <h2>Files</h2></div></nav><div class="sidebar-resizer"></div>
-    <main><nav class="sub"><form class="search-form"><span></span><div id="sidebar-button" tabindex="-1"><a href="../../../kernel/all.html" title="show sidebar"></a></div><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" tabindex="-1"><a href="../../../help.html" title="help">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+    <main><nav class="sub"><form class="search-form"><span></span><div id="sidebar-button" tabindex="-1"><a href="../../../../kernel/all.html" title="show sidebar"></a></div><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" tabindex="-1"><a href="../../../../help.html" title="help">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -694,53 +694,11 @@
 <a href="#692" id="692">692</a>
 <a href="#693" id="693">693</a>
 <a href="#694" id="694">694</a>
-<a href="#695" id="695">695</a>
-<a href="#696" id="696">696</a>
-<a href="#697" id="697">697</a>
-<a href="#698" id="698">698</a>
-<a href="#699" id="699">699</a>
-<a href="#700" id="700">700</a>
-<a href="#701" id="701">701</a>
-<a href="#702" id="702">702</a>
-<a href="#703" id="703">703</a>
-<a href="#704" id="704">704</a>
-<a href="#705" id="705">705</a>
-<a href="#706" id="706">706</a>
-<a href="#707" id="707">707</a>
-<a href="#708" id="708">708</a>
-<a href="#709" id="709">709</a>
-<a href="#710" id="710">710</a>
-<a href="#711" id="711">711</a>
-<a href="#712" id="712">712</a>
-<a href="#713" id="713">713</a>
-<a href="#714" id="714">714</a>
-<a href="#715" id="715">715</a>
-<a href="#716" id="716">716</a>
-<a href="#717" id="717">717</a>
-<a href="#718" id="718">718</a>
-<a href="#719" id="719">719</a>
-<a href="#720" id="720">720</a>
-<a href="#721" id="721">721</a>
-<a href="#722" id="722">722</a>
-<a href="#723" id="723">723</a>
-<a href="#724" id="724">724</a>
-<a href="#725" id="725">725</a>
-<a href="#726" id="726">726</a>
-<a href="#727" id="727">727</a>
-<a href="#728" id="728">728</a>
-<a href="#729" id="729">729</a>
-<a href="#730" id="730">730</a>
-<a href="#731" id="731">731</a>
-<a href="#732" id="732">732</a>
-<a href="#733" id="733">733</a>
-<a href="#734" id="734">734</a>
-<a href="#735" id="735">735</a>
-<a href="#736" id="736">736</a>
-<a href="#737" id="737">737</a>
-<a href="#738" id="738">738</a>
-<a href="#739" id="739">739</a>
-<a href="#740" id="740">740</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::{
+</pre></div><pre class="rust"><code><span class="kw">pub mod </span>facp;
+
+<span class="kw">pub use </span>facp::Facp;
+
+<span class="kw">use </span>core::{
     any::Any,
     fmt,
     mem::{<span class="self">self</span>, MaybeUninit},
@@ -827,55 +785,56 @@
 }
 
 <span class="comment">// cache the tables
-</span><span class="kw">static </span>BIOS_TABLES: OnceLock&lt;<span class="prelude-ty">Result</span>&lt;BiosTables, ()&gt;&gt; = OnceLock::new();
+</span><span class="kw">static </span>BIOS_TABLES: OnceLock&lt;BiosTables&gt; = OnceLock::new();
 
 <span class="comment">// Note: this requires allocation, so it should be called after the heap is initialized
-</span><span class="kw">pub fn </span>get_acpi_tables(multiboot_info: <span class="kw-2">&amp;</span>MultiBoot2Info) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>BiosTables, ()&gt; {
-    BIOS_TABLES
-        .get_or_init(|| {
-            <span class="kw">let </span>rdsp = multiboot_info
-                .get_most_recent_rsdp()
-                .or_else(|| {
-                    <span class="comment">// look for RSDP PTR
-                    // this is inside the kernel low virtual range, so we can just convert to virtual directly without allocating space
-                    </span><span class="kw">let </span><span class="kw-2">mut </span>rsdp_ptr = physical2virtual(BIOS_RO_MEM_START) <span class="kw">as </span><span class="kw-2">*const </span>u8;
-                    <span class="kw">let </span>end = physical2virtual(BIOS_RO_MEM_END) <span class="kw">as </span><span class="kw-2">*const </span>u8;
+</span><span class="kw">pub fn </span>init_acpi_tables(multiboot_info: <span class="kw-2">&amp;</span>MultiBoot2Info) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>BiosTables {
+    BIOS_TABLES.get_or_init(|| {
+        <span class="kw">let </span>rdsp = multiboot_info
+            .get_most_recent_rsdp()
+            .or_else(|| {
+                <span class="comment">// look for RSDP PTR
+                // this is inside the kernel low virtual range, so we can just convert to virtual directly without allocating space
+                </span><span class="kw">let </span><span class="kw-2">mut </span>rsdp_ptr = physical2virtual(BIOS_RO_MEM_START) <span class="kw">as </span><span class="kw-2">*const </span>u8;
+                <span class="kw">let </span>end = physical2virtual(BIOS_RO_MEM_END) <span class="kw">as </span><span class="kw-2">*const </span>u8;
 
-                    <span class="kw">while </span>rsdp_ptr &lt; end {
-                        <span class="comment">// Safety: this is a valid mapped range, as we are sure that the kernel is
-                        // mapped since boot and we are inside the kernel lower range
-                        </span><span class="kw">let </span>str = <span class="kw">unsafe </span>{ slice::from_raw_parts(rsdp_ptr, <span class="number">8</span>) };
-                        <span class="kw">if </span>str == <span class="string">b"RSD PTR " </span>{
-                            <span class="comment">// calculate checksum
-                            // Safety: same as above, this pointer is mapped
-                            </span><span class="kw">let </span>sum = <span class="kw">unsafe </span>{
-                                slice::from_raw_parts(rsdp_ptr, <span class="number">20</span>)
-                                    .iter()
-                                    .fold(<span class="number">0u8</span>, |acc, <span class="kw-2">&amp;</span>x| acc.wrapping_add(x))
+                <span class="kw">while </span>rsdp_ptr &lt; end {
+                    <span class="comment">// Safety: this is a valid mapped range, as we are sure that the kernel is
+                    // mapped since boot and we are inside the kernel lower range
+                    </span><span class="kw">let </span>str = <span class="kw">unsafe </span>{ slice::from_raw_parts(rsdp_ptr, <span class="number">8</span>) };
+                    <span class="kw">if </span>str == <span class="string">b"RSD PTR " </span>{
+                        <span class="comment">// calculate checksum
+                        // Safety: same as above, this pointer is mapped
+                        </span><span class="kw">let </span>sum = <span class="kw">unsafe </span>{
+                            slice::from_raw_parts(rsdp_ptr, <span class="number">20</span>)
+                                .iter()
+                                .fold(<span class="number">0u8</span>, |acc, <span class="kw-2">&amp;</span>x| acc.wrapping_add(x))
+                        };
+                        <span class="kw">if </span>sum == <span class="number">0 </span>{
+                            <span class="comment">// Safety: same as above, this pointer is mapped
+                            </span><span class="kw">let </span>rsdp_ref = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span>(rsdp_ptr <span class="kw">as </span><span class="kw-2">*const </span>RsdpV2) };
+                            <span class="kw">return if </span>rsdp_ref.rsdp_v1.revision &gt;= <span class="number">2 </span>{
+                                <span class="prelude-val">Some</span>(Rsdp::from_v2(rsdp_ref))
+                            } <span class="kw">else </span>{
+                                <span class="prelude-val">Some</span>(Rsdp::from_v1(<span class="kw-2">&amp;</span>rsdp_ref.rsdp_v1))
                             };
-                            <span class="kw">if </span>sum == <span class="number">0 </span>{
-                                <span class="comment">// Safety: same as above, this pointer is mapped
-                                </span><span class="kw">let </span>rsdp_ref = <span class="kw">unsafe </span>{ <span class="kw-2">&amp;*</span>(rsdp_ptr <span class="kw">as </span><span class="kw-2">*const </span>RsdpV2) };
-                                <span class="kw">return if </span>rsdp_ref.rsdp_v1.revision &gt;= <span class="number">2 </span>{
-                                    <span class="prelude-val">Some</span>(Rsdp::from_v2(rsdp_ref))
-                                } <span class="kw">else </span>{
-                                    <span class="prelude-val">Some</span>(Rsdp::from_v1(<span class="kw-2">&amp;</span>rsdp_ref.rsdp_v1))
-                                };
-                            }
                         }
-                        <span class="comment">// Safety: same as above, this pointer is mapped
-                        </span>rsdp_ptr = <span class="kw">unsafe </span>{ rsdp_ptr.add(<span class="number">1</span>) };
                     }
+                    <span class="comment">// Safety: same as above, this pointer is mapped
+                    </span>rsdp_ptr = <span class="kw">unsafe </span>{ rsdp_ptr.add(<span class="number">1</span>) };
+                }
 
-                    <span class="prelude-val">None
-                </span>})
-                .ok_or(())<span class="question-mark">?</span>;
+                <span class="prelude-val">None
+            </span>})
+            .expect(<span class="string">"No RSDP found"</span>);
 
-            <span class="comment">// Safety: this is called only once and we are sure no other call is using the ACPI memory
-            </span><span class="prelude-val">Ok</span>(<span class="kw">unsafe </span>{ BiosTables::new(rdsp) })
-        })
-        .as_ref()
-        .map_err(|<span class="kw">_</span>| ())
+        <span class="comment">// Safety: this is called only once and we are sure no other call is using the ACPI memory
+        </span><span class="kw">unsafe </span>{ BiosTables::new(rdsp) }
+    })
+}
+
+<span class="kw">pub fn </span>get_acpi_tables() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>BiosTables {
+    BIOS_TABLES.get()
 }
 
 <span class="attr">#[repr(C, packed)]
@@ -1195,66 +1154,6 @@
     <span class="kw">pub </span>local_apic_address: u64,
 }
 
-<span class="attr">#[repr(C, packed)]
-#[derive(Debug, Clone)]
-</span><span class="kw">pub struct </span>Facp {
-    firmware_control: u32,
-    dsdt: u32,
-    reserved: u8,
-    preferred_pm_profile: u8,
-    sci_interrupt: u16,
-    smi_command_port: u32,
-    acpi_enable: u8,
-    acpi_disable: u8,
-    s4bios_req: u8,
-    pstate_control: u8,
-    pm1a_event_block: u32,
-    pm1b_event_block: u32,
-    pm1a_control_block: u32,
-    pm1b_control_block: u32,
-    pm2_control_block: u32,
-    pm_timer_block: u32,
-    gpe0_block: u32,
-    gpe1_block: u32,
-    pm1_event_length: u8,
-    pm1_control_length: u8,
-    pm2_control_length: u8,
-    pm_timer_length: u8,
-    gpe0_block_length: u8,
-    gpe1_block_length: u8,
-    gpe1_base: u8,
-    cstate_control: u8,
-    p_level2_latency: u16,
-    p_level3_latency: u16,
-    flush_size: u16,
-    flush_stride: u16,
-    duty_offset: u8,
-    duty_width: u8,
-    day_alarm: u8,
-    month_alarm: u8,
-    <span class="kw">pub </span>century: u8,
-    iapc_boot_arch: u16,
-    reserved2: u8,
-    flags: u32,
-    reset_reg: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    reset_value: u8,
-    arm_boot_arch: u16,
-    fadt_minor_version: u8,
-    x_firmware_control: u64,
-    x_dsdt: u64,
-    x_pm1a_event_block: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    x_pm1b_event_block: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    x_pm1a_control_block: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    x_pm1b_control_block: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    x_pm2_control_block: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    x_pm_timer_block: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    x_gpe0_block: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    x_gpe1_block: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    sleep_control_reg: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    sleep_status_reg: HexArray&lt;[u8; <span class="number">12</span>]&gt;,
-    hypervisor_vendor_id: u64,
-}
-
 <span class="attr">#[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 </span><span class="kw">pub struct </span>ApicGenericAddress {
@@ -1263,6 +1162,15 @@
     <span class="kw">pub </span>register_bit_offset: u8,
     <span class="kw">pub </span>reserved: u8,
     <span class="kw">pub </span>address: u64,
+}
+<span class="kw">impl </span>ApicGenericAddress {
+    <span class="kw">fn </span>is_zero(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="self">self</span>.address == <span class="number">0
+            </span>&amp;&amp; <span class="self">self</span>.address_space_id == <span class="number">0
+            </span>&amp;&amp; <span class="self">self</span>.register_bit_offset == <span class="number">0
+            </span>&amp;&amp; <span class="self">self</span>.register_bit_width == <span class="number">0
+            </span>&amp;&amp; <span class="self">self</span>.reserved == <span class="number">0
+    </span>}
 }
 
 <span class="attr">#[repr(C, packed)]
