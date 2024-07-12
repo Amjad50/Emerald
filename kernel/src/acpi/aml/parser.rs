@@ -132,6 +132,7 @@ pub enum TermArg {
     Arg(u8),
     Local(u8),
     Name(String),
+    EisaId(String),
 }
 
 #[derive(Debug, Clone)]
@@ -636,7 +637,15 @@ impl Parser<'_> {
                 let name = self.parse_name()?;
                 self.state.add_name(name.clone());
 
-                AmlTerm::NameObj(name, self.parse_term_arg()?)
+                let mut term = self.parse_term_arg()?;
+
+                if let TermArg::DataObject(DataObject::DWordConst(data)) = term {
+                    if name.contains("ID") {
+                        term = TermArg::EisaId(Self::parse_eisa_id(data))
+                    }
+                }
+
+                AmlTerm::NameObj(name, term)
             }
             0x0d => {
                 let mut str = String::new();
@@ -910,6 +919,33 @@ impl Parser<'_> {
 
     fn parse_term_arg(&mut self) -> Result<TermArg, AmlParseError> {
         self.parse_term_arg_general(true, true)
+    }
+
+    fn parse_eisa_id(id: u32) -> String {
+        // 1st 2 hex of the product id
+        let byte2 = (id >> 16) & 0xFF;
+        // 2nd 2 hex of the product id
+        let byte3 = (id >> 24) & 0xFF;
+
+        // 1st 2 hex of the manufacturer id
+        let manufacturer_byte0 = id & 0xFF;
+        // 2nd 2 hex of the manufacturer id
+        let manufacturer_byte1 = (id >> 8) & 0xFF;
+
+        // convert 2 bytes to 3 values, each 5 bits
+        let manufacturer_list: [u32; 3] = [
+            manufacturer_byte0 >> 2,
+            ((manufacturer_byte0 & 0x03) << 3) | (manufacturer_byte1 >> 5),
+            manufacturer_byte1 & 0x1F,
+        ];
+
+        // convert 3 values to 3 characters
+        let manuf: String = manufacturer_list
+            .iter()
+            .map(|&c| (c + 0x40) as u8 as char)
+            .collect();
+
+        format!("{manuf}{byte2:02X}{byte3:02X}")
     }
 
     fn parse_term_arg_general(
@@ -1281,6 +1317,7 @@ pub(super) fn display_term_arg(
         TermArg::Arg(arg) => write!(f, "Arg{:x}", arg),
         TermArg::Local(local) => write!(f, "Local{:x}", local),
         TermArg::Name(name) => write!(f, "{}", name),
+        TermArg::EisaId(eisa_id) => write!(f, "EisaId ({:?})", eisa_id),
     }
 }
 
