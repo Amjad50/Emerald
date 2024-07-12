@@ -53,3 +53,4 @@
 [kernel_cmdline]: {ROOT_PATH}docs/kernel/cmdline/struct.Cmd.html
 [kernel_fs_mapping]: {ROOT_PATH}docs/kernel/fs/mapping/index.html
 [kernel_fs_mapping_node]: {ROOT_PATH}docs/kernel/fs/mapping/struct.MappingNode.html
+[kernel_setup_enable_acpi]: {ROOT_PATH}docs/kernel/acpi/fn.setup_enable_acpi.html

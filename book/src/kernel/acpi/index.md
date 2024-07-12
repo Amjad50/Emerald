@@ -32,6 +32,13 @@ It just means that we can read the table, and that's it, some of them are used, 
 We use [virtual space](../memory/virtual_space.md) to map `APIC` tables, and then we copy
 them to the heap, this will make it easier to use, and we can reclaim `ACPI` memory later.
 
+## ACPI Control
+
+During boot, we take control of ACPI registers, and also register an interrupt for ACPI events. (Implemented in [acpi::setup_enable_acpi][kernel_setup_enable_acpi]).
+
+So, currently, we can get ACPI events, such as `PowerButton pressed`, and so on, but we need to implement
+shutdown behavior to correctly react to it and not just print it in the logs.
+
 [UEFI]: https://en.wikipedia.org/wiki/UEFI
 [RSDP]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#root-system-description-pointer-rsdp-structure
 [RSDT]: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#root-system-description-table-rsdt
