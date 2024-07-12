@@ -154,7 +154,7 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
     interrupts::init_interrupts();
     // mount devices map before initializing them
     devices::init_devices_mapping();
-    let bios_tables = acpi::init_acpi_tables(multiboot_info).expect("BIOS tables not found");
+    let bios_tables = acpi::init_acpi_tables(multiboot_info);
     info!("BIOS tables: {}", bios_tables);
     apic::init(bios_tables);
     // must be done after APIC is initialized

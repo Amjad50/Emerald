@@ -89,59 +89,56 @@ fn get_struct_from_bytes<T>(data: &[u8]) -> T {
 }
 
 // cache the tables
-static BIOS_TABLES: OnceLock<Result<BiosTables, ()>> = OnceLock::new();
+static BIOS_TABLES: OnceLock<BiosTables> = OnceLock::new();
 
 // Note: this requires allocation, so it should be called after the heap is initialized
-pub fn init_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<&'static BiosTables, ()> {
-    BIOS_TABLES
-        .get_or_init(|| {
-            let rdsp = multiboot_info
-                .get_most_recent_rsdp()
-                .or_else(|| {
-                    // look for RSDP PTR
-                    // this is inside the kernel low virtual range, so we can just convert to virtual directly without allocating space
-                    let mut rsdp_ptr = physical2virtual(BIOS_RO_MEM_START) as *const u8;
-                    let end = physical2virtual(BIOS_RO_MEM_END) as *const u8;
+pub fn init_acpi_tables(multiboot_info: &MultiBoot2Info) -> &'static BiosTables {
+    BIOS_TABLES.get_or_init(|| {
+        let rdsp = multiboot_info
+            .get_most_recent_rsdp()
+            .or_else(|| {
+                // look for RSDP PTR
+                // this is inside the kernel low virtual range, so we can just convert to virtual directly without allocating space
+                let mut rsdp_ptr = physical2virtual(BIOS_RO_MEM_START) as *const u8;
+                let end = physical2virtual(BIOS_RO_MEM_END) as *const u8;
 
-                    while rsdp_ptr < end {
-                        // Safety: this is a valid mapped range, as we are sure that the kernel is
-                        // mapped since boot and we are inside the kernel lower range
-                        let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
-                        if str == b"RSD PTR " {
-                            // calculate checksum
-                            // Safety: same as above, this pointer is mapped
-                            let sum = unsafe {
-                                slice::from_raw_parts(rsdp_ptr, 20)
-                                    .iter()
-                                    .fold(0u8, |acc, &x| acc.wrapping_add(x))
-                            };
-                            if sum == 0 {
-                                // Safety: same as above, this pointer is mapped
-                                let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
-                                return if rsdp_ref.rsdp_v1.revision >= 2 {
-                                    Some(Rsdp::from_v2(rsdp_ref))
-                                } else {
-                                    Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1))
-                                };
-                            }
-                        }
+                while rsdp_ptr < end {
+                    // Safety: this is a valid mapped range, as we are sure that the kernel is
+                    // mapped since boot and we are inside the kernel lower range
+                    let str = unsafe { slice::from_raw_parts(rsdp_ptr, 8) };
+                    if str == b"RSD PTR " {
+                        // calculate checksum
                         // Safety: same as above, this pointer is mapped
-                        rsdp_ptr = unsafe { rsdp_ptr.add(1) };
+                        let sum = unsafe {
+                            slice::from_raw_parts(rsdp_ptr, 20)
+                                .iter()
+                                .fold(0u8, |acc, &x| acc.wrapping_add(x))
+                        };
+                        if sum == 0 {
+                            // Safety: same as above, this pointer is mapped
+                            let rsdp_ref = unsafe { &*(rsdp_ptr as *const RsdpV2) };
+                            return if rsdp_ref.rsdp_v1.revision >= 2 {
+                                Some(Rsdp::from_v2(rsdp_ref))
+                            } else {
+                                Some(Rsdp::from_v1(&rsdp_ref.rsdp_v1))
+                            };
+                        }
                     }
+                    // Safety: same as above, this pointer is mapped
+                    rsdp_ptr = unsafe { rsdp_ptr.add(1) };
+                }
 
-                    None
-                })
-                .ok_or(())?;
+                None
+            })
+            .expect("No RSDP found");
 
-            // Safety: this is called only once and we are sure no other call is using the ACPI memory
-            Ok(unsafe { BiosTables::new(rdsp) })
-        })
-        .as_ref()
-        .map_err(|_| ())
+        // Safety: this is called only once and we are sure no other call is using the ACPI memory
+        unsafe { BiosTables::new(rdsp) }
+    })
 }
 
 pub fn get_acpi_tables() -> &'static BiosTables {
-    BIOS_TABLES.get().as_ref().expect("Bios Tables not found")
+    BIOS_TABLES.get()
 }
 
 #[repr(C, packed)]
