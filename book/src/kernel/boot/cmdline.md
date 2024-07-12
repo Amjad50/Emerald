@@ -48,7 +48,7 @@ Here is the supported properties:
 | `max_log_level` | `LogLevel` (`trace/debug/info/warn/error`) | Maximum log level                                        | `LogLevel::Info` |
 | `log_file`      | `&str`                                     | Log file path                                            | `"/kernel.log"`  |
 | `allow_hpet`    | `bool`                                     | Allow `HPET` (if present), otherwise always use `PIT`    | `true`           |
-| `log_aml`       | `bool`                                     | Log the AML content as ASL code on boot from ACPI tables | `true`           |
+| `log_aml`       | `LogAml` (`off/normal/structured`)         | Log the AML content as ASL code on boot from ACPI tables | `LogAml::Off`    |
 
 
 If we write these in a command line, it will look like:

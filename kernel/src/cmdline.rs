@@ -22,7 +22,7 @@ const fn default_cmdline() -> Cmd<'static> {
         max_log_level: LogLevel::Info,
         log_file: "/kernel.log",
         allow_hpet: true,
-        log_aml: false,
+        log_aml: LogAml::Off,
     }
 }
 
@@ -74,8 +74,8 @@ macros::cmdline_struct! {
         #[default = true]
         pub allow_hpet: bool,
         /// Log the AML content as ASL code on boot from ACPI tables
-        #[default = false]
-        pub log_aml: bool,
+        #[default = LogAml::Off]
+        pub log_aml: LogAml,
     }
 }
 
@@ -122,6 +122,45 @@ impl<'a> CmdlineParse<'a> for LogLevel {
             _ => Err(ParseError::new(
                 ParseErrorKind::Unexpected {
                     need: "trace/debug/info/warn/error",
+                    got: Some(value),
+                },
+                loc,
+            )),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+pub enum LogAml {
+    /// Do not print the ASL content
+    #[default]
+    Off,
+    /// Print the ASL content as parsed, without moving anything
+    Normal,
+    /// Reorgnize the content of the ASL code to be in an easier structure
+    /// to work with and treverse
+    Structured,
+}
+
+impl<'a> CmdlineParse<'a> for LogAml {
+    fn parse_cmdline(tokenizer: &mut Tokenizer<'a>) -> Result<'a, Self> {
+        let (loc, value) = tokenizer.next_value().ok_or_else(|| {
+            ParseError::new(
+                ParseErrorKind::Unexpected {
+                    need: "off/normal/structured",
+                    got: None,
+                },
+                tokenizer.current_index(),
+            )
+        })?;
+
+        match value {
+            "off" => Ok(Self::Off),
+            "normal" => Ok(Self::Normal),
+            "structured" => Ok(Self::Structured),
+            _ => Err(ParseError::new(
+                ParseErrorKind::Unexpected {
+                    need: "off/normal/structured",
                     got: Some(value),
                 },
                 loc,
