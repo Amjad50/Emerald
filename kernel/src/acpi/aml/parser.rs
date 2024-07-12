@@ -1520,7 +1520,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
             writeln!(f, "}}")?;
         }
         AmlTerm::String(str) => {
-            write!(f, "\"{}\"", str)?;
+            write!(f, "\"{}\"", str.replace('\n', "\\n"))?;
         }
         AmlTerm::Method(method) => {
             display_method(method, f, depth)?;
