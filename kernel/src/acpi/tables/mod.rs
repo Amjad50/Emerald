@@ -13,6 +13,7 @@ use alloc::{boxed::Box, vec::Vec};
 use byteorder::{ByteOrder, LittleEndian};
 
 use crate::{
+    cmdline,
     io::{ByteStr, HexArray},
     memory_management::{memory_layout::physical2virtual, virtual_space::VirtualSpace},
     multiboot2::MultiBoot2Info,
@@ -673,12 +674,14 @@ impl fmt::Display for BiosTables {
         writeln!(f, "RSDP: {:X?}", self.rsdp)?;
         writeln!(f, "RSDT: {:X?}", self.rsdt.header)?;
         for entry in &self.rsdt.entries {
-            match entry.body {
-                DescriptorTableBody::Dsdt(_) | DescriptorTableBody::Ssdt(_) => {
+            match &entry.body {
+                DescriptorTableBody::Dsdt(data) | DescriptorTableBody::Ssdt(data) => {
                     writeln!(f, "{:X?}", entry.header)?;
-                    // TODO: add cmdline arg to print DSDT (its very large, so don't by default)
-                    // writeln!(f, "DSDT: ")?;
-                    // entry.aml_code.display_with_depth(f, 1)?;
+
+                    if cmdline::cmdline().log_aml {
+                        writeln!(f, "AML: ")?;
+                        data.aml_code.display_with_depth(f, 1)?;
+                    }
                 }
                 DescriptorTableBody::Unknown(_) => {
                     writeln!(f, "  {:X?}", entry.header)?;

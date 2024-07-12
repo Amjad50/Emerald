@@ -22,6 +22,7 @@ const fn default_cmdline() -> Cmd<'static> {
         max_log_level: LogLevel::Info,
         log_file: "/kernel.log",
         allow_hpet: true,
+        log_aml: false,
     }
 }
 
@@ -72,6 +73,9 @@ macros::cmdline_struct! {
         /// Allow `HPET` (if present), otherwise always use `PIT`
         #[default = true]
         pub allow_hpet: bool,
+        /// Log the AML content as ASL code on boot from ACPI tables
+        #[default = false]
+        pub log_aml: bool,
     }
 }
 
