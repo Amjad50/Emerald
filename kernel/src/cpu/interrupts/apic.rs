@@ -510,7 +510,10 @@ impl Apic {
         self.mmio.error_local_vector_table.write(vector_table);
     }
 
-    fn get_irq_ioapic_entry(&mut self, irq_num: u8) -> Option<(u8, &mut IoApic)> {
+    fn get_irq_ioapic_entry(
+        &mut self,
+        irq_num: u8,
+    ) -> Option<(u8, &mut IoApic, Option<&InterruptSourceOverride>)> {
         // if we have override mapping for this interrupt, use it.
         let int_override = self
             .source_overrides
@@ -528,12 +531,12 @@ impl Apic {
             })
             .map(|io_apic| {
                 let entry_in_ioapic = interrupt_num - io_apic.global_irq_base;
-                (entry_in_ioapic as u8, io_apic)
+                (entry_in_ioapic as u8, io_apic, int_override)
             })
     }
 
     fn is_irq_assigned(&mut self, irq_num: u8) -> bool {
-        let (entry_in_ioapic, io_apic) = self
+        let (entry_in_ioapic, io_apic, _) = self
             .get_irq_ioapic_entry(irq_num)
             .expect("Could not find IO APIC for the interrupt");
         io_apic.is_entry_taken(entry_in_ioapic)
@@ -555,7 +558,7 @@ impl Apic {
         assert!(cpu.id < self.n_cpus, "CPU ID is out of range");
         assert!(irq_num < 24, "interrupt number is out of range");
 
-        let (entry_in_ioapic, io_apic) = self
+        let (entry_in_ioapic, io_apic, int_override) = self
             .get_irq_ioapic_entry(irq_num)
             .expect("Could not find IO APIC for the interrupt");
         // TODO: this is added for catching bugs early, probably we should return `Result`
@@ -565,12 +568,61 @@ impl Apic {
             "entry is already taken"
         );
 
+        // override config
+        let trigger_mode_level = if let Some(int_override) = int_override {
+            match (int_override.flags >> 2) & 0b11 {
+                0b00 => {
+                    // Conforms to the specifications of the bus
+                    // TODO: ok to keep without changing?
+                    false
+                }
+                0b01 => {
+                    // Edge
+                    false
+                }
+                0b10 => {
+                    panic!("Reserved value 0b10 used for trigger mode in interrupt override");
+                }
+                0b11 => {
+                    // Level
+                    true
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            // default
+            false
+        };
+        let polarity_low = if let Some(int_override) = int_override {
+            match int_override.flags & 0b11 {
+                0b00 => {
+                    // Conforms to the specifications of the bus
+                    true
+                }
+                0b01 => {
+                    // High
+                    false
+                }
+                0b10 => {
+                    panic!("Reserved value 0b10 used for polarity in interrupt override");
+                }
+                0b11 => {
+                    // Low
+                    true
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            // default
+            false
+        };
+
         let vector_num = allocate_user_interrupt(handler);
         let b = IoApicRedirectionBuilder::default()
             .with_vector(vector_num)
             .with_delivery_mode(0) // fixed
-            .with_interrupt_polarity_low(false) // active high
-            .with_trigger_mode_level(false) // edge
+            .with_interrupt_polarity_low(polarity_low) // active high
+            .with_trigger_mode_level(trigger_mode_level) // edge
             .with_mask(false) // not masked
             .with_destination(DestinationType::Physical(cpu.apic_id));
 
