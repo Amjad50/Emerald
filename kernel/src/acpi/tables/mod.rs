@@ -1,3 +1,7 @@
+pub mod facp;
+
+pub use facp::Facp;
+
 use core::{
     any::Any,
     fmt,
@@ -88,7 +92,7 @@ fn get_struct_from_bytes<T>(data: &[u8]) -> T {
 static BIOS_TABLES: OnceLock<Result<BiosTables, ()>> = OnceLock::new();
 
 // Note: this requires allocation, so it should be called after the heap is initialized
-pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<&'static BiosTables, ()> {
+pub fn init_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<&'static BiosTables, ()> {
     BIOS_TABLES
         .get_or_init(|| {
             let rdsp = multiboot_info
@@ -134,6 +138,10 @@ pub fn get_acpi_tables(multiboot_info: &MultiBoot2Info) -> Result<&'static BiosT
         })
         .as_ref()
         .map_err(|_| ())
+}
+
+pub fn get_acpi_tables() -> &'static BiosTables {
+    BIOS_TABLES.get().as_ref().expect("Bios Tables not found")
 }
 
 #[repr(C, packed)]
@@ -453,66 +461,6 @@ pub struct LocalApicAddressOverride {
     pub local_apic_address: u64,
 }
 
-#[repr(C, packed)]
-#[derive(Debug, Clone)]
-pub struct Facp {
-    firmware_control: u32,
-    dsdt: u32,
-    reserved: u8,
-    preferred_pm_profile: u8,
-    sci_interrupt: u16,
-    smi_command_port: u32,
-    acpi_enable: u8,
-    acpi_disable: u8,
-    s4bios_req: u8,
-    pstate_control: u8,
-    pm1a_event_block: u32,
-    pm1b_event_block: u32,
-    pm1a_control_block: u32,
-    pm1b_control_block: u32,
-    pm2_control_block: u32,
-    pm_timer_block: u32,
-    gpe0_block: u32,
-    gpe1_block: u32,
-    pm1_event_length: u8,
-    pm1_control_length: u8,
-    pm2_control_length: u8,
-    pm_timer_length: u8,
-    gpe0_block_length: u8,
-    gpe1_block_length: u8,
-    gpe1_base: u8,
-    cstate_control: u8,
-    p_level2_latency: u16,
-    p_level3_latency: u16,
-    flush_size: u16,
-    flush_stride: u16,
-    duty_offset: u8,
-    duty_width: u8,
-    day_alarm: u8,
-    month_alarm: u8,
-    pub century: u8,
-    iapc_boot_arch: u16,
-    reserved2: u8,
-    flags: u32,
-    reset_reg: HexArray<[u8; 12]>,
-    reset_value: u8,
-    arm_boot_arch: u16,
-    fadt_minor_version: u8,
-    x_firmware_control: u64,
-    x_dsdt: u64,
-    x_pm1a_event_block: HexArray<[u8; 12]>,
-    x_pm1b_event_block: HexArray<[u8; 12]>,
-    x_pm1a_control_block: HexArray<[u8; 12]>,
-    x_pm1b_control_block: HexArray<[u8; 12]>,
-    x_pm2_control_block: HexArray<[u8; 12]>,
-    x_pm_timer_block: HexArray<[u8; 12]>,
-    x_gpe0_block: HexArray<[u8; 12]>,
-    x_gpe1_block: HexArray<[u8; 12]>,
-    sleep_control_reg: HexArray<[u8; 12]>,
-    sleep_status_reg: HexArray<[u8; 12]>,
-    hypervisor_vendor_id: u64,
-}
-
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 pub struct ApicGenericAddress {
@@ -521,6 +469,15 @@ pub struct ApicGenericAddress {
     pub register_bit_offset: u8,
     pub reserved: u8,
     pub address: u64,
+}
+impl ApicGenericAddress {
+    fn is_zero(&self) -> bool {
+        self.address == 0
+            && self.address_space_id == 0
+            && self.register_bit_offset == 0
+            && self.register_bit_width == 0
+            && self.reserved == 0
+    }
 }
 
 #[repr(C, packed)]
