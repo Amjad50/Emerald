@@ -1,5 +1,3 @@
-use core::fmt;
-
 use alloc::{
     boxed::Box,
     collections::{BTreeMap, BTreeSet},
@@ -7,6 +5,7 @@ use alloc::{
     string::String,
     vec::Vec,
 };
+use core::fmt;
 use tracing::trace;
 
 #[derive(Debug, Clone)]
@@ -31,7 +30,7 @@ pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
 
 #[derive(Debug, Clone)]
 pub struct AmlCode {
-    term_list: Vec<AmlTerm>,
+    pub(super) term_list: Vec<AmlTerm>,
 }
 
 #[derive(Debug, Clone)]
@@ -149,8 +148,8 @@ pub enum Target {
 
 #[derive(Debug, Clone)]
 pub struct ScopeObj {
-    name: String,
-    term_list: Vec<AmlTerm>,
+    pub(super) name: String,
+    pub(super) term_list: Vec<AmlTerm>,
 }
 
 impl ScopeObj {
@@ -167,10 +166,10 @@ impl ScopeObj {
 
 #[derive(Debug, Clone)]
 pub struct RegionObj {
-    name: String,
-    region_space: u8,
-    region_offset: TermArg,
-    region_length: TermArg,
+    pub(super) name: String,
+    pub(super) region_space: u8,
+    pub(super) region_offset: TermArg,
+    pub(super) region_length: TermArg,
 }
 
 impl RegionObj {
@@ -193,9 +192,9 @@ impl RegionObj {
 
 #[derive(Debug, Clone)]
 pub struct FieldDef {
-    name: String,
-    flags: u8,
-    fields: Vec<FieldElement>,
+    pub(super) name: String,
+    pub(super) flags: u8,
+    pub(super) fields: Vec<FieldElement>,
 }
 
 impl FieldDef {
@@ -214,10 +213,10 @@ impl FieldDef {
 
 #[derive(Debug, Clone)]
 pub struct IndexFieldDef {
-    name: String,
-    index_name: String,
-    flags: u8,
-    fields: Vec<FieldElement>,
+    pub(super) name: String,
+    pub(super) index_name: String,
+    pub(super) flags: u8,
+    pub(super) fields: Vec<FieldElement>,
 }
 
 impl IndexFieldDef {
@@ -246,9 +245,9 @@ pub enum FieldElement {
 
 #[derive(Debug, Clone)]
 pub struct MethodObj {
-    name: String,
-    flags: u8,
-    term_list: Vec<AmlTerm>,
+    pub name: String,
+    pub flags: u8,
+    pub term_list: Vec<AmlTerm>,
 }
 
 impl MethodObj {
@@ -297,11 +296,11 @@ impl PredicateBlock {
 
 #[derive(Debug, Clone)]
 pub struct ProcessorDeprecated {
-    name: String,
-    unk1: u8,
-    unk2: u32,
-    unk3: u8,
-    term_list: Vec<AmlTerm>,
+    pub(super) name: String,
+    pub(super) unk1: u8,
+    pub(super) unk2: u32,
+    pub(super) unk3: u8,
+    pub(super) term_list: Vec<AmlTerm>,
 }
 
 impl ProcessorDeprecated {
@@ -334,10 +333,10 @@ impl ProcessorDeprecated {
 
 #[derive(Debug, Clone)]
 pub struct PowerResource {
-    name: String,
-    system_level: u8,
-    resource_order: u16,
-    term_list: Vec<AmlTerm>,
+    pub(super) name: String,
+    pub(super) system_level: u8,
+    pub(super) resource_order: u16,
+    pub(super) term_list: Vec<AmlTerm>,
 }
 
 impl PowerResource {
@@ -1243,14 +1242,18 @@ impl Parser<'_> {
 // display impls, we are not using `fmt::Display`, since we have a special `depth` to propagate
 // we could have used a `fmt::Display` wrapper, which is another approach, not sure which is better.
 
-fn display_depth(f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+pub(super) fn display_depth(f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
     for _ in 0..depth {
         write!(f, "  ")?;
     }
     Ok(())
 }
 
-fn display_terms(term_list: &[AmlTerm], f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+pub(super) fn display_terms(
+    term_list: &[AmlTerm],
+    f: &mut fmt::Formatter<'_>,
+    depth: usize,
+) -> fmt::Result {
     for term in term_list {
         display_depth(f, depth)?;
         display_term(term, f, depth)?;
@@ -1259,7 +1262,11 @@ fn display_terms(term_list: &[AmlTerm], f: &mut fmt::Formatter<'_>, depth: usize
     Ok(())
 }
 
-fn display_term_arg(term_arg: &TermArg, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+pub(super) fn display_term_arg(
+    term_arg: &TermArg,
+    f: &mut fmt::Formatter<'_>,
+    depth: usize,
+) -> fmt::Result {
     match term_arg {
         TermArg::Expression(term) => display_term(term, f, depth),
         TermArg::DataObject(data) => match data {
@@ -1300,7 +1307,7 @@ fn display_target(target: &Target, f: &mut fmt::Formatter<'_>, depth: usize) -> 
     }
 }
 
-fn display_terms_list<'a>(
+pub(super) fn display_terms_list<'a>(
     terms: impl ExactSizeIterator<Item = &'a TermArg>,
     depth_divider: Option<usize>,
     f: &mut fmt::Formatter<'_>,
@@ -1390,7 +1397,11 @@ fn display_scope(scope: &ScopeObj, f: &mut fmt::Formatter<'_>, depth: usize) -> 
     writeln!(f, "}}")
 }
 
-fn display_method(method: &MethodObj, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+pub(super) fn display_method(
+    method: &MethodObj,
+    f: &mut fmt::Formatter<'_>,
+    depth: usize,
+) -> fmt::Result {
     writeln!(f, "Method ({}, {}) {{", method.name, method.flags)?;
     display_terms(&method.term_list, f, depth + 1)?;
     display_depth(f, depth)?;
@@ -1411,7 +1422,7 @@ fn display_predicate_block(
     write!(f, "}}")
 }
 
-fn display_fields(
+pub(super) fn display_fields(
     fields: &[FieldElement],
     f: &mut fmt::Formatter<'_>,
     depth: usize,
