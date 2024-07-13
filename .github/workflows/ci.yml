@@ -25,8 +25,8 @@ jobs:
           components: rust-src, rustfmt, clippy
       - name: Kernel check
         run: |
-          cargo xtask kernel fmt -- --check
-          cargo xtask kernel clippy -- -- -D warnings
+          cargo xtask kernel fmt -- --all --check
+          cargo xtask kernel clippy -- --all-targets -- -D warnings
       - run: cargo xtask test
       - run: cargo xtask --release build-iso
       - name: Upload kernel artifact

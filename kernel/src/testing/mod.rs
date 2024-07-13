@@ -82,16 +82,14 @@ pub fn test_runner(tests: &[&TestCase]) {
                 passed += 1;
                 println!("OK");
             }
+        } else if test.should_panic {
+            passed += 1;
+            println!("OK");
         } else {
-            if test.should_panic {
-                passed += 1;
-                println!("OK");
-            } else {
-                failed += 1;
-                println!("FAILED");
+            failed += 1;
+            println!("FAILED");
 
-                failed_buffers.push((test.name, buffer));
-            }
+            failed_buffers.push((test.name, buffer));
         }
     }
 

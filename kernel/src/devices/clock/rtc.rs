@@ -172,7 +172,9 @@ impl Rtc {
 
 testing::test! {
     fn test_seconds_since_unix_epoch() {
-        const TESTS: [((u16, u8, u8, u8, u8, u8), u64); 5] = [
+        // to silence clippy type warning
+        type RtcTestData = (u16, u8, u8, u8, u8, u8);
+        const TESTS: [(RtcTestData, u64); 5] = [
             ((2024, 1, 1, 12, 3, 45), 1704110625),
             ((1987, 11, 28, 0, 0, 0), 565056000),
             ((5135, 3, 4, 9, 33, 45), 99883100025),
@@ -187,7 +189,7 @@ testing::test! {
                 hours,
                 day_of_month: day,
                 month,
-                year: year as u16,
+                year,
             };
             assert_eq!(t.seconds_since_unix_epoch(), Some(expected));
         }
