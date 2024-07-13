@@ -16,6 +16,7 @@ pub enum AmlParseError {
     RemainingBytes(usize),
     CannotMoveBackward,
     InvalidTarget(u8),
+    NameObjectNotContainingDataObject,
 }
 
 pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
@@ -52,6 +53,7 @@ pub enum DataObject {
     Package(u8, Vec<PackageElement>),
     VarPackage(Box<TermArg>, Vec<PackageElement>),
     String(String),
+    EisaId(String),
 }
 
 #[derive(Debug, Clone)]
@@ -70,7 +72,7 @@ pub enum AmlTerm {
     Processor(ProcessorDeprecated),
     PowerResource(PowerResource),
     Method(MethodObj),
-    NameObj(String, TermArg),
+    NameObj(String, DataObject),
     Alias(String, String),
     ToHexString(TermArg, Box<Target>),
     ToBuffer(TermArg, Box<Target>),
@@ -144,7 +146,6 @@ pub enum TermArg {
     Arg(u8),
     Local(u8),
     Name(String),
-    EisaId(String),
 }
 
 #[derive(Debug, Clone)]
@@ -648,17 +649,17 @@ impl Parser<'_> {
                 let name = self.parse_name()?;
                 self.state.add_name(name.clone());
 
-                let mut term = self.parse_term_arg()?;
+                let mut data_object = self
+                    .try_parse_data_object()?
+                    .ok_or(AmlParseError::NameObjectNotContainingDataObject)?;
 
-                if let TermArg::DataObject(DataObject::Integer(IntegerData::DWordConst(data))) =
-                    term
-                {
+                if let DataObject::Integer(IntegerData::DWordConst(data)) = data_object {
                     if name.contains("ID") {
-                        term = TermArg::EisaId(Self::parse_eisa_id(data))
+                        data_object = DataObject::EisaId(Self::parse_eisa_id(data))
                     }
                 }
 
-                AmlTerm::NameObj(name, term)
+                AmlTerm::NameObj(name, data_object)
             }
 
             0x10 => AmlTerm::Scope(ScopeObj::parse(self)?),
@@ -1362,7 +1363,11 @@ fn display_package_elements_list<'a>(
     Ok(())
 }
 
-fn display_data_object(data: &DataObject, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+pub(super) fn display_data_object(
+    data: &DataObject,
+    f: &mut fmt::Formatter<'_>,
+    depth: usize,
+) -> fmt::Result {
     match data {
         DataObject::Integer(int) => match int {
             IntegerData::ConstZero => write!(f, "Zero"),
@@ -1407,6 +1412,7 @@ fn display_data_object(data: &DataObject, f: &mut fmt::Formatter<'_>, depth: usi
         DataObject::String(str) => {
             write!(f, "\"{}\"", str.replace('\n', "\\n"))
         }
+        DataObject::EisaId(eisa_id) => write!(f, "EisaId ({:?})", eisa_id),
     }
 }
 
@@ -1421,7 +1427,6 @@ pub(super) fn display_term_arg(
         TermArg::Arg(arg) => write!(f, "Arg{:x}", arg),
         TermArg::Local(local) => write!(f, "Local{:x}", local),
         TermArg::Name(name) => write!(f, "{}", name),
-        TermArg::EisaId(eisa_id) => write!(f, "EisaId ({:?})", eisa_id),
     }
 }
 
@@ -1648,9 +1653,9 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         AmlTerm::Method(method) => {
             display_method(method, f, depth)?;
         }
-        AmlTerm::NameObj(name, term) => {
+        AmlTerm::NameObj(name, data_object) => {
             write!(f, "Name({}, ", name)?;
-            display_term_arg(term, f, depth)?;
+            display_data_object(data_object, f, depth)?;
             write!(f, ")")?;
         }
         AmlTerm::ToHexString(term, target) => {

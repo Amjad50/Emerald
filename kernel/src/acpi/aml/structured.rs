@@ -13,8 +13,8 @@ use crate::testing;
 
 use super::{
     parser::{
-        self, AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated,
-        RegionObj, TermArg,
+        self, AmlTerm, DataObject, FieldDef, IndexFieldDef, MethodObj, PowerResource,
+        ProcessorDeprecated, RegionObj,
     },
     AmlCode,
 };
@@ -48,7 +48,7 @@ pub enum ElementType {
     PowerResource(PowerResource),
     RegionFields(Option<RegionObj>, Vec<FieldDef>),
     IndexField(IndexFieldDef),
-    Name(TermArg),
+    Name(DataObject),
     Mutex(u8),
     UnknownElements(Vec<AmlTerm>),
 }
@@ -375,9 +375,9 @@ fn display_scope(
                 parser::display_depth(f, depth + 1)?;
                 writeln!(f, "}}")?;
             }
-            ElementType::Name(term) => {
+            ElementType::Name(data_object) => {
                 write!(f, "Name({}, ", name)?;
-                parser::display_term_arg(term, f, depth + 1)?;
+                parser::display_data_object(data_object, f, depth + 1)?;
                 write!(f, ")")?;
             }
             ElementType::Mutex(sync_level) => {
@@ -407,7 +407,7 @@ impl StructuredAml {
 
 testing::test! {
     fn test_structure() {
-        use super::parser::{DataObject, FieldElement, IntegerData, ScopeObj, Target};
+        use super::parser::{DataObject, FieldElement, IntegerData, ScopeObj, Target, TermArg};
         use alloc::boxed::Box;
 
         let code = AmlCode {
