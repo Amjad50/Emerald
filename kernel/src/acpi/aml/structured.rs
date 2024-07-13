@@ -407,7 +407,7 @@ impl StructuredAml {
 
 testing::test! {
     fn test_structure() {
-        use super::parser::{DataObject, FieldElement, ScopeObj, Target};
+        use super::parser::{DataObject, FieldElement, IntegerData, ScopeObj, Target};
         use alloc::boxed::Box;
 
         let code = AmlCode {
@@ -418,8 +418,12 @@ testing::test! {
                         AmlTerm::Region(RegionObj {
                             name: "DBG_".to_string(),
                             region_space: 1,
-                            region_offset: TermArg::DataObject(DataObject::WordConst(1026)),
-                            region_length: TermArg::DataObject(DataObject::ConstOne),
+                            region_offset: TermArg::DataObject(DataObject::Integer(
+                                IntegerData::WordConst(1026),
+                            )),
+                            region_length: TermArg::DataObject(DataObject::Integer(
+                                IntegerData::ConstOne,
+                            )),
                         }),
                         AmlTerm::Field(FieldDef {
                             name: "DBG_".to_string(),

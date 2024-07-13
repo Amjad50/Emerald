@@ -35,7 +35,7 @@ pub struct AmlCode {
 }
 
 #[derive(Debug, Clone)]
-pub enum DataObject {
+pub enum IntegerData {
     ConstZero,
     ConstOne,
     ConstOnes,
@@ -43,6 +43,11 @@ pub enum DataObject {
     WordConst(u16),
     DWordConst(u32),
     QWordConst(u64),
+}
+
+#[derive(Debug, Clone)]
+pub enum DataObject {
+    Integer(IntegerData),
     Buffer(Box<TermArg>, Vec<u8>),
     Package(u8, Vec<PackageElement>),
     VarPackage(Box<TermArg>, Vec<PackageElement>),
@@ -645,7 +650,9 @@ impl Parser<'_> {
 
                 let mut term = self.parse_term_arg()?;
 
-                if let TermArg::DataObject(DataObject::DWordConst(data)) = term {
+                if let TermArg::DataObject(DataObject::Integer(IntegerData::DWordConst(data))) =
+                    term
+                {
                     if name.contains("ID") {
                         term = TermArg::EisaId(Self::parse_eisa_id(data))
                     }
@@ -930,15 +937,15 @@ impl Parser<'_> {
         let lead_byte = self.get_next_byte()?;
 
         let result = match lead_byte {
-            0x0 => DataObject::ConstZero,
-            0x1 => DataObject::ConstOne,
+            0x0 => DataObject::Integer(IntegerData::ConstZero),
+            0x1 => DataObject::Integer(IntegerData::ConstOne),
             0xA => {
                 let data = self.get_next_byte()?;
-                DataObject::ByteConst(data)
+                DataObject::Integer(IntegerData::ByteConst(data))
             }
             0xB => {
                 let data = u16::from_le_bytes([self.get_next_byte()?, self.get_next_byte()?]);
-                DataObject::WordConst(data)
+                DataObject::Integer(IntegerData::WordConst(data))
             }
             0xC => {
                 let data = u32::from_le_bytes([
@@ -947,9 +954,8 @@ impl Parser<'_> {
                     self.get_next_byte()?,
                     self.get_next_byte()?,
                 ]);
-                DataObject::DWordConst(data)
+                DataObject::Integer(IntegerData::DWordConst(data))
             }
-
             0x0D => {
                 let mut str = String::new();
                 loop {
@@ -973,7 +979,7 @@ impl Parser<'_> {
                     self.get_next_byte()?,
                     self.get_next_byte()?,
                 ]);
-                DataObject::QWordConst(data)
+                DataObject::Integer(IntegerData::QWordConst(data))
             }
             0x11 => {
                 let mut inner = self.get_inner_parser()?;
@@ -1005,7 +1011,7 @@ impl Parser<'_> {
                 inner.check_empty()?;
                 DataObject::VarPackage(Box::new(package_size), package_elements)
             }
-            0xFF => DataObject::ConstOnes,
+            0xFF => DataObject::Integer(IntegerData::ConstOnes),
             _ => {
                 self.backward(1)?;
                 return Ok(None);
@@ -1358,13 +1364,15 @@ fn display_package_elements_list<'a>(
 
 fn display_data_object(data: &DataObject, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
     match data {
-        DataObject::ConstZero => write!(f, "Zero"),
-        DataObject::ConstOne => write!(f, "One"),
-        DataObject::ConstOnes => write!(f, "0xFFFFFFFFFFFFFFFF"),
-        DataObject::ByteConst(data) => write!(f, "0x{:02X}", data),
-        DataObject::WordConst(data) => write!(f, "0x{:04X}", data),
-        DataObject::DWordConst(data) => write!(f, "0x{:08X}", data),
-        DataObject::QWordConst(data) => write!(f, "0x{:016X}", data),
+        DataObject::Integer(int) => match int {
+            IntegerData::ConstZero => write!(f, "Zero"),
+            IntegerData::ConstOne => write!(f, "One"),
+            IntegerData::ConstOnes => write!(f, "0xFFFFFFFFFFFFFFFF"),
+            IntegerData::ByteConst(data) => write!(f, "0x{:02X}", data),
+            IntegerData::WordConst(data) => write!(f, "0x{:04X}", data),
+            IntegerData::DWordConst(data) => write!(f, "0x{:08X}", data),
+            IntegerData::QWordConst(data) => write!(f, "0x{:016X}", data),
+        },
         DataObject::Buffer(size, data) => {
             write!(f, "Buffer (")?;
             display_term_arg(size, f, depth)?;
