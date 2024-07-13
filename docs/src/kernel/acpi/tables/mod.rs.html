@@ -694,6 +694,16 @@
 <a href="#692" id="692">692</a>
 <a href="#693" id="693">693</a>
 <a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>facp;
 
 <span class="kw">pub use </span>facp::Facp;
@@ -709,13 +719,14 @@
 <span class="kw">use </span>byteorder::{ByteOrder, LittleEndian};
 
 <span class="kw">use crate</span>::{
+    cmdline::{<span class="self">self</span>, LogAml},
     io::{ByteStr, HexArray},
     memory_management::{memory_layout::physical2virtual, virtual_space::VirtualSpace},
     multiboot2::MultiBoot2Info,
     sync::once::OnceLock,
 };
 
-<span class="kw">use </span><span class="kw">super</span>::aml::{parse_aml, AmlCode};
+<span class="kw">use </span><span class="kw">super</span>::aml::Aml;
 
 <span class="kw">const </span>BIOS_RO_MEM_START: u64 = <span class="number">0x000E0000</span>;
 <span class="kw">const </span>BIOS_RO_MEM_END: u64 = <span class="number">0x000FFFFF</span>;
@@ -1187,13 +1198,13 @@
 #[allow(dead_code)]
 </span><span class="doccomment">/// This is inside DSDT and SSDT
 </span><span class="kw">pub struct </span>Xsdt {
-    aml_code: AmlCode,
+    aml: Aml,
 }
 
 <span class="kw">impl </span>Xsdt {
     <span class="kw">fn </span>from_body_bytes(body: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>aml_code = parse_aml(body).unwrap();
-        <span class="self">Self </span>{ aml_code }
+        <span class="kw">let </span>aml_code = Aml::parse(body).unwrap();
+        <span class="self">Self </span>{ aml: aml_code }
     }
 }
 
@@ -1369,13 +1380,22 @@
         <span class="macro">writeln!</span>(f, <span class="string">"RSDP: {:X?}"</span>, <span class="self">self</span>.rsdp)<span class="question-mark">?</span>;
         <span class="macro">writeln!</span>(f, <span class="string">"RSDT: {:X?}"</span>, <span class="self">self</span>.rsdt.header)<span class="question-mark">?</span>;
         <span class="kw">for </span>entry <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.rsdt.entries {
-            <span class="kw">match </span>entry.body {
-                DescriptorTableBody::Dsdt(<span class="kw">_</span>) | DescriptorTableBody::Ssdt(<span class="kw">_</span>) =&gt; {
+            <span class="kw">match </span><span class="kw-2">&amp;</span>entry.body {
+                DescriptorTableBody::Dsdt(data) | DescriptorTableBody::Ssdt(data) =&gt; {
                     <span class="macro">writeln!</span>(f, <span class="string">"{:X?}"</span>, entry.header)<span class="question-mark">?</span>;
-                    <span class="comment">// TODO: add cmdline arg to print DSDT (its very large, so don't by default)
-                    // writeln!(f, "DSDT: ")?;
-                    // entry.aml_code.display_with_depth(f, 1)?;
-                </span>}
+
+                    <span class="kw">match </span>cmdline::cmdline().log_aml {
+                        LogAml::Normal =&gt; {
+                            <span class="macro">writeln!</span>(f, <span class="string">"AML: "</span>)<span class="question-mark">?</span>;
+                            data.aml.code().display_with_depth(f, <span class="number">1</span>)<span class="question-mark">?</span>;
+                        }
+                        LogAml::Structured =&gt; {
+                            <span class="macro">writeln!</span>(f, <span class="string">"AML: "</span>)<span class="question-mark">?</span>;
+                            data.aml.structured().display_with_depth(f, <span class="number">1</span>)<span class="question-mark">?</span>;
+                        }
+                        LogAml::Off =&gt; {}
+                    }
+                }
                 DescriptorTableBody::Unknown(<span class="kw">_</span>) =&gt; {
                     <span class="macro">writeln!</span>(f, <span class="string">"  {:X?}"</span>, entry.header)<span class="question-mark">?</span>;
                     <span class="macro">writeln!</span>(f, <span class="string">"  {:X?}"</span>, entry.body)<span class="question-mark">?</span>;

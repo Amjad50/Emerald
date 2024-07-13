@@ -454,6 +454,7 @@ implemented as</p>
 <tr><td><code>max_log_level</code></td><td><code>LogLevel</code> (<code>trace/debug/info/warn/error</code>)</td><td>Maximum log level</td><td><code>LogLevel::Info</code></td></tr>
 <tr><td><code>log_file</code></td><td><code>&amp;str</code></td><td>Log file path</td><td><code>&quot;/kernel.log&quot;</code></td></tr>
 <tr><td><code>allow_hpet</code></td><td><code>bool</code></td><td>Allow <code>HPET</code> (if present), otherwise always use <code>PIT</code></td><td><code>true</code></td></tr>
+<tr><td><code>log_aml</code></td><td><code>LogAml</code> (<code>off/normal/structured</code>)</td><td>Log the AML content as ASL code on boot from ACPI tables</td><td><code>LogAml::Off</code></td></tr>
 </tbody></table>
 </div>
 <p>If we write these in a command line, it will look like:</p>
