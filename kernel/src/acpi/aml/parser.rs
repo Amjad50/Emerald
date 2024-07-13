@@ -12,6 +12,7 @@ use tracing::trace;
 pub enum AmlParseError {
     UnexpectedEndOfCode,
     InvalidPkgLengthLead,
+    InvalidTermArgInPackage,
     RemainingBytes(usize),
     CannotMoveBackward,
     InvalidTarget(u8),
@@ -42,6 +43,16 @@ pub enum DataObject {
     WordConst(u16),
     DWordConst(u32),
     QWordConst(u64),
+    Buffer(Box<TermArg>, Vec<u8>),
+    Package(u8, Vec<PackageElement>),
+    VarPackage(Box<TermArg>, Vec<PackageElement>),
+    String(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum PackageElement {
+    DataObject(DataObject),
+    Name(String),
 }
 
 #[derive(Debug, Clone)]
@@ -55,11 +66,7 @@ pub enum AmlTerm {
     PowerResource(PowerResource),
     Method(MethodObj),
     NameObj(String, TermArg),
-    Package(u8, Vec<TermArg>),
-    VarPackage(TermArg, Vec<TermArg>),
     Alias(String, String),
-    String(String),
-    Buffer(TermArg, Vec<u8>),
     ToHexString(TermArg, Box<Target>),
     ToBuffer(TermArg, Box<Target>),
     ToDecimalString(TermArg, Box<Target>),
@@ -568,7 +575,6 @@ impl Parser<'_> {
                     | AmlTerm::Method(_)
                     | AmlTerm::NameObj(_, _)
                     | AmlTerm::Alias(_, _)
-                    | AmlTerm::Buffer(_, _)
                     | AmlTerm::ToHexString(_, _)
                     | AmlTerm::ToBuffer(_, _)
                     | AmlTerm::ToDecimalString(_, _)
@@ -647,49 +653,9 @@ impl Parser<'_> {
 
                 AmlTerm::NameObj(name, term)
             }
-            0x0d => {
-                let mut str = String::new();
-                loop {
-                    let byte = self.get_next_byte()?;
-                    trace!("byte: {:x}", byte);
-                    if byte == 0 {
-                        break;
-                    }
-                    str.push(byte as char);
-                }
-                AmlTerm::String(str)
-            }
+
             0x10 => AmlTerm::Scope(ScopeObj::parse(self)?),
-            0x11 => {
-                let mut inner = self.get_inner_parser()?;
-                let buf_size = inner.parse_term_arg()?;
-                // no need for `check_empty`, just take all remaining
-                AmlTerm::Buffer(buf_size, inner.code[inner.pos..].to_vec())
-            }
-            0x12 => {
-                let mut inner = self.get_inner_parser()?;
-                let package_size = inner.get_next_byte()?;
-                trace!("package size: {:x}", package_size);
-                let mut package_elements = Vec::new();
-                while inner.pos < inner.code.len() {
-                    package_elements.push(inner.parse_term_arg()?);
-                    trace!("package element: {:?}", package_elements.last());
-                }
-                inner.check_empty()?;
-                AmlTerm::Package(package_size, package_elements)
-            }
-            0x13 => {
-                let mut inner = self.get_inner_parser()?;
-                let package_size = inner.parse_term_arg()?;
-                let mut package_elements = Vec::new();
-                trace!("varpackage size: {:x?}", package_size);
-                while inner.pos < inner.code.len() {
-                    package_elements.push(inner.parse_term_arg()?);
-                    trace!("varpackage element: {:?}", package_elements.last());
-                }
-                inner.check_empty()?;
-                AmlTerm::VarPackage(package_size, package_elements)
-            }
+
             0x14 => {
                 let method = MethodObj::parse(self)?;
                 self.state.add_method(&method.name, method.arg_count());
@@ -921,6 +887,18 @@ impl Parser<'_> {
         self.parse_term_arg_general(true, true)
     }
 
+    fn parse_package_element(&mut self) -> Result<PackageElement, AmlParseError> {
+        if let Some(data_object) = self.try_parse_data_object()? {
+            return Ok(PackageElement::DataObject(data_object));
+        }
+
+        if let Some(name) = self.try_parse_name()? {
+            return Ok(PackageElement::Name(name));
+        }
+
+        Err(AmlParseError::InvalidTermArgInPackage)
+    }
+
     fn parse_eisa_id(id: u32) -> String {
         // 1st 2 hex of the product id
         let byte2 = (id >> 16) & 0xFF;
@@ -948,23 +926,19 @@ impl Parser<'_> {
         format!("{manuf}{byte2:02X}{byte3:02X}")
     }
 
-    fn parse_term_arg_general(
-        &mut self,
-        can_call_method: bool,
-        expect_data_after: bool,
-    ) -> Result<TermArg, AmlParseError> {
+    fn try_parse_data_object(&mut self) -> Result<Option<DataObject>, AmlParseError> {
         let lead_byte = self.get_next_byte()?;
 
-        let x = match lead_byte {
-            0x0 => Ok(TermArg::DataObject(DataObject::ConstZero)),
-            0x1 => Ok(TermArg::DataObject(DataObject::ConstOne)),
+        let result = match lead_byte {
+            0x0 => DataObject::ConstZero,
+            0x1 => DataObject::ConstOne,
             0xA => {
                 let data = self.get_next_byte()?;
-                Ok(TermArg::DataObject(DataObject::ByteConst(data)))
+                DataObject::ByteConst(data)
             }
             0xB => {
                 let data = u16::from_le_bytes([self.get_next_byte()?, self.get_next_byte()?]);
-                Ok(TermArg::DataObject(DataObject::WordConst(data)))
+                DataObject::WordConst(data)
             }
             0xC => {
                 let data = u32::from_le_bytes([
@@ -973,7 +947,20 @@ impl Parser<'_> {
                     self.get_next_byte()?,
                     self.get_next_byte()?,
                 ]);
-                Ok(TermArg::DataObject(DataObject::DWordConst(data)))
+                DataObject::DWordConst(data)
+            }
+
+            0x0D => {
+                let mut str = String::new();
+                loop {
+                    let byte = self.get_next_byte()?;
+                    trace!("byte: {:x}", byte);
+                    if byte == 0 {
+                        break;
+                    }
+                    str.push(byte as char);
+                }
+                DataObject::String(str)
             }
             0xE => {
                 let data = u64::from_le_bytes([
@@ -986,69 +973,113 @@ impl Parser<'_> {
                     self.get_next_byte()?,
                     self.get_next_byte()?,
                 ]);
-                Ok(TermArg::DataObject(DataObject::QWordConst(data)))
+                DataObject::QWordConst(data)
             }
-            0xFF => Ok(TermArg::DataObject(DataObject::ConstOnes)),
-            _ => {
-                if let Some(local) = self.try_parse_local(lead_byte)? {
-                    Ok(TermArg::Local(local))
-                } else if let Some(arg) = self.try_parse_arg(lead_byte)? {
-                    Ok(TermArg::Arg(arg))
-                } else {
-                    self.backward(1)?;
-                    if let Some(name) = self.try_parse_name()? {
-                        assert!(!name.is_empty());
-                        let option_nargs = self.state.find_method(&name).or_else(|| {
-                            if self.state.find_name(&name) {
-                                None
-                            } else if can_call_method {
-                                trace!("predicting possible args for {name}");
-                                let possible_args =
-                                    self.predict_possible_args(expect_data_after, &name);
-                                trace!("got possible args: {possible_args} {name}");
-                                // if its 0 and we are inside a method call, probably this is just a named variable
-                                if possible_args == 0 {
-                                    self.state.add_name(name.clone());
-                                    None
-                                } else {
-                                    Some(possible_args)
-                                }
-                            } else {
-                                // we didn't find, the name, and we can't use methods, so assume it's a name
-                                self.state.add_name(name.clone());
-                                None
-                            }
-                        });
-                        if let Some(n_args) = option_nargs {
-                            let mut args = Vec::new();
-                            for _ in 0..n_args {
-                                args.push(self.parse_term_arg()?);
-                            }
-
-                            Ok(TermArg::Expression(Box::new(AmlTerm::MethodCall(
-                                name, args,
-                            ))))
-                        } else {
-                            Ok(TermArg::Name(name))
-                        }
-                    } else {
-                        // didn't work for `name`, we need to go forward to be back to where we were before
-                        self.forward(1)?;
-
-                        if let Some(term) = self
-                            .try_parse_term(lead_byte)?
-                            .map(|term| TermArg::Expression(Box::new(term)))
-                        {
-                            Ok(term)
-                        } else {
-                            todo!("term arg lead byte: {:x}", lead_byte)
-                        }
-                    }
+            0x11 => {
+                let mut inner = self.get_inner_parser()?;
+                let buf_size = inner.parse_term_arg()?;
+                // no need for `check_empty`, just take all remaining
+                DataObject::Buffer(Box::new(buf_size), inner.code[inner.pos..].to_vec())
+            }
+            0x12 => {
+                let mut inner = self.get_inner_parser()?;
+                let package_size = inner.get_next_byte()?;
+                trace!("package size: {:x}", package_size);
+                let mut package_elements = Vec::new();
+                while inner.pos < inner.code.len() {
+                    package_elements.push(inner.parse_package_element()?);
+                    trace!("package element: {:?}", package_elements.last());
                 }
+                inner.check_empty()?;
+                DataObject::Package(package_size, package_elements)
+            }
+            0x13 => {
+                let mut inner = self.get_inner_parser()?;
+                let package_size = inner.parse_term_arg()?;
+                let mut package_elements = Vec::new();
+                trace!("varpackage size: {:x?}", package_size);
+                while inner.pos < inner.code.len() {
+                    package_elements.push(inner.parse_package_element()?);
+                    trace!("varpackage element: {:?}", package_elements.last());
+                }
+                inner.check_empty()?;
+                DataObject::VarPackage(Box::new(package_size), package_elements)
+            }
+            0xFF => DataObject::ConstOnes,
+            _ => {
+                self.backward(1)?;
+                return Ok(None);
             }
         };
-        trace!("term arg: {:x?}", x);
-        x
+
+        Ok(Some(result))
+    }
+
+    fn parse_term_arg_general(
+        &mut self,
+        can_call_method: bool,
+        expect_data_after: bool,
+    ) -> Result<TermArg, AmlParseError> {
+        if let Some(data_object) = self.try_parse_data_object()? {
+            return Ok(TermArg::DataObject(data_object));
+        }
+
+        let lead_byte = self.get_next_byte()?;
+
+        if let Some(local) = self.try_parse_local(lead_byte)? {
+            Ok(TermArg::Local(local))
+        } else if let Some(arg) = self.try_parse_arg(lead_byte)? {
+            Ok(TermArg::Arg(arg))
+        } else {
+            self.backward(1)?;
+            if let Some(name) = self.try_parse_name()? {
+                assert!(!name.is_empty());
+                let option_nargs = self.state.find_method(&name).or_else(|| {
+                    if self.state.find_name(&name) {
+                        None
+                    } else if can_call_method {
+                        trace!("predicting possible args for {name}");
+                        let possible_args = self.predict_possible_args(expect_data_after, &name);
+                        trace!("got possible args: {possible_args} {name}");
+                        // if its 0 and we are inside a method call, probably this is just a named variable
+                        if possible_args == 0 {
+                            self.state.add_name(name.clone());
+                            None
+                        } else {
+                            Some(possible_args)
+                        }
+                    } else {
+                        // we didn't find, the name, and we can't use methods, so assume it's a name
+                        self.state.add_name(name.clone());
+                        None
+                    }
+                });
+                if let Some(n_args) = option_nargs {
+                    let mut args = Vec::new();
+                    for _ in 0..n_args {
+                        args.push(self.parse_term_arg()?);
+                    }
+
+                    Ok(TermArg::Expression(Box::new(AmlTerm::MethodCall(
+                        name, args,
+                    ))))
+                } else {
+                    Ok(TermArg::Name(name))
+                }
+            } else {
+                // didn't work for `name`, we need to go forward to be back to where we were before
+                self.forward(1)?;
+
+                if let Some(term) = self
+                    .try_parse_term(lead_byte)?
+                    .map(|term| TermArg::Expression(Box::new(term)))
+                {
+                    Ok(term)
+                } else {
+                    todo!("term arg lead byte: {:x}", lead_byte)
+                }
+            }
+        }
     }
 
     fn try_parse_name(&mut self) -> Result<Option<String>, AmlParseError> {
@@ -1298,6 +1329,79 @@ pub(super) fn display_terms(
     Ok(())
 }
 
+fn display_package_elements_list<'a>(
+    elements: impl ExactSizeIterator<Item = &'a PackageElement>,
+    depth_divider: Option<usize>,
+    f: &mut fmt::Formatter<'_>,
+    depth: usize,
+) -> fmt::Result {
+    let len = elements.len();
+    for (i, element) in elements.enumerate() {
+        let mut add_depth = 0;
+        if let Some(depth_divider) = depth_divider {
+            if i % depth_divider == 0 {
+                writeln!(f)?;
+                display_depth(f, depth + 1)?;
+            }
+            add_depth = 1;
+        }
+        match element {
+            PackageElement::DataObject(data) => display_data_object(data, f, depth + add_depth)?,
+            PackageElement::Name(name) => write!(f, "{}", name)?,
+        }
+        if i != len - 1 {
+            write!(f, ", ")?;
+        }
+    }
+    Ok(())
+}
+
+fn display_data_object(data: &DataObject, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+    match data {
+        DataObject::ConstZero => write!(f, "Zero"),
+        DataObject::ConstOne => write!(f, "One"),
+        DataObject::ConstOnes => write!(f, "0xFFFFFFFFFFFFFFFF"),
+        DataObject::ByteConst(data) => write!(f, "0x{:02X}", data),
+        DataObject::WordConst(data) => write!(f, "0x{:04X}", data),
+        DataObject::DWordConst(data) => write!(f, "0x{:08X}", data),
+        DataObject::QWordConst(data) => write!(f, "0x{:016X}", data),
+        DataObject::Buffer(size, data) => {
+            write!(f, "Buffer (")?;
+            display_term_arg(size, f, depth)?;
+            write!(f, ") {{")?;
+            for (i, byte) in data.iter().enumerate() {
+                if i % 16 == 0 {
+                    writeln!(f)?;
+                    display_depth(f, depth + 1)?;
+                }
+                write!(f, "0x{:02X} ", byte)?;
+            }
+            writeln!(f)?;
+            display_depth(f, depth)?;
+            write!(f, "}}")
+        }
+        DataObject::Package(size, elements) => {
+            write!(f, "Package (0x{:02X}) {{", size)?;
+            display_package_elements_list(elements.iter(), Some(4), f, depth)?;
+            writeln!(f)?;
+            display_depth(f, depth)?;
+            write!(f, "}}")
+        }
+        DataObject::VarPackage(size, elements) => {
+            write!(f, "VarPackage (")?;
+            display_term_arg(size, f, depth)?;
+            write!(f, ") {{")?;
+            display_package_elements_list(elements.iter(), Some(4), f, depth)?;
+            writeln!(f)?;
+            display_depth(f, depth)?;
+            write!(f, "}}")
+        }
+        DataObject::String(str) => {
+            write!(f, "\"{}\"", str.replace('\n', "\\n"))
+        }
+    }
+}
+
 pub(super) fn display_term_arg(
     term_arg: &TermArg,
     f: &mut fmt::Formatter<'_>,
@@ -1305,15 +1409,7 @@ pub(super) fn display_term_arg(
 ) -> fmt::Result {
     match term_arg {
         TermArg::Expression(term) => display_term(term, f, depth),
-        TermArg::DataObject(data) => match data {
-            DataObject::ConstZero => write!(f, "Zero"),
-            DataObject::ConstOne => write!(f, "One"),
-            DataObject::ConstOnes => write!(f, "0xFFFFFFFFFFFFFFFF"),
-            DataObject::ByteConst(data) => write!(f, "0x{:02X}", data),
-            DataObject::WordConst(data) => write!(f, "0x{:04X}", data),
-            DataObject::DWordConst(data) => write!(f, "0x{:08X}", data),
-            DataObject::QWordConst(data) => write!(f, "0x{:016X}", data),
-        },
+        TermArg::DataObject(data) => display_data_object(data, f, depth),
         TermArg::Arg(arg) => write!(f, "Arg{:x}", arg),
         TermArg::Local(local) => write!(f, "Local{:x}", local),
         TermArg::Name(name) => write!(f, "{}", name),
@@ -1520,22 +1616,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
             display_depth(f, depth)?;
             writeln!(f, "}}")?;
         }
-        AmlTerm::Package(size, elements) => {
-            write!(f, "Package (0x{:02X}) {{", size)?;
-            display_terms_list(elements.iter(), Some(4), f, depth)?;
-            writeln!(f)?;
-            display_depth(f, depth)?;
-            write!(f, "}}")?;
-        }
-        AmlTerm::VarPackage(size, elements) => {
-            write!(f, "VarPackage (")?;
-            display_term_arg(size, f, depth)?;
-            write!(f, ") {{")?;
-            display_terms_list(elements.iter(), Some(4), f, depth)?;
-            writeln!(f)?;
-            display_depth(f, depth)?;
-            write!(f, "}}")?;
-        }
+
         AmlTerm::Processor(processor) => {
             writeln!(
                 f,
@@ -1555,9 +1636,6 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
             display_terms(&power_resource.term_list, f, depth + 1)?;
             display_depth(f, depth)?;
             writeln!(f, "}}")?;
-        }
-        AmlTerm::String(str) => {
-            write!(f, "\"{}\"", str.replace('\n', "\\n"))?;
         }
         AmlTerm::Method(method) => {
             display_method(method, f, depth)?;
@@ -1702,21 +1780,7 @@ fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt
         AmlTerm::Index(term1, term2, target) => {
             display_index(term1, term2, target, f, depth)?;
         }
-        AmlTerm::Buffer(size, data) => {
-            write!(f, "Buffer (")?;
-            display_term_arg(size, f, depth)?;
-            write!(f, ") {{")?;
-            for (i, byte) in data.iter().enumerate() {
-                if i % 16 == 0 {
-                    writeln!(f)?;
-                    display_depth(f, depth + 1)?;
-                }
-                write!(f, "0x{:02X} ", byte)?;
-            }
-            writeln!(f)?;
-            display_depth(f, depth)?;
-            write!(f, "}}")?;
-        }
+
         AmlTerm::Mutex(name, sync_level) => {
             write!(f, "Mutex ({}, {})", name, sync_level)?;
         }
