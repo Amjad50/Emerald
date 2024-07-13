@@ -9,6 +9,8 @@ use alloc::{
 };
 use tracing::warn;
 
+use crate::testing;
+
 use super::{
     parser::{
         self, AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated,
@@ -400,5 +402,82 @@ impl StructuredAml {
     pub fn display_with_depth(&self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
         parser::display_depth(f, depth)?;
         display_scope("\\", &self.root, f, depth)
+    }
+}
+
+testing::test! {
+    fn test_structure() {
+        use super::parser::{DataObject, FieldElement, ScopeObj, Target};
+        use alloc::boxed::Box;
+
+        let code = AmlCode {
+            term_list: vec![
+                AmlTerm::Scope(ScopeObj {
+                    name: "\\".to_string(),
+                    term_list: vec![
+                        AmlTerm::Region(RegionObj {
+                            name: "DBG_".to_string(),
+                            region_space: 1,
+                            region_offset: TermArg::DataObject(DataObject::WordConst(1026)),
+                            region_length: TermArg::DataObject(DataObject::ConstOne),
+                        }),
+                        AmlTerm::Field(FieldDef {
+                            name: "DBG_".to_string(),
+                            flags: 1,
+                            fields: vec![FieldElement::Named("DBGB".to_string(), 8)],
+                        }),
+                        AmlTerm::Method(MethodObj {
+                            name: "DBUG".to_string(),
+                            flags: 1,
+                            term_list: vec![
+                                AmlTerm::ToHexString(TermArg::Arg(0), Box::new(Target::Local(0))),
+                                AmlTerm::ToBuffer(TermArg::Local(0), Box::new(Target::Local(0))),
+                            ],
+                        }),
+                    ],
+                }),
+                AmlTerm::Method(MethodObj {
+                    name: "\\_GPE._E02".to_string(),
+                    flags: 0,
+                    term_list: vec![AmlTerm::MethodCall("\\_SB_.CPUS.CSCN".to_string(), vec![])],
+                }),
+            ],
+        };
+
+        let structured = StructuredAml::parse(&code);
+
+        assert_eq!(
+            structured.root.children.keys().collect::<Vec<_>>(),
+            vec!["DBG_", "DBUG", "_GPE"]
+        );
+
+        match &structured.root.children["DBG_"] {
+            ElementType::RegionFields(region, fields) => {
+                assert!(region.is_some());
+                assert!(!fields.is_empty());
+            }
+            _ => panic!("DBG_ is not a region"),
+        }
+        match &structured.root.children["DBUG"] {
+            ElementType::Method(method) => {
+                assert_eq!(method.name, "DBUG");
+                assert_eq!(method.term_list.len(), 2);
+            }
+            _ => panic!("DBUG is not a method"),
+        }
+        match &structured.root.children["_GPE"] {
+            ElementType::ScopeOrDevice(scope) => {
+                assert_eq!(scope.children.keys().collect::<Vec<_>>(), vec!["_E02"]);
+
+                match &scope.children["_E02"] {
+                    ElementType::Method(method) => {
+                        assert_eq!(method.name, "_E02");
+                        assert_eq!(method.term_list.len(), 1);
+                    }
+                    _ => panic!("_E02 is not a method"),
+                }
+            }
+            _ => panic!("_GPE is not a scope"),
+        }
     }
 }
