@@ -13,13 +13,14 @@ use alloc::{boxed::Box, vec::Vec};
 use byteorder::{ByteOrder, LittleEndian};
 
 use crate::{
+    cmdline::{self, LogAml},
     io::{ByteStr, HexArray},
     memory_management::{memory_layout::physical2virtual, virtual_space::VirtualSpace},
     multiboot2::MultiBoot2Info,
     sync::once::OnceLock,
 };
 
-use super::aml::{parse_aml, AmlCode};
+use super::aml::Aml;
 
 const BIOS_RO_MEM_START: u64 = 0x000E0000;
 const BIOS_RO_MEM_END: u64 = 0x000FFFFF;
@@ -491,13 +492,13 @@ pub struct Hpet {
 #[allow(dead_code)]
 /// This is inside DSDT and SSDT
 pub struct Xsdt {
-    aml_code: AmlCode,
+    aml: Aml,
 }
 
 impl Xsdt {
     fn from_body_bytes(body: &[u8]) -> Self {
-        let aml_code = parse_aml(body).unwrap();
-        Self { aml_code }
+        let aml_code = Aml::parse(body).unwrap();
+        Self { aml: aml_code }
     }
 }
 
@@ -673,12 +674,21 @@ impl fmt::Display for BiosTables {
         writeln!(f, "RSDP: {:X?}", self.rsdp)?;
         writeln!(f, "RSDT: {:X?}", self.rsdt.header)?;
         for entry in &self.rsdt.entries {
-            match entry.body {
-                DescriptorTableBody::Dsdt(_) | DescriptorTableBody::Ssdt(_) => {
+            match &entry.body {
+                DescriptorTableBody::Dsdt(data) | DescriptorTableBody::Ssdt(data) => {
                     writeln!(f, "{:X?}", entry.header)?;
-                    // TODO: add cmdline arg to print DSDT (its very large, so don't by default)
-                    // writeln!(f, "DSDT: ")?;
-                    // entry.aml_code.display_with_depth(f, 1)?;
+
+                    match cmdline::cmdline().log_aml {
+                        LogAml::Normal => {
+                            writeln!(f, "AML: ")?;
+                            data.aml.code().display_with_depth(f, 1)?;
+                        }
+                        LogAml::Structured => {
+                            writeln!(f, "AML: ")?;
+                            data.aml.structured().display_with_depth(f, 1)?;
+                        }
+                        LogAml::Off => {}
+                    }
                 }
                 DescriptorTableBody::Unknown(_) => {
                     writeln!(f, "  {:X?}", entry.header)?;
