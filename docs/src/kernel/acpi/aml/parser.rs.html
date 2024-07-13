@@ -1860,6 +1860,78 @@
 <a href="#1858" id="1858">1858</a>
 <a href="#1859" id="1859">1859</a>
 <a href="#1860" id="1860">1860</a>
+<a href="#1861" id="1861">1861</a>
+<a href="#1862" id="1862">1862</a>
+<a href="#1863" id="1863">1863</a>
+<a href="#1864" id="1864">1864</a>
+<a href="#1865" id="1865">1865</a>
+<a href="#1866" id="1866">1866</a>
+<a href="#1867" id="1867">1867</a>
+<a href="#1868" id="1868">1868</a>
+<a href="#1869" id="1869">1869</a>
+<a href="#1870" id="1870">1870</a>
+<a href="#1871" id="1871">1871</a>
+<a href="#1872" id="1872">1872</a>
+<a href="#1873" id="1873">1873</a>
+<a href="#1874" id="1874">1874</a>
+<a href="#1875" id="1875">1875</a>
+<a href="#1876" id="1876">1876</a>
+<a href="#1877" id="1877">1877</a>
+<a href="#1878" id="1878">1878</a>
+<a href="#1879" id="1879">1879</a>
+<a href="#1880" id="1880">1880</a>
+<a href="#1881" id="1881">1881</a>
+<a href="#1882" id="1882">1882</a>
+<a href="#1883" id="1883">1883</a>
+<a href="#1884" id="1884">1884</a>
+<a href="#1885" id="1885">1885</a>
+<a href="#1886" id="1886">1886</a>
+<a href="#1887" id="1887">1887</a>
+<a href="#1888" id="1888">1888</a>
+<a href="#1889" id="1889">1889</a>
+<a href="#1890" id="1890">1890</a>
+<a href="#1891" id="1891">1891</a>
+<a href="#1892" id="1892">1892</a>
+<a href="#1893" id="1893">1893</a>
+<a href="#1894" id="1894">1894</a>
+<a href="#1895" id="1895">1895</a>
+<a href="#1896" id="1896">1896</a>
+<a href="#1897" id="1897">1897</a>
+<a href="#1898" id="1898">1898</a>
+<a href="#1899" id="1899">1899</a>
+<a href="#1900" id="1900">1900</a>
+<a href="#1901" id="1901">1901</a>
+<a href="#1902" id="1902">1902</a>
+<a href="#1903" id="1903">1903</a>
+<a href="#1904" id="1904">1904</a>
+<a href="#1905" id="1905">1905</a>
+<a href="#1906" id="1906">1906</a>
+<a href="#1907" id="1907">1907</a>
+<a href="#1908" id="1908">1908</a>
+<a href="#1909" id="1909">1909</a>
+<a href="#1910" id="1910">1910</a>
+<a href="#1911" id="1911">1911</a>
+<a href="#1912" id="1912">1912</a>
+<a href="#1913" id="1913">1913</a>
+<a href="#1914" id="1914">1914</a>
+<a href="#1915" id="1915">1915</a>
+<a href="#1916" id="1916">1916</a>
+<a href="#1917" id="1917">1917</a>
+<a href="#1918" id="1918">1918</a>
+<a href="#1919" id="1919">1919</a>
+<a href="#1920" id="1920">1920</a>
+<a href="#1921" id="1921">1921</a>
+<a href="#1922" id="1922">1922</a>
+<a href="#1923" id="1923">1923</a>
+<a href="#1924" id="1924">1924</a>
+<a href="#1925" id="1925">1925</a>
+<a href="#1926" id="1926">1926</a>
+<a href="#1927" id="1927">1927</a>
+<a href="#1928" id="1928">1928</a>
+<a href="#1929" id="1929">1929</a>
+<a href="#1930" id="1930">1930</a>
+<a href="#1931" id="1931">1931</a>
+<a href="#1932" id="1932">1932</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>alloc::{
     boxed::Box,
     collections::{BTreeMap, BTreeSet},
@@ -1874,6 +1946,7 @@
 </span><span class="kw">pub enum </span>AmlParseError {
     UnexpectedEndOfCode,
     InvalidPkgLengthLead,
+    InvalidTermArgInPackage,
     RemainingBytes(usize),
     CannotMoveBackward,
     InvalidTarget(u8),
@@ -1896,7 +1969,7 @@
 }
 
 <span class="attr">#[derive(Debug, Clone)]
-</span><span class="kw">pub enum </span>DataObject {
+</span><span class="kw">pub enum </span>IntegerData {
     ConstZero,
     ConstOne,
     ConstOnes,
@@ -1904,6 +1977,21 @@
     WordConst(u16),
     DWordConst(u32),
     QWordConst(u64),
+}
+
+<span class="attr">#[derive(Debug, Clone)]
+</span><span class="kw">pub enum </span>DataObject {
+    Integer(IntegerData),
+    Buffer(Box&lt;TermArg&gt;, Vec&lt;u8&gt;),
+    Package(u8, Vec&lt;PackageElement&gt;),
+    VarPackage(Box&lt;TermArg&gt;, Vec&lt;PackageElement&gt;),
+    String(String),
+}
+
+<span class="attr">#[derive(Debug, Clone)]
+</span><span class="kw">pub enum </span>PackageElement {
+    DataObject(DataObject),
+    Name(String),
 }
 
 <span class="attr">#[derive(Debug, Clone)]
@@ -1917,11 +2005,7 @@
     PowerResource(PowerResource),
     Method(MethodObj),
     NameObj(String, TermArg),
-    Package(u8, Vec&lt;TermArg&gt;),
-    VarPackage(TermArg, Vec&lt;TermArg&gt;),
     Alias(String, String),
-    String(String),
-    Buffer(TermArg, Vec&lt;u8&gt;),
     ToHexString(TermArg, Box&lt;Target&gt;),
     ToBuffer(TermArg, Box&lt;Target&gt;),
     ToDecimalString(TermArg, Box&lt;Target&gt;),
@@ -2430,7 +2514,6 @@
                     | AmlTerm::Method(<span class="kw">_</span>)
                     | AmlTerm::NameObj(<span class="kw">_</span>, <span class="kw">_</span>)
                     | AmlTerm::Alias(<span class="kw">_</span>, <span class="kw">_</span>)
-                    | AmlTerm::Buffer(<span class="kw">_</span>, <span class="kw">_</span>)
                     | AmlTerm::ToHexString(<span class="kw">_</span>, <span class="kw">_</span>)
                     | AmlTerm::ToBuffer(<span class="kw">_</span>, <span class="kw">_</span>)
                     | AmlTerm::ToDecimalString(<span class="kw">_</span>, <span class="kw">_</span>)
@@ -2501,7 +2584,9 @@
 
                 <span class="kw">let </span><span class="kw-2">mut </span>term = <span class="self">self</span>.parse_term_arg()<span class="question-mark">?</span>;
 
-                <span class="kw">if let </span>TermArg::DataObject(DataObject::DWordConst(data)) = term {
+                <span class="kw">if let </span>TermArg::DataObject(DataObject::Integer(IntegerData::DWordConst(data))) =
+                    term
+                {
                     <span class="kw">if </span>name.contains(<span class="string">"ID"</span>) {
                         term = TermArg::EisaId(<span class="self">Self</span>::parse_eisa_id(data))
                     }
@@ -2509,49 +2594,9 @@
 
                 AmlTerm::NameObj(name, term)
             }
-            <span class="number">0x0d </span>=&gt; {
-                <span class="kw">let </span><span class="kw-2">mut </span>str = String::new();
-                <span class="kw">loop </span>{
-                    <span class="kw">let </span>byte = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
-                    <span class="macro">trace!</span>(<span class="string">"byte: {:x}"</span>, byte);
-                    <span class="kw">if </span>byte == <span class="number">0 </span>{
-                        <span class="kw">break</span>;
-                    }
-                    str.push(byte <span class="kw">as </span>char);
-                }
-                AmlTerm::String(str)
-            }
+
             <span class="number">0x10 </span>=&gt; AmlTerm::Scope(ScopeObj::parse(<span class="self">self</span>)<span class="question-mark">?</span>),
-            <span class="number">0x11 </span>=&gt; {
-                <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.get_inner_parser()<span class="question-mark">?</span>;
-                <span class="kw">let </span>buf_size = inner.parse_term_arg()<span class="question-mark">?</span>;
-                <span class="comment">// no need for `check_empty`, just take all remaining
-                </span>AmlTerm::Buffer(buf_size, inner.code[inner.pos..].to_vec())
-            }
-            <span class="number">0x12 </span>=&gt; {
-                <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.get_inner_parser()<span class="question-mark">?</span>;
-                <span class="kw">let </span>package_size = inner.get_next_byte()<span class="question-mark">?</span>;
-                <span class="macro">trace!</span>(<span class="string">"package size: {:x}"</span>, package_size);
-                <span class="kw">let </span><span class="kw-2">mut </span>package_elements = Vec::new();
-                <span class="kw">while </span>inner.pos &lt; inner.code.len() {
-                    package_elements.push(inner.parse_term_arg()<span class="question-mark">?</span>);
-                    <span class="macro">trace!</span>(<span class="string">"package element: {:?}"</span>, package_elements.last());
-                }
-                inner.check_empty()<span class="question-mark">?</span>;
-                AmlTerm::Package(package_size, package_elements)
-            }
-            <span class="number">0x13 </span>=&gt; {
-                <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.get_inner_parser()<span class="question-mark">?</span>;
-                <span class="kw">let </span>package_size = inner.parse_term_arg()<span class="question-mark">?</span>;
-                <span class="kw">let </span><span class="kw-2">mut </span>package_elements = Vec::new();
-                <span class="macro">trace!</span>(<span class="string">"varpackage size: {:x?}"</span>, package_size);
-                <span class="kw">while </span>inner.pos &lt; inner.code.len() {
-                    package_elements.push(inner.parse_term_arg()<span class="question-mark">?</span>);
-                    <span class="macro">trace!</span>(<span class="string">"varpackage element: {:?}"</span>, package_elements.last());
-                }
-                inner.check_empty()<span class="question-mark">?</span>;
-                AmlTerm::VarPackage(package_size, package_elements)
-            }
+
             <span class="number">0x14 </span>=&gt; {
                 <span class="kw">let </span>method = MethodObj::parse(<span class="self">self</span>)<span class="question-mark">?</span>;
                 <span class="self">self</span>.state.add_method(<span class="kw-2">&amp;</span>method.name, method.arg_count());
@@ -2783,6 +2828,18 @@
         <span class="self">self</span>.parse_term_arg_general(<span class="bool-val">true</span>, <span class="bool-val">true</span>)
     }
 
+    <span class="kw">fn </span>parse_package_element(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;PackageElement, AmlParseError&gt; {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(data_object) = <span class="self">self</span>.try_parse_data_object()<span class="question-mark">? </span>{
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(PackageElement::DataObject(data_object));
+        }
+
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = <span class="self">self</span>.try_parse_name()<span class="question-mark">? </span>{
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(PackageElement::Name(name));
+        }
+
+        <span class="prelude-val">Err</span>(AmlParseError::InvalidTermArgInPackage)
+    }
+
     <span class="kw">fn </span>parse_eisa_id(id: u32) -&gt; String {
         <span class="comment">// 1st 2 hex of the product id
         </span><span class="kw">let </span>byte2 = (id &gt;&gt; <span class="number">16</span>) &amp; <span class="number">0xFF</span>;
@@ -2810,23 +2867,19 @@
         <span class="macro">format!</span>(<span class="string">"{manuf}{byte2:02X}{byte3:02X}"</span>)
     }
 
-    <span class="kw">fn </span>parse_term_arg_general(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        can_call_method: bool,
-        expect_data_after: bool,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermArg, AmlParseError&gt; {
+    <span class="kw">fn </span>try_parse_data_object(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;DataObject&gt;, AmlParseError&gt; {
         <span class="kw">let </span>lead_byte = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>x = <span class="kw">match </span>lead_byte {
-            <span class="number">0x0 </span>=&gt; <span class="prelude-val">Ok</span>(TermArg::DataObject(DataObject::ConstZero)),
-            <span class="number">0x1 </span>=&gt; <span class="prelude-val">Ok</span>(TermArg::DataObject(DataObject::ConstOne)),
+        <span class="kw">let </span>result = <span class="kw">match </span>lead_byte {
+            <span class="number">0x0 </span>=&gt; DataObject::Integer(IntegerData::ConstZero),
+            <span class="number">0x1 </span>=&gt; DataObject::Integer(IntegerData::ConstOne),
             <span class="number">0xA </span>=&gt; {
                 <span class="kw">let </span>data = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(TermArg::DataObject(DataObject::ByteConst(data)))
+                DataObject::Integer(IntegerData::ByteConst(data))
             }
             <span class="number">0xB </span>=&gt; {
                 <span class="kw">let </span>data = u16::from_le_bytes([<span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>, <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>]);
-                <span class="prelude-val">Ok</span>(TermArg::DataObject(DataObject::WordConst(data)))
+                DataObject::Integer(IntegerData::WordConst(data))
             }
             <span class="number">0xC </span>=&gt; {
                 <span class="kw">let </span>data = u32::from_le_bytes([
@@ -2835,7 +2888,19 @@
                     <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>,
                     <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>,
                 ]);
-                <span class="prelude-val">Ok</span>(TermArg::DataObject(DataObject::DWordConst(data)))
+                DataObject::Integer(IntegerData::DWordConst(data))
+            }
+            <span class="number">0x0D </span>=&gt; {
+                <span class="kw">let </span><span class="kw-2">mut </span>str = String::new();
+                <span class="kw">loop </span>{
+                    <span class="kw">let </span>byte = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
+                    <span class="macro">trace!</span>(<span class="string">"byte: {:x}"</span>, byte);
+                    <span class="kw">if </span>byte == <span class="number">0 </span>{
+                        <span class="kw">break</span>;
+                    }
+                    str.push(byte <span class="kw">as </span>char);
+                }
+                DataObject::String(str)
             }
             <span class="number">0xE </span>=&gt; {
                 <span class="kw">let </span>data = u64::from_le_bytes([
@@ -2848,69 +2913,113 @@
                     <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>,
                     <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>,
                 ]);
-                <span class="prelude-val">Ok</span>(TermArg::DataObject(DataObject::QWordConst(data)))
+                DataObject::Integer(IntegerData::QWordConst(data))
             }
-            <span class="number">0xFF </span>=&gt; <span class="prelude-val">Ok</span>(TermArg::DataObject(DataObject::ConstOnes)),
-            <span class="kw">_ </span>=&gt; {
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(local) = <span class="self">self</span>.try_parse_local(lead_byte)<span class="question-mark">? </span>{
-                    <span class="prelude-val">Ok</span>(TermArg::Local(local))
-                } <span class="kw">else if let </span><span class="prelude-val">Some</span>(arg) = <span class="self">self</span>.try_parse_arg(lead_byte)<span class="question-mark">? </span>{
-                    <span class="prelude-val">Ok</span>(TermArg::Arg(arg))
-                } <span class="kw">else </span>{
-                    <span class="self">self</span>.backward(<span class="number">1</span>)<span class="question-mark">?</span>;
-                    <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = <span class="self">self</span>.try_parse_name()<span class="question-mark">? </span>{
-                        <span class="macro">assert!</span>(!name.is_empty());
-                        <span class="kw">let </span>option_nargs = <span class="self">self</span>.state.find_method(<span class="kw-2">&amp;</span>name).or_else(|| {
-                            <span class="kw">if </span><span class="self">self</span>.state.find_name(<span class="kw-2">&amp;</span>name) {
-                                <span class="prelude-val">None
-                            </span>} <span class="kw">else if </span>can_call_method {
-                                <span class="macro">trace!</span>(<span class="string">"predicting possible args for {name}"</span>);
-                                <span class="kw">let </span>possible_args =
-                                    <span class="self">self</span>.predict_possible_args(expect_data_after, <span class="kw-2">&amp;</span>name);
-                                <span class="macro">trace!</span>(<span class="string">"got possible args: {possible_args} {name}"</span>);
-                                <span class="comment">// if its 0 and we are inside a method call, probably this is just a named variable
-                                </span><span class="kw">if </span>possible_args == <span class="number">0 </span>{
-                                    <span class="self">self</span>.state.add_name(name.clone());
-                                    <span class="prelude-val">None
-                                </span>} <span class="kw">else </span>{
-                                    <span class="prelude-val">Some</span>(possible_args)
-                                }
-                            } <span class="kw">else </span>{
-                                <span class="comment">// we didn't find, the name, and we can't use methods, so assume it's a name
-                                </span><span class="self">self</span>.state.add_name(name.clone());
-                                <span class="prelude-val">None
-                            </span>}
-                        });
-                        <span class="kw">if let </span><span class="prelude-val">Some</span>(n_args) = option_nargs {
-                            <span class="kw">let </span><span class="kw-2">mut </span>args = Vec::new();
-                            <span class="kw">for _ in </span><span class="number">0</span>..n_args {
-                                args.push(<span class="self">self</span>.parse_term_arg()<span class="question-mark">?</span>);
-                            }
-
-                            <span class="prelude-val">Ok</span>(TermArg::Expression(Box::new(AmlTerm::MethodCall(
-                                name, args,
-                            ))))
-                        } <span class="kw">else </span>{
-                            <span class="prelude-val">Ok</span>(TermArg::Name(name))
-                        }
-                    } <span class="kw">else </span>{
-                        <span class="comment">// didn't work for `name`, we need to go forward to be back to where we were before
-                        </span><span class="self">self</span>.forward(<span class="number">1</span>)<span class="question-mark">?</span>;
-
-                        <span class="kw">if let </span><span class="prelude-val">Some</span>(term) = <span class="self">self
-                            </span>.try_parse_term(lead_byte)<span class="question-mark">?
-                            </span>.map(|term| TermArg::Expression(Box::new(term)))
-                        {
-                            <span class="prelude-val">Ok</span>(term)
-                        } <span class="kw">else </span>{
-                            <span class="macro">todo!</span>(<span class="string">"term arg lead byte: {:x}"</span>, lead_byte)
-                        }
-                    }
+            <span class="number">0x11 </span>=&gt; {
+                <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.get_inner_parser()<span class="question-mark">?</span>;
+                <span class="kw">let </span>buf_size = inner.parse_term_arg()<span class="question-mark">?</span>;
+                <span class="comment">// no need for `check_empty`, just take all remaining
+                </span>DataObject::Buffer(Box::new(buf_size), inner.code[inner.pos..].to_vec())
+            }
+            <span class="number">0x12 </span>=&gt; {
+                <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.get_inner_parser()<span class="question-mark">?</span>;
+                <span class="kw">let </span>package_size = inner.get_next_byte()<span class="question-mark">?</span>;
+                <span class="macro">trace!</span>(<span class="string">"package size: {:x}"</span>, package_size);
+                <span class="kw">let </span><span class="kw-2">mut </span>package_elements = Vec::new();
+                <span class="kw">while </span>inner.pos &lt; inner.code.len() {
+                    package_elements.push(inner.parse_package_element()<span class="question-mark">?</span>);
+                    <span class="macro">trace!</span>(<span class="string">"package element: {:?}"</span>, package_elements.last());
                 }
+                inner.check_empty()<span class="question-mark">?</span>;
+                DataObject::Package(package_size, package_elements)
+            }
+            <span class="number">0x13 </span>=&gt; {
+                <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.get_inner_parser()<span class="question-mark">?</span>;
+                <span class="kw">let </span>package_size = inner.parse_term_arg()<span class="question-mark">?</span>;
+                <span class="kw">let </span><span class="kw-2">mut </span>package_elements = Vec::new();
+                <span class="macro">trace!</span>(<span class="string">"varpackage size: {:x?}"</span>, package_size);
+                <span class="kw">while </span>inner.pos &lt; inner.code.len() {
+                    package_elements.push(inner.parse_package_element()<span class="question-mark">?</span>);
+                    <span class="macro">trace!</span>(<span class="string">"varpackage element: {:?}"</span>, package_elements.last());
+                }
+                inner.check_empty()<span class="question-mark">?</span>;
+                DataObject::VarPackage(Box::new(package_size), package_elements)
+            }
+            <span class="number">0xFF </span>=&gt; DataObject::Integer(IntegerData::ConstOnes),
+            <span class="kw">_ </span>=&gt; {
+                <span class="self">self</span>.backward(<span class="number">1</span>)<span class="question-mark">?</span>;
+                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
             }
         };
-        <span class="macro">trace!</span>(<span class="string">"term arg: {:x?}"</span>, x);
-        x
+
+        <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(result))
+    }
+
+    <span class="kw">fn </span>parse_term_arg_general(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        can_call_method: bool,
+        expect_data_after: bool,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermArg, AmlParseError&gt; {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(data_object) = <span class="self">self</span>.try_parse_data_object()<span class="question-mark">? </span>{
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(TermArg::DataObject(data_object));
+        }
+
+        <span class="kw">let </span>lead_byte = <span class="self">self</span>.get_next_byte()<span class="question-mark">?</span>;
+
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(local) = <span class="self">self</span>.try_parse_local(lead_byte)<span class="question-mark">? </span>{
+            <span class="prelude-val">Ok</span>(TermArg::Local(local))
+        } <span class="kw">else if let </span><span class="prelude-val">Some</span>(arg) = <span class="self">self</span>.try_parse_arg(lead_byte)<span class="question-mark">? </span>{
+            <span class="prelude-val">Ok</span>(TermArg::Arg(arg))
+        } <span class="kw">else </span>{
+            <span class="self">self</span>.backward(<span class="number">1</span>)<span class="question-mark">?</span>;
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = <span class="self">self</span>.try_parse_name()<span class="question-mark">? </span>{
+                <span class="macro">assert!</span>(!name.is_empty());
+                <span class="kw">let </span>option_nargs = <span class="self">self</span>.state.find_method(<span class="kw-2">&amp;</span>name).or_else(|| {
+                    <span class="kw">if </span><span class="self">self</span>.state.find_name(<span class="kw-2">&amp;</span>name) {
+                        <span class="prelude-val">None
+                    </span>} <span class="kw">else if </span>can_call_method {
+                        <span class="macro">trace!</span>(<span class="string">"predicting possible args for {name}"</span>);
+                        <span class="kw">let </span>possible_args = <span class="self">self</span>.predict_possible_args(expect_data_after, <span class="kw-2">&amp;</span>name);
+                        <span class="macro">trace!</span>(<span class="string">"got possible args: {possible_args} {name}"</span>);
+                        <span class="comment">// if its 0 and we are inside a method call, probably this is just a named variable
+                        </span><span class="kw">if </span>possible_args == <span class="number">0 </span>{
+                            <span class="self">self</span>.state.add_name(name.clone());
+                            <span class="prelude-val">None
+                        </span>} <span class="kw">else </span>{
+                            <span class="prelude-val">Some</span>(possible_args)
+                        }
+                    } <span class="kw">else </span>{
+                        <span class="comment">// we didn't find, the name, and we can't use methods, so assume it's a name
+                        </span><span class="self">self</span>.state.add_name(name.clone());
+                        <span class="prelude-val">None
+                    </span>}
+                });
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(n_args) = option_nargs {
+                    <span class="kw">let </span><span class="kw-2">mut </span>args = Vec::new();
+                    <span class="kw">for _ in </span><span class="number">0</span>..n_args {
+                        args.push(<span class="self">self</span>.parse_term_arg()<span class="question-mark">?</span>);
+                    }
+
+                    <span class="prelude-val">Ok</span>(TermArg::Expression(Box::new(AmlTerm::MethodCall(
+                        name, args,
+                    ))))
+                } <span class="kw">else </span>{
+                    <span class="prelude-val">Ok</span>(TermArg::Name(name))
+                }
+            } <span class="kw">else </span>{
+                <span class="comment">// didn't work for `name`, we need to go forward to be back to where we were before
+                </span><span class="self">self</span>.forward(<span class="number">1</span>)<span class="question-mark">?</span>;
+
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(term) = <span class="self">self
+                    </span>.try_parse_term(lead_byte)<span class="question-mark">?
+                    </span>.map(|term| TermArg::Expression(Box::new(term)))
+                {
+                    <span class="prelude-val">Ok</span>(term)
+                } <span class="kw">else </span>{
+                    <span class="macro">todo!</span>(<span class="string">"term arg lead byte: {:x}"</span>, lead_byte)
+                }
+            }
+        }
     }
 
     <span class="kw">fn </span>try_parse_name(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;String&gt;, AmlParseError&gt; {
@@ -3160,6 +3269,81 @@
     <span class="prelude-val">Ok</span>(())
 }
 
+<span class="kw">fn </span>display_package_elements_list&lt;<span class="lifetime">'a</span>&gt;(
+    elements: <span class="kw">impl </span>ExactSizeIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>PackageElement&gt;,
+    depth_divider: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+    f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;,
+    depth: usize,
+) -&gt; fmt::Result {
+    <span class="kw">let </span>len = elements.len();
+    <span class="kw">for </span>(i, element) <span class="kw">in </span>elements.enumerate() {
+        <span class="kw">let </span><span class="kw-2">mut </span>add_depth = <span class="number">0</span>;
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(depth_divider) = depth_divider {
+            <span class="kw">if </span>i % depth_divider == <span class="number">0 </span>{
+                <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+                display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
+            }
+            add_depth = <span class="number">1</span>;
+        }
+        <span class="kw">match </span>element {
+            PackageElement::DataObject(data) =&gt; display_data_object(data, f, depth + add_depth)<span class="question-mark">?</span>,
+            PackageElement::Name(name) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, name)<span class="question-mark">?</span>,
+        }
+        <span class="kw">if </span>i != len - <span class="number">1 </span>{
+            <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
+        }
+    }
+    <span class="prelude-val">Ok</span>(())
+}
+
+<span class="kw">fn </span>display_data_object(data: <span class="kw-2">&amp;</span>DataObject, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;, depth: usize) -&gt; fmt::Result {
+    <span class="kw">match </span>data {
+        DataObject::Integer(int) =&gt; <span class="kw">match </span>int {
+            IntegerData::ConstZero =&gt; <span class="macro">write!</span>(f, <span class="string">"Zero"</span>),
+            IntegerData::ConstOne =&gt; <span class="macro">write!</span>(f, <span class="string">"One"</span>),
+            IntegerData::ConstOnes =&gt; <span class="macro">write!</span>(f, <span class="string">"0xFFFFFFFFFFFFFFFF"</span>),
+            IntegerData::ByteConst(data) =&gt; <span class="macro">write!</span>(f, <span class="string">"0x{:02X}"</span>, data),
+            IntegerData::WordConst(data) =&gt; <span class="macro">write!</span>(f, <span class="string">"0x{:04X}"</span>, data),
+            IntegerData::DWordConst(data) =&gt; <span class="macro">write!</span>(f, <span class="string">"0x{:08X}"</span>, data),
+            IntegerData::QWordConst(data) =&gt; <span class="macro">write!</span>(f, <span class="string">"0x{:016X}"</span>, data),
+        },
+        DataObject::Buffer(size, data) =&gt; {
+            <span class="macro">write!</span>(f, <span class="string">"Buffer ("</span>)<span class="question-mark">?</span>;
+            display_term_arg(size, f, depth)<span class="question-mark">?</span>;
+            <span class="macro">write!</span>(f, <span class="string">") {{"</span>)<span class="question-mark">?</span>;
+            <span class="kw">for </span>(i, byte) <span class="kw">in </span>data.iter().enumerate() {
+                <span class="kw">if </span>i % <span class="number">16 </span>== <span class="number">0 </span>{
+                    <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+                    display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
+                }
+                <span class="macro">write!</span>(f, <span class="string">"0x{:02X} "</span>, byte)<span class="question-mark">?</span>;
+            }
+            <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+            display_depth(f, depth)<span class="question-mark">?</span>;
+            <span class="macro">write!</span>(f, <span class="string">"}}"</span>)
+        }
+        DataObject::Package(size, elements) =&gt; {
+            <span class="macro">write!</span>(f, <span class="string">"Package (0x{:02X}) {{"</span>, size)<span class="question-mark">?</span>;
+            display_package_elements_list(elements.iter(), <span class="prelude-val">Some</span>(<span class="number">4</span>), f, depth)<span class="question-mark">?</span>;
+            <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+            display_depth(f, depth)<span class="question-mark">?</span>;
+            <span class="macro">write!</span>(f, <span class="string">"}}"</span>)
+        }
+        DataObject::VarPackage(size, elements) =&gt; {
+            <span class="macro">write!</span>(f, <span class="string">"VarPackage ("</span>)<span class="question-mark">?</span>;
+            display_term_arg(size, f, depth)<span class="question-mark">?</span>;
+            <span class="macro">write!</span>(f, <span class="string">") {{"</span>)<span class="question-mark">?</span>;
+            display_package_elements_list(elements.iter(), <span class="prelude-val">Some</span>(<span class="number">4</span>), f, depth)<span class="question-mark">?</span>;
+            <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+            display_depth(f, depth)<span class="question-mark">?</span>;
+            <span class="macro">write!</span>(f, <span class="string">"}}"</span>)
+        }
+        DataObject::String(str) =&gt; {
+            <span class="macro">write!</span>(f, <span class="string">"\"{}\""</span>, str.replace(<span class="string">'\n'</span>, <span class="string">"\\n"</span>))
+        }
+    }
+}
+
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>display_term_arg(
     term_arg: <span class="kw-2">&amp;</span>TermArg,
     f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;,
@@ -3167,15 +3351,7 @@
 ) -&gt; fmt::Result {
     <span class="kw">match </span>term_arg {
         TermArg::Expression(term) =&gt; display_term(term, f, depth),
-        TermArg::DataObject(data) =&gt; <span class="kw">match </span>data {
-            DataObject::ConstZero =&gt; <span class="macro">write!</span>(f, <span class="string">"Zero"</span>),
-            DataObject::ConstOne =&gt; <span class="macro">write!</span>(f, <span class="string">"One"</span>),
-            DataObject::ConstOnes =&gt; <span class="macro">write!</span>(f, <span class="string">"0xFFFFFFFFFFFFFFFF"</span>),
-            DataObject::ByteConst(data) =&gt; <span class="macro">write!</span>(f, <span class="string">"0x{:02X}"</span>, data),
-            DataObject::WordConst(data) =&gt; <span class="macro">write!</span>(f, <span class="string">"0x{:04X}"</span>, data),
-            DataObject::DWordConst(data) =&gt; <span class="macro">write!</span>(f, <span class="string">"0x{:08X}"</span>, data),
-            DataObject::QWordConst(data) =&gt; <span class="macro">write!</span>(f, <span class="string">"0x{:016X}"</span>, data),
-        },
+        TermArg::DataObject(data) =&gt; display_data_object(data, f, depth),
         TermArg::Arg(arg) =&gt; <span class="macro">write!</span>(f, <span class="string">"Arg{:x}"</span>, arg),
         TermArg::Local(local) =&gt; <span class="macro">write!</span>(f, <span class="string">"Local{:x}"</span>, local),
         TermArg::Name(name) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, name),
@@ -3382,22 +3558,7 @@
             display_depth(f, depth)<span class="question-mark">?</span>;
             <span class="macro">writeln!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
         }
-        AmlTerm::Package(size, elements) =&gt; {
-            <span class="macro">write!</span>(f, <span class="string">"Package (0x{:02X}) {{"</span>, size)<span class="question-mark">?</span>;
-            display_terms_list(elements.iter(), <span class="prelude-val">Some</span>(<span class="number">4</span>), f, depth)<span class="question-mark">?</span>;
-            <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
-            display_depth(f, depth)<span class="question-mark">?</span>;
-            <span class="macro">write!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
-        }
-        AmlTerm::VarPackage(size, elements) =&gt; {
-            <span class="macro">write!</span>(f, <span class="string">"VarPackage ("</span>)<span class="question-mark">?</span>;
-            display_term_arg(size, f, depth)<span class="question-mark">?</span>;
-            <span class="macro">write!</span>(f, <span class="string">") {{"</span>)<span class="question-mark">?</span>;
-            display_terms_list(elements.iter(), <span class="prelude-val">Some</span>(<span class="number">4</span>), f, depth)<span class="question-mark">?</span>;
-            <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
-            display_depth(f, depth)<span class="question-mark">?</span>;
-            <span class="macro">write!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
-        }
+
         AmlTerm::Processor(processor) =&gt; {
             <span class="macro">writeln!</span>(
                 f,
@@ -3417,9 +3578,6 @@
             display_terms(<span class="kw-2">&amp;</span>power_resource.term_list, f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
             display_depth(f, depth)<span class="question-mark">?</span>;
             <span class="macro">writeln!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
-        }
-        AmlTerm::String(str) =&gt; {
-            <span class="macro">write!</span>(f, <span class="string">"\"{}\""</span>, str.replace(<span class="string">'\n'</span>, <span class="string">"\\n"</span>))<span class="question-mark">?</span>;
         }
         AmlTerm::Method(method) =&gt; {
             display_method(method, f, depth)<span class="question-mark">?</span>;
@@ -3564,21 +3722,7 @@
         AmlTerm::Index(term1, term2, target) =&gt; {
             display_index(term1, term2, target, f, depth)<span class="question-mark">?</span>;
         }
-        AmlTerm::Buffer(size, data) =&gt; {
-            <span class="macro">write!</span>(f, <span class="string">"Buffer ("</span>)<span class="question-mark">?</span>;
-            display_term_arg(size, f, depth)<span class="question-mark">?</span>;
-            <span class="macro">write!</span>(f, <span class="string">") {{"</span>)<span class="question-mark">?</span>;
-            <span class="kw">for </span>(i, byte) <span class="kw">in </span>data.iter().enumerate() {
-                <span class="kw">if </span>i % <span class="number">16 </span>== <span class="number">0 </span>{
-                    <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
-                    display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-                }
-                <span class="macro">write!</span>(f, <span class="string">"0x{:02X} "</span>, byte)<span class="question-mark">?</span>;
-            }
-            <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
-            display_depth(f, depth)<span class="question-mark">?</span>;
-            <span class="macro">write!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
-        }
+
         AmlTerm::Mutex(name, sync_level) =&gt; {
             <span class="macro">write!</span>(f, <span class="string">"Mutex ({}, {})"</span>, name, sync_level)<span class="question-mark">?</span>;
         }
