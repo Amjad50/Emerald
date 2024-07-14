@@ -46,20 +46,87 @@ pub enum IntegerData {
     QWordConst(u64),
 }
 
+#[allow(dead_code)]
+impl IntegerData {
+    #[inline]
+    pub fn as_u8(&self) -> Option<u8> {
+        match self {
+            Self::ByteConst(byte) => Some(*byte),
+            Self::ConstZero => Some(0),
+            Self::ConstOne => Some(1),
+            Self::ConstOnes => Some(0xFF),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn as_u16(&self) -> Option<u16> {
+        match self {
+            Self::WordConst(word) => Some(*word),
+            Self::ConstOnes => Some(0xFFFF),
+            _ => self.as_u8().map(|byte| byte.into()),
+        }
+    }
+
+    #[inline]
+    pub fn as_u32(&self) -> Option<u32> {
+        match self {
+            Self::DWordConst(dword) => Some(*dword),
+            Self::ConstOnes => Some(0xFFFFFFFF),
+            _ => self.as_u16().map(|word| word.into()),
+        }
+    }
+
+    #[inline]
+    pub fn as_u64(&self) -> u64 {
+        match self {
+            Self::QWordConst(qword) => *qword,
+            Self::ConstOnes => 0xFFFFFFFFFFFFFFFF,
+            _ => self
+                .as_u32()
+                .map(|dword| dword.into())
+                .expect("Can't fail, all branches are covered"),
+        }
+    }
+}
+
+/// DataObject representation as it is in the AML, which may contain expressions
+/// that need to be evaluated at runtime
+///
+/// For final result, see [DataObject][super::execution::DataObject]
 #[derive(Debug, Clone)]
-pub enum DataObject {
+pub enum UnresolvedDataObject {
     Integer(IntegerData),
     Buffer(Box<TermArg>, Vec<u8>),
-    Package(u8, Vec<PackageElement>),
-    VarPackage(Box<TermArg>, Vec<PackageElement>),
+    Package(u8, Vec<PackageElement<UnresolvedDataObject>>),
+    VarPackage(Box<TermArg>, Vec<PackageElement<UnresolvedDataObject>>),
     String(String),
     EisaId(String),
 }
 
+/// `D` is the type of data object, it can be [UnresolvedDataObject] or [DataObject][super::execution::DataObject] depending
+/// on the state, either parsed program or executed and returned result
 #[derive(Debug, Clone)]
-pub enum PackageElement {
-    DataObject(DataObject),
+pub enum PackageElement<D> {
+    DataObject(D),
     Name(String),
+}
+
+#[allow(dead_code)]
+impl<T> PackageElement<T> {
+    pub fn as_data(&self) -> Option<&T> {
+        match self {
+            Self::DataObject(data) => Some(data),
+            _ => None,
+        }
+    }
+
+    pub fn as_name(&self) -> Option<&str> {
+        match self {
+            Self::Name(name) => Some(name),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -72,7 +139,7 @@ pub enum AmlTerm {
     Processor(ProcessorDeprecated),
     PowerResource(PowerResource),
     Method(MethodObj),
-    NameObj(String, DataObject),
+    NameObj(String, UnresolvedDataObject),
     Alias(String, String),
     ToHexString(TermArg, Box<Target>),
     ToBuffer(TermArg, Box<Target>),
@@ -142,7 +209,7 @@ pub enum AmlTerm {
 #[derive(Debug, Clone)]
 pub enum TermArg {
     Expression(Box<AmlTerm>),
-    DataObject(DataObject),
+    DataObject(UnresolvedDataObject),
     Arg(u8),
     Local(u8),
     Name(String),
@@ -653,17 +720,15 @@ impl Parser<'_> {
                     .try_parse_data_object()?
                     .ok_or(AmlParseError::NameObjectNotContainingDataObject)?;
 
-                if let DataObject::Integer(IntegerData::DWordConst(data)) = data_object {
+                if let UnresolvedDataObject::Integer(IntegerData::DWordConst(data)) = data_object {
                     if name.contains("ID") {
-                        data_object = DataObject::EisaId(Self::parse_eisa_id(data))
+                        data_object = UnresolvedDataObject::EisaId(Self::parse_eisa_id(data))
                     }
                 }
 
                 AmlTerm::NameObj(name, data_object)
             }
-
             0x10 => AmlTerm::Scope(ScopeObj::parse(self)?),
-
             0x14 => {
                 let method = MethodObj::parse(self)?;
                 self.state.add_method(&method.name, method.arg_count());
@@ -895,7 +960,9 @@ impl Parser<'_> {
         self.parse_term_arg_general(true, true)
     }
 
-    fn parse_package_element(&mut self) -> Result<PackageElement, AmlParseError> {
+    fn parse_package_element(
+        &mut self,
+    ) -> Result<PackageElement<UnresolvedDataObject>, AmlParseError> {
         if let Some(data_object) = self.try_parse_data_object()? {
             return Ok(PackageElement::DataObject(data_object));
         }
@@ -934,19 +1001,19 @@ impl Parser<'_> {
         format!("{manuf}{byte2:02X}{byte3:02X}")
     }
 
-    fn try_parse_data_object(&mut self) -> Result<Option<DataObject>, AmlParseError> {
+    fn try_parse_data_object(&mut self) -> Result<Option<UnresolvedDataObject>, AmlParseError> {
         let lead_byte = self.get_next_byte()?;
 
         let result = match lead_byte {
-            0x0 => DataObject::Integer(IntegerData::ConstZero),
-            0x1 => DataObject::Integer(IntegerData::ConstOne),
+            0x0 => UnresolvedDataObject::Integer(IntegerData::ConstZero),
+            0x1 => UnresolvedDataObject::Integer(IntegerData::ConstOne),
             0xA => {
                 let data = self.get_next_byte()?;
-                DataObject::Integer(IntegerData::ByteConst(data))
+                UnresolvedDataObject::Integer(IntegerData::ByteConst(data))
             }
             0xB => {
                 let data = u16::from_le_bytes([self.get_next_byte()?, self.get_next_byte()?]);
-                DataObject::Integer(IntegerData::WordConst(data))
+                UnresolvedDataObject::Integer(IntegerData::WordConst(data))
             }
             0xC => {
                 let data = u32::from_le_bytes([
@@ -955,7 +1022,7 @@ impl Parser<'_> {
                     self.get_next_byte()?,
                     self.get_next_byte()?,
                 ]);
-                DataObject::Integer(IntegerData::DWordConst(data))
+                UnresolvedDataObject::Integer(IntegerData::DWordConst(data))
             }
             0x0D => {
                 let mut str = String::new();
@@ -967,7 +1034,7 @@ impl Parser<'_> {
                     }
                     str.push(byte as char);
                 }
-                DataObject::String(str)
+                UnresolvedDataObject::String(str)
             }
             0xE => {
                 let data = u64::from_le_bytes([
@@ -980,13 +1047,13 @@ impl Parser<'_> {
                     self.get_next_byte()?,
                     self.get_next_byte()?,
                 ]);
-                DataObject::Integer(IntegerData::QWordConst(data))
+                UnresolvedDataObject::Integer(IntegerData::QWordConst(data))
             }
             0x11 => {
                 let mut inner = self.get_inner_parser()?;
                 let buf_size = inner.parse_term_arg()?;
                 // no need for `check_empty`, just take all remaining
-                DataObject::Buffer(Box::new(buf_size), inner.code[inner.pos..].to_vec())
+                UnresolvedDataObject::Buffer(Box::new(buf_size), inner.code[inner.pos..].to_vec())
             }
             0x12 => {
                 let mut inner = self.get_inner_parser()?;
@@ -998,7 +1065,7 @@ impl Parser<'_> {
                     trace!("package element: {:?}", package_elements.last());
                 }
                 inner.check_empty()?;
-                DataObject::Package(package_size, package_elements)
+                UnresolvedDataObject::Package(package_size, package_elements)
             }
             0x13 => {
                 let mut inner = self.get_inner_parser()?;
@@ -1010,9 +1077,9 @@ impl Parser<'_> {
                     trace!("varpackage element: {:?}", package_elements.last());
                 }
                 inner.check_empty()?;
-                DataObject::VarPackage(Box::new(package_size), package_elements)
+                UnresolvedDataObject::VarPackage(Box::new(package_size), package_elements)
             }
-            0xFF => DataObject::Integer(IntegerData::ConstOnes),
+            0xFF => UnresolvedDataObject::Integer(IntegerData::ConstOnes),
             _ => {
                 self.backward(1)?;
                 return Ok(None);
@@ -1337,7 +1404,7 @@ pub(super) fn display_terms(
 }
 
 fn display_package_elements_list<'a>(
-    elements: impl ExactSizeIterator<Item = &'a PackageElement>,
+    elements: impl ExactSizeIterator<Item = &'a PackageElement<UnresolvedDataObject>>,
     depth_divider: Option<usize>,
     f: &mut fmt::Formatter<'_>,
     depth: usize,
@@ -1364,12 +1431,12 @@ fn display_package_elements_list<'a>(
 }
 
 pub(super) fn display_data_object(
-    data: &DataObject,
+    data: &UnresolvedDataObject,
     f: &mut fmt::Formatter<'_>,
     depth: usize,
 ) -> fmt::Result {
     match data {
-        DataObject::Integer(int) => match int {
+        UnresolvedDataObject::Integer(int) => match int {
             IntegerData::ConstZero => write!(f, "Zero"),
             IntegerData::ConstOne => write!(f, "One"),
             IntegerData::ConstOnes => write!(f, "0xFFFFFFFFFFFFFFFF"),
@@ -1378,7 +1445,7 @@ pub(super) fn display_data_object(
             IntegerData::DWordConst(data) => write!(f, "0x{:08X}", data),
             IntegerData::QWordConst(data) => write!(f, "0x{:016X}", data),
         },
-        DataObject::Buffer(size, data) => {
+        UnresolvedDataObject::Buffer(size, data) => {
             write!(f, "Buffer (")?;
             display_term_arg(size, f, depth)?;
             write!(f, ") {{")?;
@@ -1393,14 +1460,14 @@ pub(super) fn display_data_object(
             display_depth(f, depth)?;
             write!(f, "}}")
         }
-        DataObject::Package(size, elements) => {
+        UnresolvedDataObject::Package(size, elements) => {
             write!(f, "Package (0x{:02X}) {{", size)?;
             display_package_elements_list(elements.iter(), Some(4), f, depth)?;
             writeln!(f)?;
             display_depth(f, depth)?;
             write!(f, "}}")
         }
-        DataObject::VarPackage(size, elements) => {
+        UnresolvedDataObject::VarPackage(size, elements) => {
             write!(f, "VarPackage (")?;
             display_term_arg(size, f, depth)?;
             write!(f, ") {{")?;
@@ -1409,10 +1476,10 @@ pub(super) fn display_data_object(
             display_depth(f, depth)?;
             write!(f, "}}")
         }
-        DataObject::String(str) => {
+        UnresolvedDataObject::String(str) => {
             write!(f, "\"{}\"", str.replace('\n', "\\n"))
         }
-        DataObject::EisaId(eisa_id) => write!(f, "EisaId ({:?})", eisa_id),
+        UnresolvedDataObject::EisaId(eisa_id) => write!(f, "EisaId ({:?})", eisa_id),
     }
 }
 

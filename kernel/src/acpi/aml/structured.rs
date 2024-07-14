@@ -13,7 +13,7 @@ use crate::testing;
 
 use super::{
     parser::{
-        self, AmlTerm, DataObject, FieldDef, IndexFieldDef, MethodObj, PowerResource,
+        self, AmlTerm, UnresolvedDataObject, FieldDef, IndexFieldDef, MethodObj, PowerResource,
         ProcessorDeprecated, RegionObj,
     },
     AmlCode,
@@ -48,7 +48,7 @@ pub enum ElementType {
     PowerResource(PowerResource),
     RegionFields(Option<RegionObj>, Vec<FieldDef>),
     IndexField(IndexFieldDef),
-    Name(DataObject),
+    Name(UnresolvedDataObject),
     Mutex(u8),
     UnknownElements(Vec<AmlTerm>),
 }
@@ -407,7 +407,7 @@ impl StructuredAml {
 
 testing::test! {
     fn test_structure() {
-        use super::parser::{DataObject, FieldElement, IntegerData, ScopeObj, Target, TermArg};
+        use super::parser::{UnresolvedDataObject, FieldElement, IntegerData, ScopeObj, Target, TermArg};
         use alloc::boxed::Box;
 
         let code = AmlCode {
@@ -418,10 +418,10 @@ testing::test! {
                         AmlTerm::Region(RegionObj {
                             name: "DBG_".to_string(),
                             region_space: 1,
-                            region_offset: TermArg::DataObject(DataObject::Integer(
+                            region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
                                 IntegerData::WordConst(1026),
                             )),
-                            region_length: TermArg::DataObject(DataObject::Integer(
+                            region_length: TermArg::DataObject(UnresolvedDataObject::Integer(
                                 IntegerData::ConstOne,
                             )),
                         }),
