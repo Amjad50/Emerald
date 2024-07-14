@@ -32,8 +32,26 @@
 <a href="#30" id="30">30</a>
 <a href="#31" id="31">31</a>
 <a href="#32" id="32">32</a>
-</pre></div><pre class="rust"><code><span class="kw">mod </span>parser;
+<a href="#33" id="33">33</a>
+<a href="#34" id="34">34</a>
+<a href="#35" id="35">35</a>
+<a href="#36" id="36">36</a>
+<a href="#37" id="37">37</a>
+<a href="#38" id="38">38</a>
+<a href="#39" id="39">39</a>
+<a href="#40" id="40">40</a>
+<a href="#41" id="41">41</a>
+<a href="#42" id="42">42</a>
+<a href="#43" id="43">43</a>
+<a href="#44" id="44">44</a>
+<a href="#45" id="45">45</a>
+<a href="#46" id="46">46</a>
+</pre></div><pre class="rust"><code><span class="kw">pub mod </span>execution;
+<span class="kw">mod </span>parser;
 <span class="kw">mod </span>structured;
+
+<span class="kw">use </span>execution::{AmlExecutionError, DataObject, ExecutionContext};
+<span class="kw">use </span>parser::UnresolvedDataObject;
 
 <span class="kw">pub use </span>parser::{AmlCode, AmlParseError};
 <span class="kw">use </span>structured::StructuredAml;
@@ -62,6 +80,16 @@
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">pub fn </span>structured(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>StructuredAml {
         <span class="kw-2">&amp;</span><span class="self">self</span>.structured
+    }
+
+    <span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub fn </span>execute(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        ctx: <span class="kw-2">&amp;mut </span>ExecutionContext,
+        label: <span class="kw-2">&amp;</span>str,
+        args: <span class="kw-2">&amp;</span>[UnresolvedDataObject],
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;DataObject, AmlExecutionError&gt; {
+        ctx.execute(<span class="kw-2">&amp;</span><span class="self">self</span>.structured, label, args)
     }
 }
 </code></pre></div></section></main></body></html>
