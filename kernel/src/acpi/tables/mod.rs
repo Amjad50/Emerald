@@ -680,12 +680,10 @@ impl fmt::Display for BiosTables {
 
                     match cmdline::cmdline().log_aml {
                         LogAml::Normal => {
-                            writeln!(f, "AML: ")?;
-                            data.aml.code().display_with_depth(f, 1)?;
+                            writeln!(f, "AML: \n{:#}", data.aml.code())?;
                         }
                         LogAml::Structured => {
-                            writeln!(f, "AML: ")?;
-                            data.aml.structured().display_with_depth(f, 1)?;
+                            writeln!(f, "AML: \n{:#}", data.aml.structured())?;
                         }
                         LogAml::Off => {}
                     }

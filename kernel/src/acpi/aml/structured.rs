@@ -12,9 +12,10 @@ use tracing::warn;
 use crate::testing;
 
 use super::{
+    display::AmlDisplayer,
     parser::{
-        self, AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated,
-        RegionObj, UnresolvedDataObject,
+        AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated, RegionObj,
+        UnresolvedDataObject,
     },
     AmlCode,
 };
@@ -361,106 +362,92 @@ impl Scope {
     }
 }
 
-fn display_scope(
-    name: &str,
-    scope: &Scope,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    writeln!(f, "Scope ({}) {{", name)?;
-    for (name, element) in &scope.children {
-        parser::display_depth(f, depth + 1)?;
-        match element {
-            ElementType::ScopeOrDevice(scope) => display_scope(name, scope, f, depth + 1)?,
-            ElementType::Method(method) => {
-                parser::display_method(method, f, depth + 1)?;
-            }
-            ElementType::Processor(processor) => {
-                writeln!(
-                    f,
-                    "Processor ({}, 0x{:02X}, 0x{:04X}, 0x{:02X}) {{",
-                    processor.name, processor.unk1, processor.unk2, processor.unk3
-                )?;
-                parser::display_terms(&processor.term_list, f, depth + 2)?;
-                parser::display_depth(f, depth + 1)?;
-                writeln!(f, "}}")?;
-            }
-            ElementType::PowerResource(power_resource) => {
-                writeln!(
-                    f,
-                    "PowerResource ({}, 0x{:02X}, 0x{:04X}) {{",
-                    power_resource.name, power_resource.system_level, power_resource.resource_order,
-                )?;
-                parser::display_terms(&power_resource.term_list, f, depth + 1)?;
-                parser::display_depth(f, depth)?;
-                writeln!(f, "}}")?;
-            }
-            ElementType::RegionFields(region, fields) => {
-                if let Some(region) = region {
-                    write!(f, "Region ({}, {}, ", region.name, region.region_space,)?;
-                    parser::display_term_arg(&region.region_offset, f, depth)?;
-                    write!(f, ", ")?;
-                    parser::display_term_arg(&region.region_length, f, depth)?;
-                    write!(f, ")")?;
-                } else {
-                    write!(f, "REGION {name:?} NOT FOUND!!!!")?;
-                }
+impl fmt::Display for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, (name, element)) in self.children.iter().enumerate() {
+            match element {
+                ElementType::ScopeOrDevice(scope) => {
+                    let mut d = AmlDisplayer::start(f, "Scope");
+                    d.paren_arg(|f| f.write_str(name)).finish_paren_arg();
 
-                writeln!(f)?;
-                if fields.is_empty() {
-                    write!(f, "NO FIELDS for {name:?} !!! ")?;
+                    d.body_field(|f| scope.fmt(f));
+
+                    d.finish()
                 }
-                for field in fields {
-                    parser::display_depth(f, depth + 1)?;
-                    writeln!(f, "Field ({}, {}) {{", field.name, field.flags)?;
-                    parser::display_fields(&field.fields, f, depth + 2)?;
-                    parser::display_depth(f, depth + 1)?;
-                    writeln!(f, "}}")?;
+                ElementType::Method(method) => method.fmt(f),
+                ElementType::Processor(processor) => processor.fmt(f),
+                ElementType::PowerResource(power_resource) => power_resource.fmt(f),
+                ElementType::RegionFields(region, fields) => {
+                    if let Some(region) = region {
+                        region.fmt(f)?;
+                    } else {
+                        write!(f, "Region {name}, NOT FOUND!!!")?;
+                    }
+
+                    if f.alternate() {
+                        writeln!(f)?;
+                    } else {
+                        write!(f, "; ")?;
+                    }
+
+                    for field in fields {
+                        field.fmt(f)?;
+                    }
+
+                    Ok(())
                 }
-            }
-            ElementType::IndexField(index_field) => {
-                writeln!(
-                    f,
-                    "IndexField ({}, {}, {}) {{",
-                    index_field.name, index_field.index_name, index_field.flags
-                )?;
-                parser::display_fields(&index_field.fields, f, depth + 2)?;
-                parser::display_depth(f, depth + 1)?;
-                writeln!(f, "}}")?;
-            }
-            ElementType::Name(data_object) => {
-                write!(f, "Name({}, ", name)?;
-                parser::display_data_object(data_object, f, depth + 1)?;
-                write!(f, ")")?;
-            }
-            ElementType::Mutex(sync_level) => {
-                write!(f, "Mutex ({}, {})", name, sync_level)?;
-            }
-            ElementType::UnknownElements(elements) => {
-                writeln!(f, "UnknownElements ({}) {{", name)?;
-                parser::display_terms(elements, f, depth + 2)?;
-                writeln!(f)?;
-                parser::display_depth(f, depth + 1)?;
-                write!(f, "}}")?;
+                ElementType::IndexField(index_field) => index_field.fmt(f),
+                ElementType::Name(data_obj) => AmlDisplayer::start(f, "Name")
+                    .paren_arg(|f| f.write_str(name))
+                    .paren_arg(|f| data_obj.fmt(f))
+                    .finish(),
+                ElementType::Mutex(num) => AmlDisplayer::start(f, "Mutex")
+                    .paren_arg(|f| f.write_str(name))
+                    .paren_arg(|f| write!(f, "0x{num:02X}"))
+                    .finish(),
+                ElementType::UnknownElements(elements) => {
+                    let mut d = AmlDisplayer::start(f, "UnknownElements");
+
+                    d.paren_arg(|f| f.write_str(name)).finish_paren_arg();
+
+                    for element in elements {
+                        d.body_field(|f| element.fmt(f));
+                    }
+
+                    d.finish()
+                }
+            }?;
+
+            if i < self.children.len() - 1 {
+                if f.alternate() {
+                    writeln!(f)?;
+                } else {
+                    write!(f, "; ")?;
+                }
             }
         }
-        writeln!(f)?;
+
+        Ok(())
     }
-    parser::display_depth(f, depth)?;
-    writeln!(f, "}}")
 }
 
-impl StructuredAml {
-    #[allow(dead_code)]
-    pub fn display_with_depth(&self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-        parser::display_depth(f, depth)?;
-        display_scope("\\", &self.root, f, depth)
+impl fmt::Display for StructuredAml {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = AmlDisplayer::start(f, "Scope");
+        d.paren_arg(|f| f.write_str("\\")).finish_paren_arg();
+
+        d.body_field(|f| self.root.fmt(f));
+
+        d.finish()
     }
 }
 
 testing::test! {
     fn test_structure() {
-        use super::parser::{UnresolvedDataObject, FieldElement, IntegerData, ScopeObj, Target, TermArg};
+        use super::parser::{
+            FieldAccessType, FieldElement, FieldUpdateRule, IntegerData, ScopeObj, Target, TermArg,
+            UnresolvedDataObject,
+        };
         use alloc::boxed::Box;
 
         let code = AmlCode {
@@ -480,7 +467,9 @@ testing::test! {
                         }),
                         AmlTerm::Field(FieldDef {
                             name: "DBG_".to_string(),
-                            flags: 1,
+                            access_type: FieldAccessType::Byte,
+                            need_lock: false,
+                            update_rule: FieldUpdateRule::Preserve,
                             fields: vec![FieldElement::Named("DBGB".to_string(), 8)],
                         }),
                         AmlTerm::Method(MethodObj {

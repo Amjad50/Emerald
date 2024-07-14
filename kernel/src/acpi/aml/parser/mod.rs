@@ -1,3 +1,5 @@
+mod display;
+
 use alloc::{
     boxed::Box,
     collections::{BTreeMap, BTreeSet},
@@ -5,7 +7,6 @@ use alloc::{
     string::String,
     vec::Vec,
 };
-use core::fmt;
 use tracing::trace;
 
 #[derive(Debug, Clone)]
@@ -17,6 +18,7 @@ pub enum AmlParseError {
     CannotMoveBackward,
     InvalidTarget(u8),
     NameObjectNotContainingDataObject,
+    InvalidFieldFlags(u8),
 }
 
 pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
@@ -272,9 +274,28 @@ impl RegionObj {
 }
 
 #[derive(Debug, Clone)]
+pub enum FieldAccessType {
+    Any,
+    Byte,
+    Word,
+    DWord,
+    QWord,
+    Buffer,
+}
+
+#[derive(Debug, Clone)]
+pub enum FieldUpdateRule {
+    Preserve,
+    WriteAsOnes,
+    WriteAsZeros,
+}
+
+#[derive(Debug, Clone)]
 pub struct FieldDef {
     pub(super) name: String,
-    pub(super) flags: u8,
+    pub(super) access_type: FieldAccessType,
+    pub(super) need_lock: bool,
+    pub(super) update_rule: FieldUpdateRule,
     pub(super) fields: Vec<FieldElement>,
 }
 
@@ -284,9 +305,31 @@ impl FieldDef {
         let name = inner.parse_name()?;
         trace!("field name: {}", name);
         let (flags, field_list) = inner.parse_fields_list_and_flags()?;
+
+        let access_type = match flags & 0b1111 {
+            0 => FieldAccessType::Any,
+            1 => FieldAccessType::Byte,
+            2 => FieldAccessType::Word,
+            3 => FieldAccessType::DWord,
+            4 => FieldAccessType::QWord,
+            5 => FieldAccessType::Buffer,
+            _ => return Err(AmlParseError::InvalidFieldFlags(flags)),
+        };
+
+        let need_lock = (flags & (1 << 4)) != 0;
+
+        let update_rule = match (flags >> 5) & 0b111 {
+            0 => FieldUpdateRule::Preserve,
+            1 => FieldUpdateRule::WriteAsOnes,
+            2 => FieldUpdateRule::WriteAsZeros,
+            _ => return Err(AmlParseError::InvalidFieldFlags(flags)),
+        };
+
         Ok(Self {
             name,
-            flags,
+            access_type,
+            need_lock,
+            update_rule,
             fields: field_list,
         })
     }
@@ -296,7 +339,9 @@ impl FieldDef {
 pub struct IndexFieldDef {
     pub(super) name: String,
     pub(super) index_name: String,
-    pub(super) flags: u8,
+    pub(super) access_type: FieldAccessType,
+    pub(super) need_lock: bool,
+    pub(super) update_rule: FieldUpdateRule,
     pub(super) fields: Vec<FieldElement>,
 }
 
@@ -308,10 +353,32 @@ impl IndexFieldDef {
         let index_name = inner.parse_name()?;
         trace!("index-field index_name: {}", index_name);
         let (flags, field_list) = inner.parse_fields_list_and_flags()?;
+
+        let access_type = match flags & 0b1111 {
+            0 => FieldAccessType::Any,
+            1 => FieldAccessType::Byte,
+            2 => FieldAccessType::Word,
+            3 => FieldAccessType::DWord,
+            4 => FieldAccessType::QWord,
+            5 => FieldAccessType::Buffer,
+            _ => return Err(AmlParseError::InvalidFieldFlags(flags)),
+        };
+
+        let need_lock = (flags & (1 << 4)) != 0;
+
+        let update_rule = match (flags >> 5) & 0b111 {
+            0 => FieldUpdateRule::Preserve,
+            1 => FieldUpdateRule::WriteAsOnes,
+            2 => FieldUpdateRule::WriteAsZeros,
+            _ => return Err(AmlParseError::InvalidFieldFlags(flags)),
+        };
+
         Ok(Self {
             name,
             index_name,
-            flags,
+            access_type,
+            need_lock,
+            update_rule,
             fields: field_list,
         })
     }
@@ -319,6 +386,7 @@ impl IndexFieldDef {
 
 #[derive(Debug, Clone)]
 pub enum FieldElement {
+    // TODO: add more fields and fix printing and naming of these, should be `Offset` for example
     Reserved(usize),
     Named(String, usize),
     Access(u8, u8),
@@ -1377,628 +1445,5 @@ impl Parser<'_> {
         trace!("{:?}", term_list);
 
         Ok(AmlCode { term_list })
-    }
-}
-
-// display impls, we are not using `fmt::Display`, since we have a special `depth` to propagate
-// we could have used a `fmt::Display` wrapper, which is another approach, not sure which is better.
-
-pub(super) fn display_depth(f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-    for _ in 0..depth {
-        write!(f, "  ")?;
-    }
-    Ok(())
-}
-
-pub(super) fn display_terms(
-    term_list: &[AmlTerm],
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    for term in term_list {
-        display_depth(f, depth)?;
-        display_term(term, f, depth)?;
-        writeln!(f)?;
-    }
-    Ok(())
-}
-
-fn display_package_elements_list<'a>(
-    elements: impl ExactSizeIterator<Item = &'a PackageElement<UnresolvedDataObject>>,
-    depth_divider: Option<usize>,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    let len = elements.len();
-    for (i, element) in elements.enumerate() {
-        let mut add_depth = 0;
-        if let Some(depth_divider) = depth_divider {
-            if i % depth_divider == 0 {
-                writeln!(f)?;
-                display_depth(f, depth + 1)?;
-            }
-            add_depth = 1;
-        }
-        match element {
-            PackageElement::DataObject(data) => display_data_object(data, f, depth + add_depth)?,
-            PackageElement::Name(name) => write!(f, "{}", name)?,
-        }
-        if i != len - 1 {
-            write!(f, ", ")?;
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn display_data_object(
-    data: &UnresolvedDataObject,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    match data {
-        UnresolvedDataObject::Integer(int) => match int {
-            IntegerData::ConstZero => write!(f, "Zero"),
-            IntegerData::ConstOne => write!(f, "One"),
-            IntegerData::ConstOnes => write!(f, "0xFFFFFFFFFFFFFFFF"),
-            IntegerData::ByteConst(data) => write!(f, "0x{:02X}", data),
-            IntegerData::WordConst(data) => write!(f, "0x{:04X}", data),
-            IntegerData::DWordConst(data) => write!(f, "0x{:08X}", data),
-            IntegerData::QWordConst(data) => write!(f, "0x{:016X}", data),
-        },
-        UnresolvedDataObject::Buffer(size, data) => {
-            write!(f, "Buffer (")?;
-            display_term_arg(size, f, depth)?;
-            write!(f, ") {{")?;
-            for (i, byte) in data.iter().enumerate() {
-                if i % 16 == 0 {
-                    writeln!(f)?;
-                    display_depth(f, depth + 1)?;
-                }
-                write!(f, "0x{:02X} ", byte)?;
-            }
-            writeln!(f)?;
-            display_depth(f, depth)?;
-            write!(f, "}}")
-        }
-        UnresolvedDataObject::Package(size, elements) => {
-            write!(f, "Package (0x{:02X}) {{", size)?;
-            display_package_elements_list(elements.iter(), Some(4), f, depth)?;
-            writeln!(f)?;
-            display_depth(f, depth)?;
-            write!(f, "}}")
-        }
-        UnresolvedDataObject::VarPackage(size, elements) => {
-            write!(f, "VarPackage (")?;
-            display_term_arg(size, f, depth)?;
-            write!(f, ") {{")?;
-            display_package_elements_list(elements.iter(), Some(4), f, depth)?;
-            writeln!(f)?;
-            display_depth(f, depth)?;
-            write!(f, "}}")
-        }
-        UnresolvedDataObject::String(str) => {
-            write!(f, "\"{}\"", str.replace('\n', "\\n"))
-        }
-        UnresolvedDataObject::EisaId(eisa_id) => write!(f, "EisaId ({:?})", eisa_id),
-    }
-}
-
-pub(super) fn display_term_arg(
-    term_arg: &TermArg,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    match term_arg {
-        TermArg::Expression(term) => display_term(term, f, depth),
-        TermArg::DataObject(data) => display_data_object(data, f, depth),
-        TermArg::Arg(arg) => write!(f, "Arg{:x}", arg),
-        TermArg::Local(local) => write!(f, "Local{:x}", local),
-        TermArg::Name(name) => write!(f, "{}", name),
-    }
-}
-
-fn display_target(target: &Target, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-    match target {
-        Target::None => write!(f, "None"),
-        Target::Arg(arg) => write!(f, "Arg{:x}", arg),
-        Target::Local(local) => write!(f, "Local{:x}", local),
-        Target::Name(name) => write!(f, "{}", name),
-        Target::Debug => write!(f, "Debug"),
-        Target::DerefOf(term_arg) => {
-            write!(f, "DerefOf (")?;
-            display_term_arg(term_arg, f, depth)?;
-            write!(f, ")")
-        }
-        Target::RefOf(target) => {
-            write!(f, "RefOf (")?;
-            display_target(target, f, depth)?;
-            write!(f, ")")
-        }
-        Target::Index(term_arg1, term_arg2, target) => {
-            display_index(term_arg1, term_arg2, target, f, depth)
-        }
-    }
-}
-
-pub(super) fn display_terms_list<'a>(
-    terms: impl ExactSizeIterator<Item = &'a TermArg>,
-    depth_divider: Option<usize>,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    let len = terms.len();
-    for (i, arg) in terms.enumerate() {
-        let mut add_depth = 0;
-        if let Some(depth_divider) = depth_divider {
-            if i % depth_divider == 0 {
-                writeln!(f)?;
-                display_depth(f, depth + 1)?;
-            }
-            add_depth = 1;
-        }
-        display_term_arg(arg, f, depth + add_depth)?;
-        if i != len - 1 {
-            write!(f, ", ")?;
-        }
-    }
-    Ok(())
-}
-
-fn display_call_term_target(
-    name: &str,
-    args: &[&TermArg],
-    targets: &[&Target],
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    write!(f, "{} (", name)?;
-    if !args.is_empty() {
-        display_terms_list(args.iter().copied(), None, f, depth)?;
-        if !targets.is_empty() {
-            write!(f, ", ")?;
-        }
-    }
-    for (i, target) in targets.iter().enumerate() {
-        display_target(target, f, depth)?;
-        if i != targets.len() - 1 {
-            write!(f, ", ")?;
-        }
-    }
-    write!(f, ")")
-}
-
-fn display_binary_op(
-    op: &str,
-    arg1: &TermArg,
-    arg2: &TermArg,
-    target: &Target,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    if !matches!(target, Target::None) {
-        display_target(target, f, depth)?;
-        write!(f, " = ")?;
-    }
-    write!(f, "( ")?;
-    display_term_arg(arg1, f, depth)?;
-    write!(f, " {} ", op)?;
-    display_term_arg(arg2, f, depth)?;
-    write!(f, " )")
-}
-
-fn display_index(
-    term1: &TermArg,
-    term2: &TermArg,
-    target: &Target,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    if !matches!(target, Target::None) {
-        display_target(target, f, depth)?;
-        write!(f, " = ")?;
-    }
-    display_term_arg(term1, f, depth)?;
-    write!(f, "[")?;
-    display_term_arg(term2, f, depth)?;
-    write!(f, "]")
-}
-
-fn display_scope(scope: &ScopeObj, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-    writeln!(f, "({}) {{", scope.name)?;
-    display_terms(&scope.term_list, f, depth + 1)?;
-    display_depth(f, depth)?;
-    writeln!(f, "}}")
-}
-
-pub(super) fn display_method(
-    method: &MethodObj,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    writeln!(f, "Method ({}, {}) {{", method.name, method.flags)?;
-    display_terms(&method.term_list, f, depth + 1)?;
-    display_depth(f, depth)?;
-    write!(f, "}}")
-}
-
-fn display_predicate_block(
-    name: &str,
-    predicate_block: &PredicateBlock,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    write!(f, "{} (", name)?;
-    display_term_arg(&predicate_block.predicate, f, depth)?;
-    writeln!(f, ") {{")?;
-    display_terms(&predicate_block.term_list, f, depth + 1)?;
-    display_depth(f, depth)?;
-    write!(f, "}}")
-}
-
-pub(super) fn display_fields(
-    fields: &[FieldElement],
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    let len = fields.len();
-    for (i, field) in fields.iter().enumerate() {
-        display_depth(f, depth)?;
-        match field {
-            FieldElement::Reserved(len) => write!(f, "_Reserved (0x{:02X})", len)?,
-            FieldElement::Named(name, len) => write!(f, "{},     (0x{:02X})", name, len)?,
-            FieldElement::Access(access_type, access_attrib) => write!(
-                f,
-                "AccessAs  (0x{:02X}, 0x{:02X})",
-                access_type, access_attrib
-            )?,
-        }
-        if i != len - 1 {
-            write!(f, ", ")?;
-        }
-        writeln!(f)?;
-    }
-    Ok(())
-}
-
-fn display_term(term: &AmlTerm, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-    match term {
-        AmlTerm::Alias(name1, name2) => {
-            write!(f, "Alias({}, {})", name1, name2)?;
-        }
-        AmlTerm::Scope(scope) => {
-            write!(f, "Scope ")?;
-            display_scope(scope, f, depth)?;
-        }
-        AmlTerm::Device(scope) => {
-            write!(f, "Device ")?;
-            display_scope(scope, f, depth)?;
-        }
-        AmlTerm::Region(region) => {
-            write!(f, "Region ({}, {}, ", region.name, region.region_space,)?;
-            display_term_arg(&region.region_offset, f, depth)?;
-            write!(f, ", ")?;
-            display_term_arg(&region.region_length, f, depth)?;
-            write!(f, ")")?;
-        }
-        AmlTerm::Field(field) => {
-            writeln!(f, "Field ({}, {}) {{", field.name, field.flags)?;
-            display_fields(&field.fields, f, depth + 1)?;
-            display_depth(f, depth)?;
-            writeln!(f, "}}")?;
-        }
-        AmlTerm::IndexField(index_field) => {
-            writeln!(
-                f,
-                "IndexField ({}, {}, {}) {{",
-                index_field.name, index_field.index_name, index_field.flags
-            )?;
-            display_fields(&index_field.fields, f, depth + 1)?;
-            display_depth(f, depth)?;
-            writeln!(f, "}}")?;
-        }
-
-        AmlTerm::Processor(processor) => {
-            writeln!(
-                f,
-                "Processor ({}, 0x{:02X}, 0x{:04X}, 0x{:02X}) {{",
-                processor.name, processor.unk1, processor.unk2, processor.unk3
-            )?;
-            display_terms(&processor.term_list, f, depth + 1)?;
-            display_depth(f, depth)?;
-            writeln!(f, "}}")?;
-        }
-        AmlTerm::PowerResource(power_resource) => {
-            writeln!(
-                f,
-                "PowerResource ({}, 0x{:02X}, 0x{:04X}) {{",
-                power_resource.name, power_resource.system_level, power_resource.resource_order,
-            )?;
-            display_terms(&power_resource.term_list, f, depth + 1)?;
-            display_depth(f, depth)?;
-            writeln!(f, "}}")?;
-        }
-        AmlTerm::Method(method) => {
-            display_method(method, f, depth)?;
-        }
-        AmlTerm::NameObj(name, data_object) => {
-            write!(f, "Name({}, ", name)?;
-            display_data_object(data_object, f, depth)?;
-            write!(f, ")")?;
-        }
-        AmlTerm::ToHexString(term, target) => {
-            display_call_term_target("ToHexString", &[term], &[target], f, depth)?;
-        }
-        AmlTerm::ToDecimalString(term, target) => {
-            display_call_term_target("ToDecimalString", &[term], &[target], f, depth)?;
-        }
-        AmlTerm::ToInteger(term, target) => {
-            display_call_term_target("ToInteger", &[term], &[target], f, depth)?;
-        }
-        AmlTerm::Mid(source_term, index_term, length_term, target) => {
-            display_call_term_target(
-                "Mid",
-                &[source_term, index_term, length_term],
-                &[target],
-                f,
-                depth,
-            )?;
-        }
-        AmlTerm::ToBuffer(term, target) => {
-            display_call_term_target("ToBuffer", &[term], &[target], f, depth)?;
-        }
-        AmlTerm::Store(arg, target) => {
-            display_target(target, f, depth)?;
-            write!(f, " = ")?;
-            display_term_arg(arg, f, depth)?;
-        }
-        AmlTerm::SizeOf(target) => {
-            display_call_term_target("SizeOf", &[], &[target], f, depth)?;
-        }
-        AmlTerm::Subtract(arg1, arg2, target) => {
-            display_binary_op("-", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::Add(arg1, arg2, target) => {
-            display_binary_op("+", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::Multiply(arg1, arg2, target) => {
-            display_binary_op("*", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::ShiftLeft(arg1, arg2, target) => {
-            display_binary_op("<<", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::ShiftRight(arg1, arg2, target) => {
-            display_binary_op(">>", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::Divide(term1, term2, target1, target2) => {
-            display_binary_op("/", term1, term2, target2, f, depth)?;
-            if !matches!(target1.as_ref(), Target::None) {
-                write!(f, ", Reminder=")?;
-                display_target(target1, f, depth)?;
-            }
-        }
-        AmlTerm::Mod(arg1, arg2, target) => {
-            display_binary_op("%", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::And(arg1, arg2, target) => {
-            display_binary_op("&", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::Nand(arg1, arg2, target) => {
-            display_binary_op("~&", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::Or(arg1, arg2, target) => {
-            display_binary_op("|", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::Nor(arg1, arg2, target) => {
-            display_binary_op("~|", arg1, arg2, target, f, depth)?;
-        }
-        AmlTerm::Xor(arg1, arg2, target) => {
-            display_binary_op("^", arg1, arg2, target, f, depth)?;
-        }
-
-        AmlTerm::LLess(arg1, arg2) => {
-            display_binary_op("<", arg1, arg2, &Target::None, f, depth)?;
-        }
-        AmlTerm::LLessEqual(arg1, arg2) => {
-            display_binary_op("<=", arg1, arg2, &Target::None, f, depth)?;
-        }
-        AmlTerm::LGreater(arg1, arg2) => {
-            display_binary_op(">", arg1, arg2, &Target::None, f, depth)?;
-        }
-        AmlTerm::LGreaterEqual(arg1, arg2) => {
-            display_binary_op(">=", arg1, arg2, &Target::None, f, depth)?;
-        }
-        AmlTerm::LEqual(arg1, arg2) => {
-            display_binary_op("==", arg1, arg2, &Target::None, f, depth)?;
-        }
-        AmlTerm::LNotEqual(arg1, arg2) => {
-            display_binary_op("!=", arg1, arg2, &Target::None, f, depth)?;
-        }
-        AmlTerm::LAnd(arg1, arg2) => {
-            display_binary_op("&&", arg1, arg2, &Target::None, f, depth)?;
-        }
-        AmlTerm::LOr(arg1, arg2) => {
-            display_binary_op("||", arg1, arg2, &Target::None, f, depth)?;
-        }
-        AmlTerm::LNot(arg) => {
-            write!(f, "!")?;
-            display_term_arg(arg, f, depth)?;
-        }
-        AmlTerm::Increment(target) => {
-            display_target(target, f, depth)?;
-            write!(f, "++")?;
-        }
-        AmlTerm::Decrement(target) => {
-            display_target(target, f, depth)?;
-            write!(f, "--")?;
-        }
-
-        AmlTerm::While(predicate_block) => {
-            display_predicate_block("While", predicate_block, f, depth)?;
-        }
-        AmlTerm::If(predicate_block) => {
-            display_predicate_block("If", predicate_block, f, depth)?;
-        }
-        AmlTerm::Else(term_list) => {
-            writeln!(f, "Else {{")?;
-            display_terms(term_list, f, depth + 1)?;
-            display_depth(f, depth)?;
-            write!(f, "}}")?;
-        }
-        AmlTerm::Break => {
-            write!(f, "Break")?;
-        }
-        AmlTerm::Return(term) => {
-            write!(f, "Return ")?;
-            display_term_arg(term, f, depth)?;
-        }
-        AmlTerm::DerefOf(term) => {
-            display_call_term_target("DerefOf", &[term], &[], f, depth)?;
-        }
-        AmlTerm::RefOf(target) => {
-            display_call_term_target("RefOf", &[], &[target], f, depth)?;
-        }
-        AmlTerm::Index(term1, term2, target) => {
-            display_index(term1, term2, target, f, depth)?;
-        }
-
-        AmlTerm::Mutex(name, sync_level) => {
-            write!(f, "Mutex ({}, {})", name, sync_level)?;
-        }
-        AmlTerm::Event(name) => {
-            write!(f, "Event ({})", name)?;
-        }
-        AmlTerm::CondRefOf(target1, target2) => {
-            display_call_term_target("CondRefOf", &[], &[target1, target2], f, depth)?;
-        }
-        AmlTerm::CreateFieldOp(source, index, numbits, target_name) => {
-            display_call_term_target(
-                "CreateField",
-                &[source, index, numbits],
-                &[&Target::Name(target_name.clone())],
-                f,
-                depth,
-            )?;
-        }
-        AmlTerm::Stall(term) => {
-            display_call_term_target("Stall", &[term], &[], f, depth)?;
-        }
-        AmlTerm::Sleep(term) => {
-            display_call_term_target("Sleep", &[term], &[], f, depth)?;
-        }
-        AmlTerm::Acquire(target, timeout) => {
-            write!(f, "Acquire (")?;
-            display_target(target, f, depth)?;
-            write!(f, ", 0x{timeout:04X})")?;
-        }
-        AmlTerm::Signal(target) => {
-            display_call_term_target("Signal", &[], &[target], f, depth)?;
-        }
-        AmlTerm::Wait(target, timeout) => {
-            write!(f, "Wait (")?;
-            display_target(target, f, depth)?;
-            write!(f, ", ")?;
-            display_term_arg(timeout, f, depth)?;
-            write!(f, ")")?;
-        }
-        AmlTerm::Reset(target) => {
-            display_call_term_target("Reset", &[], &[target], f, depth)?;
-        }
-        AmlTerm::Release(target) => {
-            display_call_term_target("Release", &[], &[target], f, depth)?;
-        }
-        AmlTerm::Notify(target, value) => {
-            write!(f, "Notify (")?;
-            display_target(target, f, depth)?;
-            write!(f, ", ")?;
-            display_term_arg(value, f, depth)?;
-            write!(f, ")")?;
-        }
-        AmlTerm::CreateBitField(term1, term2, name) => {
-            display_call_term_target(
-                "CreateBitField",
-                &[term1, term2],
-                &[&Target::Name(name.clone())],
-                f,
-                depth,
-            )?;
-        }
-        AmlTerm::CreateByteField(term1, term2, name) => {
-            display_call_term_target(
-                "CreateByteField",
-                &[term1, term2],
-                &[&Target::Name(name.clone())],
-                f,
-                depth,
-            )?;
-        }
-        AmlTerm::CreateWordField(term1, term2, name) => {
-            display_call_term_target(
-                "CreateWordField",
-                &[term1, term2],
-                &[&Target::Name(name.clone())],
-                f,
-                depth,
-            )?;
-        }
-        AmlTerm::CreateDWordField(term1, term2, name) => {
-            display_call_term_target(
-                "CreateDWordField",
-                &[term1, term2],
-                &[&Target::Name(name.clone())],
-                f,
-                depth,
-            )?;
-        }
-        AmlTerm::CreateQWordField(term1, term2, name) => {
-            display_call_term_target(
-                "CreateQWordField",
-                &[term1, term2],
-                &[&Target::Name(name.clone())],
-                f,
-                depth,
-            )?;
-        }
-        AmlTerm::MethodCall(name, args) => {
-            write!(f, "{} (", name)?;
-            display_terms_list(args.iter(), None, f, depth)?;
-            write!(f, ")")?;
-        }
-        AmlTerm::Concat(term1, term2, target) => {
-            display_call_term_target("Concat", &[term1, term2], &[target], f, depth)?;
-        }
-        AmlTerm::Not(term, target) => {
-            display_call_term_target("Not", &[term], &[target], f, depth)?;
-        }
-        AmlTerm::FindSetLeftBit(term, target) => {
-            display_call_term_target("FindSetLeftBit", &[term], &[target], f, depth)?;
-        }
-        AmlTerm::FindSetRightBit(term, target) => {
-            display_call_term_target("FindSetRightBit", &[term], &[target], f, depth)?;
-        }
-        AmlTerm::ConcatRes(term1, term2, target) => {
-            display_call_term_target("ConcatRes", &[term1, term2], &[target], f, depth)?;
-        }
-        AmlTerm::ObjectType(obj) => {
-            write!(f, "ObjectType (")?;
-            display_target(obj, f, depth)?;
-            write!(f, ")")?;
-        }
-        AmlTerm::Noop => {
-            write!(f, "Noop")?;
-        }
-    }
-    Ok(())
-}
-
-impl fmt::Display for AmlCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        display_terms(&self.term_list, f, 0)
-    }
-}
-
-impl AmlCode {
-    #[allow(dead_code)]
-    pub fn display_with_depth(&self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-        display_terms(&self.term_list, f, depth)
     }
 }
