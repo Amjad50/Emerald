@@ -1,5 +1,9 @@
+pub mod execution;
 mod parser;
 mod structured;
+
+use execution::{AmlExecutionError, DataObject, ExecutionContext};
+use parser::UnresolvedDataObject;
 
 pub use parser::{AmlCode, AmlParseError};
 use structured::StructuredAml;
@@ -28,5 +32,15 @@ impl Aml {
     #[allow(dead_code)]
     pub fn structured(&self) -> &StructuredAml {
         &self.structured
+    }
+
+    #[allow(dead_code)]
+    pub fn execute(
+        &self,
+        ctx: &mut ExecutionContext,
+        label: &str,
+        args: &[UnresolvedDataObject],
+    ) -> Result<DataObject, AmlExecutionError> {
+        ctx.execute(&self.structured, label, args)
     }
 }

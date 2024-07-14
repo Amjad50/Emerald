@@ -13,11 +13,23 @@ use crate::testing;
 
 use super::{
     parser::{
-        self, AmlTerm, UnresolvedDataObject, FieldDef, IndexFieldDef, MethodObj, PowerResource,
-        ProcessorDeprecated, RegionObj,
+        self, AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated,
+        RegionObj, UnresolvedDataObject,
     },
     AmlCode,
 };
+
+#[derive(Debug, Clone)]
+pub enum StructuredAmlError {
+    QueryPathMustBeAbsolute,
+    /// This is a very stupid error, its a bit annoying to return `\\` scope element, since its not
+    /// stored inside an `Element`, and we can't return a temporary value
+    /// We will never (normally) execute or try to find the label `\\`, so hopefully we can rely on that XD
+    /// FIXME: get a better fix
+    CannotQueryRoot,
+    PartOfPathNotScope(String),
+    InvalidName(String),
+}
 
 #[derive(Debug, Clone, Default)]
 #[allow(dead_code)]
@@ -37,6 +49,18 @@ impl StructuredAml {
         root.merge(root_terms);
 
         Self { root }
+    }
+
+    pub fn find_object(&self, label: &str) -> Result<Option<&ElementType>, StructuredAmlError> {
+        if let Some(rest) = label.strip_prefix('\\') {
+            if rest.is_empty() {
+                // sad
+                return Err(StructuredAmlError::CannotQueryRoot);
+            }
+            self.root.find_object(rest)
+        } else {
+            Err(StructuredAmlError::QueryPathMustBeAbsolute)
+        }
     }
 }
 
@@ -304,6 +328,35 @@ impl Scope {
     pub fn merge(&mut self, other: Scope) {
         for (name, element) in other.children {
             self.add_immediate_child(&name, element)
+        }
+    }
+
+    fn find_object(&self, name: &str) -> Result<Option<&ElementType>, StructuredAmlError> {
+        let split_result = name.split_once('.');
+
+        match split_result {
+            Some((first_child, rest)) => {
+                if first_child.len() != 4 {
+                    return Err(StructuredAmlError::InvalidName(first_child.to_string()));
+                }
+                let Some(child) = self.children.get(first_child) else {
+                    return Ok(None);
+                };
+
+                if let ElementType::ScopeOrDevice(scope) = child {
+                    scope.find_object(rest)
+                } else {
+                    Err(StructuredAmlError::PartOfPathNotScope(
+                        first_child.to_string(),
+                    ))
+                }
+            }
+            None => {
+                if name.len() != 4 {
+                    return Err(StructuredAmlError::InvalidName(name.to_string()));
+                }
+                Ok(self.children.get(name))
+            }
         }
     }
 }
