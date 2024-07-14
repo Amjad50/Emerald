@@ -14,10 +14,22 @@ use crate::testing;
 use super::{
     parser::{
         self, AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated,
-        RegionObj, TermArg,
+        RegionObj, UnresolvedDataObject,
     },
     AmlCode,
 };
+
+#[derive(Debug, Clone)]
+pub enum StructuredAmlError {
+    QueryPathMustBeAbsolute,
+    /// This is a very stupid error, its a bit annoying to return `\\` scope element, since its not
+    /// stored inside an `Element`, and we can't return a temporary value
+    /// We will never (normally) execute or try to find the label `\\`, so hopefully we can rely on that XD
+    /// FIXME: get a better fix
+    CannotQueryRoot,
+    PartOfPathNotScope(String),
+    InvalidName(String),
+}
 
 #[derive(Debug, Clone, Default)]
 #[allow(dead_code)]
@@ -38,6 +50,18 @@ impl StructuredAml {
 
         Self { root }
     }
+
+    pub fn find_object(&self, label: &str) -> Result<Option<&ElementType>, StructuredAmlError> {
+        if let Some(rest) = label.strip_prefix('\\') {
+            if rest.is_empty() {
+                // sad
+                return Err(StructuredAmlError::CannotQueryRoot);
+            }
+            self.root.find_object(rest)
+        } else {
+            Err(StructuredAmlError::QueryPathMustBeAbsolute)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +72,7 @@ pub enum ElementType {
     PowerResource(PowerResource),
     RegionFields(Option<RegionObj>, Vec<FieldDef>),
     IndexField(IndexFieldDef),
-    Name(TermArg),
+    Name(UnresolvedDataObject),
     Mutex(u8),
     UnknownElements(Vec<AmlTerm>),
 }
@@ -306,6 +330,35 @@ impl Scope {
             self.add_immediate_child(&name, element)
         }
     }
+
+    fn find_object(&self, name: &str) -> Result<Option<&ElementType>, StructuredAmlError> {
+        let split_result = name.split_once('.');
+
+        match split_result {
+            Some((first_child, rest)) => {
+                if first_child.len() != 4 {
+                    return Err(StructuredAmlError::InvalidName(first_child.to_string()));
+                }
+                let Some(child) = self.children.get(first_child) else {
+                    return Ok(None);
+                };
+
+                if let ElementType::ScopeOrDevice(scope) = child {
+                    scope.find_object(rest)
+                } else {
+                    Err(StructuredAmlError::PartOfPathNotScope(
+                        first_child.to_string(),
+                    ))
+                }
+            }
+            None => {
+                if name.len() != 4 {
+                    return Err(StructuredAmlError::InvalidName(name.to_string()));
+                }
+                Ok(self.children.get(name))
+            }
+        }
+    }
 }
 
 fn display_scope(
@@ -375,9 +428,9 @@ fn display_scope(
                 parser::display_depth(f, depth + 1)?;
                 writeln!(f, "}}")?;
             }
-            ElementType::Name(term) => {
+            ElementType::Name(data_object) => {
                 write!(f, "Name({}, ", name)?;
-                parser::display_term_arg(term, f, depth + 1)?;
+                parser::display_data_object(data_object, f, depth + 1)?;
                 write!(f, ")")?;
             }
             ElementType::Mutex(sync_level) => {
@@ -407,7 +460,7 @@ impl StructuredAml {
 
 testing::test! {
     fn test_structure() {
-        use super::parser::{DataObject, FieldElement, IntegerData, ScopeObj, Target};
+        use super::parser::{UnresolvedDataObject, FieldElement, IntegerData, ScopeObj, Target, TermArg};
         use alloc::boxed::Box;
 
         let code = AmlCode {
@@ -418,10 +471,10 @@ testing::test! {
                         AmlTerm::Region(RegionObj {
                             name: "DBG_".to_string(),
                             region_space: 1,
-                            region_offset: TermArg::DataObject(DataObject::Integer(
+                            region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
                                 IntegerData::WordConst(1026),
                             )),
-                            region_length: TermArg::DataObject(DataObject::Integer(
+                            region_length: TermArg::DataObject(UnresolvedDataObject::Integer(
                                 IntegerData::ConstOne,
                             )),
                         }),

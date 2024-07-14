@@ -13,23 +13,66 @@ pub struct TestCase {
 
 #[macro_export]
 macro_rules! test {
-    ($($(#[$attr:tt])? fn $name:ident() $body:block)*) => {
-        $($crate::testing::test!(@meta $($attr)? fn $name() $body);)*
+    // The entry point
+    ($($(#[$($attr:tt)+])* fn $name:ident() $body:block)*) => {
+        $($crate::testing::test!(@meta_chain $([$($attr)+])* => [] {false, false} fn $name() $body);)*
     };
+    // any other entrypoints are errors
     ($(other:tt)*) => {
         compile_error!("Invalid test syntax");
     };
-    (@meta should_panic fn $name:ident() $body:block) => {
-        $crate::testing::test!(@final true, false, fn $name() $body);
+    // The final chain, if we don't have any more `meta` attributes, we build the thing
+    (@meta_chain
+        => [$($builtmeta:tt)*]
+        {$should_panic:expr, $ignore:expr}
+        fn $name:ident() $body:block
+    ) => {
+        $crate::testing::test!(@final [$($builtmeta)*] {$should_panic, $ignore}  fn $name() $body);
     };
-    (@meta ignore fn $name:ident() $body:block) => {
-        $crate::testing::test!(@final false, true, fn $name() $body);
+    // If we have meta `should_panic` or `ignore`, we modify the variable we are using
+    (@meta_chain
+        [should_panic] $([$($rest:tt)+])* => [$($builtmeta:tt)*]
+        {$should_panic:expr, $ignore:expr}
+        fn $name:ident() $body:block
+    ) => {
+        $crate::testing::test!(@meta_chain $([$($rest)+])* =>
+        [
+            $($builtmeta)*
+        ]
+        {true, $ignore} fn $name() $body);
     };
-    (@meta fn $name:ident() $body:block) => {
-        $crate::testing::test!(@final false, false, fn $name() $body);
+    (@meta_chain
+        [ignore] $([$($rest:tt)+])* => [$($builtmeta:tt)*]
+        {$should_panic:expr, $ignore:expr}
+        fn $name:ident() $body:block
+    ) => {
+        $crate::testing::test!(@meta_chain $([$($rest)+])* =>
+        [
+            $($builtmeta)*
+        ]
+        {$should_panic, true} fn $name() $body);
     };
-    (@final $should_panic:expr, $ignore:expr, fn $name:ident() $body:block) => {
+    // Any other attributes are passed as is
+    (@meta_chain
+        [$($first:tt)+] $([$($rest:tt)+])* => [$($builtmeta:tt)*]
+        {$should_panic:expr, $ignore:expr}
+        fn $name:ident() $body:block
+    ) => {
+        $crate::testing::test!(@meta_chain $([$($rest)+])* =>
+        [
+            #[$($first)+]
+            $($builtmeta)*
+        ]
+        {$should_panic, $ignore} fn $name() $body);
+    };
+    // final construction
+    (@final
+        [$($builtmeta:tt)*]
+        {$should_panic:expr, $ignore:expr}
+        fn $name:ident() $body:block
+    ) => {
         #[cfg(test)]
+        $($builtmeta)*
         fn $name() $body
         #[cfg(test)]
         #[test_case]
