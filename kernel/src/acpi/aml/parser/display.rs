@@ -98,8 +98,19 @@ impl fmt::Display for MethodObj {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = AmlDisplayer::start(f, "Method");
         d.paren_arg(|f| f.write_str(&self.name))
-            .paren_arg(|f| self.flags.fmt(f))
-            .finish_paren_arg();
+            .paren_arg(|f| write!(f, "{}", self.num_args))
+            .paren_arg(|f| {
+                f.write_str(if self.is_serialized {
+                    "Serialized"
+                } else {
+                    "NotSerialized"
+                })
+            });
+        if self.sync_level != 0 {
+            d.paren_arg(|f: &mut fmt::Formatter| write!(f, "0x{:X}", self.sync_level));
+        }
+
+        d.finish_paren_arg();
 
         for term in &self.term_list {
             d.body_field(|f| term.fmt(f));

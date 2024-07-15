@@ -462,16 +462,14 @@ pub enum FieldElement {
 
 #[derive(Debug, Clone)]
 pub struct MethodObj {
-    pub name: String,
-    pub flags: u8,
-    pub term_list: Vec<AmlTerm>,
+    pub(super) name: String,
+    pub(super) num_args: u8,
+    pub(super) is_serialized: bool,
+    pub(super) sync_level: u8,
+    pub(super) term_list: Vec<AmlTerm>,
 }
 
 impl MethodObj {
-    fn arg_count(&self) -> usize {
-        (self.flags & 0b111) as usize
-    }
-
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
@@ -481,9 +479,15 @@ impl MethodObj {
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
 
+        let num_args = flags & 0b111;
+        let is_serialized = (flags & (1 << 3)) != 0;
+        let sync_level = (flags >> 4) & 0b1111;
+
         Ok(Self {
             name,
-            flags,
+            num_args,
+            is_serialized,
+            sync_level,
             term_list,
         })
     }
@@ -867,7 +871,8 @@ impl Parser<'_> {
             0x10 => AmlTerm::Scope(ScopeObj::parse(self)?),
             0x14 => {
                 let method = MethodObj::parse(self)?;
-                self.state.add_method(&method.name, method.arg_count());
+                self.state
+                    .add_method(&method.name, method.num_args as usize);
                 AmlTerm::Method(method)
             }
             0x5b => {

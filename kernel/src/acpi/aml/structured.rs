@@ -480,7 +480,9 @@ testing::test! {
                         }),
                         AmlTerm::Method(MethodObj {
                             name: "DBUG".to_string(),
-                            flags: 1,
+                            num_args: 1,
+                            is_serialized: false,
+                            sync_level: 0,
                             term_list: vec![
                                 AmlTerm::ToHexString(TermArg::Arg(0), Box::new(Target::Local(0))),
                                 AmlTerm::ToBuffer(TermArg::Local(0), Box::new(Target::Local(0))),
@@ -490,7 +492,9 @@ testing::test! {
                 }),
                 AmlTerm::Method(MethodObj {
                     name: "\\_GPE._E02".to_string(),
-                    flags: 0,
+                    num_args: 0,
+                    is_serialized: false,
+                    sync_level: 0,
                     term_list: vec![AmlTerm::MethodCall("\\_SB_.CPUS.CSCN".to_string(), vec![])],
                 }),
             ],
