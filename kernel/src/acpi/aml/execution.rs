@@ -99,7 +99,6 @@ impl ExecutionContext {
             ElementType::PowerResource(_)
             | ElementType::RegionFields(_, _)
             | ElementType::IndexField(_)
-            | ElementType::Mutex(_)
             | ElementType::ScopeOrDevice(_)
             | ElementType::Processor(_) => {
                 return Err(AmlExecutionError::ElementNotExecutable(label.to_string()))

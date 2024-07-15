@@ -74,7 +74,6 @@ pub enum ElementType {
     RegionFields(Option<RegionObj>, Vec<FieldDef>),
     IndexField(IndexFieldDef),
     Name(UnresolvedDataObject),
-    Mutex(u8),
     UnknownElements(Vec<AmlTerm>),
 }
 
@@ -212,17 +211,20 @@ impl Scope {
                         ElementType::Name(obj.clone()),
                     );
                 }
-                AmlTerm::Mutex(name, num) => {
-                    handle_add(
-                        current_path,
-                        &mut this,
-                        root,
-                        name,
-                        ElementType::Mutex(*num),
-                    );
-                }
                 _ => {
-                    warn!("Should not be in root terms {term:?}");
+                    // TODO: the current way to structure is not good
+                    //       since the root may contain execution elements, that we need to take care of
+                    //       the language works similar to python in some sense. for example
+                    //       ```
+                    //       If (( PWRS & 0x02 )) {
+                    //         Name(_S1_, Package (0x02) {
+                    //           One, One
+                    //         })
+                    //       }
+                    //       ```
+                    //       this will enable `\_S1` name based on `PWRS` flags, and this is in the root scope
+                    //       so better to rewrite this whole thing :(
+                    warn!("Execution statements found in scope {term:?}");
                     handle_add(
                         current_path,
                         &mut this,
@@ -400,10 +402,6 @@ impl fmt::Display for Scope {
                 ElementType::Name(data_obj) => AmlDisplayer::start(f, "Name")
                     .paren_arg(|f| f.write_str(name))
                     .paren_arg(|f| data_obj.fmt(f))
-                    .finish(),
-                ElementType::Mutex(num) => AmlDisplayer::start(f, "Mutex")
-                    .paren_arg(|f| f.write_str(name))
-                    .paren_arg(|f| write!(f, "0x{num:02X}"))
                     .finish(),
                 ElementType::UnknownElements(elements) => {
                     let mut d = AmlDisplayer::start(f, "UnknownElements");
