@@ -179,3 +179,11 @@ impl<'a, 'b: 'a> AmlDisplayer<'a, 'b> {
         self.result
     }
 }
+
+pub struct HexHolder<'a, T: fmt::UpperHex>(pub &'a T);
+
+impl<T: fmt::UpperHex> fmt::Display for HexHolder<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#X}", self.0)
+    }
+}

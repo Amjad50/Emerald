@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::acpi::aml::display::AmlDisplayer;
+use crate::acpi::aml::display::{AmlDisplayer, HexHolder};
 
 use super::{
     AccessAttrib, AccessType, AmlCode, AmlTerm, Buffer, FieldConnection, FieldDef, FieldElement,
@@ -289,7 +289,7 @@ impl fmt::Display for UnresolvedDataObject {
             UnresolvedDataObject::Buffer(buffer) => buffer.fmt(f),
             UnresolvedDataObject::Package(size, elements) => {
                 let mut d = AmlDisplayer::start(f, "Package");
-                d.paren_arg(|f| write!(f, "{:X}", size))
+                d.paren_arg(|f| write!(f, "0x{:X}", size))
                     .finish_paren_arg()
                     .set_list(true);
 
@@ -479,8 +479,9 @@ impl fmt::Display for AmlTerm {
             }
             AmlTerm::Noop => f.write_str("Noop"),
             AmlTerm::Return(term) => {
-                f.write_str("Return ")?;
-                term.fmt(f)
+                f.write_str("Return ( ")?;
+                term.fmt(f)?;
+                f.write_str(" )")
             }
             AmlTerm::Break => f.write_str("Break"),
             AmlTerm::LAnd(term1, term2) => display_binary_op(f, "&&", term1, term2),
@@ -526,7 +527,7 @@ impl fmt::Display for AmlTerm {
             }
             AmlTerm::Acquire(target, num) => {
                 // TODO: display number in hex, using maybe custom struct
-                display_func_like(f, "Acquire", &[target, num])
+                display_func_like(f, "Acquire", &[target, &HexHolder(num)])
             }
             AmlTerm::Signal(target) => display_func_like(f, "Signal", &[target]),
             AmlTerm::Wait(target, term) => display_func_like(f, "Wait", &[target, term]),
