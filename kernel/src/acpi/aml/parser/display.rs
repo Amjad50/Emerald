@@ -5,8 +5,8 @@ use crate::acpi::aml::display::{AmlDisplayer, HexHolder};
 use super::{
     AccessAttrib, AccessType, AmlCode, AmlTerm, Buffer, FieldConnection, FieldDef, FieldElement,
     FieldUpdateRule, IndexFieldDef, IntegerData, MethodObj, PackageElement, PowerResource,
-    PredicateBlock, ProcessorDeprecated, RegionObj, RegionSpace, ScopeObj, Target, TermArg,
-    UnresolvedDataObject,
+    PredicateBlock, ProcessorDeprecated, RegionObj, RegionSpace, ScopeObj, ScopeType, Target,
+    TermArg, UnresolvedDataObject,
 };
 
 fn display_target_assign<F>(
@@ -84,7 +84,11 @@ impl fmt::Display for IndexFieldDef {
 
 impl fmt::Display for ScopeObj {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut d = AmlDisplayer::start(f, "Scope");
+        let ty = match self.ty {
+            ScopeType::Device => "Device",
+            ScopeType::Scope => "Scope",
+        };
+        let mut d = AmlDisplayer::start(f, ty);
         d.paren_arg(|f| f.write_str(&self.name)).finish_paren_arg();
         for term in &self.term_list {
             d.body_field(|f| term.fmt(f));

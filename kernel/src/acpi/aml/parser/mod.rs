@@ -239,20 +239,31 @@ pub enum Target {
 }
 
 #[derive(Debug, Clone)]
+pub enum ScopeType {
+    Device,
+    Scope,
+}
+
+#[derive(Debug, Clone)]
 pub struct ScopeObj {
+    pub(super) ty: ScopeType,
     pub(super) name: String,
     pub(super) term_list: Vec<AmlTerm>,
 }
 
 impl ScopeObj {
-    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+    fn parse(parser: &mut Parser, ty: ScopeType) -> Result<Self, AmlParseError> {
         let mut inner = parser.get_inner_parser()?;
         let name = inner.parse_name()?;
 
         trace!("scope name: {}", name);
         let term_list = inner.parse_term_list()?;
         inner.check_empty()?;
-        Ok(Self { name, term_list })
+        Ok(Self {
+            ty,
+            name,
+            term_list,
+        })
     }
 }
 
@@ -868,7 +879,7 @@ impl Parser<'_> {
 
                 AmlTerm::NameObj(name, data_object)
             }
-            0x10 => AmlTerm::Scope(ScopeObj::parse(self)?),
+            0x10 => AmlTerm::Scope(ScopeObj::parse(self, ScopeType::Scope)?),
             0x14 => {
                 let method = MethodObj::parse(self)?;
                 self.state
@@ -901,7 +912,7 @@ impl Parser<'_> {
                     0x27 => AmlTerm::Release(self.parse_target()?),
                     0x80 => AmlTerm::Region(RegionObj::parse(self)?),
                     0x81 => AmlTerm::Field(FieldDef::parse(self)?),
-                    0x82 => AmlTerm::Device(ScopeObj::parse(self)?),
+                    0x82 => AmlTerm::Device(ScopeObj::parse(self, ScopeType::Device)?),
                     0x83 => AmlTerm::Processor(ProcessorDeprecated::parse(self)?),
                     0x84 => AmlTerm::PowerResource(PowerResource::parse(self)?),
                     0x86 => AmlTerm::IndexField(IndexFieldDef::parse(self)?),

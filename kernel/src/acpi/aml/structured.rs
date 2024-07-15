@@ -15,7 +15,7 @@ use super::{
     display::AmlDisplayer,
     parser::{
         AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated, RegionObj,
-        UnresolvedDataObject,
+        ScopeType, UnresolvedDataObject,
     },
     AmlCode,
 };
@@ -45,7 +45,7 @@ impl StructuredAml {
         // of the root `code`, the reason we have two is that some statement use `\_SB` for example
         // and some will just use `_SB` in the root, those are the same thing.
         let mut root = Scope::default();
-        let root_terms = Scope::parse(&code.term_list, &mut root, "\\");
+        let root_terms = Scope::parse(&code.term_list, &mut root, "\\", ScopeType::Scope);
 
         root.merge(root_terms);
 
@@ -77,14 +77,27 @@ pub enum ElementType {
     UnknownElements(Vec<AmlTerm>),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Scope {
+    ty: ScopeType,
     children: BTreeMap<String, ElementType>,
 }
 
+impl Default for Scope {
+    fn default() -> Self {
+        Self {
+            ty: ScopeType::Scope,
+            children: Default::default(),
+        }
+    }
+}
+
 impl Scope {
-    pub fn parse(terms: &[AmlTerm], root: &mut Scope, current_path: &str) -> Self {
-        let mut this = Scope::default();
+    pub fn parse(terms: &[AmlTerm], root: &mut Scope, current_path: &str, ty: ScopeType) -> Self {
+        let mut this = Scope {
+            ty,
+            children: Default::default(),
+        };
 
         fn handle_add(
             current_path: &str,
@@ -145,6 +158,11 @@ impl Scope {
                         &scope.term_list,
                         root,
                         &scope_path,
+                        match term {
+                            AmlTerm::Device(_) => ScopeType::Device,
+                            AmlTerm::Scope(_) => ScopeType::Scope,
+                            _ => unreachable!(),
+                        },
                     ));
                     handle_add(current_path, &mut this, root, &scope.name, element);
                 }
@@ -249,9 +267,18 @@ impl Scope {
             }
             Entry::Occupied(mut entry) => match entry.get_mut() {
                 ElementType::ScopeOrDevice(scope) => {
-                    let ElementType::ScopeOrDevice(element) = element else {
+                    let ElementType::ScopeOrDevice(mut element) = element else {
                         panic!("New element: {name:?} is not a scope or device");
                     };
+
+                    // device always wins if there is any, its a more special version of `Scope`
+                    // it shouldn't conflict anyway, but just in case
+                    if matches!(scope.ty, ScopeType::Device)
+                        || matches!(element.ty, ScopeType::Device)
+                    {
+                        element.ty = ScopeType::Device;
+                    }
+
                     scope.merge(element);
                 }
                 ElementType::RegionFields(region, fields) => {
@@ -369,7 +396,11 @@ impl fmt::Display for Scope {
         for (i, (name, element)) in self.children.iter().enumerate() {
             match element {
                 ElementType::ScopeOrDevice(scope) => {
-                    let mut d = AmlDisplayer::start(f, "Scope");
+                    let ty = match self.ty {
+                        ScopeType::Scope => "Scope",
+                        ScopeType::Device => "Device",
+                    };
+                    let mut d = AmlDisplayer::start(f, ty);
                     d.paren_arg(|f| f.write_str(name)).finish_paren_arg();
 
                     d.body_field(|f| scope.fmt(f));
@@ -459,6 +490,7 @@ testing::test! {
         let code = AmlCode {
             term_list: vec![
                 AmlTerm::Scope(ScopeObj {
+                    ty: ScopeType::Scope,
                     name: "\\".to_string(),
                     term_list: vec![
                         AmlTerm::Region(RegionObj {
