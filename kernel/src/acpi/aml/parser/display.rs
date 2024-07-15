@@ -154,7 +154,22 @@ impl fmt::Display for PredicateBlock {
     }
 }
 
-impl fmt::Display for FieldAccessType {
+impl fmt::Display for Buffer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = AmlDisplayer::start(f, "Buffer");
+        d.paren_arg(|f| self.size.fmt(f))
+            .finish_paren_arg()
+            .set_list(true);
+
+        for element in self.data.iter() {
+            d.body_field(|f| write!(f, "0x{:02X}", element));
+        }
+
+        d.finish()
+    }
+}
+
+impl fmt::Display for AccessType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)?;
         f.write_str("Acc")
@@ -233,18 +248,7 @@ impl fmt::Display for UnresolvedDataObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UnresolvedDataObject::Integer(int) => int.fmt(f),
-            UnresolvedDataObject::Buffer(size, data) => {
-                let mut d = AmlDisplayer::start(f, "Buffer");
-                d.paren_arg(|f| size.fmt(f))
-                    .finish_paren_arg()
-                    .set_list(true);
-
-                for element in data {
-                    d.body_field(|f| write!(f, "0x{:02X}", element));
-                }
-
-                d.finish()
-            }
+            UnresolvedDataObject::Buffer(buffer) => buffer.fmt(f),
             UnresolvedDataObject::Package(size, elements) => {
                 let mut d = AmlDisplayer::start(f, "Package");
                 d.paren_arg(|f| write!(f, "{:X}", size))

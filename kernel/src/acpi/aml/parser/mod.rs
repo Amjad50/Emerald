@@ -99,7 +99,7 @@ impl IntegerData {
 #[derive(Debug, Clone)]
 pub enum UnresolvedDataObject {
     Integer(IntegerData),
-    Buffer(Box<TermArg>, Vec<u8>),
+    Buffer(Buffer),
     Package(u8, Vec<PackageElement<UnresolvedDataObject>>),
     VarPackage(Box<TermArg>, Vec<PackageElement<UnresolvedDataObject>>),
     String(String),
@@ -129,6 +129,12 @@ impl<T> PackageElement<T> {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Buffer {
+    pub(super) size: Box<TermArg>,
+    pub(super) data: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -1158,7 +1164,10 @@ impl Parser<'_> {
                 let mut inner = self.get_inner_parser()?;
                 let buf_size = inner.parse_term_arg()?;
                 // no need for `check_empty`, just take all remaining
-                UnresolvedDataObject::Buffer(Box::new(buf_size), inner.code[inner.pos..].to_vec())
+                UnresolvedDataObject::Buffer(Buffer {
+                    size: Box::new(buf_size),
+                    data: inner.code[inner.pos..].to_vec(),
+                })
             }
             0x12 => {
                 let mut inner = self.get_inner_parser()?;
