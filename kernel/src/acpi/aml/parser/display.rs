@@ -554,8 +554,16 @@ impl fmt::Display for AmlTerm {
 
 impl fmt::Display for AmlCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for term in &self.term_list {
+        for (i, term) in self.term_list.iter().enumerate() {
             term.fmt(f)?;
+
+            if i < self.term_list.len() - 1 {
+                if f.alternate() {
+                    writeln!(f)?;
+                } else {
+                    write!(f, "; ")?;
+                }
+            }
         }
         Ok(())
     }
