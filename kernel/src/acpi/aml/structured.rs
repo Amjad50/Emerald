@@ -392,8 +392,16 @@ impl fmt::Display for Scope {
                         write!(f, "; ")?;
                     }
 
-                    for field in fields {
+                    for (i, field) in fields.iter().enumerate() {
                         field.fmt(f)?;
+
+                        if i < fields.len() - 1 {
+                            if f.alternate() {
+                                writeln!(f)?;
+                            } else {
+                                write!(f, "; ")?;
+                            }
+                        }
                     }
 
                     Ok(())
