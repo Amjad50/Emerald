@@ -18,7 +18,10 @@ pub enum AmlParseError {
     CannotMoveBackward,
     InvalidTarget(u8),
     NameObjectNotContainingDataObject,
-    InvalidFieldFlags(u8),
+    UnalignedFieldElementOffset,
+    InvalidAccessType,
+    InvalidExtendedAttrib(u8),
+    InvalidFieldUpdateRule,
 }
 
 pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
@@ -317,13 +320,29 @@ impl RegionObj {
 }
 
 #[derive(Debug, Clone)]
-pub enum FieldAccessType {
+pub enum AccessType {
     Any,
     Byte,
     Word,
     DWord,
     QWord,
     Buffer,
+}
+
+impl TryFrom<u8> for AccessType {
+    type Error = AmlParseError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value & 0b1111 {
+            0 => Ok(Self::Any),
+            1 => Ok(Self::Byte),
+            2 => Ok(Self::Word),
+            3 => Ok(Self::DWord),
+            4 => Ok(Self::QWord),
+            5 => Ok(Self::Buffer),
+            _ => Err(AmlParseError::InvalidAccessType),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -333,10 +352,23 @@ pub enum FieldUpdateRule {
     WriteAsZeros,
 }
 
+impl TryFrom<u8> for FieldUpdateRule {
+    type Error = AmlParseError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value & 0b111 {
+            0 => Ok(Self::Preserve),
+            1 => Ok(Self::WriteAsOnes),
+            2 => Ok(Self::WriteAsZeros),
+            _ => Err(AmlParseError::InvalidFieldUpdateRule),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FieldDef {
     pub(super) name: String,
-    pub(super) access_type: FieldAccessType,
+    pub(super) access_type: AccessType,
     pub(super) need_lock: bool,
     pub(super) update_rule: FieldUpdateRule,
     pub(super) fields: Vec<FieldElement>,
@@ -349,24 +381,9 @@ impl FieldDef {
         trace!("field name: {}", name);
         let (flags, field_list) = inner.parse_fields_list_and_flags()?;
 
-        let access_type = match flags & 0b1111 {
-            0 => FieldAccessType::Any,
-            1 => FieldAccessType::Byte,
-            2 => FieldAccessType::Word,
-            3 => FieldAccessType::DWord,
-            4 => FieldAccessType::QWord,
-            5 => FieldAccessType::Buffer,
-            _ => return Err(AmlParseError::InvalidFieldFlags(flags)),
-        };
-
+        let access_type = flags.try_into()?;
         let need_lock = (flags & (1 << 4)) != 0;
-
-        let update_rule = match (flags >> 5) & 0b111 {
-            0 => FieldUpdateRule::Preserve,
-            1 => FieldUpdateRule::WriteAsOnes,
-            2 => FieldUpdateRule::WriteAsZeros,
-            _ => return Err(AmlParseError::InvalidFieldFlags(flags)),
-        };
+        let update_rule = (flags >> 5).try_into()?;
 
         Ok(Self {
             name,
@@ -382,7 +399,7 @@ impl FieldDef {
 pub struct IndexFieldDef {
     pub(super) name: String,
     pub(super) index_name: String,
-    pub(super) access_type: FieldAccessType,
+    pub(super) access_type: AccessType,
     pub(super) need_lock: bool,
     pub(super) update_rule: FieldUpdateRule,
     pub(super) fields: Vec<FieldElement>,
@@ -397,24 +414,9 @@ impl IndexFieldDef {
         trace!("index-field index_name: {}", index_name);
         let (flags, field_list) = inner.parse_fields_list_and_flags()?;
 
-        let access_type = match flags & 0b1111 {
-            0 => FieldAccessType::Any,
-            1 => FieldAccessType::Byte,
-            2 => FieldAccessType::Word,
-            3 => FieldAccessType::DWord,
-            4 => FieldAccessType::QWord,
-            5 => FieldAccessType::Buffer,
-            _ => return Err(AmlParseError::InvalidFieldFlags(flags)),
-        };
-
+        let access_type = flags.try_into()?;
         let need_lock = (flags & (1 << 4)) != 0;
-
-        let update_rule = match (flags >> 5) & 0b111 {
-            0 => FieldUpdateRule::Preserve,
-            1 => FieldUpdateRule::WriteAsOnes,
-            2 => FieldUpdateRule::WriteAsZeros,
-            _ => return Err(AmlParseError::InvalidFieldFlags(flags)),
-        };
+        let update_rule = (flags >> 5).try_into()?;
 
         Ok(Self {
             name,
@@ -428,11 +430,34 @@ impl IndexFieldDef {
 }
 
 #[derive(Debug, Clone)]
+pub enum AccessAttrib {
+    /// Special variant that only prints the `u8` value, doesn't have name
+    ByteValue(u8),
+
+    Bytes(u8),
+    RawBytes(u8),
+    RawProcessBytes(u8),
+    Quick,
+    SendRecv,
+    Byte,
+    Word,
+    Block,
+    ProcessCall,
+    BlockProcessCall,
+}
+
+#[derive(Debug, Clone)]
+pub enum FieldConnection {
+    Buffer(Buffer),
+    Name(String),
+}
+
+#[derive(Debug, Clone)]
 pub enum FieldElement {
-    // TODO: add more fields and fix printing and naming of these, should be `Offset` for example
-    Reserved(usize),
+    Offset(usize),
     Named(String, usize),
-    Access(u8, u8),
+    Access(AccessType, AccessAttrib),
+    Connection(FieldConnection),
 }
 
 #[derive(Debug, Clone)]
@@ -1446,6 +1471,8 @@ impl Parser<'_> {
         trace!("field flags: {:x}", flags);
         let mut field_list = Vec::new();
 
+        let mut fields_pos_bits = 0;
+
         while self.pos < self.code.len() {
             let lead = self.peek_next_byte()?;
 
@@ -1455,17 +1482,66 @@ impl Parser<'_> {
                     let pkg_length = self.get_pkg_length()?;
                     trace!("reserved field element pkg length: {:x}", pkg_length);
                     // add 1 since we are not using it as normal pkg length
-                    FieldElement::Reserved(pkg_length + 1)
+                    fields_pos_bits += pkg_length + 1;
+                    if fields_pos_bits % 8 != 0 {
+                        return Err(AmlParseError::UnalignedFieldElementOffset);
+                    }
+                    FieldElement::Offset(fields_pos_bits / 8)
                 }
                 1 => {
                     self.forward(1)?;
-                    let access_type = self.get_next_byte()?;
-                    let access_attrib = self.get_next_byte()?;
+                    let access_byte = self.get_next_byte()?;
+                    let access_attrib_byte = self.get_next_byte()?;
 
-                    FieldElement::Access(access_type, access_attrib)
+                    let access_attrib = match access_byte >> 6 {
+                        0 => match access_attrib_byte {
+                            0x2 => AccessAttrib::Quick,
+                            0x4 => AccessAttrib::SendRecv,
+                            0x6 => AccessAttrib::Byte,
+                            0x8 => AccessAttrib::Word,
+                            0xA => AccessAttrib::Block,
+                            0xC => AccessAttrib::ProcessCall,
+                            0xD => AccessAttrib::BlockProcessCall,
+                            _ => AccessAttrib::ByteValue(access_attrib_byte),
+                        },
+                        1 => AccessAttrib::Bytes(access_attrib_byte),
+                        2 => AccessAttrib::RawBytes(access_attrib_byte),
+                        3 => AccessAttrib::RawProcessBytes(access_attrib_byte),
+                        _ => unreachable!(),
+                    };
+
+                    FieldElement::Access(access_byte.try_into()?, access_attrib)
                 }
-                2 => todo!("connection field"),
-                3 => todo!("extended access field"),
+                2 => {
+                    self.forward(1)?;
+
+                    let mut clone = self.clone_parser();
+                    let data_object = clone.try_parse_data_object()?;
+                    let connection_field =
+                        if let Some(UnresolvedDataObject::Buffer(buffer)) = data_object {
+                            FieldConnection::Buffer(buffer)
+                        } else {
+                            // didn't work, try a name
+                            FieldConnection::Name(self.parse_name()?)
+                        };
+
+                    FieldElement::Connection(connection_field)
+                }
+                3 => {
+                    self.forward(1)?;
+                    let access_byte = self.get_next_byte()?;
+                    let extended_attrib = self.get_next_byte()?;
+                    let access_length = self.get_next_byte()?;
+
+                    let access_attrib = match extended_attrib {
+                        0xB => AccessAttrib::Bytes(access_length),
+                        0xE => AccessAttrib::RawBytes(access_length),
+                        0xF => AccessAttrib::RawProcessBytes(access_length),
+                        _ => return Err(AmlParseError::InvalidExtendedAttrib(extended_attrib)),
+                    };
+
+                    FieldElement::Access(access_byte.try_into()?, access_attrib)
+                }
                 _ => {
                     let len_now = self.pos;
                     let name = self.parse_name()?;
@@ -1474,8 +1550,10 @@ impl Parser<'_> {
                     trace!("field element name: {}", name);
                     let pkg_length = self.get_pkg_length()?;
                     trace!("field element pkg length: {:x}", pkg_length);
+                    let size_bits = pkg_length + 1;
+                    fields_pos_bits += size_bits;
                     // add 1 since we are not using it as normal pkg length
-                    FieldElement::Named(name, pkg_length + 1)
+                    FieldElement::Named(name, size_bits)
                 }
             };
             field_list.push(field);

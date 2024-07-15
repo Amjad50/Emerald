@@ -451,7 +451,7 @@ impl fmt::Display for StructuredAml {
 testing::test! {
     fn test_structure() {
         use super::parser::{
-            FieldAccessType, FieldElement, FieldUpdateRule, IntegerData, ScopeObj, Target, TermArg,
+            AccessType, FieldElement, FieldUpdateRule, IntegerData, ScopeObj, Target, TermArg,
             UnresolvedDataObject, RegionSpace
         };
         use alloc::boxed::Box;
@@ -473,7 +473,7 @@ testing::test! {
                         }),
                         AmlTerm::Field(FieldDef {
                             name: "DBG_".to_string(),
-                            access_type: FieldAccessType::Byte,
+                            access_type: AccessType::Byte,
                             need_lock: false,
                             update_rule: FieldUpdateRule::Preserve,
                             fields: vec![FieldElement::Named("DBGB".to_string(), 8)],

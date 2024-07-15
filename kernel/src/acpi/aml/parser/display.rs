@@ -3,9 +3,10 @@ use core::fmt;
 use crate::acpi::aml::display::AmlDisplayer;
 
 use super::{
-    AmlCode, AmlTerm, FieldAccessType, FieldDef, FieldElement, FieldUpdateRule, IndexFieldDef,
-    IntegerData, MethodObj, PackageElement, PowerResource, PredicateBlock, ProcessorDeprecated,
-    RegionObj, ScopeObj, Target, TermArg, UnresolvedDataObject,
+    AccessAttrib, AccessType, AmlCode, AmlTerm, Buffer, FieldConnection, FieldDef, FieldElement,
+    FieldUpdateRule, IndexFieldDef, IntegerData, MethodObj, PackageElement, PowerResource,
+    PredicateBlock, ProcessorDeprecated, RegionObj, RegionSpace, ScopeObj, Target, TermArg,
+    UnresolvedDataObject,
 };
 
 fn display_target_assign<F>(
@@ -176,32 +177,58 @@ impl fmt::Display for AccessType {
     }
 }
 
+impl fmt::Display for AccessAttrib {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AccessAttrib::ByteValue(v) => write!(f, "0x{:02X}", v),
+            AccessAttrib::Bytes(v) => write!(f, "AttribBytes ({})", v),
+            AccessAttrib::RawBytes(v) => write!(f, "AttribRawBytes ({})", v),
+            AccessAttrib::RawProcessBytes(v) => write!(f, "AttribRawProcessBytes ({})", v),
+            AccessAttrib::Quick => f.write_str("AttribQuick"),
+            AccessAttrib::SendRecv => f.write_str("AttribSendReceive"),
+            AccessAttrib::Byte => f.write_str("AttribByte"),
+            AccessAttrib::Word => f.write_str("AttribWord"),
+            AccessAttrib::Block => f.write_str("AttribBlock"),
+            AccessAttrib::ProcessCall => f.write_str("AttribProcessCall"),
+            AccessAttrib::BlockProcessCall => f.write_str("AttribBlockProcessCall"),
+        }
+    }
+}
+
 impl fmt::Display for FieldUpdateRule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
+impl fmt::Display for FieldConnection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FieldConnection::Buffer(buffer) => buffer.fmt(f),
+            FieldConnection::Name(name) => f.write_str(name),
+        }
+    }
+}
+
 impl fmt::Display for FieldElement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FieldElement::Reserved(len) => write!(f, "_Reserved (0x{:02X})", len),
+            FieldElement::Offset(offset) => write!(f, "Offset (0x{:02X})", offset),
             FieldElement::Named(name, len) => {
                 write!(
                     f,
-                    "{}, {}(0x{:02X})",
+                    "{}, {}{}",
                     name,
-                    if f.alternate() { "    " } else { "" },
+                    if f.alternate() { "  " } else { "" },
                     len
                 )
             }
             FieldElement::Access(access_type, access_attrib) => write!(
                 f,
-                "AccessAs {}(0x{:02X}, 0x{:02X})",
+                "AccessAs {}({access_type}, {access_attrib})",
                 if f.alternate() { " " } else { "" },
-                access_type,
-                access_attrib
             ),
+            FieldElement::Connection(connection) => write!(f, "{connection}"),
         }
     }
 }
