@@ -248,9 +248,46 @@ impl ScopeObj {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
+#[allow(non_camel_case_types)]
+pub enum RegionSpace {
+    SystemMemory,
+    SystemIO,
+    PCI_Config,
+    EmbeddedControl,
+    SMBus,
+    SystemCMOS,
+    PciBarTarget,
+    IPMI,
+    GeneralPurposeIO,
+    GenericSerialBus,
+    PCC,
+    Other(u8),
+}
+
+impl From<u8> for RegionSpace {
+    fn from(space: u8) -> Self {
+        match space {
+            0 => Self::SystemMemory,
+            1 => Self::SystemIO,
+            2 => Self::PCI_Config,
+            3 => Self::EmbeddedControl,
+            4 => Self::SMBus,
+            5 => Self::SystemCMOS,
+            6 => Self::PciBarTarget,
+            7 => Self::IPMI,
+            8 => Self::GeneralPurposeIO,
+            9 => Self::GenericSerialBus,
+            10 => Self::PCC,
+            _ => Self::Other(space),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RegionObj {
     pub(super) name: String,
-    pub(super) region_space: u8,
+    pub(super) region_space: RegionSpace,
     pub(super) region_offset: TermArg,
     pub(super) region_length: TermArg,
 }
@@ -259,7 +296,7 @@ impl RegionObj {
     fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
         let name = parser.parse_name()?;
         trace!("region name: {}", name);
-        let region_space = parser.get_next_byte()?;
+        let region_space = parser.get_next_byte()?.into();
         let region_offset = parser.parse_term_arg()?;
         trace!("region offset: {:?}", region_offset);
         let region_length = parser.parse_term_arg()?;

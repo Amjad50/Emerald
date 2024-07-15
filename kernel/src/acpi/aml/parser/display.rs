@@ -24,9 +24,18 @@ where
     value_fmt(f)
 }
 
+impl fmt::Display for RegionSpace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Other(x) => write!(f, "0x{:02X}", x),
+            _ => write!(f, "{:?}", self),
+        }
+    }
+}
+
 impl fmt::Display for RegionObj {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        AmlDisplayer::start(f, "Region")
+        AmlDisplayer::start(f, "OperationRegion")
             .paren_arg(|f| f.write_str(&self.name))
             .paren_arg(|f| write!(f, "{:?}", self.region_space))
             .paren_arg(|f| write!(f, "{}", self.region_offset))

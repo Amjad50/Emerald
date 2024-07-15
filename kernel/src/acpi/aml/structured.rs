@@ -444,7 +444,7 @@ testing::test! {
     fn test_structure() {
         use super::parser::{
             FieldAccessType, FieldElement, FieldUpdateRule, IntegerData, ScopeObj, Target, TermArg,
-            UnresolvedDataObject,
+            UnresolvedDataObject, RegionSpace
         };
         use alloc::boxed::Box;
 
@@ -455,7 +455,7 @@ testing::test! {
                     term_list: vec![
                         AmlTerm::Region(RegionObj {
                             name: "DBG_".to_string(),
-                            region_space: 1,
+                            region_space: RegionSpace::SystemIO,
                             region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
                                 IntegerData::WordConst(1026),
                             )),
