@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    parser::{IntegerData, TermArg, UnresolvedDataObject},
+    parser::{resource_template::ResourceTemplate, IntegerData, TermArg, UnresolvedDataObject},
     structured::{StructuredAml, StructuredAmlError},
 };
 
@@ -39,6 +39,7 @@ impl Package {
 #[derive(Debug, Clone)]
 pub enum DataObject {
     Integer(IntegerData),
+    ResourceTemplate(ResourceTemplate),
     Buffer(IntegerData, Vec<u8>),
     Package(Package),
     String(String),
@@ -157,6 +158,9 @@ impl ExecutionContext {
                     size_term,
                     buffer.data.into_iter().collect(),
                 ))
+            }
+            UnresolvedDataObject::ResourceTemplate(template) => {
+                Ok(DataObject::ResourceTemplate(template))
             }
             UnresolvedDataObject::Package(size, elements) => Ok(DataObject::Package(Package {
                 size: IntegerData::ByteConst(size),

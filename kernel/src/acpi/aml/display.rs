@@ -74,6 +74,7 @@ pub struct AmlDisplayer<'a, 'b: 'a> {
     result: fmt::Result,
     in_paren_arg: bool,
     already_in_paren_arg: bool,
+    already_in_body: bool,
     in_body: bool,
     is_list: bool,
 }
@@ -88,6 +89,7 @@ impl<'a, 'b: 'a> AmlDisplayer<'a, 'b> {
             already_in_paren_arg: false,
             in_body: false,
             is_list: false,
+            already_in_body: false,
         }
     }
 
@@ -159,7 +161,22 @@ impl<'a, 'b: 'a> AmlDisplayer<'a, 'b> {
         });
 
         self.in_body = true;
+        self.already_in_body = true;
 
+        self
+    }
+
+    pub fn at_least_empty_paren_arg(&mut self) -> &mut Self {
+        if !self.in_paren_arg && !self.already_in_paren_arg {
+            self.result = self.result.and_then(|_| self.fmt.write_str(" ()"));
+        }
+        self
+    }
+
+    pub fn at_least_empty_body(&mut self) -> &mut Self {
+        if !self.in_body && !self.already_in_body {
+            self.result = self.result.and_then(|_| self.fmt.write_str("{ }"));
+        }
         self
     }
 

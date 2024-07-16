@@ -291,6 +291,7 @@ impl fmt::Display for UnresolvedDataObject {
         match self {
             UnresolvedDataObject::Integer(int) => int.fmt(f),
             UnresolvedDataObject::Buffer(buffer) => buffer.fmt(f),
+            UnresolvedDataObject::ResourceTemplate(template) => template.fmt(f),
             UnresolvedDataObject::Package(size, elements) => {
                 let mut d = AmlDisplayer::start(f, "Package");
                 d.paren_arg(|f| write!(f, "0x{:X}", size))

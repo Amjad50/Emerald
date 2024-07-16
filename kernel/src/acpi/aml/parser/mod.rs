@@ -1,4 +1,5 @@
 mod display;
+pub mod resource_template;
 
 use alloc::{
     boxed::Box,
@@ -7,6 +8,7 @@ use alloc::{
     string::String,
     vec::Vec,
 };
+use resource_template::ResourceTemplate;
 use tracing::trace;
 
 #[derive(Debug, Clone)]
@@ -22,6 +24,8 @@ pub enum AmlParseError {
     InvalidAccessType,
     InvalidExtendedAttrib(u8),
     InvalidFieldUpdateRule,
+    ReservedFieldSet,
+    ResourceTemplateReservedTag,
 }
 
 pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
@@ -103,6 +107,7 @@ impl IntegerData {
 pub enum UnresolvedDataObject {
     Integer(IntegerData),
     Buffer(Buffer),
+    ResourceTemplate(ResourceTemplate),
     Package(u8, Vec<PackageElement<UnresolvedDataObject>>),
     VarPackage(Box<TermArg>, Vec<PackageElement<UnresolvedDataObject>>),
     String(String),
@@ -282,6 +287,8 @@ pub enum RegionSpace {
     GeneralPurposeIO,
     GenericSerialBus,
     PCC,
+    // used by ResourceTemplate, so we are not initializing it in `TryFrom<u8>`
+    FFixedHW,
     Other(u8),
 }
 
@@ -332,6 +339,7 @@ impl RegionObj {
 
 #[derive(Debug, Clone)]
 pub enum AccessType {
+    /// Undefined
     Any,
     Byte,
     Word,
@@ -1204,11 +1212,18 @@ impl Parser<'_> {
             0x11 => {
                 let mut inner = self.get_inner_parser()?;
                 let buf_size = inner.parse_term_arg()?;
-                // no need for `check_empty`, just take all remaining
-                UnresolvedDataObject::Buffer(Buffer {
+
+                let buffer = Buffer {
                     size: Box::new(buf_size),
+                    // take all remaining data
                     data: inner.code[inner.pos..].to_vec(),
-                })
+                };
+
+                if let Some(resource_template) = ResourceTemplate::try_parse_buffer(&buffer)? {
+                    UnresolvedDataObject::ResourceTemplate(resource_template)
+                } else {
+                    UnresolvedDataObject::Buffer(buffer)
+                }
             }
             0x12 => {
                 let mut inner = self.get_inner_parser()?;
