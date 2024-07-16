@@ -919,7 +919,7 @@ fn display_memory_args<'a, 'b>(
         f.write_str(if is_read_write {
             "ReadWrite"
         } else {
-            "ReadOnce"
+            "ReadOnly"
         })
     });
 
@@ -989,7 +989,7 @@ impl<W: AddressWidth> fmt::Display for AddressSpace<W> {
         let mut d = AmlDisplayer::start(f, "");
 
         if let AddressSpaceType::VendorDefined { value, .. } = self.ty {
-            d.paren_arg(|f| write!(f, "0x{:X}", value));
+            d.paren_arg(|f| write!(f, "0x{:02X}", value));
         }
         d.paren_arg(|f| {
             f.write_str(if self.is_consumer {
@@ -1030,7 +1030,7 @@ impl<W: AddressWidth> fmt::Display for AddressSpace<W> {
                 d.paren_arg(write_decode);
                 d.paren_arg(write_min_fixed);
                 d.paren_arg(write_max_fixed);
-                d.paren_arg(|f| write!(f, "0x{:X}", flags));
+                d.paren_arg(|f| write!(f, "0x{:02X}", flags));
             }
         }
 
@@ -1129,7 +1129,8 @@ impl fmt::Display for ResourceMacro {
                     *edge_triggered,
                     &ResourceSource::empty(),
                 )
-                .finish_paren_arg();
+                .finish_paren_arg()
+                .set_list(true);
 
                 for i in 0..15 {
                     if irqs_mask & (1 << i) != 0 {
@@ -1154,7 +1155,9 @@ impl fmt::Display for ResourceMacro {
                             "NotBusMaster"
                         })
                     })
-                    .paren_arg(|f| transfer_type.fmt(f));
+                    .paren_arg(|f| transfer_type.fmt(f))
+                    .finish_paren_arg()
+                    .set_list(true);
 
                 for i in 0..7 {
                     if channels_mask & (1 << i) != 0 {
@@ -1209,23 +1212,23 @@ impl fmt::Display for ResourceMacro {
                 .finish(),
             ResourceMacro::VendorShort { data, len } => {
                 let mut d = AmlDisplayer::start(f, "VendorShort");
-                d.at_least_empty_paren_arg();
+                d.at_least_empty_paren_arg().set_list(true);
 
                 for e in data.iter().take(*len as usize) {
                     d.body_field(|f| write!(f, "0x{:02X}", e));
                 }
 
-                d.finish()
+                d.at_least_empty_body().finish()
             }
             ResourceMacro::VendorLarge { data } => {
                 let mut d = AmlDisplayer::start(f, "VendorLarge");
-                d.at_least_empty_paren_arg();
+                d.at_least_empty_paren_arg().set_list(true);
 
                 for e in data {
                     d.body_field(|f| write!(f, "0x{:02X}", e));
                 }
 
-                d.finish()
+                d.at_least_empty_body().finish()
             }
             ResourceMacro::Memory24 {
                 is_read_write,
@@ -1279,7 +1282,8 @@ impl fmt::Display for ResourceMacro {
                     *edge_triggered,
                     resource_source,
                 )
-                .finish_paren_arg();
+                .finish_paren_arg()
+                .set_list(true);
 
                 for i in interrupts {
                     d.body_field(|f| write!(f, "0x{:08X}", i));
@@ -1317,6 +1321,6 @@ impl fmt::Display for ResourceTemplate {
             d.body_field(|f| item.fmt(f));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }

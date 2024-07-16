@@ -405,7 +405,7 @@ impl fmt::Display for Scope {
 
                     d.body_field(|f| scope.fmt(f));
 
-                    d.finish()
+                    d.at_least_empty_body().finish()
                 }
                 ElementType::Method(method) => method.fmt(f),
                 ElementType::Processor(processor) => processor.fmt(f),
@@ -451,7 +451,7 @@ impl fmt::Display for Scope {
                         d.body_field(|f| element.fmt(f));
                     }
 
-                    d.finish()
+                    d.at_least_empty_body().finish()
                 }
             }?;
 

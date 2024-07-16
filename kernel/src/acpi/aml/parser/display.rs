@@ -59,7 +59,7 @@ impl fmt::Display for FieldDef {
             d.body_field(|f| field.fmt(f));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }
 
@@ -78,7 +78,7 @@ impl fmt::Display for IndexFieldDef {
             d.body_field(|f| field.fmt(f));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }
 
@@ -94,7 +94,7 @@ impl fmt::Display for ScopeObj {
             d.body_field(|f| term.fmt(f));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }
 
@@ -111,7 +111,7 @@ impl fmt::Display for MethodObj {
                 })
             });
         if self.sync_level != 0 {
-            d.paren_arg(|f: &mut fmt::Formatter| write!(f, "0x{:X}", self.sync_level));
+            d.paren_arg(|f: &mut fmt::Formatter| write!(f, "0x{:02X}", self.sync_level));
         }
 
         d.finish_paren_arg();
@@ -120,7 +120,7 @@ impl fmt::Display for MethodObj {
             d.body_field(|f| term.fmt(f));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }
 
@@ -137,7 +137,7 @@ impl fmt::Display for ProcessorDeprecated {
             d.body_field(|f| term.fmt(f));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }
 
@@ -153,7 +153,7 @@ impl fmt::Display for PowerResource {
             d.body_field(|f| term.fmt(f));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }
 
@@ -166,7 +166,7 @@ impl fmt::Display for PredicateBlock {
             d.body_field(|f| term.fmt(f));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }
 
@@ -181,7 +181,7 @@ impl fmt::Display for Buffer {
             d.body_field(|f| write!(f, "0x{:02X}", element));
         }
 
-        d.finish()
+        d.at_least_empty_body().finish()
     }
 }
 
@@ -294,7 +294,7 @@ impl fmt::Display for UnresolvedDataObject {
             UnresolvedDataObject::ResourceTemplate(template) => template.fmt(f),
             UnresolvedDataObject::Package(size, elements) => {
                 let mut d = AmlDisplayer::start(f, "Package");
-                d.paren_arg(|f| write!(f, "0x{:X}", size))
+                d.paren_arg(|f| write!(f, "0x{:02X}", size))
                     .finish_paren_arg()
                     .set_list(true);
 
@@ -302,7 +302,7 @@ impl fmt::Display for UnresolvedDataObject {
                     d.body_field(|f| element.fmt(f));
                 }
 
-                d.finish()
+                d.at_least_empty_body().finish()
             }
             UnresolvedDataObject::VarPackage(size, elements) => {
                 let mut d = AmlDisplayer::start(f, "Package");
@@ -314,7 +314,7 @@ impl fmt::Display for UnresolvedDataObject {
                     d.body_field(|f| element.fmt(f));
                 }
 
-                d.finish()
+                d.at_least_empty_body().finish()
             }
             UnresolvedDataObject::String(str) => {
                 write!(f, "\"{}\"", str.replace('\n', "\\n"))
@@ -369,13 +369,13 @@ impl fmt::Display for AmlTerm {
             left: &dyn fmt::Display,
             right: &dyn fmt::Display,
         ) -> fmt::Result {
-            f.write_str("( ")?;
+            f.write_str("(")?;
             left.fmt(f)?;
             f.write_str(" ")?;
             f.write_str(op)?;
             f.write_str(" ")?;
             right.fmt(f)?;
-            f.write_str(" )")
+            f.write_str(")")
         }
 
         match self {
@@ -466,11 +466,11 @@ impl fmt::Display for AmlTerm {
                 f.write_str("--")
             }
             AmlTerm::While(predicate_block) => {
-                f.write_str("While ")?;
+                f.write_str("While")?;
                 predicate_block.fmt(f)
             }
             AmlTerm::If(predicate_block) => {
-                f.write_str("If ")?;
+                f.write_str("If")?;
                 predicate_block.fmt(f)
             }
             AmlTerm::Else(terms) => {
@@ -480,13 +480,13 @@ impl fmt::Display for AmlTerm {
                     d.body_field(|f| term.fmt(f));
                 }
 
-                d.finish()
+                d.at_least_empty_body().finish()
             }
             AmlTerm::Noop => f.write_str("Noop"),
             AmlTerm::Return(term) => {
-                f.write_str("Return ( ")?;
+                f.write_str("Return (")?;
                 term.fmt(f)?;
-                f.write_str(" )")
+                f.write_str(")")
             }
             AmlTerm::Break => f.write_str("Break"),
             AmlTerm::LAnd(term1, term2) => display_binary_op(f, "&&", term1, term2),

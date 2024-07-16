@@ -23,7 +23,7 @@ impl fmt::Write for PadAdapter<'_, '_> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for s in s.split_inclusive('\n') {
             if self.state.on_newline {
-                self.buf.write_str("  ")?;
+                self.buf.write_str("    ")?;
             }
 
             self.state.on_newline = s.ends_with('\n');
@@ -35,7 +35,7 @@ impl fmt::Write for PadAdapter<'_, '_> {
 
     fn write_char(&mut self, c: char) -> fmt::Result {
         if self.state.on_newline {
-            self.buf.write_str("  ")?;
+            self.buf.write_str("    ")?;
         }
         self.state.on_newline = c == '\n';
         self.buf.write_char(c)
@@ -107,7 +107,7 @@ impl<'a, 'b: 'a> AmlDisplayer<'a, 'b> {
         }
 
         self.result = self.result.and_then(|_| {
-            let prefix = if self.in_paren_arg { ", " } else { " ( " };
+            let prefix = if self.in_paren_arg { ", " } else { " (" };
 
             self.fmt.write_str(prefix)?;
             value_fmt(self.fmt)
@@ -121,7 +121,7 @@ impl<'a, 'b: 'a> AmlDisplayer<'a, 'b> {
 
     pub fn finish_paren_arg(&mut self) -> &mut Self {
         if self.in_paren_arg {
-            self.result = self.result.and_then(|_| self.fmt.write_str(" )"));
+            self.result = self.result.and_then(|_| self.fmt.write_str(")"));
             self.in_paren_arg = false;
         }
         self
@@ -137,19 +137,22 @@ impl<'a, 'b: 'a> AmlDisplayer<'a, 'b> {
             if self.fmt.alternate() {
                 if !self.in_body {
                     self.fmt.write_str(" {\n")?;
+                } else {
+                    self.fmt
+                        .write_str(if self.is_list { ",\n" } else { "\n" })?;
                 }
 
                 let mut state = PadAdapterState { on_newline: true };
                 let mut writer = PadAdapter::wrap(self.fmt, &mut state);
                 let fmt_holder = FmtHolder::new(value_fmt);
-                writer.write_fmt(format_args!("{:#}", fmt_holder))?;
-                writer.write_str(if self.is_list { ",\n" } else { "\n" })
+
+                writer.write_fmt(format_args!("{:#}", fmt_holder))
             } else {
                 let prefix = if self.in_body {
                     if self.is_list {
                         ", "
                     } else {
-                        ";"
+                        "; "
                     }
                 } else {
                     " { "
@@ -186,9 +189,10 @@ impl<'a, 'b: 'a> AmlDisplayer<'a, 'b> {
         if self.in_body {
             self.result = self.result.and_then(|_| {
                 if !self.fmt.alternate() {
-                    self.fmt.write_str(" ")?;
+                    self.fmt.write_str(" }")
+                } else {
+                    self.fmt.write_str("\n}")
                 }
-                self.fmt.write_str("}")
             });
             self.in_body = false;
         }
