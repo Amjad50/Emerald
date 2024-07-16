@@ -12,9 +12,10 @@ use tracing::warn;
 use crate::testing;
 
 use super::{
+    display::AmlDisplayer,
     parser::{
-        self, AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated,
-        RegionObj, UnresolvedDataObject,
+        AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated, RegionObj,
+        ScopeType, UnresolvedDataObject,
     },
     AmlCode,
 };
@@ -44,7 +45,7 @@ impl StructuredAml {
         // of the root `code`, the reason we have two is that some statement use `\_SB` for example
         // and some will just use `_SB` in the root, those are the same thing.
         let mut root = Scope::default();
-        let root_terms = Scope::parse(&code.term_list, &mut root, "\\");
+        let root_terms = Scope::parse(&code.term_list, &mut root, "\\", ScopeType::Scope);
 
         root.merge(root_terms);
 
@@ -73,18 +74,30 @@ pub enum ElementType {
     RegionFields(Option<RegionObj>, Vec<FieldDef>),
     IndexField(IndexFieldDef),
     Name(UnresolvedDataObject),
-    Mutex(u8),
     UnknownElements(Vec<AmlTerm>),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Scope {
+    ty: ScopeType,
     children: BTreeMap<String, ElementType>,
 }
 
+impl Default for Scope {
+    fn default() -> Self {
+        Self {
+            ty: ScopeType::Scope,
+            children: Default::default(),
+        }
+    }
+}
+
 impl Scope {
-    pub fn parse(terms: &[AmlTerm], root: &mut Scope, current_path: &str) -> Self {
-        let mut this = Scope::default();
+    pub fn parse(terms: &[AmlTerm], root: &mut Scope, current_path: &str, ty: ScopeType) -> Self {
+        let mut this = Scope {
+            ty,
+            children: Default::default(),
+        };
 
         fn handle_add(
             current_path: &str,
@@ -145,6 +158,11 @@ impl Scope {
                         &scope.term_list,
                         root,
                         &scope_path,
+                        match term {
+                            AmlTerm::Device(_) => ScopeType::Device,
+                            AmlTerm::Scope(_) => ScopeType::Scope,
+                            _ => unreachable!(),
+                        },
                     ));
                     handle_add(current_path, &mut this, root, &scope.name, element);
                 }
@@ -211,17 +229,20 @@ impl Scope {
                         ElementType::Name(obj.clone()),
                     );
                 }
-                AmlTerm::Mutex(name, num) => {
-                    handle_add(
-                        current_path,
-                        &mut this,
-                        root,
-                        name,
-                        ElementType::Mutex(*num),
-                    );
-                }
                 _ => {
-                    warn!("Should not be in root terms {term:?}");
+                    // TODO: the current way to structure is not good
+                    //       since the root may contain execution elements, that we need to take care of
+                    //       the language works similar to python in some sense. for example
+                    //       ```
+                    //       If (( PWRS & 0x02 )) {
+                    //         Name(_S1_, Package (0x02) {
+                    //           One, One
+                    //         })
+                    //       }
+                    //       ```
+                    //       this will enable `\_S1` name based on `PWRS` flags, and this is in the root scope
+                    //       so better to rewrite this whole thing :(
+                    warn!("Execution statements found in scope {term:?}");
                     handle_add(
                         current_path,
                         &mut this,
@@ -246,9 +267,18 @@ impl Scope {
             }
             Entry::Occupied(mut entry) => match entry.get_mut() {
                 ElementType::ScopeOrDevice(scope) => {
-                    let ElementType::ScopeOrDevice(element) = element else {
+                    let ElementType::ScopeOrDevice(mut element) = element else {
                         panic!("New element: {name:?} is not a scope or device");
                     };
+
+                    // device always wins if there is any, its a more special version of `Scope`
+                    // it shouldn't conflict anyway, but just in case
+                    if matches!(scope.ty, ScopeType::Device)
+                        || matches!(element.ty, ScopeType::Device)
+                    {
+                        element.ty = ScopeType::Device;
+                    }
+
                     scope.merge(element);
                 }
                 ElementType::RegionFields(region, fields) => {
@@ -361,116 +391,111 @@ impl Scope {
     }
 }
 
-fn display_scope(
-    name: &str,
-    scope: &Scope,
-    f: &mut fmt::Formatter<'_>,
-    depth: usize,
-) -> fmt::Result {
-    writeln!(f, "Scope ({}) {{", name)?;
-    for (name, element) in &scope.children {
-        parser::display_depth(f, depth + 1)?;
-        match element {
-            ElementType::ScopeOrDevice(scope) => display_scope(name, scope, f, depth + 1)?,
-            ElementType::Method(method) => {
-                parser::display_method(method, f, depth + 1)?;
-            }
-            ElementType::Processor(processor) => {
-                writeln!(
-                    f,
-                    "Processor ({}, 0x{:02X}, 0x{:04X}, 0x{:02X}) {{",
-                    processor.name, processor.unk1, processor.unk2, processor.unk3
-                )?;
-                parser::display_terms(&processor.term_list, f, depth + 2)?;
-                parser::display_depth(f, depth + 1)?;
-                writeln!(f, "}}")?;
-            }
-            ElementType::PowerResource(power_resource) => {
-                writeln!(
-                    f,
-                    "PowerResource ({}, 0x{:02X}, 0x{:04X}) {{",
-                    power_resource.name, power_resource.system_level, power_resource.resource_order,
-                )?;
-                parser::display_terms(&power_resource.term_list, f, depth + 1)?;
-                parser::display_depth(f, depth)?;
-                writeln!(f, "}}")?;
-            }
-            ElementType::RegionFields(region, fields) => {
-                if let Some(region) = region {
-                    write!(f, "Region ({}, {}, ", region.name, region.region_space,)?;
-                    parser::display_term_arg(&region.region_offset, f, depth)?;
-                    write!(f, ", ")?;
-                    parser::display_term_arg(&region.region_length, f, depth)?;
-                    write!(f, ")")?;
-                } else {
-                    write!(f, "REGION {name:?} NOT FOUND!!!!")?;
-                }
+impl fmt::Display for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, (name, element)) in self.children.iter().enumerate() {
+            match element {
+                ElementType::ScopeOrDevice(scope) => {
+                    let ty = match self.ty {
+                        ScopeType::Scope => "Scope",
+                        ScopeType::Device => "Device",
+                    };
+                    let mut d = AmlDisplayer::start(f, ty);
+                    d.paren_arg(|f| f.write_str(name)).finish_paren_arg();
 
-                writeln!(f)?;
-                if fields.is_empty() {
-                    write!(f, "NO FIELDS for {name:?} !!! ")?;
+                    d.body_field(|f| scope.fmt(f));
+
+                    d.at_least_empty_body().finish()
                 }
-                for field in fields {
-                    parser::display_depth(f, depth + 1)?;
-                    writeln!(f, "Field ({}, {}) {{", field.name, field.flags)?;
-                    parser::display_fields(&field.fields, f, depth + 2)?;
-                    parser::display_depth(f, depth + 1)?;
-                    writeln!(f, "}}")?;
+                ElementType::Method(method) => method.fmt(f),
+                ElementType::Processor(processor) => processor.fmt(f),
+                ElementType::PowerResource(power_resource) => power_resource.fmt(f),
+                ElementType::RegionFields(region, fields) => {
+                    if let Some(region) = region {
+                        region.fmt(f)?;
+                    } else {
+                        write!(f, "Region {name}, NOT FOUND!!!")?;
+                    }
+
+                    if f.alternate() {
+                        writeln!(f)?;
+                    } else {
+                        write!(f, "; ")?;
+                    }
+
+                    for (i, field) in fields.iter().enumerate() {
+                        field.fmt(f)?;
+
+                        if i < fields.len() - 1 {
+                            if f.alternate() {
+                                writeln!(f)?;
+                            } else {
+                                write!(f, "; ")?;
+                            }
+                        }
+                    }
+
+                    Ok(())
                 }
-            }
-            ElementType::IndexField(index_field) => {
-                writeln!(
-                    f,
-                    "IndexField ({}, {}, {}) {{",
-                    index_field.name, index_field.index_name, index_field.flags
-                )?;
-                parser::display_fields(&index_field.fields, f, depth + 2)?;
-                parser::display_depth(f, depth + 1)?;
-                writeln!(f, "}}")?;
-            }
-            ElementType::Name(data_object) => {
-                write!(f, "Name({}, ", name)?;
-                parser::display_data_object(data_object, f, depth + 1)?;
-                write!(f, ")")?;
-            }
-            ElementType::Mutex(sync_level) => {
-                write!(f, "Mutex ({}, {})", name, sync_level)?;
-            }
-            ElementType::UnknownElements(elements) => {
-                writeln!(f, "UnknownElements ({}) {{", name)?;
-                parser::display_terms(elements, f, depth + 2)?;
-                writeln!(f)?;
-                parser::display_depth(f, depth + 1)?;
-                write!(f, "}}")?;
+                ElementType::IndexField(index_field) => index_field.fmt(f),
+                ElementType::Name(data_obj) => AmlDisplayer::start(f, "Name")
+                    .paren_arg(|f| f.write_str(name))
+                    .paren_arg(|f| data_obj.fmt(f))
+                    .finish(),
+                ElementType::UnknownElements(elements) => {
+                    let mut d = AmlDisplayer::start(f, "UnknownElements");
+
+                    d.paren_arg(|f| f.write_str(name)).finish_paren_arg();
+
+                    for element in elements {
+                        d.body_field(|f| element.fmt(f));
+                    }
+
+                    d.at_least_empty_body().finish()
+                }
+            }?;
+
+            if i < self.children.len() - 1 {
+                if f.alternate() {
+                    writeln!(f)?;
+                } else {
+                    write!(f, "; ")?;
+                }
             }
         }
-        writeln!(f)?;
+
+        Ok(())
     }
-    parser::display_depth(f, depth)?;
-    writeln!(f, "}}")
 }
 
-impl StructuredAml {
-    #[allow(dead_code)]
-    pub fn display_with_depth(&self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-        parser::display_depth(f, depth)?;
-        display_scope("\\", &self.root, f, depth)
+impl fmt::Display for StructuredAml {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = AmlDisplayer::start(f, "Scope");
+        d.paren_arg(|f| f.write_str("\\")).finish_paren_arg();
+
+        d.body_field(|f| self.root.fmt(f));
+
+        d.finish()
     }
 }
 
 testing::test! {
     fn test_structure() {
-        use super::parser::{UnresolvedDataObject, FieldElement, IntegerData, ScopeObj, Target, TermArg};
+        use super::parser::{
+            AccessType, FieldElement, FieldUpdateRule, IntegerData, ScopeObj, Target, TermArg,
+            UnresolvedDataObject, RegionSpace
+        };
         use alloc::boxed::Box;
 
         let code = AmlCode {
             term_list: vec![
                 AmlTerm::Scope(ScopeObj {
+                    ty: ScopeType::Scope,
                     name: "\\".to_string(),
                     term_list: vec![
                         AmlTerm::Region(RegionObj {
                             name: "DBG_".to_string(),
-                            region_space: 1,
+                            region_space: RegionSpace::SystemIO,
                             region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
                                 IntegerData::WordConst(1026),
                             )),
@@ -480,12 +505,16 @@ testing::test! {
                         }),
                         AmlTerm::Field(FieldDef {
                             name: "DBG_".to_string(),
-                            flags: 1,
+                            access_type: AccessType::Byte,
+                            need_lock: false,
+                            update_rule: FieldUpdateRule::Preserve,
                             fields: vec![FieldElement::Named("DBGB".to_string(), 8)],
                         }),
                         AmlTerm::Method(MethodObj {
                             name: "DBUG".to_string(),
-                            flags: 1,
+                            num_args: 1,
+                            is_serialized: false,
+                            sync_level: 0,
                             term_list: vec![
                                 AmlTerm::ToHexString(TermArg::Arg(0), Box::new(Target::Local(0))),
                                 AmlTerm::ToBuffer(TermArg::Local(0), Box::new(Target::Local(0))),
@@ -495,7 +524,9 @@ testing::test! {
                 }),
                 AmlTerm::Method(MethodObj {
                     name: "\\_GPE._E02".to_string(),
-                    flags: 0,
+                    num_args: 0,
+                    is_serialized: false,
+                    sync_level: 0,
                     term_list: vec![AmlTerm::MethodCall("\\_SB_.CPUS.CSCN".to_string(), vec![])],
                 }),
             ],

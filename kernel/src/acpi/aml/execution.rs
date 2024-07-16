@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    parser::{IntegerData, TermArg, UnresolvedDataObject},
+    parser::{resource_template::ResourceTemplate, IntegerData, TermArg, UnresolvedDataObject},
     structured::{StructuredAml, StructuredAmlError},
 };
 
@@ -39,6 +39,7 @@ impl Package {
 #[derive(Debug, Clone)]
 pub enum DataObject {
     Integer(IntegerData),
+    ResourceTemplate(ResourceTemplate),
     Buffer(IntegerData, Vec<u8>),
     Package(Package),
     String(String),
@@ -99,7 +100,6 @@ impl ExecutionContext {
             ElementType::PowerResource(_)
             | ElementType::RegionFields(_, _)
             | ElementType::IndexField(_)
-            | ElementType::Mutex(_)
             | ElementType::ScopeOrDevice(_)
             | ElementType::Processor(_) => {
                 return Err(AmlExecutionError::ElementNotExecutable(label.to_string()))
@@ -141,20 +141,26 @@ impl ExecutionContext {
         reference_path: &str,
     ) -> Result<DataObject, AmlExecutionError> {
         match data {
-            UnresolvedDataObject::Buffer(term, data) => {
-                let size_term = self.execute_term_arg(term.as_ref(), reference_path)?;
+            UnresolvedDataObject::Buffer(buffer) => {
+                let size_term = self.execute_term_arg(buffer.size.as_ref(), reference_path)?;
 
                 let size_term = match size_term {
                     DataObject::Integer(i) => i,
                     _ => {
                         return Err(AmlExecutionError::UnexpectedTermResultType(
-                            term.as_ref().clone(),
+                            buffer.size.as_ref().clone(),
                             "Integer".to_string(),
                         ))
                     }
                 };
 
-                Ok(DataObject::Buffer(size_term, data.into_iter().collect()))
+                Ok(DataObject::Buffer(
+                    size_term,
+                    buffer.data.into_iter().collect(),
+                ))
+            }
+            UnresolvedDataObject::ResourceTemplate(template) => {
+                Ok(DataObject::ResourceTemplate(template))
             }
             UnresolvedDataObject::Package(size, elements) => Ok(DataObject::Package(Package {
                 size: IntegerData::ByteConst(size),

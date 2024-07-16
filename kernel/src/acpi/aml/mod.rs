@@ -1,3 +1,4 @@
+mod display;
 pub mod execution;
 mod parser;
 mod structured;
