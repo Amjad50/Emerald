@@ -540,6 +540,37 @@
 <a href="#538" id="538">538</a>
 <a href="#539" id="539">539</a>
 <a href="#540" id="540">540</a>
+<a href="#541" id="541">541</a>
+<a href="#542" id="542">542</a>
+<a href="#543" id="543">543</a>
+<a href="#544" id="544">544</a>
+<a href="#545" id="545">545</a>
+<a href="#546" id="546">546</a>
+<a href="#547" id="547">547</a>
+<a href="#548" id="548">548</a>
+<a href="#549" id="549">549</a>
+<a href="#550" id="550">550</a>
+<a href="#551" id="551">551</a>
+<a href="#552" id="552">552</a>
+<a href="#553" id="553">553</a>
+<a href="#554" id="554">554</a>
+<a href="#555" id="555">555</a>
+<a href="#556" id="556">556</a>
+<a href="#557" id="557">557</a>
+<a href="#558" id="558">558</a>
+<a href="#559" id="559">559</a>
+<a href="#560" id="560">560</a>
+<a href="#561" id="561">561</a>
+<a href="#562" id="562">562</a>
+<a href="#563" id="563">563</a>
+<a href="#564" id="564">564</a>
+<a href="#565" id="565">565</a>
+<a href="#566" id="566">566</a>
+<a href="#567" id="567">567</a>
+<a href="#568" id="568">568</a>
+<a href="#569" id="569">569</a>
+<a href="#570" id="570">570</a>
+<a href="#571" id="571">571</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{
@@ -554,9 +585,10 @@
 <span class="kw">use </span><span class="kw">crate</span>::testing;
 
 <span class="kw">use super</span>::{
+    display::AmlDisplayer,
     parser::{
-        <span class="self">self</span>, AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated,
-        RegionObj, UnresolvedDataObject,
+        AmlTerm, FieldDef, IndexFieldDef, MethodObj, PowerResource, ProcessorDeprecated, RegionObj,
+        ScopeType, UnresolvedDataObject,
     },
     AmlCode,
 };
@@ -586,7 +618,7 @@
         // of the root `code`, the reason we have two is that some statement use `\_SB` for example
         // and some will just use `_SB` in the root, those are the same thing.
         </span><span class="kw">let </span><span class="kw-2">mut </span>root = Scope::default();
-        <span class="kw">let </span>root_terms = Scope::parse(<span class="kw-2">&amp;</span>code.term_list, <span class="kw-2">&amp;mut </span>root, <span class="string">"\\"</span>);
+        <span class="kw">let </span>root_terms = Scope::parse(<span class="kw-2">&amp;</span>code.term_list, <span class="kw-2">&amp;mut </span>root, <span class="string">"\\"</span>, ScopeType::Scope);
 
         root.merge(root_terms);
 
@@ -615,18 +647,30 @@
     RegionFields(<span class="prelude-ty">Option</span>&lt;RegionObj&gt;, Vec&lt;FieldDef&gt;),
     IndexField(IndexFieldDef),
     Name(UnresolvedDataObject),
-    Mutex(u8),
     UnknownElements(Vec&lt;AmlTerm&gt;),
 }
 
-<span class="attr">#[derive(Debug, Clone, Default)]
+<span class="attr">#[derive(Debug, Clone)]
 </span><span class="kw">pub struct </span>Scope {
+    ty: ScopeType,
     children: BTreeMap&lt;String, ElementType&gt;,
 }
 
+<span class="kw">impl </span>Default <span class="kw">for </span>Scope {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            ty: ScopeType::Scope,
+            children: Default::default(),
+        }
+    }
+}
+
 <span class="kw">impl </span>Scope {
-    <span class="kw">pub fn </span>parse(terms: <span class="kw-2">&amp;</span>[AmlTerm], root: <span class="kw-2">&amp;mut </span>Scope, current_path: <span class="kw-2">&amp;</span>str) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span><span class="kw-2">mut </span>this = Scope::default();
+    <span class="kw">pub fn </span>parse(terms: <span class="kw-2">&amp;</span>[AmlTerm], root: <span class="kw-2">&amp;mut </span>Scope, current_path: <span class="kw-2">&amp;</span>str, ty: ScopeType) -&gt; <span class="self">Self </span>{
+        <span class="kw">let </span><span class="kw-2">mut </span>this = Scope {
+            ty,
+            children: Default::default(),
+        };
 
         <span class="kw">fn </span>handle_add(
             current_path: <span class="kw-2">&amp;</span>str,
@@ -687,6 +731,11 @@
                         <span class="kw-2">&amp;</span>scope.term_list,
                         root,
                         <span class="kw-2">&amp;</span>scope_path,
+                        <span class="kw">match </span>term {
+                            AmlTerm::Device(<span class="kw">_</span>) =&gt; ScopeType::Device,
+                            AmlTerm::Scope(<span class="kw">_</span>) =&gt; ScopeType::Scope,
+                            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
+                        },
                     ));
                     handle_add(current_path, <span class="kw-2">&amp;mut </span>this, root, <span class="kw-2">&amp;</span>scope.name, element);
                 }
@@ -753,17 +802,20 @@
                         ElementType::Name(obj.clone()),
                     );
                 }
-                AmlTerm::Mutex(name, num) =&gt; {
-                    handle_add(
-                        current_path,
-                        <span class="kw-2">&amp;mut </span>this,
-                        root,
-                        name,
-                        ElementType::Mutex(<span class="kw-2">*</span>num),
-                    );
-                }
                 <span class="kw">_ </span>=&gt; {
-                    <span class="macro">warn!</span>(<span class="string">"Should not be in root terms {term:?}"</span>);
+                    <span class="comment">// TODO: the current way to structure is not good
+                    //       since the root may contain execution elements, that we need to take care of
+                    //       the language works similar to python in some sense. for example
+                    //       ```
+                    //       If (( PWRS &amp; 0x02 )) {
+                    //         Name(_S1_, Package (0x02) {
+                    //           One, One
+                    //         })
+                    //       }
+                    //       ```
+                    //       this will enable `\_S1` name based on `PWRS` flags, and this is in the root scope
+                    //       so better to rewrite this whole thing :(
+                    </span><span class="macro">warn!</span>(<span class="string">"Execution statements found in scope {term:?}"</span>);
                     handle_add(
                         current_path,
                         <span class="kw-2">&amp;mut </span>this,
@@ -788,9 +840,18 @@
             }
             Entry::Occupied(<span class="kw-2">mut </span>entry) =&gt; <span class="kw">match </span>entry.get_mut() {
                 ElementType::ScopeOrDevice(scope) =&gt; {
-                    <span class="kw">let </span>ElementType::ScopeOrDevice(element) = element <span class="kw">else </span>{
+                    <span class="kw">let </span>ElementType::ScopeOrDevice(<span class="kw-2">mut </span>element) = element <span class="kw">else </span>{
                         <span class="macro">panic!</span>(<span class="string">"New element: {name:?} is not a scope or device"</span>);
                     };
+
+                    <span class="comment">// device always wins if there is any, its a more special version of `Scope`
+                    // it shouldn't conflict anyway, but just in case
+                    </span><span class="kw">if </span><span class="macro">matches!</span>(scope.ty, ScopeType::Device)
+                        || <span class="macro">matches!</span>(element.ty, ScopeType::Device)
+                    {
+                        element.ty = ScopeType::Device;
+                    }
+
                     scope.merge(element);
                 }
                 ElementType::RegionFields(region, fields) =&gt; {
@@ -903,116 +964,111 @@
     }
 }
 
-<span class="kw">fn </span>display_scope(
-    name: <span class="kw-2">&amp;</span>str,
-    scope: <span class="kw-2">&amp;</span>Scope,
-    f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;,
-    depth: usize,
-) -&gt; fmt::Result {
-    <span class="macro">writeln!</span>(f, <span class="string">"Scope ({}) {{"</span>, name)<span class="question-mark">?</span>;
-    <span class="kw">for </span>(name, element) <span class="kw">in </span><span class="kw-2">&amp;</span>scope.children {
-        parser::display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-        <span class="kw">match </span>element {
-            ElementType::ScopeOrDevice(scope) =&gt; display_scope(name, scope, f, depth + <span class="number">1</span>)<span class="question-mark">?</span>,
-            ElementType::Method(method) =&gt; {
-                parser::display_method(method, f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-            }
-            ElementType::Processor(processor) =&gt; {
-                <span class="macro">writeln!</span>(
-                    f,
-                    <span class="string">"Processor ({}, 0x{:02X}, 0x{:04X}, 0x{:02X}) {{"</span>,
-                    processor.name, processor.unk1, processor.unk2, processor.unk3
-                )<span class="question-mark">?</span>;
-                parser::display_terms(<span class="kw-2">&amp;</span>processor.term_list, f, depth + <span class="number">2</span>)<span class="question-mark">?</span>;
-                parser::display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-                <span class="macro">writeln!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
-            }
-            ElementType::PowerResource(power_resource) =&gt; {
-                <span class="macro">writeln!</span>(
-                    f,
-                    <span class="string">"PowerResource ({}, 0x{:02X}, 0x{:04X}) {{"</span>,
-                    power_resource.name, power_resource.system_level, power_resource.resource_order,
-                )<span class="question-mark">?</span>;
-                parser::display_terms(<span class="kw-2">&amp;</span>power_resource.term_list, f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-                parser::display_depth(f, depth)<span class="question-mark">?</span>;
-                <span class="macro">writeln!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
-            }
-            ElementType::RegionFields(region, fields) =&gt; {
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(region) = region {
-                    <span class="macro">write!</span>(f, <span class="string">"Region ({}, {}, "</span>, region.name, region.region_space,)<span class="question-mark">?</span>;
-                    parser::display_term_arg(<span class="kw-2">&amp;</span>region.region_offset, f, depth)<span class="question-mark">?</span>;
-                    <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
-                    parser::display_term_arg(<span class="kw-2">&amp;</span>region.region_length, f, depth)<span class="question-mark">?</span>;
-                    <span class="macro">write!</span>(f, <span class="string">")"</span>)<span class="question-mark">?</span>;
-                } <span class="kw">else </span>{
-                    <span class="macro">write!</span>(f, <span class="string">"REGION {name:?} NOT FOUND!!!!"</span>)<span class="question-mark">?</span>;
-                }
+<span class="kw">impl </span>fmt::Display <span class="kw">for </span>Scope {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+        <span class="kw">for </span>(i, (name, element)) <span class="kw">in </span><span class="self">self</span>.children.iter().enumerate() {
+            <span class="kw">match </span>element {
+                ElementType::ScopeOrDevice(scope) =&gt; {
+                    <span class="kw">let </span>ty = <span class="kw">match </span><span class="self">self</span>.ty {
+                        ScopeType::Scope =&gt; <span class="string">"Scope"</span>,
+                        ScopeType::Device =&gt; <span class="string">"Device"</span>,
+                    };
+                    <span class="kw">let </span><span class="kw-2">mut </span>d = AmlDisplayer::start(f, ty);
+                    d.paren_arg(|f| f.write_str(name)).finish_paren_arg();
 
-                <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
-                <span class="kw">if </span>fields.is_empty() {
-                    <span class="macro">write!</span>(f, <span class="string">"NO FIELDS for {name:?} !!! "</span>)<span class="question-mark">?</span>;
+                    d.body_field(|f| scope.fmt(f));
+
+                    d.at_least_empty_body().finish()
                 }
-                <span class="kw">for </span>field <span class="kw">in </span>fields {
-                    parser::display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-                    <span class="macro">writeln!</span>(f, <span class="string">"Field ({}, {}) {{"</span>, field.name, field.flags)<span class="question-mark">?</span>;
-                    parser::display_fields(<span class="kw-2">&amp;</span>field.fields, f, depth + <span class="number">2</span>)<span class="question-mark">?</span>;
-                    parser::display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-                    <span class="macro">writeln!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
+                ElementType::Method(method) =&gt; method.fmt(f),
+                ElementType::Processor(processor) =&gt; processor.fmt(f),
+                ElementType::PowerResource(power_resource) =&gt; power_resource.fmt(f),
+                ElementType::RegionFields(region, fields) =&gt; {
+                    <span class="kw">if let </span><span class="prelude-val">Some</span>(region) = region {
+                        region.fmt(f)<span class="question-mark">?</span>;
+                    } <span class="kw">else </span>{
+                        <span class="macro">write!</span>(f, <span class="string">"Region {name}, NOT FOUND!!!"</span>)<span class="question-mark">?</span>;
+                    }
+
+                    <span class="kw">if </span>f.alternate() {
+                        <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+                    } <span class="kw">else </span>{
+                        <span class="macro">write!</span>(f, <span class="string">"; "</span>)<span class="question-mark">?</span>;
+                    }
+
+                    <span class="kw">for </span>(i, field) <span class="kw">in </span>fields.iter().enumerate() {
+                        field.fmt(f)<span class="question-mark">?</span>;
+
+                        <span class="kw">if </span>i &lt; fields.len() - <span class="number">1 </span>{
+                            <span class="kw">if </span>f.alternate() {
+                                <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+                            } <span class="kw">else </span>{
+                                <span class="macro">write!</span>(f, <span class="string">"; "</span>)<span class="question-mark">?</span>;
+                            }
+                        }
+                    }
+
+                    <span class="prelude-val">Ok</span>(())
                 }
-            }
-            ElementType::IndexField(index_field) =&gt; {
-                <span class="macro">writeln!</span>(
-                    f,
-                    <span class="string">"IndexField ({}, {}, {}) {{"</span>,
-                    index_field.name, index_field.index_name, index_field.flags
-                )<span class="question-mark">?</span>;
-                parser::display_fields(<span class="kw-2">&amp;</span>index_field.fields, f, depth + <span class="number">2</span>)<span class="question-mark">?</span>;
-                parser::display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-                <span class="macro">writeln!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
-            }
-            ElementType::Name(data_object) =&gt; {
-                <span class="macro">write!</span>(f, <span class="string">"Name({}, "</span>, name)<span class="question-mark">?</span>;
-                parser::display_data_object(data_object, f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-                <span class="macro">write!</span>(f, <span class="string">")"</span>)<span class="question-mark">?</span>;
-            }
-            ElementType::Mutex(sync_level) =&gt; {
-                <span class="macro">write!</span>(f, <span class="string">"Mutex ({}, {})"</span>, name, sync_level)<span class="question-mark">?</span>;
-            }
-            ElementType::UnknownElements(elements) =&gt; {
-                <span class="macro">writeln!</span>(f, <span class="string">"UnknownElements ({}) {{"</span>, name)<span class="question-mark">?</span>;
-                parser::display_terms(elements, f, depth + <span class="number">2</span>)<span class="question-mark">?</span>;
-                <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
-                parser::display_depth(f, depth + <span class="number">1</span>)<span class="question-mark">?</span>;
-                <span class="macro">write!</span>(f, <span class="string">"}}"</span>)<span class="question-mark">?</span>;
+                ElementType::IndexField(index_field) =&gt; index_field.fmt(f),
+                ElementType::Name(data_obj) =&gt; AmlDisplayer::start(f, <span class="string">"Name"</span>)
+                    .paren_arg(|f| f.write_str(name))
+                    .paren_arg(|f| data_obj.fmt(f))
+                    .finish(),
+                ElementType::UnknownElements(elements) =&gt; {
+                    <span class="kw">let </span><span class="kw-2">mut </span>d = AmlDisplayer::start(f, <span class="string">"UnknownElements"</span>);
+
+                    d.paren_arg(|f| f.write_str(name)).finish_paren_arg();
+
+                    <span class="kw">for </span>element <span class="kw">in </span>elements {
+                        d.body_field(|f| element.fmt(f));
+                    }
+
+                    d.at_least_empty_body().finish()
+                }
+            }<span class="question-mark">?</span>;
+
+            <span class="kw">if </span>i &lt; <span class="self">self</span>.children.len() - <span class="number">1 </span>{
+                <span class="kw">if </span>f.alternate() {
+                    <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+                } <span class="kw">else </span>{
+                    <span class="macro">write!</span>(f, <span class="string">"; "</span>)<span class="question-mark">?</span>;
+                }
             }
         }
-        <span class="macro">writeln!</span>(f)<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>(())
     }
-    parser::display_depth(f, depth)<span class="question-mark">?</span>;
-    <span class="macro">writeln!</span>(f, <span class="string">"}}"</span>)
 }
 
-<span class="kw">impl </span>StructuredAml {
-    <span class="attr">#[allow(dead_code)]
-    </span><span class="kw">pub fn </span>display_with_depth(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;, depth: usize) -&gt; fmt::Result {
-        parser::display_depth(f, depth)<span class="question-mark">?</span>;
-        display_scope(<span class="string">"\\"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.root, f, depth)
+<span class="kw">impl </span>fmt::Display <span class="kw">for </span>StructuredAml {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+        <span class="kw">let </span><span class="kw-2">mut </span>d = AmlDisplayer::start(f, <span class="string">"Scope"</span>);
+        d.paren_arg(|f| f.write_str(<span class="string">"\\"</span>)).finish_paren_arg();
+
+        d.body_field(|f| <span class="self">self</span>.root.fmt(f));
+
+        d.finish()
     }
 }
 
 <span class="macro">testing::test! </span>{
     <span class="kw">fn </span>test_structure() {
-        <span class="kw">use </span><span class="kw">super</span>::parser::{UnresolvedDataObject, FieldElement, IntegerData, ScopeObj, Target, TermArg};
+        <span class="kw">use </span><span class="kw">super</span>::parser::{
+            AccessType, FieldElement, FieldUpdateRule, IntegerData, ScopeObj, Target, TermArg,
+            UnresolvedDataObject, RegionSpace
+        };
         <span class="kw">use </span>alloc::boxed::Box;
 
         <span class="kw">let </span>code = AmlCode {
             term_list: <span class="macro">vec!</span>[
                 AmlTerm::Scope(ScopeObj {
+                    ty: ScopeType::Scope,
                     name: <span class="string">"\\"</span>.to_string(),
                     term_list: <span class="macro">vec!</span>[
                         AmlTerm::Region(RegionObj {
                             name: <span class="string">"DBG_"</span>.to_string(),
-                            region_space: <span class="number">1</span>,
+                            region_space: RegionSpace::SystemIO,
                             region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
                                 IntegerData::WordConst(<span class="number">1026</span>),
                             )),
@@ -1022,12 +1078,16 @@
                         }),
                         AmlTerm::Field(FieldDef {
                             name: <span class="string">"DBG_"</span>.to_string(),
-                            flags: <span class="number">1</span>,
+                            access_type: AccessType::Byte,
+                            need_lock: <span class="bool-val">false</span>,
+                            update_rule: FieldUpdateRule::Preserve,
                             fields: <span class="macro">vec!</span>[FieldElement::Named(<span class="string">"DBGB"</span>.to_string(), <span class="number">8</span>)],
                         }),
                         AmlTerm::Method(MethodObj {
                             name: <span class="string">"DBUG"</span>.to_string(),
-                            flags: <span class="number">1</span>,
+                            num_args: <span class="number">1</span>,
+                            is_serialized: <span class="bool-val">false</span>,
+                            sync_level: <span class="number">0</span>,
                             term_list: <span class="macro">vec!</span>[
                                 AmlTerm::ToHexString(TermArg::Arg(<span class="number">0</span>), Box::new(Target::Local(<span class="number">0</span>))),
                                 AmlTerm::ToBuffer(TermArg::Local(<span class="number">0</span>), Box::new(Target::Local(<span class="number">0</span>))),
@@ -1037,7 +1097,9 @@
                 }),
                 AmlTerm::Method(MethodObj {
                     name: <span class="string">"\\_GPE._E02"</span>.to_string(),
-                    flags: <span class="number">0</span>,
+                    num_args: <span class="number">0</span>,
+                    is_serialized: <span class="bool-val">false</span>,
+                    sync_level: <span class="number">0</span>,
                     term_list: <span class="macro">vec!</span>[AmlTerm::MethodCall(<span class="string">"\\_SB_.CPUS.CSCN"</span>.to_string(), <span class="macro">vec!</span>[])],
                 }),
             ],

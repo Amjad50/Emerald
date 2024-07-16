@@ -182,8 +182,13 @@
 </blockquote>
 <p><code>AML</code> is a language used to describe the hardware of the system, and it is used by the <a href="./index.html">ACPI</a> to configure the system, check spec <a href="https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/20_AML_Specification/AML_Specification.html">here</a> (this is what's used to implement this parser).</p>
 <p>This is an <code>AML</code> parser that is able to parse the code inside the <code>DSDT</code> and <code>SSDT</code> tables.</p>
-<p>Currently, we do not use the parsed code, as we need to build an interpreter for it, so that we can emulate executing it
-and get the data we need.</p>
+<p>We have 2 forms of the parsed <code>AML</code>.</p>
+<ul>
+<li><strong>Normal:</strong> This is what we get from the table, we just parse it directly</li>
+<li><strong>Structured:</strong> After getting the <code>Normal</code> version, we do some processing to order them and group them by <code>Scope</code>
+so that we can easily search for a given label.</li>
+</ul>
+<p>Any of these can be printed by the cmdline <code>log_aml</code> being <code>normal</code> or <code>structured</code> (See <a href="../boot/cmdline.html">Cmdline</a>)</p>
 <h2 id="why-this-is-needed"><a class="header" href="#why-this-is-needed">Why this is needed?</a></h2>
 <p>There are some details of the hardware that is hidden in <code>AML</code>, such as:</p>
 <ul>

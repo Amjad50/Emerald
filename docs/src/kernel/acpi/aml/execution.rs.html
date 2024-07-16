@@ -278,6 +278,12 @@
 <a href="#276" id="276">276</a>
 <a href="#277" id="277">277</a>
 <a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>alloc::{
     string::{String, ToString},
     vec::Vec,
@@ -289,7 +295,7 @@
 };
 
 <span class="kw">use super</span>::{
-    parser::{IntegerData, TermArg, UnresolvedDataObject},
+    parser::{resource_template::ResourceTemplate, IntegerData, TermArg, UnresolvedDataObject},
     structured::{StructuredAml, StructuredAmlError},
 };
 
@@ -319,6 +325,7 @@
 </span><span class="attr">#[derive(Debug, Clone)]
 </span><span class="kw">pub enum </span>DataObject {
     Integer(IntegerData),
+    ResourceTemplate(ResourceTemplate),
     Buffer(IntegerData, Vec&lt;u8&gt;),
     Package(Package),
     String(String),
@@ -379,7 +386,6 @@
             ElementType::PowerResource(<span class="kw">_</span>)
             | ElementType::RegionFields(<span class="kw">_</span>, <span class="kw">_</span>)
             | ElementType::IndexField(<span class="kw">_</span>)
-            | ElementType::Mutex(<span class="kw">_</span>)
             | ElementType::ScopeOrDevice(<span class="kw">_</span>)
             | ElementType::Processor(<span class="kw">_</span>) =&gt; {
                 <span class="kw">return </span><span class="prelude-val">Err</span>(AmlExecutionError::ElementNotExecutable(label.to_string()))
@@ -421,20 +427,26 @@
         reference_path: <span class="kw-2">&amp;</span>str,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;DataObject, AmlExecutionError&gt; {
         <span class="kw">match </span>data {
-            UnresolvedDataObject::Buffer(term, data) =&gt; {
-                <span class="kw">let </span>size_term = <span class="self">self</span>.execute_term_arg(term.as_ref(), reference_path)<span class="question-mark">?</span>;
+            UnresolvedDataObject::Buffer(buffer) =&gt; {
+                <span class="kw">let </span>size_term = <span class="self">self</span>.execute_term_arg(buffer.size.as_ref(), reference_path)<span class="question-mark">?</span>;
 
                 <span class="kw">let </span>size_term = <span class="kw">match </span>size_term {
                     DataObject::Integer(i) =&gt; i,
                     <span class="kw">_ </span>=&gt; {
                         <span class="kw">return </span><span class="prelude-val">Err</span>(AmlExecutionError::UnexpectedTermResultType(
-                            term.as_ref().clone(),
+                            buffer.size.as_ref().clone(),
                             <span class="string">"Integer"</span>.to_string(),
                         ))
                     }
                 };
 
-                <span class="prelude-val">Ok</span>(DataObject::Buffer(size_term, data.into_iter().collect()))
+                <span class="prelude-val">Ok</span>(DataObject::Buffer(
+                    size_term,
+                    buffer.data.into_iter().collect(),
+                ))
+            }
+            UnresolvedDataObject::ResourceTemplate(template) =&gt; {
+                <span class="prelude-val">Ok</span>(DataObject::ResourceTemplate(template))
             }
             UnresolvedDataObject::Package(size, elements) =&gt; <span class="prelude-val">Ok</span>(DataObject::Package(Package {
                 size: IntegerData::ByteConst(size),

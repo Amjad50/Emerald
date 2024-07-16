@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ElementType","StructuredAmlError"],"fn":["display_scope"],"struct":["Scope","StructuredAml"]};
+window.SIDEBAR_ITEMS = {"enum":["ElementType","StructuredAmlError"],"struct":["Scope","StructuredAml"]};
