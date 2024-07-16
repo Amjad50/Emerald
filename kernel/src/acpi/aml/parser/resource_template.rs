@@ -55,14 +55,26 @@ impl Parser<'_> {
         ]))
     }
 
-    pub fn get_data_as_slice(&mut self, len: usize) -> Result<&[u8], AmlParseError> {
+    pub fn get_next_address_data<W: AddressWidth>(&mut self) -> Result<W, AmlParseError> {
+        W::from_parser(self)
+    }
+
+    pub fn get_inner(&mut self, len: usize) -> Result<Self, AmlParseError> {
         if self.pos + len > self.buffer.len() {
             return Err(AmlParseError::UnexpectedEndOfCode);
         }
 
-        let slice = &self.buffer[self.pos..self.pos + len];
+        let buffer = &self.buffer[self.pos..self.pos + len];
         self.pos += len;
-        Ok(slice)
+        Ok(Parser { buffer, pos: 0 })
+    }
+
+    pub fn get_remaining_data(&mut self) -> Result<&[u8], AmlParseError> {
+        if self.pos >= self.buffer.len() {
+            return Err(AmlParseError::UnexpectedEndOfCode);
+        }
+        self.pos = self.buffer.len();
+        Ok(&self.buffer[self.pos..])
     }
 
     pub fn is_done(&self) -> bool {
@@ -94,6 +106,265 @@ pub enum DmaTransferWidth {
     Width64Bit,
     Width128Bit,
     Width256Bit,
+}
+
+#[derive(Debug, Clone)]
+pub enum SpaceMemoryType {
+    NonCacheable,
+    Cacheable,
+    WriteCombining,
+    // ignore in extended address space
+    Prefetchable,
+}
+
+#[derive(Debug, Clone)]
+pub enum SpaceMemoryRangeType {
+    AddressRangeMemory,
+    AddressRangeReserved,
+    AddressRangeACPI,
+    AddressRangeNVS,
+}
+
+#[derive(Debug, Clone)]
+pub enum SpaceIoRangeType {
+    NonISAOnlyRanges,
+    ISAOnlyRanges,
+    EntireRange,
+}
+
+#[derive(Debug, Clone)]
+pub enum AddressSpaceType {
+    Memory {
+        is_read_write: bool,
+        ty: SpaceMemoryType,
+        range_ty: SpaceMemoryRangeType,
+        is_type_translation: bool,
+    },
+    Io {
+        is_type_translation: bool,
+        range_ty: SpaceIoRangeType,
+        is_sparse_translation: bool,
+    },
+    BusNumber,
+    VendorDefined {
+        value: u8,
+        flags: u8,
+    },
+}
+
+impl AddressSpaceType {
+    pub fn parse<W: AddressWidth>(value: u8, flags: u8) -> Result<Self, AmlParseError> {
+        let result = match (W::width(), value) {
+            (_, 0) => {
+                let is_read_write = flags & 1 != 0;
+                let ty = match (flags >> 1) & 0b11 {
+                    0 => SpaceMemoryType::NonCacheable,
+                    1 => SpaceMemoryType::Cacheable,
+                    2 => SpaceMemoryType::WriteCombining,
+                    3 => SpaceMemoryType::Prefetchable,
+                    _ => unreachable!(),
+                };
+                let range_ty = match (flags >> 3) & 0b11 {
+                    0 => SpaceMemoryRangeType::AddressRangeMemory,
+                    1 => SpaceMemoryRangeType::AddressRangeReserved,
+                    2 => SpaceMemoryRangeType::AddressRangeACPI,
+                    3 => SpaceMemoryRangeType::AddressRangeNVS,
+                    _ => unreachable!(),
+                };
+                let is_type_translation = (flags >> 5) & 1 != 0;
+
+                Self::Memory {
+                    is_read_write,
+                    ty,
+                    range_ty,
+                    is_type_translation,
+                }
+            }
+            (_, 1) => {
+                let range_ty = match flags & 0b11 {
+                    0 => return Err(AmlParseError::ReservedValue),
+                    1 => SpaceIoRangeType::NonISAOnlyRanges,
+                    2 => SpaceIoRangeType::ISAOnlyRanges,
+                    3 => SpaceIoRangeType::EntireRange,
+                    _ => unreachable!(),
+                };
+                let is_type_translation = (flags >> 4) & 1 != 0;
+                let is_sparse_translation = (flags >> 5) & 1 != 0;
+
+                Self::Io {
+                    is_type_translation,
+                    range_ty,
+                    is_sparse_translation,
+                }
+            }
+            // only word has bus number
+            (2, 2) => Self::BusNumber,
+            (_, 192..=255) => Self::VendorDefined { value, flags },
+            _ => return Err(AmlParseError::ReservedValue),
+        };
+
+        Ok(result)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ResourceSourceOrTypeSpecificAttrs {
+    ResourceSource(ResourceSource),
+    TypeSpecificAttrs(u64),
+}
+
+#[derive(Debug, Clone)]
+pub struct AddressSpace<W: AddressWidth> {
+    ty: AddressSpaceType,
+    is_consumer: bool,
+    is_max_fixed: bool,
+    is_min_fixed: bool,
+    is_subtract_decode: bool,
+    granularity: W,
+    min: W,
+    max: W,
+    translation_offset: W,
+    len: W,
+    extra: ResourceSourceOrTypeSpecificAttrs,
+}
+
+impl<W: AddressWidth> AddressSpace<W> {
+    fn parse_address_ranges_nums(parser: &mut Parser) -> Result<(W, W, W, W, W), AmlParseError> {
+        let granularity = parser.get_next_address_data::<W>()?;
+        let min = parser.get_next_address_data::<W>()?;
+        let max = parser.get_next_address_data::<W>()?;
+        let translation_offset = parser.get_next_address_data::<W>()?;
+        let len = parser.get_next_address_data::<W>()?;
+
+        Ok((granularity, min, max, translation_offset, len))
+    }
+
+    fn parse_start_flags(
+        parser: &mut Parser,
+    ) -> Result<(AddressSpaceType, bool, bool, bool, bool), AmlParseError> {
+        let ty_byte = parser.get_next_byte()?;
+        let flags = parser.get_next_byte()?;
+        let ty_flags = parser.get_next_byte()?;
+
+        let ty = AddressSpaceType::parse::<W>(ty_byte, ty_flags)?;
+        let is_max_fixed = flags & (1 << 3) != 0;
+        let is_min_fixed = flags & (1 << 2) != 0;
+        let is_subtract_decode = flags & (1 << 1) != 0;
+        let is_consumer = flags & 1 != 0;
+
+        Ok((
+            ty,
+            is_consumer,
+            is_max_fixed,
+            is_min_fixed,
+            is_subtract_decode,
+        ))
+    }
+
+    pub fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let (ty, is_consumer, is_max_fixed, is_min_fixed, is_subtract_decode) =
+            Self::parse_start_flags(parser)?;
+        let (granularity, min, max, translation_offset, len) =
+            Self::parse_address_ranges_nums(parser)?;
+
+        let resource_source = ResourceSource::parse(parser)?;
+
+        Ok(Self {
+            ty,
+            is_consumer,
+            is_max_fixed,
+            is_min_fixed,
+            is_subtract_decode,
+            granularity,
+            min,
+            max,
+            translation_offset,
+            len,
+            extra: ResourceSourceOrTypeSpecificAttrs::ResourceSource(resource_source),
+        })
+    }
+
+    pub fn parse_extended(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        assert_eq!(W::width(), 8, "only support 64-bit address space");
+        let (ty, is_consumer, is_max_fixed, is_min_fixed, is_subtract_decode) =
+            Self::parse_start_flags(parser)?;
+
+        let revision = parser.get_next_byte()?;
+        assert_eq!(revision, 1, "only support revision 1");
+        let reserved = parser.get_next_byte()?;
+        if reserved != 0 {
+            return Err(AmlParseError::ReservedValue);
+        }
+
+        let (granularity, min, max, translation_offset, len) =
+            Self::parse_address_ranges_nums(parser)?;
+
+        let type_specific_attribute = parser.get_next_u64()?;
+
+        Ok(Self {
+            ty,
+            is_consumer,
+            is_max_fixed,
+            is_min_fixed,
+            is_subtract_decode,
+            granularity,
+            min,
+            max,
+            translation_offset,
+            len,
+            extra: ResourceSourceOrTypeSpecificAttrs::TypeSpecificAttrs(type_specific_attribute),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ResourceSource {
+    index: Option<u8>,
+    source: Option<Vec<u8>>,
+}
+
+impl ResourceSource {
+    fn empty() -> Self {
+        Self {
+            index: None,
+            source: None,
+        }
+    }
+
+    fn parse(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        let index = if !parser.is_done() {
+            Some(parser.get_next_byte()?)
+        } else {
+            None
+        };
+
+        let source = if !parser.is_done() {
+            Some(parser.get_remaining_data()?.to_vec())
+        } else {
+            None
+        };
+
+        Ok(Self { index, source })
+    }
+
+    fn display<'a, 'b, 'r>(&self, d: &'r mut AmlDisplayer<'a, 'b>) -> &'r mut AmlDisplayer<'a, 'b> {
+        d.paren_arg(|f| {
+            if let Some(index) = self.index {
+                write!(f, "{}", index)
+            } else {
+                Ok(())
+            }
+        });
+        d.paren_arg(|f| {
+            if let Some(source) = &self.source {
+                write!(f, "{:?}", ByteStr(source))
+            } else {
+                Ok(())
+            }
+        });
+
+        d
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -165,8 +436,7 @@ pub enum ResourceMacro {
         is_shared: bool,
         wake_capable: bool,
         interrupts: Vec<u32>,
-        resource_source_index: Option<u8>,
-        resource_source: Option<Vec<u8>>,
+        resource_source: ResourceSource,
     },
     Register {
         address_space: RegionSpace,
@@ -175,6 +445,10 @@ pub enum ResourceMacro {
         address: u64,
         access_size: AccessType,
     },
+    AddressSpaceWord(AddressSpace<u16>),
+    AddressSpaceDWord(AddressSpace<u32>),
+    AddressSpaceQWord(AddressSpace<u64>),
+    AddressSpaceExtended(AddressSpace<u64>),
 }
 
 impl ResourceMacro {
@@ -338,6 +612,8 @@ impl ResourceMacro {
 
         let data_len = parser.get_next_u16()?;
 
+        let mut parser = parser.get_inner(data_len as usize)?;
+
         let result = match first & 0x7F {
             0x00 | 0x03 | 0x13..=0x7F => {
                 return Err(AmlParseError::ResourceTemplateReservedTag);
@@ -387,13 +663,9 @@ impl ResourceMacro {
                     access_size,
                 })
             }
-            0x04 => {
-                let data = parser.get_data_as_slice(data_len as usize)?;
-
-                Some(ResourceMacro::VendorLarge {
-                    data: data.to_vec(),
-                })
-            }
+            0x04 => Some(ResourceMacro::VendorLarge {
+                data: parser.get_remaining_data()?.to_vec(),
+            }),
             0x05 => {
                 assert_eq!(data_len, 17);
                 let flags = parser.get_next_byte()?;
@@ -424,7 +696,21 @@ impl ResourceMacro {
                     len,
                 })
             }
+            0x07 => {
+                assert!(data_len >= 23);
+                Some(ResourceMacro::AddressSpaceDWord(
+                    AddressSpace::<u32>::parse(&mut parser)?,
+                ))
+            }
+            0x08 => {
+                assert!(data_len >= 13);
+                Some(ResourceMacro::AddressSpaceWord(AddressSpace::<u16>::parse(
+                    &mut parser,
+                )?))
+            }
             0x09 => {
+                assert!(data_len >= 6);
+
                 let flags = parser.get_next_byte()?;
                 let is_consumed = flags & 1 != 0;
                 let edge_triggered = flags & (1 << 1) != 0;
@@ -439,21 +725,8 @@ impl ResourceMacro {
                     interrupts.push(parser.get_next_u32()?);
                 }
 
-                let mut len_so_far = table_len as u16 * 4 + 2;
-                let resource_source_index = if len_so_far < data_len {
-                    Some(parser.get_next_byte()?)
-                } else {
-                    None
-                };
-                len_so_far += 1;
+                let resource_source = ResourceSource::parse(&mut parser)?;
 
-                let resource_source = if len_so_far < data_len {
-                    let buffer =
-                        parser.get_data_as_slice(data_len as usize - len_so_far as usize)?;
-                    Some(buffer.to_vec())
-                } else {
-                    None
-                };
                 Some(ResourceMacro::Interrupt {
                     is_consumer: is_consumed,
                     edge_triggered,
@@ -461,17 +734,29 @@ impl ResourceMacro {
                     is_shared,
                     wake_capable,
                     interrupts,
-                    resource_source_index,
                     resource_source,
                 })
             }
             0x0A => {
-                assert_eq!(data_len, 43);
-
-                todo!()
+                assert!(data_len >= 43);
+                Some(ResourceMacro::AddressSpaceQWord(
+                    AddressSpace::<u64>::parse(&mut parser)?,
+                ))
             }
+            0x0B => {
+                assert!(data_len >= 53);
+                Some(ResourceMacro::AddressSpaceExtended(
+                    AddressSpace::<u64>::parse_extended(&mut parser)?,
+                ))
+            }
+            // TODO: support rest of the resource types
             _ => None,
         };
+
+        // still there is more data to parse
+        if result.is_some() && !parser.is_done() {
+            return Err(AmlParseError::InvalidResourceTemplate);
+        }
 
         Ok(result)
     }
@@ -528,6 +813,58 @@ impl ResourceTemplate {
     }
 }
 
+pub trait AddressWidth {
+    fn width() -> u8
+    where
+        Self: Sized;
+    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result;
+    fn from_parser(parser: &mut Parser) -> Result<Self, AmlParseError>
+    where
+        Self: Sized;
+}
+
+impl AddressWidth for u16 {
+    fn width() -> u8 {
+        2
+    }
+
+    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{:04X}", self)
+    }
+
+    fn from_parser(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        parser.get_next_u16()
+    }
+}
+
+impl AddressWidth for u32 {
+    fn width() -> u8 {
+        4
+    }
+
+    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{:08X}", self)
+    }
+
+    fn from_parser(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        parser.get_next_u32()
+    }
+}
+
+impl AddressWidth for u64 {
+    fn width() -> u8 {
+        8
+    }
+
+    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{:016X}", self)
+    }
+
+    fn from_parser(parser: &mut Parser) -> Result<Self, AmlParseError> {
+        parser.get_next_u64()
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn display_interrupt_args<'a, 'b, 'r>(
     d: &'r mut AmlDisplayer<'a, 'b>,
@@ -536,8 +873,7 @@ fn display_interrupt_args<'a, 'b, 'r>(
     is_shared: bool,
     active_low: bool,
     edge_triggered: bool,
-    resource_source_index: Option<u8>,
-    resource_source: Option<&Vec<u8>>,
+    resource_source: &ResourceSource,
 ) -> &'r mut AmlDisplayer<'a, 'b> {
     if let Some(is_consumer) = is_consumer {
         d.paren_arg(|f| {
@@ -565,49 +901,17 @@ fn display_interrupt_args<'a, 'b, 'r>(
                 Ok(())
             }
         });
-    if let Some(resource_source_index) = resource_source_index {
-        d.paren_arg(|f| write!(f, "{}", resource_source_index));
-    }
-    if let Some(resource_source) = resource_source {
-        d.paren_arg(|f| write!(f, "{:?}", ByteStr(resource_source)));
-    }
+
+    resource_source.display(d);
 
     d
-}
-
-trait NumHexDisplay {
-    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result;
-}
-
-impl NumHexDisplay for u8 {
-    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:02X}", self)
-    }
-}
-
-impl NumHexDisplay for u16 {
-    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:04X}", self)
-    }
-}
-
-impl NumHexDisplay for u32 {
-    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:08X}", self)
-    }
-}
-
-impl NumHexDisplay for u64 {
-    fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:016X}", self)
-    }
 }
 
 fn display_memory_args<'a, 'b>(
     f: &'a mut fmt::Formatter<'b>,
     name: &str,
     is_read_write: bool,
-    nums: &[&dyn NumHexDisplay],
+    nums: &[&dyn AddressWidth],
 ) -> AmlDisplayer<'a, 'b> {
     let mut d = AmlDisplayer::start(f, name);
 
@@ -624,6 +928,167 @@ fn display_memory_args<'a, 'b>(
     }
 
     d
+}
+
+impl fmt::Display for SpaceMemoryRangeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+impl fmt::Display for SpaceIoRangeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+impl fmt::Display for SpaceMemoryType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+impl<W: AddressWidth> fmt::Display for AddressSpace<W> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let width_name = match W::width() {
+            2 => "Word",
+            4 => "DWord",
+            8 => "QWord",
+            _ => unreachable!(),
+        };
+        let space_name = match self.ty {
+            AddressSpaceType::Memory { .. } => "Memory",
+            AddressSpaceType::Io { .. } => "IO",
+            AddressSpaceType::BusNumber => "BusNumber",
+            AddressSpaceType::VendorDefined { .. } => "Space",
+        };
+        let write_min_fixed = |f: &mut fmt::Formatter<'_>| {
+            if self.is_min_fixed {
+                f.write_str("MinFixed")
+            } else {
+                f.write_str("MinNotFixed")
+            }
+        };
+        let write_max_fixed = |f: &mut fmt::Formatter<'_>| {
+            if self.is_max_fixed {
+                f.write_str("MaxFixed")
+            } else {
+                f.write_str("MaxNotFixed")
+            }
+        };
+        let write_decode = |f: &mut fmt::Formatter<'_>| {
+            if self.is_subtract_decode {
+                f.write_str("SubDecode")
+            } else {
+                f.write_str("PosDecode")
+            }
+        };
+
+        f.write_str(width_name)?;
+        f.write_str(space_name)?;
+        let mut d = AmlDisplayer::start(f, "");
+
+        if let AddressSpaceType::VendorDefined { value, .. } = self.ty {
+            d.paren_arg(|f| write!(f, "0x{:X}", value));
+        }
+        d.paren_arg(|f| {
+            f.write_str(if self.is_consumer {
+                "ResourceConsumer"
+            } else {
+                "ResourceProducer"
+            })
+        });
+
+        match &self.ty {
+            AddressSpaceType::Memory {
+                is_read_write, ty, ..
+            } => {
+                d.paren_arg(write_decode);
+                d.paren_arg(write_min_fixed);
+                d.paren_arg(write_max_fixed);
+                d.paren_arg(|f| ty.fmt(f));
+                d.paren_arg(|f| {
+                    f.write_str(if *is_read_write {
+                        "ReadWrite"
+                    } else {
+                        "ReadOnly"
+                    })
+                });
+            }
+            AddressSpaceType::Io { range_ty, .. } => {
+                d.paren_arg(write_min_fixed);
+                d.paren_arg(write_max_fixed);
+                d.paren_arg(write_decode);
+                d.paren_arg(|f| range_ty.fmt(f));
+            }
+            AddressSpaceType::BusNumber => {
+                d.paren_arg(write_min_fixed);
+                d.paren_arg(write_max_fixed);
+                d.paren_arg(write_decode);
+            }
+            AddressSpaceType::VendorDefined { flags, .. } => {
+                d.paren_arg(write_decode);
+                d.paren_arg(write_min_fixed);
+                d.paren_arg(write_max_fixed);
+                d.paren_arg(|f| write!(f, "0x{:X}", flags));
+            }
+        }
+
+        d.paren_arg(|f| self.granularity.fmt_hex(f));
+        d.paren_arg(|f| self.min.fmt_hex(f));
+        d.paren_arg(|f| self.max.fmt_hex(f));
+        d.paren_arg(|f| self.translation_offset.fmt_hex(f));
+        d.paren_arg(|f| self.len.fmt_hex(f));
+
+        match &self.extra {
+            ResourceSourceOrTypeSpecificAttrs::ResourceSource(resource_source) => {
+                resource_source.display(&mut d);
+            }
+            ResourceSourceOrTypeSpecificAttrs::TypeSpecificAttrs(type_attrs) => {
+                d.paren_arg(|f| write!(f, "0x{:8X}", type_attrs));
+            }
+        }
+
+        match &self.ty {
+            AddressSpaceType::Memory {
+                range_ty,
+                is_type_translation,
+                ..
+            } => {
+                d.paren_arg(|f| range_ty.fmt(f));
+                d.paren_arg(|f| {
+                    f.write_str(if *is_type_translation {
+                        "TypeTranslation"
+                    } else {
+                        "TypeStatic"
+                    })
+                });
+            }
+            AddressSpaceType::Io {
+                is_type_translation,
+                is_sparse_translation,
+                ..
+            } => {
+                d.paren_arg(|f| {
+                    f.write_str(if *is_type_translation {
+                        "TypeTranslation"
+                    } else {
+                        "TypeStatic"
+                    })
+                });
+                d.paren_arg(|f| {
+                    f.write_str(if *is_sparse_translation {
+                        "SparseTranslation"
+                    } else {
+                        "DenseTranslation"
+                    })
+                });
+            }
+            AddressSpaceType::BusNumber | AddressSpaceType::VendorDefined { .. } => {}
+        }
+
+        d.finish()
+    }
 }
 
 impl fmt::Display for DmaSpeedType {
@@ -662,8 +1127,7 @@ impl fmt::Display for ResourceMacro {
                     *is_shared,
                     *active_low,
                     *edge_triggered,
-                    None,
-                    None,
+                    &ResourceSource::empty(),
                 )
                 .finish_paren_arg();
 
@@ -803,7 +1267,6 @@ impl fmt::Display for ResourceMacro {
                 is_shared,
                 wake_capable,
                 interrupts,
-                resource_source_index,
                 resource_source,
             } => {
                 let mut d = AmlDisplayer::start(f, "Interrupt");
@@ -814,8 +1277,7 @@ impl fmt::Display for ResourceMacro {
                     *is_shared,
                     *active_low,
                     *edge_triggered,
-                    *resource_source_index,
-                    resource_source.as_ref(),
+                    resource_source,
                 )
                 .finish_paren_arg();
 
@@ -838,6 +1300,10 @@ impl fmt::Display for ResourceMacro {
                 .paren_arg(|f| write!(f, "0x{:08X}", address))
                 .paren_arg(|f| write!(f, "{}", access_size.clone() as u8))
                 .finish(),
+            ResourceMacro::AddressSpaceWord(address_space) => address_space.fmt(f),
+            ResourceMacro::AddressSpaceDWord(address_space) => address_space.fmt(f),
+            ResourceMacro::AddressSpaceQWord(address_space) => address_space.fmt(f),
+            ResourceMacro::AddressSpaceExtended(address_space) => address_space.fmt(f),
         }
     }
 }

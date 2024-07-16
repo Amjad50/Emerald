@@ -26,6 +26,8 @@ pub enum AmlParseError {
     InvalidFieldUpdateRule,
     ReservedFieldSet,
     ResourceTemplateReservedTag,
+    ReservedValue,
+    InvalidResourceTemplate,
 }
 
 pub fn parse_aml(code: &[u8]) -> Result<AmlCode, AmlParseError> {
