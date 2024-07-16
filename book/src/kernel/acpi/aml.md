@@ -9,8 +9,12 @@
 
 This is an `AML` parser that is able to parse the code inside the `DSDT` and `SSDT` tables.
 
-Currently, we do not use the parsed code, as we need to build an interpreter for it, so that we can emulate executing it
-and get the data we need.
+We have 2 forms of the parsed `AML`.
+- **Normal:** This is what we get from the table, we just parse it directly
+- **Structured:** After getting the `Normal` version, we do some processing to order them and group them by `Scope`
+  so that we can easily search for a given label.
+
+Any of these can be printed by the cmdline `log_aml` being `normal` or `structured` (See [Cmdline](../boot/cmdline.md))
 
 ## Why this is needed?
 
