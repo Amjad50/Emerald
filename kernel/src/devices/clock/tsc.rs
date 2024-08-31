@@ -6,8 +6,13 @@ use crate::{cpu, devices::clock::NANOS_PER_SEC};
 
 use super::ClockDevice;
 
+// The value used to scale the number of nanoseconds, to get more precision
+// i.e. with value of `32`, the lowest `32` bits will act as the fractional part
+// the rest will be the integer part
+const NS_SCALE_SHIFT: u8 = 32;
+
 const fn cycles_to_ns(cycles: u64, nanos_per_cycle_scaled: u64) -> u64 {
-    (((cycles as u128) * (nanos_per_cycle_scaled as u128)) >> 64) as u64
+    (((cycles as u128) * (nanos_per_cycle_scaled as u128)) >> NS_SCALE_SHIFT) as u64
 }
 
 struct SyncPoint {
@@ -136,9 +141,15 @@ impl Tsc {
         let ns_diff = end_point.nanos - start_point.nanos;
         let cycles_diff = end_point.cycles - start_point.cycles;
 
-        let scaled_ns_per_cycle = ((ns_diff as u128) << 64) / cycles_diff as u128;
-        assert!(scaled_ns_per_cycle.leading_zeros() >= 64);
+        let scaled_ns_per_cycle = ((ns_diff as u128) << NS_SCALE_SHIFT) / cycles_diff as u128;
+        assert!(scaled_ns_per_cycle.leading_zeros() >= 64,
+            "scaled_ns_per_cycle: {scaled_ns_per_cycle:#X} is too large, i.e. `ns/cycles` is more than `{NS_SCALE_SHIFT}` bits");
         let scaled_ns_per_cycle = scaled_ns_per_cycle as u64;
+
+        info!(
+            "TSC calibrated, CPU running at {:.1}Hz",
+            1_000_000_000.0 / (scaled_ns_per_cycle as f64 / ((1u128 << NS_SCALE_SHIFT) as f64))
+        );
 
         let start_ns = start_point
             .nanos
