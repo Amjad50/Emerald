@@ -213,6 +213,17 @@
 <a href="#211" id="211">211</a>
 <a href="#212" id="212">212</a>
 <a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::sync::atomic::{AtomicU64, Ordering};
 
 <span class="kw">use </span>tracing::info;
@@ -221,8 +232,13 @@
 
 <span class="kw">use </span><span class="kw">super</span>::ClockDevice;
 
+<span class="comment">// The value used to scale the number of nanoseconds, to get more precision
+// i.e. with value of `32`, the lowest `32` bits will act as the fractional part
+// the rest will be the integer part
+</span><span class="kw">const </span>NS_SCALE_SHIFT: u8 = <span class="number">32</span>;
+
 <span class="kw">const fn </span>cycles_to_ns(cycles: u64, nanos_per_cycle_scaled: u64) -&gt; u64 {
-    (((cycles <span class="kw">as </span>u128) * (nanos_per_cycle_scaled <span class="kw">as </span>u128)) &gt;&gt; <span class="number">64</span>) <span class="kw">as </span>u64
+    (((cycles <span class="kw">as </span>u128) * (nanos_per_cycle_scaled <span class="kw">as </span>u128)) &gt;&gt; NS_SCALE_SHIFT) <span class="kw">as </span>u64
 }
 
 <span class="kw">struct </span>SyncPoint {
@@ -351,9 +367,15 @@
         <span class="kw">let </span>ns_diff = end_point.nanos - start_point.nanos;
         <span class="kw">let </span>cycles_diff = end_point.cycles - start_point.cycles;
 
-        <span class="kw">let </span>scaled_ns_per_cycle = ((ns_diff <span class="kw">as </span>u128) &lt;&lt; <span class="number">64</span>) / cycles_diff <span class="kw">as </span>u128;
-        <span class="macro">assert!</span>(scaled_ns_per_cycle.leading_zeros() &gt;= <span class="number">64</span>);
+        <span class="kw">let </span>scaled_ns_per_cycle = ((ns_diff <span class="kw">as </span>u128) &lt;&lt; NS_SCALE_SHIFT) / cycles_diff <span class="kw">as </span>u128;
+        <span class="macro">assert!</span>(scaled_ns_per_cycle.leading_zeros() &gt;= <span class="number">64</span>,
+            <span class="string">"scaled_ns_per_cycle: {scaled_ns_per_cycle:#X} is too large, i.e. `ns/cycles` is more than `{NS_SCALE_SHIFT}` bits"</span>);
         <span class="kw">let </span>scaled_ns_per_cycle = scaled_ns_per_cycle <span class="kw">as </span>u64;
+
+        <span class="macro">info!</span>(
+            <span class="string">"TSC calibrated, CPU running at {:.1}Hz"</span>,
+            <span class="number">1_000_000_000.0 </span>/ (scaled_ns_per_cycle <span class="kw">as </span>f64 / ((<span class="number">1u128 </span>&lt;&lt; NS_SCALE_SHIFT) <span class="kw">as </span>f64))
+        );
 
         <span class="kw">let </span>start_ns = start_point
             .nanos

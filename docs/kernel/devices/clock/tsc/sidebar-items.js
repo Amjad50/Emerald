@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cycles_to_ns"],"struct":["SyncPoint","Tsc"]};
+window.SIDEBAR_ITEMS = {"constant":["NS_SCALE_SHIFT"],"fn":["cycles_to_ns"],"struct":["SyncPoint","Tsc"]};
