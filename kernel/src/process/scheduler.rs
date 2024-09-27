@@ -1,4 +1,8 @@
-use core::{cell::RefCell, mem};
+use core::{
+    cell::RefCell,
+    mem,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use alloc::{
     boxed::Box,
@@ -18,6 +22,7 @@ use crate::{
 use super::{Process, ProcessContext};
 
 static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
+static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 // an arbitrary value to reset the priority counters
 // we don't want to get to 0, as it will result in underflow on subtract
@@ -60,7 +65,6 @@ impl Ord for SchedulerProcess {
 
 struct Scheduler {
     interrupt_initialized: bool,
-    shutdown: bool,
     scheduled_processes: BinaryHeap<SchedulerProcess>,
     running_waiting_procs: BTreeMap<u64, SchedulerProcess>,
     exited_processes: Vec<Process>,
@@ -71,7 +75,6 @@ impl Scheduler {
     const fn new() -> Self {
         Self {
             interrupt_initialized: false,
-            shutdown: false,
             scheduled_processes: BinaryHeap::new(),
             running_waiting_procs: BTreeMap::new(),
             exited_processes: Vec::new(),
@@ -99,7 +102,7 @@ impl Scheduler {
     }
 
     fn reschedule_process(&mut self, mut process: SchedulerProcess) {
-        if self.shutdown {
+        if SHUTDOWN.load(Ordering::Acquire) {
             let mut inner_proc = process.process.into_inner();
             info!(
                 "Process {} is not rescheduled as the scheduler is shutting down",
@@ -193,6 +196,30 @@ impl Scheduler {
         // we can clear here, since we don't use the vm of the process anymore
         self.exited_processes.clear();
     }
+
+    /// Exits all non-running (waiting and scheduled) processes.
+    /// The [`schedule`] function will return when all processes are done.
+    fn exit_idle_processes(&mut self) {
+        // TODO: implement graceful shutdown and wait for processes to exit
+        for process in self.scheduled_processes.drain() {
+            let mut inner_proc = process.process.into_inner();
+            info!("Force stopping process {}", inner_proc.id);
+            inner_proc.exit(0);
+        }
+        // shutdown the waiting processes
+        self.running_waiting_procs
+            .retain(|_, process| match process.state {
+                ProcessState::Running => true,
+                ProcessState::Scheduled
+                | ProcessState::WaitingForPid(_)
+                | ProcessState::WaitingForTime(_) => {
+                    let mut inner_proc = process.process.borrow_mut();
+                    info!("Force stopping process {}", inner_proc.id);
+                    inner_proc.exit(0);
+                    false
+                }
+            });
+    }
 }
 
 pub fn push_process(process: Process) {
@@ -200,47 +227,23 @@ pub fn push_process(process: Process) {
 }
 
 /// What this function does is that it tells the scheduler to stop scheduling any more processes.
-/// Exits all non-running (waiting and scheduled) processes.
-/// And then goes back, the [`schedule`] function will return when all processes are done.
+/// And start the shutdown process.
 pub fn stop_scheduler() {
-    let mut scheduler = SCHEDULER.lock();
-
-    // TODO: implement graceful shutdown and wait for processes to exit
-    for process in scheduler.scheduled_processes.drain() {
-        let mut inner_proc = process.process.into_inner();
-        info!("Force stopping process {}", inner_proc.id);
-        inner_proc.exit(0);
-    }
-    // shutdown the waiting processes
-    scheduler
-        .running_waiting_procs
-        .retain(|_, process| match process.state {
-            ProcessState::Running => true,
-            ProcessState::Scheduled
-            | ProcessState::WaitingForPid(_)
-            | ProcessState::WaitingForTime(_) => {
-                let mut inner_proc = process.process.borrow_mut();
-                info!("Force stopping process {}", inner_proc.id);
-                inner_proc.exit(0);
-                false
-            }
-        });
-
-    // don't allow anything else to run
-    scheduler.shutdown = true;
+    SHUTDOWN.store(true, Ordering::Relaxed);
 }
 
 pub fn schedule() {
     SCHEDULER.lock().init_interrupt();
-
-    let mut shutdown;
 
     loop {
         let current_cpu = cpu::cpu();
         assert!(current_cpu.context.is_none());
 
         let mut scheduler = SCHEDULER.lock();
-        shutdown = scheduler.shutdown;
+        let shutdown = SHUTDOWN.load(Ordering::Acquire);
+        if shutdown {
+            scheduler.exit_idle_processes();
+        }
 
         current_cpu.push_cli();
 
@@ -288,6 +291,7 @@ pub fn schedule() {
         if shutdown
             && scheduler.scheduled_processes.is_empty()
             && scheduler.running_waiting_procs.is_empty()
+            && current_cpu.context.is_none()
         {
             break;
         }
