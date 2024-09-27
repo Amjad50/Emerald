@@ -8,6 +8,7 @@ use crate::{
         self, DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem, FileSystemError,
         Node,
     },
+    power,
     sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
@@ -102,6 +103,9 @@ pub fn init_devices_mapping() {
             devices: BTreeMap::new(),
         })))
         .expect("Devices already initialized");
+
+    // initialize builtin devices
+    register_device(Arc::new(power::PowerDevice));
 
     fs::mapping::mount("/devices", DEVICES.get().clone()).expect("Mapping failed");
 }
