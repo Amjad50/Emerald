@@ -4,7 +4,7 @@ use core::fmt::{self, Write};
 
 use alloc::vec::Vec;
 use kernel_user_link::file::{BlockingMode, OpenOptions};
-use tracing::{span, Level};
+use tracing::{info, span, Level};
 
 use crate::{
     cmdline,
@@ -41,6 +41,13 @@ fn log_file() -> &'static Mutex<LogFile> {
 pub fn flush_log_file() {
     if let Some(log_file) = LOG_FILE.try_get() {
         log_file.lock().flush()
+    }
+}
+
+pub fn shutdown_log_file() {
+    info!("Shutting down log file...");
+    if let Some(log_file) = LOG_FILE.try_get() {
+        log_file.lock().shutdown()
     }
 }
 
@@ -143,6 +150,7 @@ impl Buffer {
 
 struct LogFile {
     file: Option<crate::fs::File>,
+    shutdown: bool,
     buffer: Buffer,
 }
 
@@ -152,7 +160,7 @@ impl LogFile {
     }
 
     pub fn flush(&mut self) {
-        if self.buffer.is_empty() {
+        if self.buffer.is_empty() || self.shutdown {
             return;
         }
 
@@ -185,12 +193,19 @@ impl LogFile {
 
         self.buffer.clear();
     }
+
+    pub fn shutdown(&mut self) {
+        self.flush();
+        self.file = None;
+        self.shutdown = true;
+    }
 }
 
 impl Default for LogFile {
     fn default() -> Self {
         LogFile {
             file: None,
+            shutdown: false,
             buffer: Buffer::static_buf(),
         }
     }

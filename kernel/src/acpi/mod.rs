@@ -16,6 +16,7 @@ use crate::{
         idt::{BasicInterruptHandler, InterruptStackFrame64},
         interrupts::apic,
     },
+    power,
     sync::once::OnceLock,
 };
 
@@ -236,7 +237,7 @@ extern "x86-interrupt" fn acpi_handler(_frame: InterruptStackFrame64) {
         warn!("Power button ACPI event: {:X}", pm1_event);
 
         // TODO: handle shutdown setup
-        sleep(5).unwrap();
+        power::start_shutdown();
     } else if pm1_event & facp::flags::PM_EN_TMR != 0 {
         facp.write_pm1_status(facp::flags::PM_EN_TMR);
         warn!("Timer ACPI event: {:X}", pm1_event);

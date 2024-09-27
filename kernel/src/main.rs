@@ -34,6 +34,7 @@ mod io;
 mod memory_management;
 mod multiboot2;
 mod panic_handler;
+mod power;
 mod process;
 mod sync;
 mod testing;
@@ -174,8 +175,10 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
 
     load_init_process();
 
-    // this will never return
-    scheduler::schedule()
+    // this will return on shutdown, the sequence is initiated by `power::start_shutdown`
+    scheduler::schedule();
+    // continue the shutdown process
+    power::shutdown_system();
 }
 
 #[link_section = ".text"]

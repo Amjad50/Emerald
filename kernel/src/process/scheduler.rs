@@ -5,7 +5,7 @@ use alloc::{
     collections::{BTreeMap, BinaryHeap},
     vec::Vec,
 };
-use tracing::trace;
+use tracing::{info, trace};
 
 use crate::{
     cpu::{self, idt::InterruptAllSavedState, interrupts},
@@ -60,6 +60,7 @@ impl Ord for SchedulerProcess {
 
 struct Scheduler {
     interrupt_initialized: bool,
+    shutdown: bool,
     scheduled_processes: BinaryHeap<SchedulerProcess>,
     running_waiting_procs: BTreeMap<u64, SchedulerProcess>,
     exited_processes: Vec<Process>,
@@ -70,6 +71,7 @@ impl Scheduler {
     const fn new() -> Self {
         Self {
             interrupt_initialized: false,
+            shutdown: false,
             scheduled_processes: BinaryHeap::new(),
             running_waiting_procs: BTreeMap::new(),
             exited_processes: Vec::new(),
@@ -97,6 +99,16 @@ impl Scheduler {
     }
 
     fn reschedule_process(&mut self, mut process: SchedulerProcess) {
+        if self.shutdown {
+            let mut inner_proc = process.process.into_inner();
+            info!(
+                "Process {} is not rescheduled as the scheduler is shutting down",
+                inner_proc.id
+            );
+            inner_proc.exit(0xFF);
+            self.exited_processes.push(*inner_proc);
+            return;
+        }
         process.priority_counter = self.max_priority;
         process.state = ProcessState::Scheduled;
         self.scheduled_processes.push(process);
@@ -187,14 +199,48 @@ pub fn push_process(process: Process) {
     SCHEDULER.lock().push_process(process);
 }
 
-pub fn schedule() -> ! {
+/// What this function does is that it tells the scheduler to stop scheduling any more processes.
+/// Exits all non-running (waiting and scheduled) processes.
+/// And then goes back, the [`schedule`] function will return when all processes are done.
+pub fn stop_scheduler() {
+    let mut scheduler = SCHEDULER.lock();
+
+    // TODO: implement graceful shutdown and wait for processes to exit
+    for process in scheduler.scheduled_processes.drain() {
+        let mut inner_proc = process.process.into_inner();
+        info!("Force stopping process {}", inner_proc.id);
+        inner_proc.exit(0);
+    }
+    // shutdown the waiting processes
+    scheduler
+        .running_waiting_procs
+        .retain(|_, process| match process.state {
+            ProcessState::Running => true,
+            ProcessState::Scheduled
+            | ProcessState::WaitingForPid(_)
+            | ProcessState::WaitingForTime(_) => {
+                let mut inner_proc = process.process.borrow_mut();
+                info!("Force stopping process {}", inner_proc.id);
+                inner_proc.exit(0);
+                false
+            }
+        });
+
+    // don't allow anything else to run
+    scheduler.shutdown = true;
+}
+
+pub fn schedule() {
     SCHEDULER.lock().init_interrupt();
+
+    let mut shutdown;
 
     loop {
         let current_cpu = cpu::cpu();
         assert!(current_cpu.context.is_none());
 
         let mut scheduler = SCHEDULER.lock();
+        shutdown = scheduler.shutdown;
 
         current_cpu.push_cli();
 
@@ -216,26 +262,34 @@ pub fn schedule() -> ! {
             assert_eq!(top.state, ProcessState::Scheduled);
             top.state = ProcessState::Running;
             let pid;
-            {
-                let mut inner_proc = top.process.borrow_mut();
-                pid = inner_proc.id;
+            if !shutdown {
+                {
+                    let mut inner_proc = top.process.borrow_mut();
+                    pid = inner_proc.id;
 
-                // the higher the value, the lower the priority
-                let decrement = 6 - inner_proc.priority as u64;
-                top.priority_counter -= decrement;
+                    // the higher the value, the lower the priority
+                    let decrement = 6 - inner_proc.priority as u64;
+                    top.priority_counter -= decrement;
 
-                scheduler.max_priority = top.priority_counter;
-                // SAFETY: we are the scheduler and running in kernel space, so it's safe to switch to this vm
-                // as it has clones of our kernel mappings
-                unsafe { inner_proc.switch_to_this_vm() };
-                current_cpu.process_id = inner_proc.id;
-                current_cpu.context = Some(inner_proc.context);
-                current_cpu.scheduling = true;
+                    scheduler.max_priority = top.priority_counter;
+                    // SAFETY: we are the scheduler and running in kernel space, so it's safe to switch to this vm
+                    // as it has clones of our kernel mappings
+                    unsafe { inner_proc.switch_to_this_vm() };
+                    current_cpu.process_id = inner_proc.id;
+                    current_cpu.context = Some(inner_proc.context);
+                    current_cpu.scheduling = true;
+                }
+                scheduler.running_waiting_procs.insert(pid, top);
             }
 
-            scheduler.running_waiting_procs.insert(pid, top);
-
             current_cpu.pop_cli();
+        }
+
+        if shutdown
+            && scheduler.scheduled_processes.is_empty()
+            && scheduler.running_waiting_procs.is_empty()
+        {
+            break;
         }
 
         drop(scheduler);
