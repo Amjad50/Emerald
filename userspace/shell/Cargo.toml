@@ -45,6 +45,10 @@ path = "src/time.rs"
 name = "clock"
 path = "src/clock.rs"
 
+[[bin]]
+name = "shutdown"
+path = "src/shutdown.rs"
+
 [dependencies]
 colored = "2.1.0"
 chrono = "0.4"

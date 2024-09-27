@@ -5,6 +5,7 @@ pub mod file;
 pub mod graphics;
 pub mod keyboard;
 pub mod mouse;
+pub mod power;
 pub mod process;
 pub mod syscalls;
 
