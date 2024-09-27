@@ -505,8 +505,13 @@ pub trait FileSystem: Send + Sync {
 
     /// Set the size of the file in the `inode` to `size`, this is used to truncate the file
     /// or to extend it
-    fn set_file_size(&self, _inode: &mut FileNode, _size: u64) -> Result<(), FileSystemError> {
-        Err(FileSystemError::OperationNotSupported)
+    fn set_file_size(&self, inode: &mut FileNode, size: u64) -> Result<(), FileSystemError> {
+        if let Some(device) = &inode.device {
+            assert_eq!(inode.start_cluster, DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            device.set_size(size)
+        } else {
+            Err(FileSystemError::WriteNotSupported)
+        }
     }
 
     /// The expected number of strong refs in `Arc` by default

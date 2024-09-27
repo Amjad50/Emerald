@@ -40,6 +40,9 @@ pub trait Device: Sync + Send + fmt::Debug {
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<u64, FileSystemError> {
         Err(FileSystemError::WriteNotSupported)
     }
+    fn set_size(&self, _size: u64) -> Result<(), FileSystemError> {
+        Err(FileSystemError::WriteNotSupported)
+    }
     /// Informs the device that it is closed.
     fn close(&self) -> Result<(), FileSystemError> {
         Ok(())
