@@ -86,6 +86,11 @@ impl FileSystem for RwLock<Devices> {
             Err(FileSystemError::FileNotFound)
         }
     }
+
+    fn number_global_refs(&self) -> usize {
+        // we have `DEVICES` mutex globally stored
+        1
+    }
 }
 
 pub fn init_devices_mapping() {
