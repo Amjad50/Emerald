@@ -1,5 +1,3 @@
-use core::borrow::{Borrow, BorrowMut};
-
 use alloc::vec::Vec;
 use tracing::{error, warn};
 
@@ -8,6 +6,7 @@ use crate::{
     cpu::{self, idt::InterruptStackFrame64, Cpu, CPUS, MAX_CPUS},
     memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
+    utils::vcell::RW,
 };
 
 use super::{
@@ -64,17 +63,17 @@ pub fn assign_io_irq_custom<H: InterruptHandler, F>(
 
 #[repr(C, align(4))]
 struct ApicReg {
-    reg: u32,
+    reg: RW<u32>,
     pad: [u32; 3],
 }
 
 impl ApicReg {
     fn write(&mut self, value: u32) {
-        unsafe { (self.reg.borrow_mut() as *mut u32).write_volatile(value) };
+        unsafe { self.reg.write(value) };
     }
 
     fn read(&self) -> u32 {
-        unsafe { (self.reg.borrow() as *const u32).read_volatile() }
+        self.reg.read()
     }
 }
 

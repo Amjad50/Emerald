@@ -39,6 +39,7 @@ mod power;
 mod process;
 mod sync;
 mod testing;
+mod utils;
 
 use alloc::vec::Vec;
 use cpu::{

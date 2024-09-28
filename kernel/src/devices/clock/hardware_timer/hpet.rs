@@ -11,6 +11,7 @@ use crate::{
     devices::clock::{hardware_timer::pit, ClockTime, FEMTOS_PER_SEC, NANOS_PER_FEMTO},
     memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
+    utils::vcell::{RO, RW, WO},
 };
 
 use super::super::ClockDevice;
@@ -38,27 +39,21 @@ pub fn init(hpet_table: &acpi::tables::Hpet) -> Arc<Mutex<Hpet>> {
     clock.clone()
 }
 
-#[derive(Clone, Copy, Debug)]
 #[repr(C, packed(8))]
 struct HpetInterruptStatus {
-    status: u32,
+    status: RW<u32>,
     reserved: u32,
 }
 
 impl HpetInterruptStatus {
-    fn is_set(&self, bit: u8) -> bool {
-        assert!(bit < 32);
-        unsafe { (&self.status as *const u32).read_volatile() & (1 << bit) != 0 }
-    }
-
     fn set_interrupts_iter(&self) -> impl Iterator<Item = u8> {
-        let s = *self;
-        (0..32).filter(move |bit| s.is_set(*bit))
+        let s = self.status.read();
+        (0..32).filter(move |bit| s & (1 << bit) != 0)
     }
 
     fn ack(&mut self, bit: u8) {
         assert!(bit < 32);
-        unsafe { (&mut self.status as *mut u32).write_volatile(1 << bit) }
+        unsafe { self.status.write(1 << bit) }
     }
 }
 
@@ -93,8 +88,7 @@ struct HpetTimerConfig {
 }
 
 impl HpetTimerConfig {
-    fn read(raw_ptr: &u64) -> Self {
-        let data = unsafe { (raw_ptr as *const u64).read_volatile() };
+    fn new(data: u64) -> Self {
         Self {
             is_interrupt_level_triggered: data & (1 << 1) != 0,
             interrupt_enabled: data & (1 << 2) != 0,
@@ -112,7 +106,7 @@ impl HpetTimerConfig {
         }
     }
 
-    fn write(self, raw_ptr: &mut u64) {
+    fn as_u64(&self) -> u64 {
         let mut data = 0;
         if self.is_interrupt_level_triggered {
             data |= 1 << 1;
@@ -144,48 +138,45 @@ impl HpetTimerConfig {
         }
         data |= (self.interrupt_route_capabilities.bitmap as u64) << 32;
 
-        unsafe { (raw_ptr as *mut u64).write_volatile(data) };
+        data
     }
 }
 
-#[derive(Debug)]
 #[repr(C, align(8))]
 struct HpetTimerMmio {
-    config_and_capabilities: u64,
-    comparator_value: u64,
-    fsb_interrupt_route: u64,
+    config_and_capabilities: RW<u64>,
+    comparator_value: WO<u64>,
+    fsb_interrupt_route: RO<u64>,
     reserved: u64,
 }
 
 impl HpetTimerMmio {
     fn config(&self) -> HpetTimerConfig {
-        HpetTimerConfig::read(&self.config_and_capabilities)
+        HpetTimerConfig::new(self.config_and_capabilities.read())
     }
 
     fn set_config(&mut self, config: HpetTimerConfig) {
-        config.write(&mut self.config_and_capabilities);
+        unsafe { self.config_and_capabilities.write(config.as_u64()) };
     }
 
     fn write_comparator_value(&mut self, value: u64) {
-        unsafe { (&mut self.comparator_value as *mut u64).write_volatile(value) };
+        unsafe { self.comparator_value.write(value) };
     }
 }
 
-#[derive(Debug)]
 #[repr(C, align(8))]
 struct HpetMmio {
-    general_capabilities_id: u64,
+    general_capabilities_id: RO<u64>,
     reserved0: u64,
-    general_configuration: u64,
+    general_configuration: RW<u64>,
     reserved1: u64,
     general_interrupt_status: HpetInterruptStatus,
     reserved2: [u64; 25],
-    main_counter_value: u64,
+    main_counter_value: RO<u64>,
     reserved3: u64,
     timers: [HpetTimerMmio; 3],
 }
 
-#[derive(Debug)]
 pub struct Hpet {
     mmio: VirtualSpace<HpetMmio>,
 }
@@ -257,11 +248,11 @@ impl Hpet {
     }
 
     fn read_general_configuration(&self) -> u64 {
-        unsafe { (&self.mmio.general_configuration as *const u64).read_volatile() }
+        self.mmio.general_configuration.read()
     }
 
     fn write_general_configuration(&mut self, value: u64) {
-        unsafe { (&mut self.mmio.general_configuration as *mut u64).write_volatile(value) }
+        unsafe { self.mmio.general_configuration.write(value) };
     }
 
     pub fn set_enabled(&mut self, enabled: bool) {
@@ -286,12 +277,12 @@ impl Hpet {
 
     /// Returns the number of femtoseconds per counter tick
     fn counter_clock_period(&self) -> u64 {
-        (self.mmio.general_capabilities_id >> 32) & 0xFFFFFFFF
+        (self.mmio.general_capabilities_id.read() >> 32) & 0xFFFFFFFF
     }
 
     fn current_counter(&self) -> u64 {
         // Safety: we know that the counter is 64-bit, aligned, valid pointer
-        unsafe { (&self.mmio.main_counter_value as *const u64).read_volatile() }
+        self.mmio.main_counter_value.read()
     }
 
     fn status_interrupts_iter(&self) -> impl Iterator<Item = u8> {
