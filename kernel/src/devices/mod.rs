@@ -8,6 +8,7 @@ use crate::{
         self, DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem, FileSystemError,
         Node,
     },
+    power,
     sync::{once::OnceLock, spin::rwlock::RwLock},
 };
 
@@ -38,6 +39,9 @@ pub trait Device: Sync + Send + fmt::Debug {
         Err(FileSystemError::ReadNotSupported)
     }
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<u64, FileSystemError> {
+        Err(FileSystemError::WriteNotSupported)
+    }
+    fn set_size(&self, _size: u64) -> Result<(), FileSystemError> {
         Err(FileSystemError::WriteNotSupported)
     }
     /// Informs the device that it is closed.
@@ -86,6 +90,16 @@ impl FileSystem for RwLock<Devices> {
             Err(FileSystemError::FileNotFound)
         }
     }
+
+    fn number_global_refs(&self) -> usize {
+        // we have `DEVICES` mutex globally stored
+        1
+    }
+
+    fn unmount(self: Arc<Self>) {
+        // clean the devices
+        self.write().devices.clear();
+    }
 }
 
 pub fn init_devices_mapping() {
@@ -94,6 +108,9 @@ pub fn init_devices_mapping() {
             devices: BTreeMap::new(),
         })))
         .expect("Devices already initialized");
+
+    // initialize builtin devices
+    register_device(Arc::new(power::PowerDevice));
 
     fs::mapping::mount("/devices", DEVICES.get().clone()).expect("Mapping failed");
 }

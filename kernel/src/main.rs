@@ -5,6 +5,7 @@
 #![feature(const_binary_heap_constructor)]
 #![feature(btree_extract_if)]
 #![feature(custom_test_frameworks)]
+#![feature(byte_slice_trim_ascii)]
 #![test_runner(crate::testing::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 // fix warnings when testing (since we are not using the normal `kernel_main`)
@@ -34,6 +35,7 @@ mod io;
 mod memory_management;
 mod multiboot2;
 mod panic_handler;
+mod power;
 mod process;
 mod sync;
 mod testing;
@@ -158,7 +160,7 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
     info!("BIOS tables: {}", bios_tables);
     apic::init(bios_tables);
     // must be done after APIC is initialized
-    acpi::setup_enable_acpi();
+    acpi::init();
     clock::init(bios_tables);
 
     // APIC timer interrupt rely on the clock, so it must be initialized after the clock
@@ -174,8 +176,10 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
 
     load_init_process();
 
-    // this will never return
-    scheduler::schedule()
+    // this will return on shutdown, the sequence is initiated by `power::start_shutdown`
+    scheduler::schedule();
+    // continue the shutdown process
+    power::finish_power_sequence();
 }
 
 #[link_section = ".text"]

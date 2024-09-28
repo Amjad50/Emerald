@@ -27,6 +27,8 @@ pub mod flags {
     pub const PM_CTRL_BM_RLD: u16 = 1 << 1;
     pub const PM_CTRL_GBL_RLS: u16 = 1 << 2;
     pub const PM_CTRL_SLP_EN: u16 = 1 << 13;
+    pub const PM_CTRL_SLP_TYP_MASK: u16 = 0b111 << PM_CTRL_SLP_TYP_SHIFT;
+    pub const PM_CTRL_SLP_TYP_SHIFT: u8 = 10;
 }
 
 #[repr(C, packed)]
@@ -250,6 +252,42 @@ impl Facp {
         self.access_io_read(self.pm1a_control_block, self.pm1_control_length)
             .try_into()
             .expect("Should be in u16 range")
+    }
+
+    pub fn read_pm1_control_a(&self) -> u16 {
+        self.access_io_read(self.pm1a_control_block, self.pm1_control_length)
+            .try_into()
+            .expect("Should be in u16 range")
+    }
+
+    pub fn read_pm1_control_b(&self) -> Option<u16> {
+        if self.pm1b_control_block == 0 {
+            return None;
+        }
+
+        Some(
+            self.access_io_read(self.pm1b_control_block, self.pm1_control_length)
+                .try_into()
+                .expect("Should be in u16 range"),
+        )
+    }
+
+    pub fn write_pm1_control_a(&self, value: u16) {
+        self.access_io_write(
+            self.pm1a_control_block,
+            None,
+            self.pm1_control_length,
+            value as u32,
+        )
+    }
+
+    pub fn write_pm1_control_b(&self, value: u16) {
+        self.access_io_write(
+            self.pm1b_control_block,
+            None,
+            self.pm1_control_length,
+            value as u32,
+        )
     }
 
     pub fn read_pm_timer(&self) -> Option<u32> {

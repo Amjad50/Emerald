@@ -405,14 +405,23 @@ pub enum DirTreverse {
     Stop,
 }
 
+/// A filesystem trait, this is the main interface to interact with the filesystem
+/// it is used to open files, directories, read and write files, etc.
 pub trait FileSystem: Send + Sync {
+    /// Open the root directory of the filesystem
     fn open_root(&self) -> Result<DirectoryNode, FileSystemError>;
+
+    /// Read the directory entries in the `inode`, and call the handler for each entry
+    /// The `handler` should return `DirTreverse::Stop` to stop the traversal
     fn read_dir(
         &self,
         inode: &DirectoryNode,
         handler: &mut dyn FnMut(Node) -> DirTreverse,
     ) -> Result<(), FileSystemError>;
 
+    /// Traverse the directory in the `inode` and return the entry with the name `matcher`
+    /// Most of the time, no need to implement this, as it is already implemented in the default
+    /// using [`FileSystem::read_dir`]
     fn treverse_dir(&self, inode: &DirectoryNode, matcher: &str) -> Result<Node, FileSystemError> {
         let mut entry = None;
         self.read_dir(inode, &mut |inode| {
@@ -426,6 +435,8 @@ pub trait FileSystem: Send + Sync {
         entry.ok_or(FileSystemError::FileNotFound)
     }
 
+    /// Create a new entry in the `parent` directory with the `name` and `attributes`
+    /// This could be a file or a directory, the `attributes` should specify the type
     fn create_node(
         &self,
         _parent: &DirectoryNode,
@@ -435,6 +446,9 @@ pub trait FileSystem: Send + Sync {
         Err(FileSystemError::OperationNotSupported)
     }
 
+    /// Read the file in the `inode` at the `position` and put the data in `buf`
+    /// The `access_helper` is used to store some extra metadata to help the filesystem
+    /// manage the caches or any extra data it needs.
     fn read_file(
         &self,
         inode: &FileNode,
@@ -450,6 +464,9 @@ pub trait FileSystem: Send + Sync {
         }
     }
 
+    /// Write the file in the `inode` at the `position` with the data in `buf`
+    /// The `access_helper` is used to store some extra metadata to help the filesystem
+    /// manage the caches or any extra data it needs.
     fn write_file(
         &self,
         inode: &mut FileNode,
@@ -465,6 +482,8 @@ pub trait FileSystem: Send + Sync {
         }
     }
 
+    /// Tells the filesystem to flush the content of this file to disk or to the backing store
+    /// if it needs to
     fn flush_file(
         &self,
         _inode: &mut FileNode,
@@ -473,6 +492,9 @@ pub trait FileSystem: Send + Sync {
         Err(FileSystemError::WriteNotSupported)
     }
 
+    /// Close the file in the `inode`, this is called when the file is dropped
+    /// The `access_helper` is used to store some extra metadata to help the filesystem
+    /// manage the caches or any extra data it needs.
     fn close_file(
         &self,
         _inode: &FileNode,
@@ -481,9 +503,30 @@ pub trait FileSystem: Send + Sync {
         Ok(())
     }
 
-    fn set_file_size(&self, _inode: &mut FileNode, _size: u64) -> Result<(), FileSystemError> {
-        Err(FileSystemError::OperationNotSupported)
+    /// Set the size of the file in the `inode` to `size`, this is used to truncate the file
+    /// or to extend it
+    fn set_file_size(&self, inode: &mut FileNode, size: u64) -> Result<(), FileSystemError> {
+        if let Some(device) = &inode.device {
+            assert_eq!(inode.start_cluster, DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            device.set_size(size)
+        } else {
+            Err(FileSystemError::WriteNotSupported)
+        }
     }
+
+    /// The expected number of strong refs in `Arc` by default
+    /// This is used to check if the filesystem is still in use before unmounting
+    /// This is here because for some filesystems, it could be stored globally in some `Mutex`
+    /// like `/devices` this reference should not be counted to know if its still in use
+    fn number_global_refs(&self) -> usize {
+        // no global refs by default
+        0
+    }
+
+    /// Unmount the filesystem, this is called before the filesystem is dropped
+    /// The reason we use this is that we can't force `Drop` to be implemented
+    /// for `Arc<dyn FileSystem>`, so we have this instead
+    fn unmount(self: Arc<Self>) {}
 }
 
 pub struct EmptyFileSystem;
@@ -554,6 +597,11 @@ pub fn create_disk_mapping(hard_disk_index: usize) -> Result<(), FileSystemError
     mapping::mount("/", Arc::new(Mutex::new(filesystem)))?;
 
     Ok(())
+}
+
+pub fn unmount_all() {
+    // unmount all filesystems
+    mapping::unmount_all();
 }
 
 /// Open the inode of a path, this include directories and files.

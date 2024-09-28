@@ -1212,6 +1212,10 @@ impl ClusterCache {
             }
         }
     }
+
+    pub fn release_all(&mut self) -> BTreeMap<u32, ClusterCacheEntry> {
+        core::mem::take(&mut self.entries)
+    }
 }
 
 /// Buffer for reading or writing file data
@@ -1513,9 +1517,23 @@ impl FatFilesystem {
     }
 
     /// Helper method to write the dirty parts of a cluster into disk
-    fn flush_cluster_dirty_range(
+    fn flush_cluster_dirty_range_file(
         &mut self,
         inode: &FileNode,
+        cluster_data: &[u8],
+        cluster_num: u32,
+        dirty_range: Range<usize>,
+    ) -> Result<(), FileSystemError> {
+        self.flush_fat()?;
+        self.update_directory_entry(inode, |entry| {
+            entry.file_size = inode.size() as u32;
+        })?;
+
+        self.flush_cluster_dirty_range(cluster_data, cluster_num, dirty_range)
+    }
+
+    fn flush_cluster_dirty_range(
+        &mut self,
         cluster_data: &[u8],
         cluster_num: u32,
         dirty_range: Range<usize>,
@@ -1543,10 +1561,6 @@ impl FatFilesystem {
             "start_byte_offset, end_byte_offset {start_byte_offset} < {end_byte_offset}"
         );
 
-        self.flush_fat()?;
-        self.update_directory_entry(inode, |entry| {
-            entry.file_size = inode.size() as u32;
-        })?;
         // write back
         let start_sector = self.first_sector_of_cluster(cluster_num)
             + (start_byte_offset as u32 / self.boot_sector.bytes_per_sector() as u32);
@@ -1561,7 +1575,12 @@ impl FatFilesystem {
     fn release_cluster(&mut self, inode: &FileNode, cluster: u32) -> Result<(), FileSystemError> {
         if let Some(cluster) = self.cluster_cache.release_cluster(cluster) {
             if let Some(dirty_range) = cluster.dirty_range {
-                self.flush_cluster_dirty_range(inode, &cluster.data, cluster.cluster, dirty_range)?;
+                self.flush_cluster_dirty_range_file(
+                    inode,
+                    &cluster.data,
+                    cluster.cluster,
+                    dirty_range,
+                )?;
             }
         }
         Ok(())
@@ -1577,7 +1596,7 @@ impl FatFilesystem {
                 let cluster_num = cluster.cluster;
                 cluster_data = Some(NoDebug(Vec::new()));
                 core::mem::swap(&mut cluster.data, cluster_data.as_mut().unwrap());
-                self.flush_cluster_dirty_range(
+                self.flush_cluster_dirty_range_file(
                     inode,
                     cluster_data.as_ref().unwrap(),
                     cluster_num,
@@ -2108,5 +2127,17 @@ impl FileSystem for Mutex<FatFilesystem> {
         })?;
 
         Ok(())
+    }
+
+    fn unmount(self: Arc<Self>) {
+        let mut s = self.lock();
+        s.flush_fat().expect("flush fat");
+
+        for cluster in s.cluster_cache.release_all().into_values() {
+            if let Some(dirty_range) = cluster.dirty_range {
+                s.flush_cluster_dirty_range(&cluster.data, cluster.cluster, dirty_range)
+                    .expect("flush cluster dirty range");
+            }
+        }
     }
 }

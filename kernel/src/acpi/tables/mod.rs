@@ -271,6 +271,23 @@ impl Rsdt {
             })
             .find_map(|obj| obj.downcast_ref::<T>())
     }
+
+    pub fn iter_tables<T: Any>(&self) -> impl Iterator<Item = &T> {
+        self.entries
+            .iter()
+            .filter_map(|entry| match &entry.body {
+                DescriptorTableBody::Unknown(_) => None,
+                DescriptorTableBody::Apic(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Facp(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Hpet(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Dsdt(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Ssdt(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Bgrt(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Waet(a) => Some(a.as_ref() as &dyn Any),
+                DescriptorTableBody::Srat(a) => Some(a.as_ref() as &dyn Any),
+            })
+            .filter_map(|obj| obj.downcast_ref::<T>())
+    }
 }
 
 #[repr(C, packed)]
@@ -492,7 +509,7 @@ pub struct Hpet {
 #[allow(dead_code)]
 /// This is inside DSDT and SSDT
 pub struct Xsdt {
-    aml: Aml,
+    pub aml: Aml,
 }
 
 impl Xsdt {

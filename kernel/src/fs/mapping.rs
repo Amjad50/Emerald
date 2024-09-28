@@ -3,6 +3,7 @@ use alloc::{
     collections::{btree_map, BTreeMap},
     sync::{Arc, Weak},
 };
+use tracing::info;
 
 use crate::{
     io::NoDebug,
@@ -65,6 +66,14 @@ pub fn mount(arg: &str, filesystem: Arc<dyn FileSystem>) -> Result<(), MappingEr
     } else {
         mapping.mount(arg, filesystem)
     }
+}
+
+/// Unmounts all filesystems from the virtual filesystem.
+/// This function removes all mounted filesystems from the virtual filesystem, effectively clearing
+/// the filesystem mapping tree.
+pub fn unmount_all() {
+    // The `Drop` will call `unmount` for each filesystem
+    FILESYSTEM_MAPPING.get().root.unmount_all(Path::new("/"));
 }
 
 /// Traverses the filesystem mapping tree and applies a handler function to all matching mappings.
@@ -169,6 +178,22 @@ impl MappingNode {
 
     pub fn parent(&self) -> Option<Arc<MappingNode>> {
         self.parent.upgrade()
+    }
+
+    fn unmount_all(&self, this_name: &Path) {
+        let mut children = self.children.write();
+        while let Some((name, node)) = children.pop_first() {
+            node.unmount_all(&this_name.join(name.as_ref()));
+        }
+
+        info!("Unmounting {}", this_name.display());
+        let fs = core::mem::replace(&mut *self.filesystem.0.write(), Arc::new(EmptyFileSystem));
+        assert_eq!(
+            Arc::strong_count(&fs),
+            fs.number_global_refs() + 1, // number of global refs + this one
+            "Filesystem still in use"
+        );
+        fs.unmount();
     }
 }
 

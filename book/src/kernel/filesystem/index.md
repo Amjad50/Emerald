@@ -84,6 +84,11 @@ Operations supported are:
   is used to alert the filesystem to clean up any resources that it might have allocated for this file.
 - `set_file_size` - Set the file size to a custom value, this is similar to `truncate` in Unix systems, `write_file`, will increase
   the file size if needed.
+- `unmount` - Unmount the filesystem, this is called when the filesystem is no longer needed, and it should clean up all resources.
+  You might say we don't use `Drop`, but there are several reasons I went with this.
+  - We can't add `Drop` as a trait dependancy to `Filesystem`, so I wanted something
+    related to the trait itself.
+  - Some filesystems might not be able to be dropped like the `DEVICES` global filesystem, but we still want to tell it to clean itself or the parts that can be cleaned before shutdown/reboot.
 
 ## Node
 
