@@ -46,8 +46,8 @@ name = "clock"
 path = "src/clock.rs"
 
 [[bin]]
-name = "shutdown"
-path = "src/shutdown.rs"
+name = "power"
+path = "src/power.rs"
 
 [dependencies]
 colored = "2.1.0"
