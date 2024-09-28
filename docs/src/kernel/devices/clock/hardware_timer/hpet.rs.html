@@ -349,15 +349,6 @@
 <a href="#347" id="347">347</a>
 <a href="#348" id="348">348</a>
 <a href="#349" id="349">349</a>
-<a href="#350" id="350">350</a>
-<a href="#351" id="351">351</a>
-<a href="#352" id="352">352</a>
-<a href="#353" id="353">353</a>
-<a href="#354" id="354">354</a>
-<a href="#355" id="355">355</a>
-<a href="#356" id="356">356</a>
-<a href="#357" id="357">357</a>
-<a href="#358" id="358">358</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>alloc::sync::Arc;
 <span class="kw">use </span>tracing::warn;
 
@@ -371,6 +362,7 @@
     devices::clock::{hardware_timer::pit, ClockTime, FEMTOS_PER_SEC, NANOS_PER_FEMTO},
     memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
+    utils::vcell::VCell,
 };
 
 <span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::ClockDevice;
@@ -398,27 +390,21 @@
     clock.clone()
 }
 
-<span class="attr">#[derive(Clone, Copy, Debug)]
-#[repr(C, packed(<span class="number">8</span>))]
+<span class="attr">#[repr(C, packed(<span class="number">8</span>))]
 </span><span class="kw">struct </span>HpetInterruptStatus {
-    status: u32,
+    status: VCell&lt;u32&gt;,
     reserved: u32,
 }
 
 <span class="kw">impl </span>HpetInterruptStatus {
-    <span class="kw">fn </span>is_set(<span class="kw-2">&amp;</span><span class="self">self</span>, bit: u8) -&gt; bool {
-        <span class="macro">assert!</span>(bit &lt; <span class="number">32</span>);
-        <span class="kw">unsafe </span>{ (<span class="kw-2">&amp;</span><span class="self">self</span>.status <span class="kw">as </span><span class="kw-2">*const </span>u32).read_volatile() &amp; (<span class="number">1 </span>&lt;&lt; bit) != <span class="number">0 </span>}
-    }
-
     <span class="kw">fn </span>set_interrupts_iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = u8&gt; {
-        <span class="kw">let </span>s = <span class="kw-2">*</span><span class="self">self</span>;
-        (<span class="number">0</span>..<span class="number">32</span>).filter(<span class="kw">move </span>|bit| s.is_set(<span class="kw-2">*</span>bit))
+        <span class="kw">let </span>s = <span class="self">self</span>.status.get();
+        (<span class="number">0</span>..<span class="number">32</span>).filter(<span class="kw">move </span>|bit| s &amp; (<span class="number">1 </span>&lt;&lt; bit) != <span class="number">0</span>)
     }
 
     <span class="kw">fn </span>ack(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bit: u8) {
         <span class="macro">assert!</span>(bit &lt; <span class="number">32</span>);
-        <span class="kw">unsafe </span>{ (<span class="kw-2">&amp;mut </span><span class="self">self</span>.status <span class="kw">as </span><span class="kw-2">*mut </span>u32).write_volatile(<span class="number">1 </span>&lt;&lt; bit) }
+        <span class="self">self</span>.status.set(<span class="number">1 </span>&lt;&lt; bit)
     }
 }
 
@@ -453,8 +439,7 @@
 }
 
 <span class="kw">impl </span>HpetTimerConfig {
-    <span class="kw">fn </span>read(raw_ptr: <span class="kw-2">&amp;</span>u64) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>data = <span class="kw">unsafe </span>{ (raw_ptr <span class="kw">as </span><span class="kw-2">*const </span>u64).read_volatile() };
+    <span class="kw">fn </span>new(data: u64) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             is_interrupt_level_triggered: data &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>) != <span class="number">0</span>,
             interrupt_enabled: data &amp; (<span class="number">1 </span>&lt;&lt; <span class="number">2</span>) != <span class="number">0</span>,
@@ -472,7 +457,7 @@
         }
     }
 
-    <span class="kw">fn </span>write(<span class="self">self</span>, raw_ptr: <span class="kw-2">&amp;mut </span>u64) {
+    <span class="kw">fn </span>as_u64(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
         <span class="kw">let </span><span class="kw-2">mut </span>data = <span class="number">0</span>;
         <span class="kw">if </span><span class="self">self</span>.is_interrupt_level_triggered {
             data |= <span class="number">1 </span>&lt;&lt; <span class="number">1</span>;
@@ -504,49 +489,46 @@
         }
         data |= (<span class="self">self</span>.interrupt_route_capabilities.bitmap <span class="kw">as </span>u64) &lt;&lt; <span class="number">32</span>;
 
-        <span class="kw">unsafe </span>{ (raw_ptr <span class="kw">as </span><span class="kw-2">*mut </span>u64).write_volatile(data) };
+        data
     }
 }
 
-<span class="attr">#[derive(Debug)]
-#[repr(C, align(<span class="number">8</span>))]
+<span class="attr">#[repr(C, align(<span class="number">8</span>))]
 </span><span class="kw">struct </span>HpetTimerMmio {
-    config_and_capabilities: u64,
-    comparator_value: u64,
-    fsb_interrupt_route: u64,
+    config_and_capabilities: VCell&lt;u64&gt;,
+    comparator_value: VCell&lt;u64&gt;,
+    fsb_interrupt_route: VCell&lt;u64&gt;,
     reserved: u64,
 }
 
 <span class="kw">impl </span>HpetTimerMmio {
     <span class="kw">fn </span>config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; HpetTimerConfig {
-        HpetTimerConfig::read(<span class="kw-2">&amp;</span><span class="self">self</span>.config_and_capabilities)
+        HpetTimerConfig::new(<span class="self">self</span>.config_and_capabilities.get())
     }
 
     <span class="kw">fn </span>set_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, config: HpetTimerConfig) {
-        config.write(<span class="kw-2">&amp;mut </span><span class="self">self</span>.config_and_capabilities);
+        <span class="self">self</span>.config_and_capabilities.set(config.as_u64());
     }
 
     <span class="kw">fn </span>write_comparator_value(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: u64) {
-        <span class="kw">unsafe </span>{ (<span class="kw-2">&amp;mut </span><span class="self">self</span>.comparator_value <span class="kw">as </span><span class="kw-2">*mut </span>u64).write_volatile(value) };
+        <span class="self">self</span>.comparator_value.set(value);
     }
 }
 
-<span class="attr">#[derive(Debug)]
-#[repr(C, align(<span class="number">8</span>))]
+<span class="attr">#[repr(C, align(<span class="number">8</span>))]
 </span><span class="kw">struct </span>HpetMmio {
-    general_capabilities_id: u64,
+    general_capabilities_id: VCell&lt;u64&gt;,
     reserved0: u64,
-    general_configuration: u64,
+    general_configuration: VCell&lt;u64&gt;,
     reserved1: u64,
     general_interrupt_status: HpetInterruptStatus,
     reserved2: [u64; <span class="number">25</span>],
-    main_counter_value: u64,
+    main_counter_value: VCell&lt;u64&gt;,
     reserved3: u64,
     timers: [HpetTimerMmio; <span class="number">3</span>],
 }
 
-<span class="attr">#[derive(Debug)]
-</span><span class="kw">pub struct </span>Hpet {
+<span class="kw">pub struct </span>Hpet {
     mmio: VirtualSpace&lt;HpetMmio&gt;,
 }
 
@@ -617,11 +599,11 @@
     }
 
     <span class="kw">fn </span>read_general_configuration(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
-        <span class="kw">unsafe </span>{ (<span class="kw-2">&amp;</span><span class="self">self</span>.mmio.general_configuration <span class="kw">as </span><span class="kw-2">*const </span>u64).read_volatile() }
+        <span class="self">self</span>.mmio.general_configuration.get()
     }
 
     <span class="kw">fn </span>write_general_configuration(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: u64) {
-        <span class="kw">unsafe </span>{ (<span class="kw-2">&amp;mut </span><span class="self">self</span>.mmio.general_configuration <span class="kw">as </span><span class="kw-2">*mut </span>u64).write_volatile(value) }
+        <span class="self">self</span>.mmio.general_configuration.set(value);
     }
 
     <span class="kw">pub fn </span>set_enabled(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enabled: bool) {
@@ -646,12 +628,12 @@
 
     <span class="doccomment">/// Returns the number of femtoseconds per counter tick
     </span><span class="kw">fn </span>counter_clock_period(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
-        (<span class="self">self</span>.mmio.general_capabilities_id &gt;&gt; <span class="number">32</span>) &amp; <span class="number">0xFFFFFFFF
+        (<span class="self">self</span>.mmio.general_capabilities_id.get() &gt;&gt; <span class="number">32</span>) &amp; <span class="number">0xFFFFFFFF
     </span>}
 
     <span class="kw">fn </span>current_counter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
         <span class="comment">// Safety: we know that the counter is 64-bit, aligned, valid pointer
-        </span><span class="kw">unsafe </span>{ (<span class="kw-2">&amp;</span><span class="self">self</span>.mmio.main_counter_value <span class="kw">as </span><span class="kw-2">*const </span>u64).read_volatile() }
+        </span><span class="self">self</span>.mmio.main_counter_value.get()
     }
 
     <span class="kw">fn </span>status_interrupts_iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = u8&gt; {

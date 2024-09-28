@@ -645,10 +645,7 @@
 <a href="#643" id="643">643</a>
 <a href="#644" id="644">644</a>
 <a href="#645" id="645">645</a>
-<a href="#646" id="646">646</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>core::borrow::{Borrow, BorrowMut};
-
-<span class="kw">use </span>alloc::vec::Vec;
+</pre></div><pre class="rust"><code><span class="kw">use </span>alloc::vec::Vec;
 <span class="kw">use </span>tracing::{error, warn};
 
 <span class="kw">use crate</span>::{
@@ -656,6 +653,7 @@
     cpu::{<span class="self">self</span>, idt::InterruptStackFrame64, Cpu, CPUS, MAX_CPUS},
     memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
+    utils::vcell::VCell,
 };
 
 <span class="kw">use super</span>::{
@@ -712,17 +710,17 @@
 
 <span class="attr">#[repr(C, align(<span class="number">4</span>))]
 </span><span class="kw">struct </span>ApicReg {
-    reg: u32,
+    reg: VCell&lt;u32&gt;,
     pad: [u32; <span class="number">3</span>],
 }
 
 <span class="kw">impl </span>ApicReg {
     <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: u32) {
-        <span class="kw">unsafe </span>{ (<span class="self">self</span>.reg.borrow_mut() <span class="kw">as </span><span class="kw-2">*mut </span>u32).write_volatile(value) };
+        <span class="self">self</span>.reg.set(value);
     }
 
     <span class="kw">fn </span>read(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
-        <span class="kw">unsafe </span>{ (<span class="self">self</span>.reg.borrow() <span class="kw">as </span><span class="kw-2">*const </span>u32).read_volatile() }
+        <span class="self">self</span>.reg.get()
     }
 }
 
