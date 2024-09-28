@@ -362,7 +362,7 @@
     devices::clock::{hardware_timer::pit, ClockTime, FEMTOS_PER_SEC, NANOS_PER_FEMTO},
     memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
-    utils::vcell::VCell,
+    utils::vcell::{RO, RW, WO},
 };
 
 <span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::ClockDevice;
@@ -392,19 +392,19 @@
 
 <span class="attr">#[repr(C, packed(<span class="number">8</span>))]
 </span><span class="kw">struct </span>HpetInterruptStatus {
-    status: VCell&lt;u32&gt;,
+    status: RW&lt;u32&gt;,
     reserved: u32,
 }
 
 <span class="kw">impl </span>HpetInterruptStatus {
     <span class="kw">fn </span>set_interrupts_iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = u8&gt; {
-        <span class="kw">let </span>s = <span class="self">self</span>.status.get();
+        <span class="kw">let </span>s = <span class="self">self</span>.status.read();
         (<span class="number">0</span>..<span class="number">32</span>).filter(<span class="kw">move </span>|bit| s &amp; (<span class="number">1 </span>&lt;&lt; bit) != <span class="number">0</span>)
     }
 
     <span class="kw">fn </span>ack(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bit: u8) {
         <span class="macro">assert!</span>(bit &lt; <span class="number">32</span>);
-        <span class="self">self</span>.status.set(<span class="number">1 </span>&lt;&lt; bit)
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.status.write(<span class="number">1 </span>&lt;&lt; bit) }
     }
 }
 
@@ -495,35 +495,35 @@
 
 <span class="attr">#[repr(C, align(<span class="number">8</span>))]
 </span><span class="kw">struct </span>HpetTimerMmio {
-    config_and_capabilities: VCell&lt;u64&gt;,
-    comparator_value: VCell&lt;u64&gt;,
-    fsb_interrupt_route: VCell&lt;u64&gt;,
+    config_and_capabilities: RW&lt;u64&gt;,
+    comparator_value: WO&lt;u64&gt;,
+    fsb_interrupt_route: RO&lt;u64&gt;,
     reserved: u64,
 }
 
 <span class="kw">impl </span>HpetTimerMmio {
     <span class="kw">fn </span>config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; HpetTimerConfig {
-        HpetTimerConfig::new(<span class="self">self</span>.config_and_capabilities.get())
+        HpetTimerConfig::new(<span class="self">self</span>.config_and_capabilities.read())
     }
 
     <span class="kw">fn </span>set_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, config: HpetTimerConfig) {
-        <span class="self">self</span>.config_and_capabilities.set(config.as_u64());
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.config_and_capabilities.write(config.as_u64()) };
     }
 
     <span class="kw">fn </span>write_comparator_value(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: u64) {
-        <span class="self">self</span>.comparator_value.set(value);
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.comparator_value.write(value) };
     }
 }
 
 <span class="attr">#[repr(C, align(<span class="number">8</span>))]
 </span><span class="kw">struct </span>HpetMmio {
-    general_capabilities_id: VCell&lt;u64&gt;,
+    general_capabilities_id: RO&lt;u64&gt;,
     reserved0: u64,
-    general_configuration: VCell&lt;u64&gt;,
+    general_configuration: RW&lt;u64&gt;,
     reserved1: u64,
     general_interrupt_status: HpetInterruptStatus,
     reserved2: [u64; <span class="number">25</span>],
-    main_counter_value: VCell&lt;u64&gt;,
+    main_counter_value: RO&lt;u64&gt;,
     reserved3: u64,
     timers: [HpetTimerMmio; <span class="number">3</span>],
 }
@@ -599,11 +599,11 @@
     }
 
     <span class="kw">fn </span>read_general_configuration(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
-        <span class="self">self</span>.mmio.general_configuration.get()
+        <span class="self">self</span>.mmio.general_configuration.read()
     }
 
     <span class="kw">fn </span>write_general_configuration(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: u64) {
-        <span class="self">self</span>.mmio.general_configuration.set(value);
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.mmio.general_configuration.write(value) };
     }
 
     <span class="kw">pub fn </span>set_enabled(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enabled: bool) {
@@ -628,12 +628,12 @@
 
     <span class="doccomment">/// Returns the number of femtoseconds per counter tick
     </span><span class="kw">fn </span>counter_clock_period(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
-        (<span class="self">self</span>.mmio.general_capabilities_id.get() &gt;&gt; <span class="number">32</span>) &amp; <span class="number">0xFFFFFFFF
+        (<span class="self">self</span>.mmio.general_capabilities_id.read() &gt;&gt; <span class="number">32</span>) &amp; <span class="number">0xFFFFFFFF
     </span>}
 
     <span class="kw">fn </span>current_counter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
         <span class="comment">// Safety: we know that the counter is 64-bit, aligned, valid pointer
-        </span><span class="self">self</span>.mmio.main_counter_value.get()
+        </span><span class="self">self</span>.mmio.main_counter_value.read()
     }
 
     <span class="kw">fn </span>status_interrupts_iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = u8&gt; {

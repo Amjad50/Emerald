@@ -653,7 +653,7 @@
     cpu::{<span class="self">self</span>, idt::InterruptStackFrame64, Cpu, CPUS, MAX_CPUS},
     memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
-    utils::vcell::VCell,
+    utils::vcell::RW,
 };
 
 <span class="kw">use super</span>::{
@@ -710,17 +710,17 @@
 
 <span class="attr">#[repr(C, align(<span class="number">4</span>))]
 </span><span class="kw">struct </span>ApicReg {
-    reg: VCell&lt;u32&gt;,
+    reg: RW&lt;u32&gt;,
     pad: [u32; <span class="number">3</span>],
 }
 
 <span class="kw">impl </span>ApicReg {
     <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: u32) {
-        <span class="self">self</span>.reg.set(value);
+        <span class="kw">unsafe </span>{ <span class="self">self</span>.reg.write(value) };
     }
 
     <span class="kw">fn </span>read(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
-        <span class="self">self</span>.reg.get()
+        <span class="self">self</span>.reg.read()
     }
 }
 
