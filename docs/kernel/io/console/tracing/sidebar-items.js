@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Buffer"],"fn":["flush_log_file","init","level_str","log_file","move_to_dynamic_buffer"],"static":["CONSOLE_SUBSCRIBER","INITIAL_BUFFER","LOG_FILE"],"struct":["ConsoleSubscriber","LogFile","MultiWriter","Visitor"]};
+window.SIDEBAR_ITEMS = {"enum":["Buffer"],"fn":["flush_log_file","init","level_str","log_file","move_to_dynamic_buffer","shutdown_log_file"],"static":["CONSOLE_SUBSCRIBER","INITIAL_BUFFER","LOG_FILE"],"struct":["ConsoleSubscriber","LogFile","MultiWriter","Visitor"]};

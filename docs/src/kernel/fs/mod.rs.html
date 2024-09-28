@@ -1166,6 +1166,54 @@
 <a href="#1164" id="1164">1164</a>
 <a href="#1165" id="1165">1165</a>
 <a href="#1166" id="1166">1166</a>
+<a href="#1167" id="1167">1167</a>
+<a href="#1168" id="1168">1168</a>
+<a href="#1169" id="1169">1169</a>
+<a href="#1170" id="1170">1170</a>
+<a href="#1171" id="1171">1171</a>
+<a href="#1172" id="1172">1172</a>
+<a href="#1173" id="1173">1173</a>
+<a href="#1174" id="1174">1174</a>
+<a href="#1175" id="1175">1175</a>
+<a href="#1176" id="1176">1176</a>
+<a href="#1177" id="1177">1177</a>
+<a href="#1178" id="1178">1178</a>
+<a href="#1179" id="1179">1179</a>
+<a href="#1180" id="1180">1180</a>
+<a href="#1181" id="1181">1181</a>
+<a href="#1182" id="1182">1182</a>
+<a href="#1183" id="1183">1183</a>
+<a href="#1184" id="1184">1184</a>
+<a href="#1185" id="1185">1185</a>
+<a href="#1186" id="1186">1186</a>
+<a href="#1187" id="1187">1187</a>
+<a href="#1188" id="1188">1188</a>
+<a href="#1189" id="1189">1189</a>
+<a href="#1190" id="1190">1190</a>
+<a href="#1191" id="1191">1191</a>
+<a href="#1192" id="1192">1192</a>
+<a href="#1193" id="1193">1193</a>
+<a href="#1194" id="1194">1194</a>
+<a href="#1195" id="1195">1195</a>
+<a href="#1196" id="1196">1196</a>
+<a href="#1197" id="1197">1197</a>
+<a href="#1198" id="1198">1198</a>
+<a href="#1199" id="1199">1199</a>
+<a href="#1200" id="1200">1200</a>
+<a href="#1201" id="1201">1201</a>
+<a href="#1202" id="1202">1202</a>
+<a href="#1203" id="1203">1203</a>
+<a href="#1204" id="1204">1204</a>
+<a href="#1205" id="1205">1205</a>
+<a href="#1206" id="1206">1206</a>
+<a href="#1207" id="1207">1207</a>
+<a href="#1208" id="1208">1208</a>
+<a href="#1209" id="1209">1209</a>
+<a href="#1210" id="1210">1210</a>
+<a href="#1211" id="1211">1211</a>
+<a href="#1212" id="1212">1212</a>
+<a href="#1213" id="1213">1213</a>
+<a href="#1214" id="1214">1214</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>fat;
 <span class="kw">pub mod </span>mapping;
 <span class="kw">mod </span>mbr;
@@ -1573,15 +1621,24 @@
     Stop,
 }
 
-<span class="kw">pub trait </span>FileSystem: Send + Sync {
-    <span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt;;
-    <span class="kw">fn </span>read_dir(
+<span class="doccomment">/// A filesystem trait, this is the main interface to interact with the filesystem
+/// it is used to open files, directories, read and write files, etc.
+</span><span class="kw">pub trait </span>FileSystem: Send + Sync {
+    <span class="doccomment">/// Open the root directory of the filesystem
+    </span><span class="kw">fn </span>open_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;DirectoryNode, FileSystemError&gt;;
+
+    <span class="doccomment">/// Read the directory entries in the `inode`, and call the handler for each entry
+    /// The `handler` should return `DirTreverse::Stop` to stop the traversal
+    </span><span class="kw">fn </span>read_dir(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         inode: <span class="kw-2">&amp;</span>DirectoryNode,
         handler: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(Node) -&gt; DirTreverse,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt;;
 
-    <span class="kw">fn </span>treverse_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, inode: <span class="kw-2">&amp;</span>DirectoryNode, matcher: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Node, FileSystemError&gt; {
+    <span class="doccomment">/// Traverse the directory in the `inode` and return the entry with the name `matcher`
+    /// Most of the time, no need to implement this, as it is already implemented in the default
+    /// using [`FileSystem::read_dir`]
+    </span><span class="kw">fn </span>treverse_dir(<span class="kw-2">&amp;</span><span class="self">self</span>, inode: <span class="kw-2">&amp;</span>DirectoryNode, matcher: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Node, FileSystemError&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>entry = <span class="prelude-val">None</span>;
         <span class="self">self</span>.read_dir(inode, <span class="kw-2">&amp;mut </span>|inode| {
             <span class="kw">if </span>inode.name() == matcher {
@@ -1594,7 +1651,9 @@
         entry.ok_or(FileSystemError::FileNotFound)
     }
 
-    <span class="kw">fn </span>create_node(
+    <span class="doccomment">/// Create a new entry in the `parent` directory with the `name` and `attributes`
+    /// This could be a file or a directory, the `attributes` should specify the type
+    </span><span class="kw">fn </span>create_node(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         _parent: <span class="kw-2">&amp;</span>DirectoryNode,
         _name: <span class="kw-2">&amp;</span>str,
@@ -1603,7 +1662,10 @@
         <span class="prelude-val">Err</span>(FileSystemError::OperationNotSupported)
     }
 
-    <span class="kw">fn </span>read_file(
+    <span class="doccomment">/// Read the file in the `inode` at the `position` and put the data in `buf`
+    /// The `access_helper` is used to store some extra metadata to help the filesystem
+    /// manage the caches or any extra data it needs.
+    </span><span class="kw">fn </span>read_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         inode: <span class="kw-2">&amp;</span>FileNode,
         position: u64,
@@ -1618,7 +1680,10 @@
         }
     }
 
-    <span class="kw">fn </span>write_file(
+    <span class="doccomment">/// Write the file in the `inode` at the `position` with the data in `buf`
+    /// The `access_helper` is used to store some extra metadata to help the filesystem
+    /// manage the caches or any extra data it needs.
+    </span><span class="kw">fn </span>write_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         inode: <span class="kw-2">&amp;mut </span>FileNode,
         position: u64,
@@ -1633,7 +1698,9 @@
         }
     }
 
-    <span class="kw">fn </span>flush_file(
+    <span class="doccomment">/// Tells the filesystem to flush the content of this file to disk or to the backing store
+    /// if it needs to
+    </span><span class="kw">fn </span>flush_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         _inode: <span class="kw-2">&amp;mut </span>FileNode,
         _access_helper: <span class="kw-2">&amp;mut </span>AccessHelper,
@@ -1641,7 +1708,10 @@
         <span class="prelude-val">Err</span>(FileSystemError::WriteNotSupported)
     }
 
-    <span class="kw">fn </span>close_file(
+    <span class="doccomment">/// Close the file in the `inode`, this is called when the file is dropped
+    /// The `access_helper` is used to store some extra metadata to help the filesystem
+    /// manage the caches or any extra data it needs.
+    </span><span class="kw">fn </span>close_file(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         _inode: <span class="kw-2">&amp;</span>FileNode,
         _access_helper: AccessHelper,
@@ -1649,9 +1719,30 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn </span>set_file_size(<span class="kw-2">&amp;</span><span class="self">self</span>, _inode: <span class="kw-2">&amp;mut </span>FileNode, _size: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
-        <span class="prelude-val">Err</span>(FileSystemError::OperationNotSupported)
+    <span class="doccomment">/// Set the size of the file in the `inode` to `size`, this is used to truncate the file
+    /// or to extend it
+    </span><span class="kw">fn </span>set_file_size(<span class="kw-2">&amp;</span><span class="self">self</span>, inode: <span class="kw-2">&amp;mut </span>FileNode, size: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), FileSystemError&gt; {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(device) = <span class="kw-2">&amp;</span>inode.device {
+            <span class="macro">assert_eq!</span>(inode.start_cluster, DEVICES_FILESYSTEM_CLUSTER_MAGIC);
+            device.set_size(size)
+        } <span class="kw">else </span>{
+            <span class="prelude-val">Err</span>(FileSystemError::WriteNotSupported)
+        }
     }
+
+    <span class="doccomment">/// The expected number of strong refs in `Arc` by default
+    /// This is used to check if the filesystem is still in use before unmounting
+    /// This is here because for some filesystems, it could be stored globally in some `Mutex`
+    /// like `/devices` this reference should not be counted to know if its still in use
+    </span><span class="kw">fn </span>number_global_refs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="comment">// no global refs by default
+        </span><span class="number">0
+    </span>}
+
+    <span class="doccomment">/// Unmount the filesystem, this is called before the filesystem is dropped
+    /// The reason we use this is that we can't force `Drop` to be implemented
+    /// for `Arc&lt;dyn FileSystem&gt;`, so we have this instead
+    </span><span class="kw">fn </span>unmount(<span class="self">self</span>: Arc&lt;<span class="self">Self</span>&gt;) {}
 }
 
 <span class="kw">pub struct </span>EmptyFileSystem;
@@ -1722,6 +1813,11 @@
     mapping::mount(<span class="string">"/"</span>, Arc::new(Mutex::new(filesystem)))<span class="question-mark">?</span>;
 
     <span class="prelude-val">Ok</span>(())
+}
+
+<span class="kw">pub fn </span>unmount_all() {
+    <span class="comment">// unmount all filesystems
+    </span>mapping::unmount_all();
 }
 
 <span class="doccomment">/// Open the inode of a path, this include directories and files.

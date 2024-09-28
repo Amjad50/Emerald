@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["MappingError"],"fn":["get_mapping","mount","on_all_matching_mappings"],"static":["FILESYSTEM_MAPPING"],"struct":["FileSystemMapping","MappingNode"]};
+window.SIDEBAR_ITEMS = {"enum":["MappingError"],"fn":["get_mapping","mount","on_all_matching_mappings","unmount_all"],"static":["FILESYSTEM_MAPPING"],"struct":["FileSystemMapping","MappingNode"]};

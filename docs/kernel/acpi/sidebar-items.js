@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["acpi_handler","setup_enable_acpi"],"mod":["aml","tables"]};
+window.SIDEBAR_ITEMS = {"enum":["AcpiError"],"fn":["acpi_handler","fetch_s_array","init","sleep"],"mod":["aml","tables"],"static":["ACPI"],"struct":["Acpi"]};

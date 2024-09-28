@@ -252,6 +252,10 @@
 <a href="#250" id="250">250</a>
 <a href="#251" id="251">251</a>
 <a href="#252" id="252">252</a>
+<a href="#253" id="253">253</a>
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>keyboard;
 <span class="kw">mod </span>mouse;
 <span class="kw">mod </span>ps2;
@@ -312,6 +316,10 @@
 
 <span class="kw">pub fn </span>get_mouse_reader() -&gt; MouseReader {
     KEYBOARD_MOUSE.get().get_mouse_reader()
+}
+
+<span class="kw">pub fn </span>reset_system() -&gt; ! {
+    KEYBOARD_MOUSE.get().ps2.reset_system();
 }
 
 <span class="comment">// A mini keyboard driver/mapper

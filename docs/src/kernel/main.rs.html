@@ -197,6 +197,10 @@
 <a href="#195" id="195">195</a>
 <a href="#196" id="196">196</a>
 <a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
+<a href="#199" id="199">199</a>
+<a href="#200" id="200">200</a>
+<a href="#201" id="201">201</a>
 </pre></div><pre class="rust"><code><span class="attr">#![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
@@ -204,6 +208,7 @@
 #![feature(const_binary_heap_constructor)]
 #![feature(btree_extract_if)]
 #![feature(custom_test_frameworks)]
+#![feature(byte_slice_trim_ascii)]
 #![test_runner(<span class="kw">crate</span>::testing::test_runner)]
 #![reexport_test_harness_main = <span class="string">"test_main"</span>]
 </span><span class="comment">// fix warnings when testing (since we are not using the normal `kernel_main`)
@@ -233,6 +238,7 @@
 <span class="kw">mod </span>memory_management;
 <span class="kw">mod </span>multiboot2;
 <span class="kw">mod </span>panic_handler;
+<span class="kw">mod </span>power;
 <span class="kw">mod </span>process;
 <span class="kw">mod </span>sync;
 <span class="kw">mod </span>testing;
@@ -357,7 +363,7 @@
     <span class="macro">info!</span>(<span class="string">"BIOS tables: {}"</span>, bios_tables);
     apic::init(bios_tables);
     <span class="comment">// must be done after APIC is initialized
-    </span>acpi::setup_enable_acpi();
+    </span>acpi::init();
     clock::init(bios_tables);
 
     <span class="comment">// APIC timer interrupt rely on the clock, so it must be initialized after the clock
@@ -373,8 +379,10 @@
 
     </span>load_init_process();
 
-    <span class="comment">// this will never return
-    </span>scheduler::schedule()
+    <span class="comment">// this will return on shutdown, the sequence is initiated by `power::start_shutdown`
+    </span>scheduler::schedule();
+    <span class="comment">// continue the shutdown process
+    </span>power::finish_power_sequence();
 }
 
 <span class="attr">#[link_section = <span class="string">".text"</span>]
