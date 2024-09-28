@@ -95,6 +95,11 @@ impl FileSystem for RwLock<Devices> {
         // we have `DEVICES` mutex globally stored
         1
     }
+
+    fn unmount(self: Arc<Self>) {
+        // clean the devices
+        self.write().devices.clear();
+    }
 }
 
 pub fn init_devices_mapping() {
