@@ -179,7 +179,7 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
     // this will return on shutdown, the sequence is initiated by `power::start_shutdown`
     scheduler::schedule();
     // continue the shutdown process
-    power::shutdown_system();
+    power::finish_power_sequence();
 }
 
 #[link_section = ".text"]

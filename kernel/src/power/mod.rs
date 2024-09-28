@@ -1,13 +1,22 @@
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     acpi,
     cpu::{self},
-    devices::Device,
+    devices::{keyboard_mouse, Device},
     fs,
     io::console,
     process::scheduler,
+    sync::once::OnceLock,
 };
+
+static CURRENT_CMD: OnceLock<PowerCommand> = OnceLock::new();
+
+#[derive(Debug, Copy, Clone)]
+pub enum PowerCommand {
+    Shutdown,
+    Reboot,
+}
 
 /// Power device
 ///
@@ -42,7 +51,14 @@ impl Device for PowerDevice {
 
         if let Some(rest) = buf.strip_prefix(b"shutdown") {
             if rest.trim_ascii().is_empty() {
-                start_shutdown();
+                start_power_sequence(PowerCommand::Shutdown);
+                Ok(buf.len() as u64)
+            } else {
+                Err(fs::FileSystemError::EndOfFile)
+            }
+        } else if let Some(rest) = buf.strip_prefix(b"reboot") {
+            if rest.trim_ascii().is_empty() {
+                start_power_sequence(PowerCommand::Reboot);
                 Ok(buf.len() as u64)
             } else {
                 Err(fs::FileSystemError::EndOfFile)
@@ -54,22 +70,48 @@ impl Device for PowerDevice {
 }
 
 /// Start the shutdown process
-pub fn start_shutdown() {
-    info!("Shutting down...");
+pub fn start_power_sequence(cmd: PowerCommand) {
+    if let Err(current_cmd) = CURRENT_CMD.set(cmd) {
+        error!("Power command already set: {current_cmd:?}, ignoring: {cmd:?}",);
+        return;
+    }
+    match cmd {
+        PowerCommand::Shutdown => {
+            info!("Shutting down the system");
+        }
+        PowerCommand::Reboot => {
+            info!("Rebooting the system");
+        }
+    }
 
-    // tell the scheduler to initiate shutdown, the rest will be handled by
-    // [`shutdown_system`]
+    // tell the scheduler to initiate shutdown/reboot, the rest will be handled by
+    // [`finish_power_sequence`]
     scheduler::stop_scheduler();
 }
 
 /// reverse of [`crate::kernel_main`]
 /// Called by [`crate::kernel_main`] after all processes have exited and cleaned up
-pub fn shutdown_system() -> ! {
+pub fn finish_power_sequence() -> ! {
+    let cmd = CURRENT_CMD.try_get().expect("No power command set");
+
     console::tracing::shutdown_log_file();
     // unmount all filesystems
     fs::unmount_all();
-    // shutdown through ACPI, state S5
-    acpi::sleep(5).expect("Could not shutdown");
+
+    cpu::cpu().push_cli();
+    match cmd {
+        PowerCommand::Shutdown => {
+            // shutdown through ACPI, state S5
+            acpi::sleep(5).expect("Could not shutdown");
+        }
+        PowerCommand::Reboot => {
+            // TODO: implement using the `reset_register` in ACPI if available
+            //       not doing it now because for my qemu its not enabled,
+            //       and using the below method is easier for now.
+            info!("Rebooting the system using the keyboard controller");
+            keyboard_mouse::reset_system();
+        }
+    }
 
     // if ACPI failed or woke up, halt the CPU
     loop {

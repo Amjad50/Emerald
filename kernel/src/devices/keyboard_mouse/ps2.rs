@@ -104,4 +104,11 @@ impl Ps2 {
             core::hint::spin_loop();
         }
     }
+
+    pub fn reset_system(&self) -> ! {
+        self.write_prefix(0xFE);
+        loop {
+            unsafe { cpu::halt() };
+        }
+    }
 }

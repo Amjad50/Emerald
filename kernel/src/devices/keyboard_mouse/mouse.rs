@@ -35,6 +35,8 @@ mod commands {
     pub const MOUSE_GET_DEVICE_ID: u8 = 0xF2;
     pub const MOUSE_REQUEST_SINGLE_PACKET: u8 = 0xEB;
     pub const MOUSE_STATUS_REQUEST: u8 = 0xE9;
+
+    pub const SYSTEM_RESET: u8 = 0xFE;
 }
 
 mod packet {

@@ -60,6 +60,10 @@ pub fn get_mouse_reader() -> MouseReader {
     KEYBOARD_MOUSE.get().get_mouse_reader()
 }
 
+pub fn reset_system() -> ! {
+    KEYBOARD_MOUSE.get().ps2.reset_system();
+}
+
 // A mini keyboard driver/mapper
 pub struct KeyboardMouse {
     keyboard: Keyboard,
