@@ -241,7 +241,8 @@
 //! OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 //! IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 //! DEALINGS IN THE SOFTWARE.
-//!
+
+</span><span class="attr">#![allow(dead_code)]
 
 </span><span class="kw">use </span>core::cell::UnsafeCell;
 <span class="kw">use </span>core::ptr;
@@ -255,8 +256,7 @@
     value: UnsafeCell&lt;T&gt;,
 }
 
-<span class="attr">#[allow(dead_code)]
-</span><span class="kw">impl</span>&lt;T&gt; VCell&lt;T&gt; {
+<span class="kw">impl</span>&lt;T&gt; VCell&lt;T&gt; {
     <span class="doccomment">/// Creates a new `VolatileCell` containing the given value
     </span><span class="kw">pub const fn </span>new(value: T) -&gt; <span class="self">Self </span>{
         VCell {
