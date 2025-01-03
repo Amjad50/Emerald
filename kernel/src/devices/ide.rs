@@ -17,12 +17,16 @@ use crate::{
     sync::spin::mutex::Mutex,
 };
 
-use super::pci::{self, PciDevice, PciDeviceConfig, ProbeExtra};
+use super::pci::{self, PciDevice, PciDeviceConfig, PciDeviceType, ProbeExtra};
 
 static mut IDE_DEVICES: [Option<Arc<IdeDevice>>; 4] = [None, None, None, None];
 static INTERRUPTS_SETUP: AtomicBool = AtomicBool::new(false);
 
 pub fn try_register_ide_device(pci_device: &PciDeviceConfig) -> bool {
+    let PciDeviceType::MassStorageController(..) = pci_device.device_type else {
+        return false;
+    };
+
     let mut found_device = false;
     for i in 0..2 {
         // i = 0 => primary
@@ -1001,7 +1005,7 @@ impl PciDevice for IdeDevice {
     where
         Self: Sized,
     {
-        if let pci::PciDeviceType::MassStorageController(0x1, prog_if, ..) = config.device_type {
+        if let PciDeviceType::MassStorageController(0x1, prog_if, ..) = config.device_type {
             let support_dma = prog_if & pci_cfg::PROG_IF_MASTER != 0;
             let mut command = config.read_command();
             command |= pci_cfg::CMD_IO_SPACE;
