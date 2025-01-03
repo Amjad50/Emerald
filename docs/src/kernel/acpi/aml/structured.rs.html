@@ -570,7 +570,6 @@
 <a href="#568" id="568">568</a>
 <a href="#569" id="569">569</a>
 <a href="#570" id="570">570</a>
-<a href="#571" id="571">571</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use </span>alloc::{
@@ -1052,94 +1051,93 @@
     }
 }
 
-<span class="macro">testing::test! </span>{
-    <span class="kw">fn </span>test_structure() {
-        <span class="kw">use </span><span class="kw">super</span>::parser::{
-            AccessType, FieldElement, FieldUpdateRule, IntegerData, ScopeObj, Target, TermArg,
-            UnresolvedDataObject, RegionSpace
-        };
-        <span class="kw">use </span>alloc::boxed::Box;
+<span class="attr">#[macro_rules_attribute::apply(testing::test)]
+</span><span class="kw">fn </span>test_structure() {
+    <span class="kw">use </span><span class="kw">super</span>::parser::{
+        AccessType, FieldElement, FieldUpdateRule, IntegerData, RegionSpace, ScopeObj, Target,
+        TermArg, UnresolvedDataObject,
+    };
+    <span class="kw">use </span>alloc::boxed::Box;
 
-        <span class="kw">let </span>code = AmlCode {
-            term_list: <span class="macro">vec!</span>[
-                AmlTerm::Scope(ScopeObj {
-                    ty: ScopeType::Scope,
-                    name: <span class="string">"\\"</span>.to_string(),
-                    term_list: <span class="macro">vec!</span>[
-                        AmlTerm::Region(RegionObj {
-                            name: <span class="string">"DBG_"</span>.to_string(),
-                            region_space: RegionSpace::SystemIO,
-                            region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::WordConst(<span class="number">1026</span>),
-                            )),
-                            region_length: TermArg::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstOne,
-                            )),
-                        }),
-                        AmlTerm::Field(FieldDef {
-                            name: <span class="string">"DBG_"</span>.to_string(),
-                            access_type: AccessType::Byte,
-                            need_lock: <span class="bool-val">false</span>,
-                            update_rule: FieldUpdateRule::Preserve,
-                            fields: <span class="macro">vec!</span>[FieldElement::Named(<span class="string">"DBGB"</span>.to_string(), <span class="number">8</span>)],
-                        }),
-                        AmlTerm::Method(MethodObj {
-                            name: <span class="string">"DBUG"</span>.to_string(),
-                            num_args: <span class="number">1</span>,
-                            is_serialized: <span class="bool-val">false</span>,
-                            sync_level: <span class="number">0</span>,
-                            term_list: <span class="macro">vec!</span>[
-                                AmlTerm::ToHexString(TermArg::Arg(<span class="number">0</span>), Box::new(Target::Local(<span class="number">0</span>))),
-                                AmlTerm::ToBuffer(TermArg::Local(<span class="number">0</span>), Box::new(Target::Local(<span class="number">0</span>))),
-                            ],
-                        }),
-                    ],
-                }),
-                AmlTerm::Method(MethodObj {
-                    name: <span class="string">"\\_GPE._E02"</span>.to_string(),
-                    num_args: <span class="number">0</span>,
-                    is_serialized: <span class="bool-val">false</span>,
-                    sync_level: <span class="number">0</span>,
-                    term_list: <span class="macro">vec!</span>[AmlTerm::MethodCall(<span class="string">"\\_SB_.CPUS.CSCN"</span>.to_string(), <span class="macro">vec!</span>[])],
-                }),
-            ],
-        };
+    <span class="kw">let </span>code = AmlCode {
+        term_list: <span class="macro">vec!</span>[
+            AmlTerm::Scope(ScopeObj {
+                ty: ScopeType::Scope,
+                name: <span class="string">"\\"</span>.to_string(),
+                term_list: <span class="macro">vec!</span>[
+                    AmlTerm::Region(RegionObj {
+                        name: <span class="string">"DBG_"</span>.to_string(),
+                        region_space: RegionSpace::SystemIO,
+                        region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::WordConst(<span class="number">1026</span>),
+                        )),
+                        region_length: TermArg::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstOne,
+                        )),
+                    }),
+                    AmlTerm::Field(FieldDef {
+                        name: <span class="string">"DBG_"</span>.to_string(),
+                        access_type: AccessType::Byte,
+                        need_lock: <span class="bool-val">false</span>,
+                        update_rule: FieldUpdateRule::Preserve,
+                        fields: <span class="macro">vec!</span>[FieldElement::Named(<span class="string">"DBGB"</span>.to_string(), <span class="number">8</span>)],
+                    }),
+                    AmlTerm::Method(MethodObj {
+                        name: <span class="string">"DBUG"</span>.to_string(),
+                        num_args: <span class="number">1</span>,
+                        is_serialized: <span class="bool-val">false</span>,
+                        sync_level: <span class="number">0</span>,
+                        term_list: <span class="macro">vec!</span>[
+                            AmlTerm::ToHexString(TermArg::Arg(<span class="number">0</span>), Box::new(Target::Local(<span class="number">0</span>))),
+                            AmlTerm::ToBuffer(TermArg::Local(<span class="number">0</span>), Box::new(Target::Local(<span class="number">0</span>))),
+                        ],
+                    }),
+                ],
+            }),
+            AmlTerm::Method(MethodObj {
+                name: <span class="string">"\\_GPE._E02"</span>.to_string(),
+                num_args: <span class="number">0</span>,
+                is_serialized: <span class="bool-val">false</span>,
+                sync_level: <span class="number">0</span>,
+                term_list: <span class="macro">vec!</span>[AmlTerm::MethodCall(<span class="string">"\\_SB_.CPUS.CSCN"</span>.to_string(), <span class="macro">vec!</span>[])],
+            }),
+        ],
+    };
 
-        <span class="kw">let </span>structured = StructuredAml::parse(<span class="kw-2">&amp;</span>code);
+    <span class="kw">let </span>structured = StructuredAml::parse(<span class="kw-2">&amp;</span>code);
 
-        <span class="macro">assert_eq!</span>(
-            structured.root.children.keys().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
-            <span class="macro">vec!</span>[<span class="string">"DBG_"</span>, <span class="string">"DBUG"</span>, <span class="string">"_GPE"</span>]
-        );
+    <span class="macro">assert_eq!</span>(
+        structured.root.children.keys().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+        <span class="macro">vec!</span>[<span class="string">"DBG_"</span>, <span class="string">"DBUG"</span>, <span class="string">"_GPE"</span>]
+    );
 
-        <span class="kw">match </span><span class="kw-2">&amp;</span>structured.root.children[<span class="string">"DBG_"</span>] {
-            ElementType::RegionFields(region, fields) =&gt; {
-                <span class="macro">assert!</span>(region.is_some());
-                <span class="macro">assert!</span>(!fields.is_empty());
-            }
-            <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"DBG_ is not a region"</span>),
+    <span class="kw">match </span><span class="kw-2">&amp;</span>structured.root.children[<span class="string">"DBG_"</span>] {
+        ElementType::RegionFields(region, fields) =&gt; {
+            <span class="macro">assert!</span>(region.is_some());
+            <span class="macro">assert!</span>(!fields.is_empty());
         }
-        <span class="kw">match </span><span class="kw-2">&amp;</span>structured.root.children[<span class="string">"DBUG"</span>] {
-            ElementType::Method(method) =&gt; {
-                <span class="macro">assert_eq!</span>(method.name, <span class="string">"DBUG"</span>);
-                <span class="macro">assert_eq!</span>(method.term_list.len(), <span class="number">2</span>);
-            }
-            <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"DBUG is not a method"</span>),
+        <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"DBG_ is not a region"</span>),
+    }
+    <span class="kw">match </span><span class="kw-2">&amp;</span>structured.root.children[<span class="string">"DBUG"</span>] {
+        ElementType::Method(method) =&gt; {
+            <span class="macro">assert_eq!</span>(method.name, <span class="string">"DBUG"</span>);
+            <span class="macro">assert_eq!</span>(method.term_list.len(), <span class="number">2</span>);
         }
-        <span class="kw">match </span><span class="kw-2">&amp;</span>structured.root.children[<span class="string">"_GPE"</span>] {
-            ElementType::ScopeOrDevice(scope) =&gt; {
-                <span class="macro">assert_eq!</span>(scope.children.keys().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(), <span class="macro">vec!</span>[<span class="string">"_E02"</span>]);
+        <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"DBUG is not a method"</span>),
+    }
+    <span class="kw">match </span><span class="kw-2">&amp;</span>structured.root.children[<span class="string">"_GPE"</span>] {
+        ElementType::ScopeOrDevice(scope) =&gt; {
+            <span class="macro">assert_eq!</span>(scope.children.keys().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(), <span class="macro">vec!</span>[<span class="string">"_E02"</span>]);
 
-                <span class="kw">match </span><span class="kw-2">&amp;</span>scope.children[<span class="string">"_E02"</span>] {
-                    ElementType::Method(method) =&gt; {
-                        <span class="macro">assert_eq!</span>(method.name, <span class="string">"_E02"</span>);
-                        <span class="macro">assert_eq!</span>(method.term_list.len(), <span class="number">1</span>);
-                    }
-                    <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"_E02 is not a method"</span>),
+            <span class="kw">match </span><span class="kw-2">&amp;</span>scope.children[<span class="string">"_E02"</span>] {
+                ElementType::Method(method) =&gt; {
+                    <span class="macro">assert_eq!</span>(method.name, <span class="string">"_E02"</span>);
+                    <span class="macro">assert_eq!</span>(method.term_list.len(), <span class="number">1</span>);
                 }
+                <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"_E02 is not a method"</span>),
             }
-            <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"_GPE is not a scope"</span>),
         }
+        <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"_GPE is not a scope"</span>),
     }
 }
 </code></pre></div></section></main></body></html>

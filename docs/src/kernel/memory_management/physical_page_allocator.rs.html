@@ -287,6 +287,7 @@
 <a href="#285" id="285">285</a>
 <a href="#286" id="286">286</a>
 <a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::ptr::NonNull;
 
 <span class="kw">use </span>tracing::info;
@@ -513,65 +514,66 @@
     }
 }
 
-<span class="macro">testing::test! </span>{
-    <span class="kw">fn </span>test_general() {
-        <span class="kw">let </span>page1 = <span class="kw">unsafe </span>{ alloc() };
-        <span class="kw">let </span>page2 = <span class="kw">unsafe </span>{ alloc() };
-        <span class="kw">let </span>page3 = <span class="kw">unsafe </span>{ alloc() };
+<span class="attr">#[macro_rules_attribute::apply(testing::test)]
+</span><span class="kw">fn </span>test_general() {
+    <span class="kw">let </span>page1 = <span class="kw">unsafe </span>{ alloc() };
+    <span class="kw">let </span>page2 = <span class="kw">unsafe </span>{ alloc() };
+    <span class="kw">let </span>page3 = <span class="kw">unsafe </span>{ alloc() };
 
-        <span class="comment">// make sure its aligned
-        </span><span class="macro">assert_eq!</span>(page1 <span class="kw">as </span>usize % PAGE_4K, <span class="number">0</span>);
-        <span class="macro">assert_eq!</span>(page2 <span class="kw">as </span>usize % PAGE_4K, <span class="number">0</span>);
-        <span class="macro">assert_eq!</span>(page3 <span class="kw">as </span>usize % PAGE_4K, <span class="number">0</span>);
+    <span class="comment">// make sure its aligned
+    </span><span class="macro">assert_eq!</span>(page1 <span class="kw">as </span>usize % PAGE_4K, <span class="number">0</span>);
+    <span class="macro">assert_eq!</span>(page2 <span class="kw">as </span>usize % PAGE_4K, <span class="number">0</span>);
+    <span class="macro">assert_eq!</span>(page3 <span class="kw">as </span>usize % PAGE_4K, <span class="number">0</span>);
 
-        <span class="comment">// make sure its after one another in reverse
-        </span><span class="macro">assert_eq!</span>(page1 <span class="kw">as </span>usize, page2 <span class="kw">as </span>usize + PAGE_4K);
-        <span class="macro">assert_eq!</span>(page2 <span class="kw">as </span>usize, page3 <span class="kw">as </span>usize + PAGE_4K);
+    <span class="comment">// make sure its after one another in reverse
+    </span><span class="macro">assert_eq!</span>(page1 <span class="kw">as </span>usize, page2 <span class="kw">as </span>usize + PAGE_4K);
+    <span class="macro">assert_eq!</span>(page2 <span class="kw">as </span>usize, page3 <span class="kw">as </span>usize + PAGE_4K);
 
-        <span class="comment">// make sure the content are 1
-        </span><span class="macro">assert!</span>(<span class="kw">unsafe </span>{ core::slice::from_raw_parts(page1, PAGE_4K) }
-            .iter()
-            .all(|<span class="kw-2">&amp;</span>x| x == <span class="number">1</span>),);
-        <span class="macro">assert!</span>(<span class="kw">unsafe </span>{ core::slice::from_raw_parts(page2, PAGE_4K) }
-            .iter()
-            .all(|<span class="kw-2">&amp;</span>x| x == <span class="number">1</span>),);
-        <span class="macro">assert!</span>(<span class="kw">unsafe </span>{ core::slice::from_raw_parts(page3, PAGE_4K) }
-            .iter()
-            .all(|<span class="kw-2">&amp;</span>x| x == <span class="number">1</span>),);
+    <span class="comment">// make sure the content are 1
+    </span><span class="macro">assert!</span>(<span class="kw">unsafe </span>{ core::slice::from_raw_parts(page1, PAGE_4K) }
+        .iter()
+        .all(|<span class="kw-2">&amp;</span>x| x == <span class="number">1</span>),);
+    <span class="macro">assert!</span>(<span class="kw">unsafe </span>{ core::slice::from_raw_parts(page2, PAGE_4K) }
+        .iter()
+        .all(|<span class="kw-2">&amp;</span>x| x == <span class="number">1</span>),);
+    <span class="macro">assert!</span>(<span class="kw">unsafe </span>{ core::slice::from_raw_parts(page3, PAGE_4K) }
+        .iter()
+        .all(|<span class="kw-2">&amp;</span>x| x == <span class="number">1</span>),);
 
-        <span class="kw">let </span>zeros = <span class="kw">unsafe </span>{ alloc_zeroed() };
-        <span class="macro">assert!</span>(<span class="kw">unsafe </span>{ core::slice::from_raw_parts(zeros, PAGE_4K) }
-            .iter()
-            .all(|<span class="kw-2">&amp;</span>x| x == <span class="number">0</span>),);
+    <span class="kw">let </span>zeros = <span class="kw">unsafe </span>{ alloc_zeroed() };
+    <span class="macro">assert!</span>(<span class="kw">unsafe </span>{ core::slice::from_raw_parts(zeros, PAGE_4K) }
+        .iter()
+        .all(|<span class="kw-2">&amp;</span>x| x == <span class="number">0</span>),);
 
-        <span class="kw">unsafe </span>{
-            free(page1);
-            free(page2);
-            free(page3);
-            free(zeros);
-        }
+    <span class="kw">unsafe </span>{
+        free(page1);
+        free(page2);
+        free(page3);
+        free(zeros);
     }
+}
 
-    <span class="kw">fn </span>test_free_realloc() {
-        <span class="kw">let </span>page = <span class="kw">unsafe </span>{ alloc() };
-        <span class="kw">let </span>addr = page <span class="kw">as </span>usize;
+<span class="attr">#[macro_rules_attribute::apply(testing::test)]
+</span><span class="kw">fn </span>test_free_realloc() {
+    <span class="kw">let </span>page = <span class="kw">unsafe </span>{ alloc() };
+    <span class="kw">let </span>addr = page <span class="kw">as </span>usize;
 
-        <span class="kw">unsafe </span>{ free(page) };
+    <span class="kw">unsafe </span>{ free(page) };
 
-        <span class="kw">let </span>page2 = <span class="kw">unsafe </span>{ alloc() };
+    <span class="kw">let </span>page2 = <span class="kw">unsafe </span>{ alloc() };
 
-        <span class="macro">assert_eq!</span>(page <span class="kw">as </span>usize, addr);
+    <span class="macro">assert_eq!</span>(page <span class="kw">as </span>usize, addr);
 
-        <span class="kw">unsafe </span>{ free(page2) };
-    }
+    <span class="kw">unsafe </span>{ free(page2) };
+}
 
-    <span class="attr">#[should_panic]
-    </span><span class="kw">fn </span>test_unaligned_free() {
-        <span class="kw">let </span>page = <span class="kw">unsafe </span>{ alloc() };
+<span class="attr">#[macro_rules_attribute::apply(testing::test)]
+#[should_panic]
+</span><span class="kw">fn </span>test_unaligned_free() {
+    <span class="kw">let </span>page = <span class="kw">unsafe </span>{ alloc() };
 
-        <span class="kw">let </span>addr_inside_page = <span class="kw">unsafe </span>{ page.add(<span class="number">1</span>) };
+    <span class="kw">let </span>addr_inside_page = <span class="kw">unsafe </span>{ page.add(<span class="number">1</span>) };
 
-        <span class="kw">unsafe </span>{ free(addr_inside_page) };
-    }
+    <span class="kw">unsafe </span>{ free(addr_inside_page) };
 }
 </code></pre></div></section></main></body></html>

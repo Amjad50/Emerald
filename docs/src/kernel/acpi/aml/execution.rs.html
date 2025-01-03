@@ -283,7 +283,6 @@
 <a href="#281" id="281">281</a>
 <a href="#282" id="282">282</a>
 <a href="#283" id="283">283</a>
-<a href="#284" id="284">284</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>alloc::{
     string::{String, ToString},
     vec::Vec,
@@ -477,95 +476,94 @@
     }
 }
 
-<span class="macro">testing::test! </span>{
-    <span class="doccomment">/// Test executing and getting data from
-    /// ```
-    /// Name("_S5_", Package(4) {0x5, 0x5, Zero, Zero}
-    /// Name("_S4_", Package(4) {0x4, 0x4, Zero, Zero}
-    /// ```
-    /// ```
-    </span><span class="kw">fn </span>test_execute_normal_sleep_package() {
-        <span class="kw">use </span><span class="kw">super</span>::parser::{AmlCode, AmlTerm};
-        <span class="kw">use </span>alloc::vec;
+<span class="doccomment">/// Test executing and getting data from
+/// ```
+/// Name("_S5_", Package(4) {0x5, 0x5, Zero, Zero}
+/// Name("_S4_", Package(4) {0x4, 0x4, Zero, Zero}
+/// ```
+/// ```
+</span><span class="attr">#[macro_rules_attribute::apply(testing::test)]
+</span><span class="kw">fn </span>test_execute_normal_sleep_package() {
+    <span class="kw">use </span><span class="kw">super</span>::parser::{AmlCode, AmlTerm};
+    <span class="kw">use </span>alloc::vec;
 
-        <span class="kw">fn </span>return_package_of_name(
-            ctx: <span class="kw-2">&amp;mut </span>ExecutionContext,
-            structured_code: <span class="kw-2">&amp;</span>StructuredAml,
-            name: <span class="kw-2">&amp;</span>str,
-        ) -&gt; Vec&lt;u8&gt; {
-            ctx.execute(structured_code, name, <span class="kw-2">&amp;</span>[])
-                .expect(<span class="string">"label"</span>)
-                .as_package()
-                .expect(<span class="string">"package"</span>)
-                .iter()
-                .map(|d| {
-                    d.as_data()
-                        .expect(<span class="string">"data"</span>)
-                        .as_integer()
-                        .expect(<span class="string">"integer"</span>)
-                        .as_u8()
-                        .unwrap()
-                })
-                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
-        }
-
-        <span class="kw">let </span>code = AmlCode {
-            term_list: <span class="macro">vec!</span>[
-                AmlTerm::NameObj(
-                    <span class="string">"_S5_"</span>.to_string(),
-                    UnresolvedDataObject::Package(
-                        <span class="number">4</span>,
-                        <span class="macro">vec!</span>[
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ByteConst(<span class="number">5</span>),
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ByteConst(<span class="number">5</span>),
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstZero,
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstZero,
-                            )),
-                        ],
-                    ),
-                ),
-                AmlTerm::NameObj(
-                    <span class="string">"_S4_"</span>.to_string(),
-                    UnresolvedDataObject::Package(
-                        <span class="number">4</span>,
-                        <span class="macro">vec!</span>[
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ByteConst(<span class="number">4</span>),
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ByteConst(<span class="number">4</span>),
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstZero,
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstZero,
-                            )),
-                        ],
-                    ),
-                ),
-            ],
-        };
-
-        <span class="kw">let </span>structured_code = StructuredAml::parse(<span class="kw-2">&amp;</span>code);
-
-        <span class="kw">let </span><span class="kw-2">mut </span>execution_ctx = ExecutionContext::default();
-
-        <span class="macro">assert_eq!</span>(
-            return_package_of_name(<span class="kw-2">&amp;mut </span>execution_ctx, <span class="kw-2">&amp;</span>structured_code, <span class="string">"\\_S5_"</span>),
-            <span class="macro">vec!</span>[<span class="number">5</span>, <span class="number">5</span>, <span class="number">0</span>, <span class="number">0</span>]
-        );
-        <span class="macro">assert_eq!</span>(
-            return_package_of_name(<span class="kw-2">&amp;mut </span>execution_ctx, <span class="kw-2">&amp;</span>structured_code, <span class="string">"\\_S4_"</span>),
-            <span class="macro">vec!</span>[<span class="number">4</span>, <span class="number">4</span>, <span class="number">0</span>, <span class="number">0</span>]
-        );
+    <span class="kw">fn </span>return_package_of_name(
+        ctx: <span class="kw-2">&amp;mut </span>ExecutionContext,
+        structured_code: <span class="kw-2">&amp;</span>StructuredAml,
+        name: <span class="kw-2">&amp;</span>str,
+    ) -&gt; Vec&lt;u8&gt; {
+        ctx.execute(structured_code, name, <span class="kw-2">&amp;</span>[])
+            .expect(<span class="string">"label"</span>)
+            .as_package()
+            .expect(<span class="string">"package"</span>)
+            .iter()
+            .map(|d| {
+                d.as_data()
+                    .expect(<span class="string">"data"</span>)
+                    .as_integer()
+                    .expect(<span class="string">"integer"</span>)
+                    .as_u8()
+                    .unwrap()
+            })
+            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
     }
+
+    <span class="kw">let </span>code = AmlCode {
+        term_list: <span class="macro">vec!</span>[
+            AmlTerm::NameObj(
+                <span class="string">"_S5_"</span>.to_string(),
+                UnresolvedDataObject::Package(
+                    <span class="number">4</span>,
+                    <span class="macro">vec!</span>[
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ByteConst(<span class="number">5</span>),
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ByteConst(<span class="number">5</span>),
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstZero,
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstZero,
+                        )),
+                    ],
+                ),
+            ),
+            AmlTerm::NameObj(
+                <span class="string">"_S4_"</span>.to_string(),
+                UnresolvedDataObject::Package(
+                    <span class="number">4</span>,
+                    <span class="macro">vec!</span>[
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ByteConst(<span class="number">4</span>),
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ByteConst(<span class="number">4</span>),
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstZero,
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstZero,
+                        )),
+                    ],
+                ),
+            ),
+        ],
+    };
+
+    <span class="kw">let </span>structured_code = StructuredAml::parse(<span class="kw-2">&amp;</span>code);
+
+    <span class="kw">let </span><span class="kw-2">mut </span>execution_ctx = ExecutionContext::default();
+
+    <span class="macro">assert_eq!</span>(
+        return_package_of_name(<span class="kw-2">&amp;mut </span>execution_ctx, <span class="kw-2">&amp;</span>structured_code, <span class="string">"\\_S5_"</span>),
+        <span class="macro">vec!</span>[<span class="number">5</span>, <span class="number">5</span>, <span class="number">0</span>, <span class="number">0</span>]
+    );
+    <span class="macro">assert_eq!</span>(
+        return_package_of_name(<span class="kw-2">&amp;mut </span>execution_ctx, <span class="kw-2">&amp;</span>structured_code, <span class="string">"\\_S4_"</span>),
+        <span class="macro">vec!</span>[<span class="number">4</span>, <span class="number">4</span>, <span class="number">0</span>, <span class="number">0</span>]
+    );
 }
 </code></pre></div></section></main></body></html>

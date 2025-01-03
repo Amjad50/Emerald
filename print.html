@@ -1502,6 +1502,17 @@ we can copy correctly from it.</li>
     }
 }
 <span class="boring">}</span></code></pre></pre>
+<blockquote>
+<p>We have added <code>macro_rules_attribute</code> temporarily, so instead of using <code>testing::test! {}</code> we can use this:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[macro_rules_attribute::apply(testing::test)]
+fn test() {
+    // test code
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The plan is to replace it with custom <code>proc_macro</code> crate later.</p>
+</blockquote>
 <p>When you create a new feature be sure to add a test for it as much as possible.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="logging"><a class="header" href="#logging">Logging</a></h1>
 <p>We are using <a href="https://docs.rs/tracing/latest/tracing/"><code>tracing</code></a> to implement logging in our kernel.</p>

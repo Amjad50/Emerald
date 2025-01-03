@@ -169,7 +169,6 @@
 <a href="#167" id="167">167</a>
 <a href="#168" id="168">168</a>
 <a href="#169" id="169">169</a>
-<a href="#170" id="170">170</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>parser::{CmdlineParse, ParseError, ParseErrorKind, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>tokenizer::Tokenizer;
 <span class="kw">use </span>tracing::{error, info};
@@ -227,28 +226,27 @@
     </span>CMDLINE.get_or_init(default_cmdline)
 }
 
-<span class="macro">macros::cmdline_struct! </span>{
-    <span class="attr">#[derive(Debug)]
-    </span><span class="kw">pub struct </span>Cmd&lt;<span class="lifetime">'a</span>&gt; {
-        <span class="doccomment">/// Enable the UART
-        </span><span class="attr">#[default = <span class="bool-val">true</span>]
-        </span><span class="kw">pub </span>uart: bool,
-        <span class="doccomment">/// UART baudrate
-        </span><span class="attr">#[default = <span class="number">115200</span>]
-        </span><span class="kw">pub </span>uart_baud: u32,
-        <span class="doccomment">/// Log level
-        </span><span class="attr">#[default = LogLevel::Info]
-        </span><span class="kw">pub </span>max_log_level: LogLevel,
-        <span class="doccomment">/// Log file
-        </span><span class="attr">#[default = <span class="string">"/kernel.log"</span>]
-        </span><span class="kw">pub </span>log_file: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
-        <span class="doccomment">/// Allow `HPET` (if present), otherwise always use `PIT`
-        </span><span class="attr">#[default = <span class="bool-val">true</span>]
-        </span><span class="kw">pub </span>allow_hpet: bool,
-        <span class="doccomment">/// Log the AML content as ASL code on boot from ACPI tables
-        </span><span class="attr">#[default = LogAml::Off]
-        </span><span class="kw">pub </span>log_aml: LogAml,
-    }
+<span class="attr">#[macro_rules_attribute::apply(<span class="macro">macros::cmdline_struct!</span>)]
+#[derive(Debug)]
+</span><span class="kw">pub struct </span>Cmd&lt;<span class="lifetime">'a</span>&gt; {
+    <span class="doccomment">/// Enable the UART
+    </span><span class="attr">#[default = <span class="bool-val">true</span>]
+    </span><span class="kw">pub </span>uart: bool,
+    <span class="doccomment">/// UART baudrate
+    </span><span class="attr">#[default = <span class="number">115200</span>]
+    </span><span class="kw">pub </span>uart_baud: u32,
+    <span class="doccomment">/// Log level
+    </span><span class="attr">#[default = LogLevel::Info]
+    </span><span class="kw">pub </span>max_log_level: LogLevel,
+    <span class="doccomment">/// Log file
+    </span><span class="attr">#[default = <span class="string">"/kernel.log"</span>]
+    </span><span class="kw">pub </span>log_file: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+    <span class="doccomment">/// Allow `HPET` (if present), otherwise always use `PIT`
+    </span><span class="attr">#[default = <span class="bool-val">true</span>]
+    </span><span class="kw">pub </span>allow_hpet: bool,
+    <span class="doccomment">/// Log the AML content as ASL code on boot from ACPI tables
+    </span><span class="attr">#[default = LogAml::Off]
+    </span><span class="kw">pub </span>log_aml: LogAml,
 }
 
 <span class="attr">#[derive(Default, Debug, Clone, Copy)]

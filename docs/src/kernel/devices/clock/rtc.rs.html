@@ -196,7 +196,6 @@
 <a href="#194" id="194">194</a>
 <a href="#195" id="195">195</a>
 <a href="#196" id="196">196</a>
-<a href="#197" id="197">197</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt;
 
 <span class="kw">use crate</span>::{cpu, testing};
@@ -369,29 +368,28 @@
     }
 }
 
-<span class="macro">testing::test! </span>{
-    <span class="kw">fn </span>test_seconds_since_unix_epoch() {
-        <span class="comment">// to silence clippy type warning
-        </span><span class="kw">type </span>RtcTestData = (u16, u8, u8, u8, u8, u8);
-        <span class="kw">const </span>TESTS: [(RtcTestData, u64); <span class="number">5</span>] = [
-            ((<span class="number">2024</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">12</span>, <span class="number">3</span>, <span class="number">45</span>), <span class="number">1704110625</span>),
-            ((<span class="number">1987</span>, <span class="number">11</span>, <span class="number">28</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="number">565056000</span>),
-            ((<span class="number">5135</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">99883100025</span>),
-            ((<span class="number">2811</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">26544792825</span>),
-            ((<span class="number">2404</span>, <span class="number">2</span>, <span class="number">29</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">13700828025</span>),
-        ];
+<span class="attr">#[macro_rules_attribute::apply(testing::test)]
+</span><span class="kw">fn </span>test_seconds_since_unix_epoch() {
+    <span class="comment">// to silence clippy type warning
+    </span><span class="kw">type </span>RtcTestData = (u16, u8, u8, u8, u8, u8);
+    <span class="kw">const </span>TESTS: [(RtcTestData, u64); <span class="number">5</span>] = [
+        ((<span class="number">2024</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">12</span>, <span class="number">3</span>, <span class="number">45</span>), <span class="number">1704110625</span>),
+        ((<span class="number">1987</span>, <span class="number">11</span>, <span class="number">28</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>), <span class="number">565056000</span>),
+        ((<span class="number">5135</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">99883100025</span>),
+        ((<span class="number">2811</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">26544792825</span>),
+        ((<span class="number">2404</span>, <span class="number">2</span>, <span class="number">29</span>, <span class="number">9</span>, <span class="number">33</span>, <span class="number">45</span>), <span class="number">13700828025</span>),
+    ];
 
-        <span class="kw">for </span>((year, month, day, hours, minutes, seconds), expected) <span class="kw">in </span>TESTS {
-            <span class="kw">let </span>t = RtcTime {
-                seconds,
-                minutes,
-                hours,
-                day_of_month: day,
-                month,
-                year,
-            };
-            <span class="macro">assert_eq!</span>(t.seconds_since_unix_epoch(), <span class="prelude-val">Some</span>(expected));
-        }
+    <span class="kw">for </span>((year, month, day, hours, minutes, seconds), expected) <span class="kw">in </span>TESTS {
+        <span class="kw">let </span>t = RtcTime {
+            seconds,
+            minutes,
+            hours,
+            day_of_month: day,
+            month,
+            year,
+        };
+        <span class="macro">assert_eq!</span>(t.seconds_since_unix_epoch(), <span class="prelude-val">Some</span>(expected));
     }
 }
 </code></pre></div></section></main></body></html>

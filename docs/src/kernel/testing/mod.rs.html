@@ -156,6 +156,7 @@
 <a href="#154" id="154">154</a>
 <a href="#155" id="155">155</a>
 <a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
 </pre></div><pre class="rust"><code><span class="attr">#[cfg(test)]
 </span><span class="kw">use </span><span class="kw">crate</span>::hw::qemu;
 
@@ -234,6 +235,7 @@
         <span class="kw">fn </span><span class="macro-nonterminal">$name</span>() <span class="macro-nonterminal">$body
         </span><span class="attr">#[cfg(test)]
         #[test_case]
+        #[allow(non_upper_case_globals)]
         </span><span class="kw">const </span><span class="macro-nonterminal">$name</span>: <span class="macro-nonterminal">$crate::testing::TestCase </span>= <span class="macro-nonterminal">$crate::testing::TestCase </span>{
             name: <span class="macro">concat!</span>(<span class="macro">module_path!</span>(), <span class="string">"::"</span>, <span class="macro">stringify!</span>(<span class="macro-nonterminal">$name</span>)),
             ignore: <span class="macro-nonterminal">$ignore</span>,
