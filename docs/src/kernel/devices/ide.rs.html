@@ -1128,6 +1128,10 @@
 <a href="#1126" id="1126">1126</a>
 <a href="#1127" id="1127">1127</a>
 <a href="#1128" id="1128">1128</a>
+<a href="#1129" id="1129">1129</a>
+<a href="#1130" id="1130">1130</a>
+<a href="#1131" id="1131">1131</a>
+<a href="#1132" id="1132">1132</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::{
     fmt, hint, mem,
     ptr::{addr_of, addr_of_mut},
@@ -1147,12 +1151,16 @@
     sync::spin::mutex::Mutex,
 };
 
-<span class="kw">use </span><span class="kw">super</span>::pci::{<span class="self">self</span>, PciDevice, PciDeviceConfig, ProbeExtra};
+<span class="kw">use </span><span class="kw">super</span>::pci::{<span class="self">self</span>, PciDevice, PciDeviceConfig, PciDeviceType, ProbeExtra};
 
 <span class="kw">static </span><span class="kw-2">mut </span>IDE_DEVICES: [<span class="prelude-ty">Option</span>&lt;Arc&lt;IdeDevice&gt;&gt;; <span class="number">4</span>] = [<span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>];
 <span class="kw">static </span>INTERRUPTS_SETUP: AtomicBool = AtomicBool::new(<span class="bool-val">false</span>);
 
 <span class="kw">pub fn </span>try_register_ide_device(pci_device: <span class="kw-2">&amp;</span>PciDeviceConfig) -&gt; bool {
+    <span class="kw">let </span>PciDeviceType::MassStorageController(..) = pci_device.device_type <span class="kw">else </span>{
+        <span class="kw">return </span><span class="bool-val">false</span>;
+    };
+
     <span class="kw">let </span><span class="kw-2">mut </span>found_device = <span class="bool-val">false</span>;
     <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">2 </span>{
         <span class="comment">// i = 0 =&gt; primary
@@ -2131,7 +2139,7 @@
     <span class="kw">where
         </span><span class="self">Self</span>: Sized,
     {
-        <span class="kw">if let </span>pci::PciDeviceType::MassStorageController(<span class="number">0x1</span>, prog_if, ..) = config.device_type {
+        <span class="kw">if let </span>PciDeviceType::MassStorageController(<span class="number">0x1</span>, prog_if, ..) = config.device_type {
             <span class="kw">let </span>support_dma = prog_if &amp; pci_cfg::PROG_IF_MASTER != <span class="number">0</span>;
             <span class="kw">let </span><span class="kw-2">mut </span>command = config.read_command();
             command |= pci_cfg::CMD_IO_SPACE;
