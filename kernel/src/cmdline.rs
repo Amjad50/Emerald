@@ -55,28 +55,27 @@ pub fn cmdline() -> &'static Cmd<'static> {
     CMDLINE.get_or_init(default_cmdline)
 }
 
-macros::cmdline_struct! {
-    #[derive(Debug)]
-    pub struct Cmd<'a> {
-        /// Enable the UART
-        #[default = true]
-        pub uart: bool,
-        /// UART baudrate
-        #[default = 115200]
-        pub uart_baud: u32,
-        /// Log level
-        #[default = LogLevel::Info]
-        pub max_log_level: LogLevel,
-        /// Log file
-        #[default = "/kernel.log"]
-        pub log_file: &'a str,
-        /// Allow `HPET` (if present), otherwise always use `PIT`
-        #[default = true]
-        pub allow_hpet: bool,
-        /// Log the AML content as ASL code on boot from ACPI tables
-        #[default = LogAml::Off]
-        pub log_aml: LogAml,
-    }
+#[macro_rules_attribute::apply(macros::cmdline_struct!)]
+#[derive(Debug)]
+pub struct Cmd<'a> {
+    /// Enable the UART
+    #[default = true]
+    pub uart: bool,
+    /// UART baudrate
+    #[default = 115200]
+    pub uart_baud: u32,
+    /// Log level
+    #[default = LogLevel::Info]
+    pub max_log_level: LogLevel,
+    /// Log file
+    #[default = "/kernel.log"]
+    pub log_file: &'a str,
+    /// Allow `HPET` (if present), otherwise always use `PIT`
+    #[default = true]
+    pub allow_hpet: bool,
+    /// Log the AML content as ASL code on boot from ACPI tables
+    #[default = LogAml::Off]
+    pub log_aml: LogAml,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

@@ -479,93 +479,92 @@ impl fmt::Display for StructuredAml {
     }
 }
 
-testing::test! {
-    fn test_structure() {
-        use super::parser::{
-            AccessType, FieldElement, FieldUpdateRule, IntegerData, ScopeObj, Target, TermArg,
-            UnresolvedDataObject, RegionSpace
-        };
-        use alloc::boxed::Box;
+#[macro_rules_attribute::apply(testing::test)]
+fn test_structure() {
+    use super::parser::{
+        AccessType, FieldElement, FieldUpdateRule, IntegerData, RegionSpace, ScopeObj, Target,
+        TermArg, UnresolvedDataObject,
+    };
+    use alloc::boxed::Box;
 
-        let code = AmlCode {
-            term_list: vec![
-                AmlTerm::Scope(ScopeObj {
-                    ty: ScopeType::Scope,
-                    name: "\\".to_string(),
-                    term_list: vec![
-                        AmlTerm::Region(RegionObj {
-                            name: "DBG_".to_string(),
-                            region_space: RegionSpace::SystemIO,
-                            region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::WordConst(1026),
-                            )),
-                            region_length: TermArg::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstOne,
-                            )),
-                        }),
-                        AmlTerm::Field(FieldDef {
-                            name: "DBG_".to_string(),
-                            access_type: AccessType::Byte,
-                            need_lock: false,
-                            update_rule: FieldUpdateRule::Preserve,
-                            fields: vec![FieldElement::Named("DBGB".to_string(), 8)],
-                        }),
-                        AmlTerm::Method(MethodObj {
-                            name: "DBUG".to_string(),
-                            num_args: 1,
-                            is_serialized: false,
-                            sync_level: 0,
-                            term_list: vec![
-                                AmlTerm::ToHexString(TermArg::Arg(0), Box::new(Target::Local(0))),
-                                AmlTerm::ToBuffer(TermArg::Local(0), Box::new(Target::Local(0))),
-                            ],
-                        }),
-                    ],
-                }),
-                AmlTerm::Method(MethodObj {
-                    name: "\\_GPE._E02".to_string(),
-                    num_args: 0,
-                    is_serialized: false,
-                    sync_level: 0,
-                    term_list: vec![AmlTerm::MethodCall("\\_SB_.CPUS.CSCN".to_string(), vec![])],
-                }),
-            ],
-        };
+    let code = AmlCode {
+        term_list: vec![
+            AmlTerm::Scope(ScopeObj {
+                ty: ScopeType::Scope,
+                name: "\\".to_string(),
+                term_list: vec![
+                    AmlTerm::Region(RegionObj {
+                        name: "DBG_".to_string(),
+                        region_space: RegionSpace::SystemIO,
+                        region_offset: TermArg::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::WordConst(1026),
+                        )),
+                        region_length: TermArg::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstOne,
+                        )),
+                    }),
+                    AmlTerm::Field(FieldDef {
+                        name: "DBG_".to_string(),
+                        access_type: AccessType::Byte,
+                        need_lock: false,
+                        update_rule: FieldUpdateRule::Preserve,
+                        fields: vec![FieldElement::Named("DBGB".to_string(), 8)],
+                    }),
+                    AmlTerm::Method(MethodObj {
+                        name: "DBUG".to_string(),
+                        num_args: 1,
+                        is_serialized: false,
+                        sync_level: 0,
+                        term_list: vec![
+                            AmlTerm::ToHexString(TermArg::Arg(0), Box::new(Target::Local(0))),
+                            AmlTerm::ToBuffer(TermArg::Local(0), Box::new(Target::Local(0))),
+                        ],
+                    }),
+                ],
+            }),
+            AmlTerm::Method(MethodObj {
+                name: "\\_GPE._E02".to_string(),
+                num_args: 0,
+                is_serialized: false,
+                sync_level: 0,
+                term_list: vec![AmlTerm::MethodCall("\\_SB_.CPUS.CSCN".to_string(), vec![])],
+            }),
+        ],
+    };
 
-        let structured = StructuredAml::parse(&code);
+    let structured = StructuredAml::parse(&code);
 
-        assert_eq!(
-            structured.root.children.keys().collect::<Vec<_>>(),
-            vec!["DBG_", "DBUG", "_GPE"]
-        );
+    assert_eq!(
+        structured.root.children.keys().collect::<Vec<_>>(),
+        vec!["DBG_", "DBUG", "_GPE"]
+    );
 
-        match &structured.root.children["DBG_"] {
-            ElementType::RegionFields(region, fields) => {
-                assert!(region.is_some());
-                assert!(!fields.is_empty());
-            }
-            _ => panic!("DBG_ is not a region"),
+    match &structured.root.children["DBG_"] {
+        ElementType::RegionFields(region, fields) => {
+            assert!(region.is_some());
+            assert!(!fields.is_empty());
         }
-        match &structured.root.children["DBUG"] {
-            ElementType::Method(method) => {
-                assert_eq!(method.name, "DBUG");
-                assert_eq!(method.term_list.len(), 2);
-            }
-            _ => panic!("DBUG is not a method"),
+        _ => panic!("DBG_ is not a region"),
+    }
+    match &structured.root.children["DBUG"] {
+        ElementType::Method(method) => {
+            assert_eq!(method.name, "DBUG");
+            assert_eq!(method.term_list.len(), 2);
         }
-        match &structured.root.children["_GPE"] {
-            ElementType::ScopeOrDevice(scope) => {
-                assert_eq!(scope.children.keys().collect::<Vec<_>>(), vec!["_E02"]);
+        _ => panic!("DBUG is not a method"),
+    }
+    match &structured.root.children["_GPE"] {
+        ElementType::ScopeOrDevice(scope) => {
+            assert_eq!(scope.children.keys().collect::<Vec<_>>(), vec!["_E02"]);
 
-                match &scope.children["_E02"] {
-                    ElementType::Method(method) => {
-                        assert_eq!(method.name, "_E02");
-                        assert_eq!(method.term_list.len(), 1);
-                    }
-                    _ => panic!("_E02 is not a method"),
+            match &scope.children["_E02"] {
+                ElementType::Method(method) => {
+                    assert_eq!(method.name, "_E02");
+                    assert_eq!(method.term_list.len(), 1);
                 }
+                _ => panic!("_E02 is not a method"),
             }
-            _ => panic!("_GPE is not a scope"),
         }
+        _ => panic!("_GPE is not a scope"),
     }
 }

@@ -32,5 +32,16 @@ testing::test! {
 }
 ```
 
+> We have added `macro_rules_attribute` temporarily, so instead of using `testing::test! {}` we can use this:
+>
+> ```rust
+> #[macro_rules_attribute::apply(testing::test)]
+> fn test() {
+>     // test code
+> }
+> ```
+>
+> The plan is to replace it with custom `proc_macro` crate later.
+
 When you create a new feature be sure to add a test for it as much as possible.
 

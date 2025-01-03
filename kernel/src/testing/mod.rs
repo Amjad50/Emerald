@@ -76,6 +76,7 @@ macro_rules! test {
         fn $name() $body
         #[cfg(test)]
         #[test_case]
+        #[allow(non_upper_case_globals)]
         const $name: $crate::testing::TestCase = $crate::testing::TestCase {
             name: concat!(module_path!(), "::", stringify!($name)),
             ignore: $ignore,

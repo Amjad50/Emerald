@@ -224,64 +224,65 @@ impl PhysicalPageAllocator {
     }
 }
 
-testing::test! {
-    fn test_general() {
-        let page1 = unsafe { alloc() };
-        let page2 = unsafe { alloc() };
-        let page3 = unsafe { alloc() };
+#[macro_rules_attribute::apply(testing::test)]
+fn test_general() {
+    let page1 = unsafe { alloc() };
+    let page2 = unsafe { alloc() };
+    let page3 = unsafe { alloc() };
 
-        // make sure its aligned
-        assert_eq!(page1 as usize % PAGE_4K, 0);
-        assert_eq!(page2 as usize % PAGE_4K, 0);
-        assert_eq!(page3 as usize % PAGE_4K, 0);
+    // make sure its aligned
+    assert_eq!(page1 as usize % PAGE_4K, 0);
+    assert_eq!(page2 as usize % PAGE_4K, 0);
+    assert_eq!(page3 as usize % PAGE_4K, 0);
 
-        // make sure its after one another in reverse
-        assert_eq!(page1 as usize, page2 as usize + PAGE_4K);
-        assert_eq!(page2 as usize, page3 as usize + PAGE_4K);
+    // make sure its after one another in reverse
+    assert_eq!(page1 as usize, page2 as usize + PAGE_4K);
+    assert_eq!(page2 as usize, page3 as usize + PAGE_4K);
 
-        // make sure the content are 1
-        assert!(unsafe { core::slice::from_raw_parts(page1, PAGE_4K) }
-            .iter()
-            .all(|&x| x == 1),);
-        assert!(unsafe { core::slice::from_raw_parts(page2, PAGE_4K) }
-            .iter()
-            .all(|&x| x == 1),);
-        assert!(unsafe { core::slice::from_raw_parts(page3, PAGE_4K) }
-            .iter()
-            .all(|&x| x == 1),);
+    // make sure the content are 1
+    assert!(unsafe { core::slice::from_raw_parts(page1, PAGE_4K) }
+        .iter()
+        .all(|&x| x == 1),);
+    assert!(unsafe { core::slice::from_raw_parts(page2, PAGE_4K) }
+        .iter()
+        .all(|&x| x == 1),);
+    assert!(unsafe { core::slice::from_raw_parts(page3, PAGE_4K) }
+        .iter()
+        .all(|&x| x == 1),);
 
-        let zeros = unsafe { alloc_zeroed() };
-        assert!(unsafe { core::slice::from_raw_parts(zeros, PAGE_4K) }
-            .iter()
-            .all(|&x| x == 0),);
+    let zeros = unsafe { alloc_zeroed() };
+    assert!(unsafe { core::slice::from_raw_parts(zeros, PAGE_4K) }
+        .iter()
+        .all(|&x| x == 0),);
 
-        unsafe {
-            free(page1);
-            free(page2);
-            free(page3);
-            free(zeros);
-        }
+    unsafe {
+        free(page1);
+        free(page2);
+        free(page3);
+        free(zeros);
     }
+}
 
-    fn test_free_realloc() {
-        let page = unsafe { alloc() };
-        let addr = page as usize;
+#[macro_rules_attribute::apply(testing::test)]
+fn test_free_realloc() {
+    let page = unsafe { alloc() };
+    let addr = page as usize;
 
-        unsafe { free(page) };
+    unsafe { free(page) };
 
-        let page2 = unsafe { alloc() };
+    let page2 = unsafe { alloc() };
 
-        assert_eq!(page as usize, addr);
+    assert_eq!(page as usize, addr);
 
-        unsafe { free(page2) };
-    }
+    unsafe { free(page2) };
+}
 
-    #[should_panic]
-    fn test_unaligned_free() {
-        let page = unsafe { alloc() };
+#[macro_rules_attribute::apply(testing::test)]
+#[should_panic]
+fn test_unaligned_free() {
+    let page = unsafe { alloc() };
 
-        let addr_inside_page = unsafe { page.add(1) };
+    let addr_inside_page = unsafe { page.add(1) };
 
-        unsafe { free(addr_inside_page) };
-    }
+    unsafe { free(addr_inside_page) };
 }

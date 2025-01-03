@@ -191,94 +191,93 @@ impl ExecutionContext {
     }
 }
 
-testing::test! {
-    /// Test executing and getting data from
-    /// ```
-    /// Name("_S5_", Package(4) {0x5, 0x5, Zero, Zero}
-    /// Name("_S4_", Package(4) {0x4, 0x4, Zero, Zero}
-    /// ```
-    /// ```
-    fn test_execute_normal_sleep_package() {
-        use super::parser::{AmlCode, AmlTerm};
-        use alloc::vec;
+/// Test executing and getting data from
+/// ```
+/// Name("_S5_", Package(4) {0x5, 0x5, Zero, Zero}
+/// Name("_S4_", Package(4) {0x4, 0x4, Zero, Zero}
+/// ```
+/// ```
+#[macro_rules_attribute::apply(testing::test)]
+fn test_execute_normal_sleep_package() {
+    use super::parser::{AmlCode, AmlTerm};
+    use alloc::vec;
 
-        fn return_package_of_name(
-            ctx: &mut ExecutionContext,
-            structured_code: &StructuredAml,
-            name: &str,
-        ) -> Vec<u8> {
-            ctx.execute(structured_code, name, &[])
-                .expect("label")
-                .as_package()
-                .expect("package")
-                .iter()
-                .map(|d| {
-                    d.as_data()
-                        .expect("data")
-                        .as_integer()
-                        .expect("integer")
-                        .as_u8()
-                        .unwrap()
-                })
-                .collect::<Vec<_>>()
-        }
-
-        let code = AmlCode {
-            term_list: vec![
-                AmlTerm::NameObj(
-                    "_S5_".to_string(),
-                    UnresolvedDataObject::Package(
-                        4,
-                        vec![
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ByteConst(5),
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ByteConst(5),
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstZero,
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstZero,
-                            )),
-                        ],
-                    ),
-                ),
-                AmlTerm::NameObj(
-                    "_S4_".to_string(),
-                    UnresolvedDataObject::Package(
-                        4,
-                        vec![
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ByteConst(4),
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ByteConst(4),
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstZero,
-                            )),
-                            PackageElement::DataObject(UnresolvedDataObject::Integer(
-                                IntegerData::ConstZero,
-                            )),
-                        ],
-                    ),
-                ),
-            ],
-        };
-
-        let structured_code = StructuredAml::parse(&code);
-
-        let mut execution_ctx = ExecutionContext::default();
-
-        assert_eq!(
-            return_package_of_name(&mut execution_ctx, &structured_code, "\\_S5_"),
-            vec![5, 5, 0, 0]
-        );
-        assert_eq!(
-            return_package_of_name(&mut execution_ctx, &structured_code, "\\_S4_"),
-            vec![4, 4, 0, 0]
-        );
+    fn return_package_of_name(
+        ctx: &mut ExecutionContext,
+        structured_code: &StructuredAml,
+        name: &str,
+    ) -> Vec<u8> {
+        ctx.execute(structured_code, name, &[])
+            .expect("label")
+            .as_package()
+            .expect("package")
+            .iter()
+            .map(|d| {
+                d.as_data()
+                    .expect("data")
+                    .as_integer()
+                    .expect("integer")
+                    .as_u8()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>()
     }
+
+    let code = AmlCode {
+        term_list: vec![
+            AmlTerm::NameObj(
+                "_S5_".to_string(),
+                UnresolvedDataObject::Package(
+                    4,
+                    vec![
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ByteConst(5),
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ByteConst(5),
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstZero,
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstZero,
+                        )),
+                    ],
+                ),
+            ),
+            AmlTerm::NameObj(
+                "_S4_".to_string(),
+                UnresolvedDataObject::Package(
+                    4,
+                    vec![
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ByteConst(4),
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ByteConst(4),
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstZero,
+                        )),
+                        PackageElement::DataObject(UnresolvedDataObject::Integer(
+                            IntegerData::ConstZero,
+                        )),
+                    ],
+                ),
+            ),
+        ],
+    };
+
+    let structured_code = StructuredAml::parse(&code);
+
+    let mut execution_ctx = ExecutionContext::default();
+
+    assert_eq!(
+        return_package_of_name(&mut execution_ctx, &structured_code, "\\_S5_"),
+        vec![5, 5, 0, 0]
+    );
+    assert_eq!(
+        return_package_of_name(&mut execution_ctx, &structured_code, "\\_S4_"),
+        vec![4, 4, 0, 0]
+    );
 }
