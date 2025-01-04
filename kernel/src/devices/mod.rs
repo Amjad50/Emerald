@@ -20,6 +20,7 @@ use self::{
 pub mod clock;
 pub mod ide;
 pub mod keyboard_mouse;
+pub mod net;
 pub mod pci;
 pub mod pipe;
 
@@ -154,7 +155,7 @@ pub fn probe_pci_devices() {
 }
 
 pub fn probe_pci_driver(pci_device: &PciDeviceConfig) -> bool {
-    ide::try_register_ide_device(pci_device)
+    ide::try_register_ide_device(pci_device) || net::try_register_net_device(pci_device)
     // add more devices here
 }
 
