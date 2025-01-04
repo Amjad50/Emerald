@@ -1,8 +1,9 @@
 mod desc;
 
-use core::{fmt, mem};
+use core::mem;
 
-use desc::{DmaRing, ReceiveDescriptor, TransmitDescriptor};
+use alloc::{collections::vec_deque::VecDeque, sync::Arc, vec::Vec};
+use desc::{Descriptor, DmaRing, ReceiveDescriptor, TransmitDescriptor};
 use tracing::{info, trace, warn};
 
 use crate::{
@@ -13,6 +14,7 @@ use crate::{
     },
     devices::pci::PciDeviceConfig,
     memory_management::virtual_space::VirtualSpace,
+    net::NetworkFrame,
     sync::{once::OnceLock, spin::mutex::Mutex},
     utils::{
         vcell::{RO, RW, WO},
@@ -20,7 +22,13 @@ use crate::{
     },
 };
 
-static E1000: OnceLock<Mutex<E1000>> = OnceLock::new();
+use super::{MacAddress, NetworkDevice};
+
+static E1000: OnceLock<Arc<Mutex<E1000>>> = OnceLock::new();
+
+pub fn get_device() -> Option<&'static dyn NetworkDevice> {
+    E1000.try_get().map(|e1000| e1000 as &dyn NetworkDevice)
+}
 
 #[allow(dead_code)]
 #[allow(clippy::identity_op)]
@@ -166,25 +174,15 @@ struct E1000Mmio {
     receive_addresses: [(RW<u32>, RW<u32>); 16],
 }
 
-#[derive(Clone, Copy)]
-struct MacAddress([u8; 6]);
-
-impl fmt::Debug for MacAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
-        )
-    }
-}
-
 struct E1000 {
     mmio: VirtualSpace<E1000Mmio>,
     eeprom_size: u16,
 
     recv_ring: DmaRing<ReceiveDescriptor, 128>,
     transmit_ring: DmaRing<TransmitDescriptor, 128>,
+
+    received_queue: VecDeque<Vec<u8>>,
+    in_middle_of_packet: bool,
 }
 
 impl E1000 {
@@ -200,6 +198,8 @@ impl E1000 {
             eeprom_size,
             recv_ring,
             transmit_ring: DmaRing::new(),
+            received_queue: VecDeque::new(),
+            in_middle_of_packet: false,
         }
     }
 
@@ -326,13 +326,18 @@ impl E1000 {
         let head = self.mmio.receive_descriptor_head.read() as u16;
 
         let mut count = 0;
-        while let Some(_desc) = self.recv_ring.pop_next(head) {
+        while let Some(desc) = self.recv_ring.pop_next(head) {
             count += 1;
 
-            // TODO: do something with the packet
-            // println!("{desc:X?}");
-            // crate::io::hexdump(desc.data());
-            // println!();
+            if self.in_middle_of_packet {
+                self.received_queue
+                    .back_mut()
+                    .expect("No packet in queue")
+                    .extend_from_slice(desc.data());
+            } else {
+                self.received_queue.push_back(desc.data().to_vec());
+            }
+            self.in_middle_of_packet = !desc.is_end_of_packet();
 
             self.recv_ring.allocate_next_for_hw();
         }
@@ -357,7 +362,7 @@ impl E1000 {
             todo!("Transmit queue is full, implement dynamic driver queueing");
         };
 
-        desc.copy_into(data);
+        desc.data_mut(data.len()).copy_from_slice(data);
         desc.prepare_for_transmit();
 
         unsafe {
@@ -367,6 +372,44 @@ impl E1000 {
         };
 
         self.flush_writes();
+    }
+
+    pub fn transmit_network_frame(&mut self, frame: &dyn NetworkFrame) {
+        assert!(frame.size() < 4096);
+
+        let Some(desc) = self.transmit_ring.allocate_next_for_hw() else {
+            todo!("Transmit queue is full, implement dynamic driver queueing");
+        };
+
+        let data = desc.data_mut(frame.size());
+        frame
+            .write_into_buffer(data)
+            .expect("Failed to write into buffer");
+
+        desc.prepare_for_transmit();
+
+        unsafe {
+            self.mmio
+                .transmit_descriptor_tail
+                .write(self.transmit_ring.tail() as u32)
+        };
+
+        self.flush_writes();
+    }
+}
+
+impl NetworkDevice for Arc<Mutex<E1000>> {
+    fn mac_address(&self) -> MacAddress {
+        self.lock().read_mac_address()
+    }
+
+    fn send(&self, data: &dyn NetworkFrame) {
+        self.lock().transmit_network_frame(data);
+    }
+
+    fn receive(&self) -> Option<Vec<u8>> {
+        let mut e1000 = self.lock();
+        e1000.received_queue.pop_front()
     }
 }
 
@@ -407,7 +450,7 @@ pub fn try_register(pci_device: &PciDeviceConfig) -> bool {
         unsafe { VirtualSpace::<E1000Mmio>::new(mem_base as u64) }.expect("Failed to map MMIO");
     // set mmio first
     E1000
-        .set(Mutex::new(E1000::new(mmio)))
+        .set(Arc::new(Mutex::new(E1000::new(mmio))))
         .ok()
         .expect("Should only be called once");
 

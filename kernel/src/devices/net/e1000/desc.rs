@@ -48,6 +48,12 @@ pub struct ReceiveDescriptor {
     special: u16,
 }
 
+impl ReceiveDescriptor {
+    pub fn is_end_of_packet(&self) -> bool {
+        self.status & recv_desc::STATUS_EOP != 0
+    }
+}
+
 impl Descriptor for ReceiveDescriptor {
     fn data(&self) -> &[u8] {
         assert!(self.len <= 4096);
@@ -90,19 +96,17 @@ pub struct TransmitDescriptor {
 
 #[allow(dead_code)]
 impl TransmitDescriptor {
-    pub fn copy_into(&mut self, data: &[u8]) {
-        assert!(data.len() <= 4096);
+    pub fn data_mut(&mut self, len: usize) -> &mut [u8] {
+        assert!(len <= 4096);
         assert!(self.address != 0);
 
-        self.len = data.len() as u16;
-        let self_buf = unsafe {
+        self.len = len as u16;
+        unsafe {
             core::slice::from_raw_parts_mut(
                 physical2virtual(self.address) as *mut u8,
                 self.len as usize,
             )
-        };
-
-        self_buf.copy_from_slice(data);
+        }
     }
 
     pub fn prepare_for_transmit(&mut self) {
