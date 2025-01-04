@@ -1,5 +1,8 @@
+mod desc;
+
 use core::{fmt, mem};
 
+use desc::{DmaRing, ReceiveDescriptor, TransmitDescriptor};
 use tracing::{info, trace, warn};
 
 use crate::{
@@ -9,11 +12,7 @@ use crate::{
         interrupts::apic,
     },
     devices::pci::PciDeviceConfig,
-    memory_management::{
-        memory_layout::{physical2virtual, virtual2physical},
-        physical_page_allocator,
-        virtual_space::VirtualSpace,
-    },
+    memory_management::virtual_space::VirtualSpace,
     sync::{once::OnceLock, spin::mutex::Mutex},
     utils::{
         vcell::{RO, RW, WO},
@@ -27,6 +26,7 @@ static E1000: OnceLock<Mutex<E1000>> = OnceLock::new();
 #[allow(clippy::identity_op)]
 #[allow(clippy::eq_op)]
 pub mod flags {
+    // EEPROM
     pub const EERD_ADDR_SHIFT: u32 = 8;
     pub const EERD_DATA_SHIFT: u32 = 16;
     pub const EERD_START: u32 = 1 << 0;
@@ -63,6 +63,16 @@ pub mod flags {
     pub const RCTL_PMCF: u32 = 1 << 23;
     pub const RCTL_STRIP_ETH_CRC: u32 = 1 << 26;
 
+    // Transmit Control
+    pub const TCTL_EN: u32 = 1 << 1;
+    pub const TCTL_PSP: u32 = 1 << 3;
+    // collision threshold
+    pub const TCTL_CT_SHIFT: u32 = 4;
+    pub const TCTL_CT_MASK: u32 = 0xF << TCTL_CT_SHIFT;
+    // collision distance
+    pub const TCTL_COLD_SHIFT: u32 = 12;
+    pub const TCTL_COLD_MASK: u32 = 0x3F << TCTL_COLD_SHIFT;
+
     // Interrupts
     pub const I_TXDW: u32 = 1 << 0;
     pub const I_TXQE: u32 = 1 << 1;
@@ -71,17 +81,7 @@ pub mod flags {
     pub const I_RXDMT0: u32 = 1 << 4;
     pub const I_RXO: u32 = 1 << 6;
     pub const I_RXT0: u32 = 1 << 7;
-}
-
-#[allow(dead_code)]
-mod recv_desc {
-    pub const STATUS_DD: u8 = 1 << 0;
-    pub const STATUS_EOP: u8 = 1 << 1;
-    pub const STATUS_IGNORE_CHECKSUM: u8 = 1 << 2;
-    pub const STATUS_VLAN: u8 = 1 << 3;
-    pub const STATUS_TCP_CHECKSUM: u8 = 1 << 5;
-    pub const STATUS_IP_CHECKSUM: u8 = 1 << 6;
-    pub const STATUS_PIF: u8 = 1 << 7;
+    pub const I_TXD_LOW: u32 = 1 << 15;
 }
 
 #[allow(dead_code)]
@@ -125,108 +125,45 @@ struct E1000Mmio {
     transmit_config_word: RW<u32>,
     _pad10: Pad<4>,
     receive_config_word: RO<u32>,
-    _pad11: Pad<0xC7C>,
+    _pad11: Pad<0x27C>,
+    transmit_control: RW<u32>,
+    _pad12: Pad<0x9FC>,
     led_control: RW<u32>,
-    _pad12: Pad<0x160C>,
+    _pad13: Pad<0x160C>,
     receive_data_fifo_head: RW<u32>,
-    _pad13: Pad<0x4>,
-    receive_data_fifo_tail: RW<u32>,
     _pad14: Pad<0x4>,
-    receive_data_fifo_head_saved: RW<u32>,
+    receive_data_fifo_tail: RW<u32>,
     _pad15: Pad<0x4>,
-    receive_data_fifo_tail_saved: RW<u32>,
+    receive_data_fifo_head_saved: RW<u32>,
     _pad16: Pad<0x4>,
+    receive_data_fifo_tail_saved: RW<u32>,
+    _pad17: Pad<0x4>,
     receive_data_fifo_packet_count: RW<u32>,
-    _pad17: Pad<0x3CC>,
+    _pad18: Pad<0x3CC>,
     receive_descriptor_base_low: RW<u32>,
     receive_descriptor_base_high: RW<u32>,
     receive_descriptor_length: RW<u32>,
-    _pad18: Pad<0x4>,
-    receive_descriptor_head: RW<u32>,
     _pad19: Pad<0x4>,
-    receive_descriptor_tail: RW<u32>,
+    receive_descriptor_head: RW<u32>,
     _pad20: Pad<0x4>,
+    receive_descriptor_tail: RW<u32>,
+    _pad21: Pad<0x4>,
     receive_delay_timer: RW<u32>,
-    _pad21: Pad<0x8>,
+    _pad22: Pad<0x8>,
     receive_interrupt_abs_delay_timer: RW<u32>,
-    _pad22: Pad<0x29D0>,
+    _pad23: Pad<0xFD0>,
+    transmit_descriptor_base_low: RW<u32>,
+    transmit_descriptor_base_high: RW<u32>,
+    transmit_descriptor_length: RW<u32>,
+    _pad24: Pad<0x4>,
+    transmit_descriptor_head: RW<u32>,
+    _pad25: Pad<0x4>,
+    transmit_descriptor_tail: RW<u32>,
+    _pad26: Pad<0x4>,
+    transmit_descriptor_interrupt_delay: RW<u32>,
+    _pad27: Pad<0x19DC>,
     multicast_table_array: [RW<u32>; 128],
     receive_addresses: [(RW<u32>, RW<u32>); 16],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-struct ReceiveDescriptor {
-    address: u64,
-    len: u16,
-    checksum: u16,
-    status: u8,
-    errors: u8,
-    special: u16,
-}
-
-impl ReceiveDescriptor {
-    #[allow(dead_code)]
-    pub fn data(&self) -> &[u8] {
-        assert!(self.len <= 4096);
-        assert!(self.address != 0);
-        unsafe {
-            core::slice::from_raw_parts(
-                physical2virtual(self.address) as *const u8,
-                self.len as usize,
-            )
-        }
-    }
-}
-
-struct ReceiveRing<const N: usize> {
-    ring: &'static mut [ReceiveDescriptor],
-    head: u16,
-}
-
-impl<const N: usize> ReceiveRing<N> {
-    pub fn new() -> Self {
-        assert!(N % 8 == 0); // ring must be multiple of 8
-        assert!(N * 16 < 4096); // less than physical page
-
-        let ring: &mut [ReceiveDescriptor] = unsafe {
-            core::slice::from_raw_parts_mut(physical_page_allocator::alloc_zeroed().cast(), N)
-        };
-
-        // set addresses
-        for elem in ring.iter_mut() {
-            elem.address =
-                virtual2physical(unsafe { physical_page_allocator::alloc_zeroed() } as usize)
-        }
-
-        Self { ring, head: 0 }
-    }
-
-    pub const fn bytes_len(&self) -> usize {
-        N * core::mem::size_of::<ReceiveDescriptor>()
-    }
-
-    pub fn physical_ptr(&self) -> u64 {
-        virtual2physical(self.ring.as_ptr() as usize)
-    }
-
-    pub fn get_tail(&self) -> u16 {
-        self.head.wrapping_sub(1) % N as u16
-    }
-
-    pub fn get_next_entry(&mut self, hw_head: u16) -> Option<&mut ReceiveDescriptor> {
-        // check each entry from where we are at now until where the NIC is
-
-        if hw_head == self.head {
-            None
-        } else if self.ring[self.head as usize].status & recv_desc::STATUS_DD != 0 {
-            let res = Some(&mut self.ring[self.head as usize]);
-            self.head = (self.head + 1) % N as u16;
-            res
-        } else {
-            None
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -246,7 +183,8 @@ struct E1000 {
     mmio: VirtualSpace<E1000Mmio>,
     eeprom_size: u16,
 
-    ring: ReceiveRing<128>,
+    recv_ring: DmaRing<ReceiveDescriptor, 128>,
+    transmit_ring: DmaRing<TransmitDescriptor, 128>,
 }
 
 impl E1000 {
@@ -254,12 +192,14 @@ impl E1000 {
         let eecd = mmio.eecd.read();
         let eeprom_size = if eecd & flags::EE_SIZE != 0 { 256 } else { 64 };
 
-        let ring = ReceiveRing::new();
+        let mut recv_ring = DmaRing::new();
+        recv_ring.allocate_all_for_hw();
 
         Self {
             mmio,
             eeprom_size,
-            ring,
+            recv_ring,
+            transmit_ring: DmaRing::new(),
         }
     }
 
@@ -295,22 +235,22 @@ impl E1000 {
     pub fn init_recv(&self) {
         // 14.4 Receive Initialization
         unsafe {
-            assert_eq!(self.ring.physical_ptr() & 0xF, 0);
+            assert_eq!(self.recv_ring.physical_ptr() & 0xF, 0);
             self.mmio
                 .receive_descriptor_base_low
-                .write(self.ring.physical_ptr() as u32);
+                .write(self.recv_ring.physical_ptr() as u32);
             self.mmio
                 .receive_descriptor_base_high
-                .write((self.ring.physical_ptr() >> 32) as u32);
+                .write((self.recv_ring.physical_ptr() >> 32) as u32);
             self.mmio
                 .receive_descriptor_length
-                .write(self.ring.bytes_len() as u32);
+                .write(self.recv_ring.bytes_len() as u32);
             self.mmio
                 .receive_descriptor_head
-                .write(self.ring.head as u32);
+                .write(self.recv_ring.head() as u32);
             self.mmio
                 .receive_descriptor_tail
-                .write(self.ring.get_tail() as u32);
+                .write(self.recv_ring.tail() as u32);
 
             self.mmio.receive_delay_timer.write(0);
             self.mmio.receive_interrupt_abs_delay_timer.write(0);
@@ -318,11 +258,8 @@ impl E1000 {
             for i in 0..128 {
                 self.mmio.multicast_table_array[i].write(0);
             }
-        }
-    }
 
-    pub fn enable_recv(&self) {
-        unsafe {
+            // Enable
             self.mmio.receive_control.write(
                 flags::RCTL_EN
                     | flags::RCTL_LPE
@@ -333,10 +270,47 @@ impl E1000 {
         };
     }
 
-    fn enable_interrupts(&self) {
+    pub fn init_transmit(&self) {
+        // 14.5 Transmit Initialization
+        unsafe {
+            assert_eq!(self.recv_ring.physical_ptr() & 0xF, 0);
+            self.mmio
+                .transmit_descriptor_base_low
+                .write(self.transmit_ring.physical_ptr() as u32);
+            self.mmio
+                .transmit_descriptor_base_high
+                .write((self.transmit_ring.physical_ptr() >> 32) as u32);
+            self.mmio
+                .transmit_descriptor_length
+                .write(self.transmit_ring.bytes_len() as u32);
+            self.mmio
+                .transmit_descriptor_head
+                .write(self.transmit_ring.head() as u32);
+            self.mmio
+                .transmit_descriptor_tail
+                .write(self.transmit_ring.tail() as u32);
+
+            self.mmio.transmit_descriptor_interrupt_delay.write(0);
+
+            self.mmio.transmit_control.write(
+                flags::TCTL_EN
+                    | flags::TCTL_PSP
+                    | (0xF << flags::TCTL_CT_SHIFT)
+                    | (0x40 << flags::TCTL_COLD_SHIFT),
+            );
+        }
+    }
+
+    pub fn enable_interrupts(&self) {
         unsafe {
             self.mmio.interrupt_mask_set.write(
-                flags::I_LSC | flags::I_RXSEQ | flags::I_RXDMT0 | flags::I_RXO | flags::I_RXT0,
+                flags::I_LSC
+                    | flags::I_RXSEQ
+                    | flags::I_RXDMT0
+                    | flags::I_RXO
+                    | flags::I_RXT0
+                    | flags::I_TXDW
+                    | flags::I_TXD_LOW,
             );
             // clear any pending interrupts
             self.mmio.interrupt_cause_read.read();
@@ -348,26 +322,51 @@ impl E1000 {
         self.mmio.status.read();
     }
 
-    fn handle_recv(&mut self) {
+    pub fn handle_recv(&mut self) {
         let head = self.mmio.receive_descriptor_head.read() as u16;
 
         let mut count = 0;
-        while let Some(desc) = self.ring.get_next_entry(head) {
+        while let Some(_desc) = self.recv_ring.pop_next(head) {
             count += 1;
 
             // TODO: do something with the packet
             // println!("{desc:X?}");
             // crate::io::hexdump(desc.data());
+            // println!();
 
-            // clear status (not really needed, but maybe some hardware need that?)
-            desc.status = 0;
+            self.recv_ring.allocate_next_for_hw();
         }
 
-        let new_tail = self.ring.get_tail();
-
+        let new_tail = self.recv_ring.tail();
         trace!("Processed {count} descriptors, new tail: {new_tail:x}");
-
         unsafe { self.mmio.receive_descriptor_tail.write(new_tail as u32) };
+    }
+
+    pub fn handle_transmit_interrupt(&mut self) {
+        let head = self.mmio.transmit_descriptor_head.read() as u16;
+        // just pop all those that are done, so we can allocate them
+        // later, no need to do any processing here
+        while self.transmit_ring.pop_next(head).is_some() {}
+    }
+
+    #[allow(dead_code)]
+    pub fn transmit_raw(&mut self, data: &[u8]) {
+        assert!(data.len() < 4096);
+
+        let Some(desc) = self.transmit_ring.allocate_next_for_hw() else {
+            todo!("Transmit queue is full, implement dynamic driver queueing");
+        };
+
+        desc.copy_into(data);
+        desc.prepare_for_transmit();
+
+        unsafe {
+            self.mmio
+                .transmit_descriptor_tail
+                .write(self.transmit_ring.tail() as u32)
+        };
+
+        self.flush_writes();
     }
 }
 
@@ -423,9 +422,9 @@ pub fn try_register(pci_device: &PciDeviceConfig) -> bool {
 
     info!("MAC address: {:?}", e1000.read_mac_address());
 
-    e1000.init_recv();
     e1000.enable_interrupts();
-    e1000.enable_recv();
+    e1000.init_recv();
+    e1000.init_transmit();
     e1000.flush_writes();
 
     true
@@ -444,8 +443,17 @@ extern "x86-interrupt" fn interrupt(_stack_frame: InterruptStackFrame64) {
         // Link Status Change
         warn!("Link Status Change");
     }
+    if cause & flags::I_RXSEQ != 0 {
+        // Receiver Sequence Error
+        warn!("Receiver Sequence Error");
+    }
+    if cause & flags::I_TXD_LOW != 0 {
+        // Transmit Descriptor Low Ring
+        warn!("Transmit Descriptor Low Ring");
+    }
 
     e1000.handle_recv();
+    e1000.handle_transmit_interrupt();
 
     apic::return_from_interrupt();
 }
