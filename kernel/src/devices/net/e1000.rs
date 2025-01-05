@@ -41,6 +41,13 @@ pub mod flags {
     pub const EERD_DONE: u32 = 1 << 4;
     pub const EE_SIZE: u32 = 1 << 9;
 
+    // Control
+    pub const CTRL_FD: u32 = 1 << 0;
+    pub const CTRL_SPEED_10MB: u32 = 0 << 8;
+    pub const CTRL_SPEED_100MB: u32 = 1 << 8;
+    pub const CTRL_SPEED_1000MB: u32 = 2 << 8;
+    pub const CRTL_FORCE_DPLX: u32 = 1 << 12;
+
     // Receive Control
     pub const RCTL_EN: u32 = 1 << 1;
     pub const RCTL_SBP: u32 = 1 << 2;
@@ -185,6 +192,7 @@ struct E1000 {
     in_middle_of_packet: bool,
 }
 
+#[allow(dead_code)]
 impl E1000 {
     fn new(mmio: VirtualSpace<E1000Mmio>) -> Self {
         let eecd = mmio.eecd.read();
@@ -354,7 +362,6 @@ impl E1000 {
         while self.transmit_ring.pop_next(head).is_some() {}
     }
 
-    #[allow(dead_code)]
     pub fn transmit_raw(&mut self, data: &[u8]) {
         assert!(data.len() < 4096);
 
@@ -396,6 +403,27 @@ impl E1000 {
 
         self.flush_writes();
     }
+
+    pub fn receive_packet(&mut self) -> Option<Vec<u8>> {
+        self.received_queue.pop_front()
+    }
+
+    // might not work depending on the network card
+    pub fn enable_loopback(&self) {
+        unsafe {
+            self.mmio
+                .receive_control
+                .write(self.mmio.receive_control.read() | flags::RCTL_LBM_YES);
+        }
+    }
+
+    pub fn enable_full_duplex(&self) {
+        unsafe {
+            self.mmio
+                .control
+                .write(self.mmio.control.read() | flags::CTRL_FD | flags::CRTL_FORCE_DPLX);
+        }
+    }
 }
 
 impl NetworkDevice for Arc<Mutex<E1000>> {
@@ -409,7 +437,7 @@ impl NetworkDevice for Arc<Mutex<E1000>> {
 
     fn receive(&self) -> Option<Vec<u8>> {
         let mut e1000 = self.lock();
-        e1000.received_queue.pop_front()
+        e1000.receive_packet()
     }
 }
 
