@@ -224,6 +224,135 @@ impl NetworkHeader for EthernetHeader {
         Ok(14)
     }
 }
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub struct Ipv4Address(pub [u8; 4]);
+
+#[allow(dead_code)]
+impl Ipv4Address {
+    pub fn bytes(&self) -> &[u8; 4] {
+        &self.0
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        let mut bytes = [0; 4];
+        let mut iter = s.split('.');
+        for b in &mut bytes {
+            *b = str::parse(iter.next()?).ok()?;
+        }
+        Some(Ipv4Address(bytes))
+    }
+}
+
+impl fmt::Debug for Ipv4Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}.{}", self.0[0], self.0[1], self.0[2], self.0[3],)
+    }
+}
+
+impl ArpProtocol for Ipv4Address {
+    const PROTOCOL: EtherType = EtherType::Ipv4;
+    const LENGTH: u8 = 4;
+
+    fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn new(bytes: &[u8]) -> Option<Self> {
+        Some(Ipv4Address(bytes.try_into().ok()?))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u16)]
+pub enum ArpOperation {
+    #[default]
+    Request = 1,
+    Reply = 2,
+    RequestReverse = 3,
+    ReplyReverse = 4,
+}
+
+impl ArpOperation {
+    pub fn to_be_bytes(self) -> [u8; 2] {
+        (self as u16).to_be_bytes()
+    }
+
+    pub fn from_be_bytes(num: [u8; 2]) -> Result<Self, NetworkError> {
+        match u16::from_be_bytes(num) {
+            1 => Ok(ArpOperation::Request),
+            2 => Ok(ArpOperation::Reply),
+            3 => Ok(ArpOperation::RequestReverse),
+            4 => Ok(ArpOperation::ReplyReverse),
+            num => Err(NetworkError::UnsupporedEtherType(num)),
+        }
+    }
+}
+
+pub trait ArpProtocol: fmt::Debug {
+    const PROTOCOL: EtherType;
+    const LENGTH: u8;
+
+    fn bytes(&self) -> &[u8];
+    fn new(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized;
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// Assume:
+/// - `HardwareType` is always `Ethernet == 1`
+/// - `HardwareLength` is always `6` because `Ethernet`
+pub struct ArpHeader<T: ArpProtocol> {
+    pub operation: ArpOperation,
+    pub sender_hw_addr: MacAddress,
+    pub sender_protocol_addr: T,
+    pub target_hw_addr: MacAddress,
+    pub target_protocol_addr: T,
+}
+
+impl<T: ArpProtocol + 'static> NetworkHeader for ArpHeader<T> {
+    fn write_into_buffer(&self, buffer: &mut [u8]) -> Result<(), NetworkError> {
+        buffer[0..2].copy_from_slice(&1u16.to_be_bytes()); // Ethernet
+        buffer[2..4].copy_from_slice(&T::PROTOCOL.to_be_bytes());
+        buffer[4] = 6; // Ethernet
+        buffer[5] = T::LENGTH;
+        buffer[6..8].copy_from_slice(&self.operation.to_be_bytes());
+        buffer[8..14].copy_from_slice(self.sender_hw_addr.bytes());
+        buffer[14..14 + T::LENGTH as usize].copy_from_slice(self.sender_protocol_addr.bytes());
+
+        let off = 14 + T::LENGTH as usize;
+        buffer[off..off + 6].copy_from_slice(self.target_hw_addr.bytes());
+
+        let off = off + 6;
+        buffer[off..off + T::LENGTH as usize].copy_from_slice(self.target_protocol_addr.bytes());
+
+        Ok(())
+    }
+
+    fn size(&self) -> usize {
+        14 + T::LENGTH as usize * 2 + 6
+    }
+
+    fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<usize, NetworkError> {
+        if buffer.len() < self.size() {
+            return Err(NetworkError::ReachedEndOfStream);
+        }
+
+        self.operation = ArpOperation::from_be_bytes(buffer[6..8].try_into().unwrap())?;
+        self.sender_hw_addr = MacAddress(buffer[8..14].try_into().unwrap());
+        self.sender_protocol_addr =
+            T::new(&buffer[14..14 + T::LENGTH as usize]).expect("Not enough space");
+
+        let off = 14 + T::LENGTH as usize;
+        self.target_hw_addr = MacAddress(buffer[off..off + 6].try_into().unwrap());
+
+        let off = off + 6;
+        self.target_protocol_addr =
+            T::new(&buffer[off..off + T::LENGTH as usize]).expect("Not enough space");
+
+        Ok(off + T::LENGTH as usize)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetworkError {
