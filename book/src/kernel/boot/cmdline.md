@@ -22,19 +22,19 @@ last value will be used.
 > This is implemented in [`cmdline`][kernel_cmdline]
 > implemented as
 > ```rust
-> cmdline_struct! {
->     pub struct Cmd<'a> {
->         #[default = true]
->         pub uart: bool,
->         #[default = 115200]
->         pub uart_baud: u32,
->         #[default = LogLevel::Info]
->         pub max_log_level: LogLevel,
->         #[default = "/kernel.log"]
->         pub log_file: &'a str,
->         #[default = true]
->         pub allow_hpet: bool,
->     }
+> pub struct Cmd<'a> {
+>     #[default = true]
+>     pub uart: bool,
+>     #[default = 115200]
+>     pub uart_baud: u32,
+>     #[default = LogLevel::Info]
+>     pub max_log_level: LogLevel,
+>     #[default = "/kernel.log"]
+>     pub log_file: &'a str,
+>     #[default = true]
+>     pub allow_hpet: bool,
+>     #[default = None]
+>     pub mac_address: Option<MacAddress>,
 > }
 > ```
 
@@ -49,9 +49,10 @@ Here is the supported properties:
 | `log_file`      | `&str`                                     | Log file path                                            | `"/kernel.log"`  |
 | `allow_hpet`    | `bool`                                     | Allow `HPET` (if present), otherwise always use `PIT`    | `true`           |
 | `log_aml`       | `LogAml` (`off/normal/structured`)         | Log the AML content as ASL code on boot from ACPI tables | `LogAml::Off`    |
+| `mac_address`   | `Option<MacAddress>`                       | MAC address override for the network interface                    | `""`             |
 
 
 If we write these in a command line, it will look like:
 ```
-uart=true uart_baud=115200 max_log_level=info log_file=/kernel.log allow_hpet=true
+uart=true uart_baud=115200 max_log_level=info log_file=/kernel.log allow_hpet=true mac_address=00:11:22:33:44:55
 ```
