@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PriorityLevel"],"fn":["exit","priority","process_metadata","spawn","wait_for_pid"],"struct":["ProcessMetadata","SpawnFileMapping"]};

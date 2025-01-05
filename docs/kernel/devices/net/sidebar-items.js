@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_device","try_register_net_device"],"mod":["e1000"],"struct":["MacAddress"],"trait":["NetworkDevice"]};

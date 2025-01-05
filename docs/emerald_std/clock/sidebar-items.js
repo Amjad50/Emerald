@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ClockType"],"fn":["get_time","sleep"],"struct":["ClockTime"]};

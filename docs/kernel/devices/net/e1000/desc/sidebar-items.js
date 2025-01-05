@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["recv_desc","transmit_desc"],"struct":["DmaRing","ReceiveDescriptor","TransmitDescriptor"],"trait":["Descriptor"]};

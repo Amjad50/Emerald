@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["GraphicsCommand"],"fn":["blit","get_framebuffer_info","release_ownership","take_ownership"],"struct":["BlitCommand","FrameBufferInfo"]};

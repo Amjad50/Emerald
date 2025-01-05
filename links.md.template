@@ -57,3 +57,7 @@
 [power_dev]: {ROOT_PATH}docs/kernel/power
 [start_power_sequence]: {ROOT_PATH}docs/kernel/power/fn.start_power_sequence.html
 [finish_power_sequence]: {ROOT_PATH}docs/kernel/power/fn.finish_power_sequence.html
+[kernel_net]: {ROOT_PATH}docs/kernel/net
+[kernel_net_eth_socket]: {ROOT_PATH}docs/kernel/net/socket/struct.EthernetSocket.html
+[kernel_net_packet]: {ROOT_PATH}docs/kernel/net/struct.NetworkPacket.html
+[kernel_net_header]: {ROOT_PATH}docs/kernel/net/trait.NetworkHeader.html

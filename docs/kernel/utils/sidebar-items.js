@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["vcell"]};
+window.SIDEBAR_ITEMS = {"mod":["vcell"],"struct":["Pad"]};
