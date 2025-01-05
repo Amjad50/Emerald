@@ -14,7 +14,7 @@ use crate::{
     },
     devices::pci::PciDeviceConfig,
     memory_management::virtual_space::VirtualSpace,
-    net::{NetworkError, NetworkPacket},
+    net::{MacAddress, NetworkError, NetworkPacket},
     sync::{once::OnceLock, spin::mutex::Mutex},
     utils::{
         vcell::{RO, RW, WO},
@@ -22,7 +22,7 @@ use crate::{
     },
 };
 
-use super::{MacAddress, NetworkDevice};
+use super::NetworkDevice;
 
 static E1000: OnceLock<Arc<Mutex<E1000>>> = OnceLock::new();
 

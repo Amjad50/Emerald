@@ -4,7 +4,7 @@ use core::{any::Any, fmt};
 
 use alloc::{boxed::Box, vec::Vec};
 
-use crate::{devices::net::MacAddress, testing};
+use crate::testing;
 
 /// Represent a part of a network stack, and will
 /// be written directly into the network DMA buffer
@@ -101,6 +101,37 @@ impl NetworkPacket {
     }
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub struct MacAddress(pub [u8; 6]);
+
+#[allow(dead_code)]
+impl MacAddress {
+    pub const BROADCAST: MacAddress = MacAddress([0xFF; 6]);
+
+    fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        let mut bytes = [0; 6];
+        let mut iter = s.split(':');
+        for b in &mut bytes {
+            *b = u8::from_str_radix(iter.next()?, 16).ok()?;
+        }
+        Some(MacAddress(bytes))
+    }
+}
+
+impl fmt::Debug for MacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
+        )
+    }
+}
+
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum EtherType {
@@ -186,8 +217,8 @@ impl NetworkHeader for EthernetHeader {
             return Err(NetworkError::ReachedEndOfStream);
         }
 
-        self.dest = MacAddress::new(buffer[0..6].try_into().unwrap());
-        self.src = MacAddress::new(buffer[6..12].try_into().unwrap());
+        self.dest = MacAddress(buffer[0..6].try_into().unwrap());
+        self.src = MacAddress(buffer[6..12].try_into().unwrap());
         self.ty = EtherType::from_be_bytes(buffer[12..14].try_into().unwrap())?;
 
         Ok(14)
@@ -214,12 +245,9 @@ fn test_parse_ethernet_header() {
     assert_eq!(header.read_from_buffer(&buffer), Ok(14));
     assert_eq!(
         header.dest,
-        MacAddress::new([0x00, 0x01, 0x02, 0x03, 0x04, 0x05])
+        MacAddress([0x00, 0x01, 0x02, 0x03, 0x04, 0x05])
     );
-    assert_eq!(
-        header.src,
-        MacAddress::new([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B])
-    );
+    assert_eq!(header.src, MacAddress([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]));
     assert_eq!(header.ty, EtherType::Ipv4);
 }
 
@@ -227,8 +255,8 @@ fn test_parse_ethernet_header() {
 fn test_parse_packet() {
     let mut packet = NetworkPacket::default();
     packet.push(EthernetHeader {
-        dest: MacAddress::new([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]),
-        src: MacAddress::new([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]),
+        dest: MacAddress([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]),
+        src: MacAddress([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]),
         ty: EtherType::Ipv4,
     });
 
@@ -247,11 +275,8 @@ fn test_parse_packet() {
     assert_eq!(header, packet.header::<EthernetHeader>().unwrap());
     assert_eq!(
         header.dest,
-        MacAddress::new([0x00, 0x01, 0x02, 0x03, 0x04, 0x05])
+        MacAddress([0x00, 0x01, 0x02, 0x03, 0x04, 0x05])
     );
-    assert_eq!(
-        header.src,
-        MacAddress::new([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B])
-    );
+    assert_eq!(header.src, MacAddress([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]));
     assert_eq!(header.ty, EtherType::Ipv4);
 }
