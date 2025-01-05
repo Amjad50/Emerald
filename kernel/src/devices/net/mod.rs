@@ -2,13 +2,11 @@ mod e1000;
 
 use core::fmt;
 
-use alloc::vec::Vec;
-
-use crate::net::NetworkFrame;
+use crate::net::{NetworkError, NetworkPacket};
 
 use super::pci::{self, PciDeviceConfig};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct MacAddress([u8; 6]);
 
 impl MacAddress {
@@ -33,8 +31,8 @@ impl fmt::Debug for MacAddress {
 
 pub trait NetworkDevice {
     fn mac_address(&self) -> MacAddress;
-    fn send(&self, data: &dyn NetworkFrame);
-    fn receive(&self) -> Option<Vec<u8>>;
+    fn send(&self, data: &NetworkPacket) -> Result<(), NetworkError>;
+    fn receive_into(&self, packet: &mut NetworkPacket) -> Result<bool, NetworkError>;
 }
 
 #[allow(dead_code)]

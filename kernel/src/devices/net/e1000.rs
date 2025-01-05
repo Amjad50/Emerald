@@ -14,7 +14,7 @@ use crate::{
     },
     devices::pci::PciDeviceConfig,
     memory_management::virtual_space::VirtualSpace,
-    net::NetworkFrame,
+    net::{NetworkError, NetworkPacket},
     sync::{once::OnceLock, spin::mutex::Mutex},
     utils::{
         vcell::{RO, RW, WO},
@@ -381,17 +381,17 @@ impl E1000 {
         self.flush_writes();
     }
 
-    pub fn transmit_network_frame(&mut self, frame: &dyn NetworkFrame) {
-        assert!(frame.size() < 4096);
+    pub fn transmit_packet(&mut self, packet: &NetworkPacket) -> Result<(), NetworkError> {
+        if packet.size() > 4096 {
+            return Err(NetworkError::PacketTooLarge(packet.size()));
+        }
 
         let Some(desc) = self.transmit_ring.allocate_next_for_hw() else {
             todo!("Transmit queue is full, implement dynamic driver queueing");
         };
 
-        let data = desc.data_mut(frame.size());
-        frame
-            .write_into_buffer(data)
-            .expect("Failed to write into buffer");
+        let data = desc.data_mut(packet.size());
+        packet.write_into_buffer(data)?;
 
         desc.prepare_for_transmit();
 
@@ -402,6 +402,8 @@ impl E1000 {
         };
 
         self.flush_writes();
+
+        Ok(())
     }
 
     pub fn receive_packet(&mut self) -> Option<Vec<u8>> {
@@ -431,13 +433,17 @@ impl NetworkDevice for Arc<Mutex<E1000>> {
         self.lock().read_mac_address()
     }
 
-    fn send(&self, data: &dyn NetworkFrame) {
-        self.lock().transmit_network_frame(data);
+    fn send(&self, data: &NetworkPacket) -> Result<(), NetworkError> {
+        self.lock().transmit_packet(data)
     }
 
-    fn receive(&self) -> Option<Vec<u8>> {
-        let mut e1000 = self.lock();
-        e1000.receive_packet()
+    fn receive_into(&self, packet: &mut NetworkPacket) -> Result<bool, NetworkError> {
+        if let Some(data) = self.lock().receive_packet() {
+            packet.read_from_buffer(&data)?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
 
