@@ -10,6 +10,8 @@ We have the target `x86_64-unknown-emerald`. The changes needed are in [`rust/li
 These changes are provided by another crate [emerald_std], where we have all the basic implementation of userspace functionalities including:
 - `allocator`: See [Heap Allocator](../extra/heap_allocator.md) for more details.
 - `files` and `io`: For file operations and input/output.
+- `clock`: For clock and time operations.
+- `graphics`: For graphics operations.
 - `process`: For process management.
 
 This crate, is very basic and only performs `syscalls` basically, nothing much else, then in `rust` we perform the

@@ -34,6 +34,7 @@ mod hw;
 mod io;
 mod memory_management;
 mod multiboot2;
+mod net;
 mod panic_handler;
 mod power;
 mod process;

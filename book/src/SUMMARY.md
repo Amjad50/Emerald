@@ -20,6 +20,7 @@
         - [Power](./kernel/virtual_devices/power.md)
     - [Filesystem](./kernel/filesystem/index.md)
         - [FAT](./kernel/filesystem/fat.md)
+    - [Network](./kernel/network/index.md)
     - [Processor](./kernel/processor/index.md)
         - [Interrupts and Exceptions](./kernel/processor/interrupts.md)
         - [GDT and others](./kernel/processor/gdt.md)
