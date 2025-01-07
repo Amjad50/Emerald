@@ -100,8 +100,8 @@ impl NetworkHeader for EthernetHeader {
 
     fn next_header(&self) -> Option<Box<dyn NetworkHeader>> {
         match self.ty {
-            EtherType::Ipv4 => Some(Box::new(Ipv4Header::default())),
-            EtherType::Arp => Some(Box::new(ArpHeader::<Ipv4Address>::default())),
+            EtherType::Ipv4 => Some(Box::<Ipv4Header>::default()),
+            EtherType::Arp => Some(Box::<ArpHeader<Ipv4Address>>::default()),
             _ => None,
         }
     }
@@ -320,8 +320,8 @@ impl NetworkHeader for Ipv4Header {
             return Err(NetworkError::ReachedEndOfStream);
         }
 
-        let checksum = Self::calc_checksum(&buffer[..20]);
         // TODO: looks like some systems send wrong checksum, so hard to make it strict
+        // let checksum = Self::calc_checksum(&buffer[..20]);
         // if checksum != 0 {
         //     return Err(NetworkError::InvalidChecksum);
         // }
@@ -345,7 +345,7 @@ impl NetworkHeader for Ipv4Header {
 
     fn next_header(&self) -> Option<Box<dyn NetworkHeader>> {
         match self.protocol {
-            IpProtocol::Icmp => Some(Box::new(IcmpHeaderAndData::default())),
+            IpProtocol::Icmp => Some(Box::<IcmpHeaderAndData>::default()),
             _ => None,
         }
     }
@@ -432,8 +432,8 @@ impl NetworkHeader for IcmpHeaderAndData {
             return Err(NetworkError::ReachedEndOfStream);
         }
 
-        let checksum = Ipv4Header::calc_checksum(&buffer);
         // TODO: looks like some systems send wrong checksum, so hard to make it strict
+        // let checksum = Ipv4Header::calc_checksum(&buffer);
         // if checksum != 0 {
         //     return Err(NetworkError::InvalidChecksum);
         // }

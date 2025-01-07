@@ -111,7 +111,7 @@ impl NetworkPacket {
         self.clear();
 
         let mut ethernet = EthernetHeader::create();
-        let mut off = ethernet.read_from_buffer(&buffer)?;
+        let mut off = ethernet.read_from_buffer(buffer)?;
 
         let mut next_header = ethernet.next_header();
         self.push(ethernet);
@@ -233,6 +233,7 @@ impl ArpProtocol for Ipv4Address {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum NetworkError {
     ReachedEndOfStream,
     NotEnoughSpace,
