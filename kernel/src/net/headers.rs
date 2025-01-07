@@ -334,6 +334,106 @@ impl NetworkHeader for Ipv4Header {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+// TODO: implement the rest
+pub enum IcmpHeader {
+    EchoReply,
+    EchoRequest,
+    Unknown { ty: u8, code: u8, extra: u32 },
+}
+
+impl Default for IcmpHeader {
+    fn default() -> Self {
+        Self::Unknown {
+            ty: 0,
+            code: 0,
+            extra: 0,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct IcmpHeaderAndData {
+    pub header: IcmpHeader,
+    pub data: Vec<u8>,
+}
+
+impl IcmpHeader {
+    pub fn ty(&self) -> u8 {
+        // This is exactly what the `EchoReply` is, but I guess its okay either way
+        match self {
+            IcmpHeader::EchoReply => 0,
+            IcmpHeader::EchoRequest => 8,
+            IcmpHeader::Unknown { ty, .. } => *ty,
+        }
+    }
+
+    pub fn code(&self) -> u8 {
+        match self {
+            IcmpHeader::EchoReply | IcmpHeader::EchoRequest => 0,
+            IcmpHeader::Unknown { code, .. } => *code,
+        }
+    }
+
+    pub fn extra(&self) -> u32 {
+        match self {
+            IcmpHeader::EchoReply | IcmpHeader::EchoRequest => 0,
+            IcmpHeader::Unknown { extra, .. } => *extra,
+        }
+    }
+
+    fn from_header(ty: u8, code: u8, extra: u32) -> Self {
+        match (ty, code) {
+            (0, 0) => Self::EchoReply,
+            (8, 0) => Self::EchoRequest,
+            _ => Self::Unknown { ty, code, extra },
+        }
+    }
+}
+
+impl NetworkHeader for IcmpHeaderAndData {
+    fn write_into_buffer(&self, buffer: &mut [u8]) -> Result<(), NetworkError> {
+        buffer[0] = self.header.ty();
+        buffer[1] = self.header.code();
+        buffer[2] = 0; // reset checksum to 0;
+        buffer[3] = 0;
+        buffer[4..8].copy_from_slice(&self.header.extra().to_be_bytes());
+        buffer[8..8 + self.data.len()].copy_from_slice(&self.data);
+
+        let checksum = Ipv4Header::calc_checksum(&buffer[..8 + self.data.len()]);
+        buffer[2..4].copy_from_slice(&checksum.to_be_bytes());
+
+        Ok(())
+    }
+
+    fn size(&self) -> usize {
+        8 + self.data.len()
+    }
+
+    fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<usize, NetworkError> {
+        if buffer.len() < 8 {
+            return Err(NetworkError::ReachedEndOfStream);
+        }
+
+        let checksum = Ipv4Header::calc_checksum(&buffer);
+        // TODO: looks like some systems send wrong checksum, so hard to make it strict
+        // if checksum != 0 {
+        //     return Err(NetworkError::InvalidChecksum);
+        // }
+
+        self.header = IcmpHeader::from_header(
+            buffer[0],
+            buffer[1],
+            u32::from_be_bytes(buffer[4..8].try_into().unwrap()),
+        );
+
+        self.data.clear();
+        self.data.extend_from_slice(&buffer[8..]);
+
+        Ok(self.size())
+    }
+}
+
 #[macro_rules_attribute::apply(testing::test)]
 fn test_parse_ethernet_header() {
     let mut header = EthernetHeader::default();
