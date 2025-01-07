@@ -15,6 +15,9 @@ pub trait NetworkHeader: fmt::Debug + Any {
     fn write_into_buffer(&self, buffer: &mut [u8]) -> Result<(), NetworkError>;
     fn size(&self) -> usize;
     fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<usize, NetworkError>;
+    fn next_header(&self) -> Option<Box<dyn NetworkHeader>> {
+        None
+    }
     fn create() -> Self
     where
         Self: Default,
@@ -23,14 +26,31 @@ pub trait NetworkHeader: fmt::Debug + Any {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct NetworkPacket {
     headers: Vec<Box<dyn NetworkHeader>>,
     payload: Vec<u8>,
+    should_build: bool,
+}
+
+impl fmt::Debug for NetworkPacket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NetworkPacket")
+            .field("headers", &self.headers)
+            .field("payload", &self.payload)
+            .finish()
+    }
 }
 
 #[allow(dead_code)]
 impl NetworkPacket {
+    pub fn buildable() -> Self {
+        Self {
+            should_build: true,
+            ..Default::default()
+        }
+    }
+
     pub fn push<T: NetworkHeader + 'static>(&mut self, header: T) -> &mut Self {
         self.headers.push(Box::new(header));
         self
@@ -75,7 +95,7 @@ impl NetworkPacket {
         Ok(offset + payload_len)
     }
 
-    pub fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<(), NetworkError> {
+    fn read_from_buffer_into(&mut self, buffer: &[u8]) -> Result<(), NetworkError> {
         let mut offset = 0;
         for header in self.headers.iter_mut() {
             offset += header.read_from_buffer(&buffer[offset..])?;
@@ -87,10 +107,44 @@ impl NetworkPacket {
         Ok(())
     }
 
+    fn read_from_buffer_and_build(&mut self, buffer: &[u8]) -> Result<(), NetworkError> {
+        self.clear();
+
+        let mut ethernet = EthernetHeader::create();
+        let mut off = ethernet.read_from_buffer(&buffer)?;
+
+        let mut next_header = ethernet.next_header();
+        self.push(ethernet);
+
+        while let Some(mut header) = next_header {
+            off += header.read_from_buffer(&buffer[off..])?;
+            next_header = header.next_header();
+            self.headers.push(header);
+        }
+
+        self.payload.extend_from_slice(&buffer[off..]);
+
+        Ok(())
+    }
+
+    pub fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<(), NetworkError> {
+        if self.should_build {
+            self.read_from_buffer_and_build(buffer)
+        } else {
+            self.read_from_buffer_into(buffer)
+        }
+    }
+
     pub fn header<T: NetworkHeader>(&self) -> Option<&T> {
         self.headers
             .iter()
             .find_map(|h| (h.as_ref() as &dyn Any).downcast_ref::<T>())
+    }
+
+    pub fn header_mut<T: NetworkHeader>(&mut self) -> Option<&mut T> {
+        self.headers
+            .iter_mut()
+            .find_map(|h| (h.as_mut() as &mut dyn Any).downcast_mut::<T>())
     }
 
     pub fn headers<T: NetworkHeader>(&self) -> impl Iterator<Item = &T> {
@@ -101,6 +155,11 @@ impl NetworkPacket {
 
     pub fn all_headers(&self) -> &[Box<dyn NetworkHeader>] {
         &self.headers
+    }
+
+    pub fn clear(&mut self) {
+        self.headers.clear();
+        self.payload.clear();
     }
 }
 

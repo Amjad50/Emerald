@@ -1,5 +1,7 @@
 use core::fmt;
 
+use alloc::{boxed::Box, vec::Vec};
+
 use crate::testing;
 
 use super::{Ipv4Address, MacAddress, NetworkError, NetworkHeader};
@@ -94,6 +96,14 @@ impl NetworkHeader for EthernetHeader {
         self.ty = EtherType::from_be_bytes(buffer[12..14].try_into().unwrap())?;
 
         Ok(14)
+    }
+
+    fn next_header(&self) -> Option<Box<dyn NetworkHeader>> {
+        match self.ty {
+            EtherType::Ipv4 => Some(Box::new(Ipv4Header::default())),
+            EtherType::Arp => Some(Box::new(ArpHeader::<Ipv4Address>::default())),
+            _ => None,
+        }
     }
 }
 
@@ -331,6 +341,13 @@ impl NetworkHeader for Ipv4Header {
         self.dest_addr = Ipv4Address(buffer[16..20].try_into().unwrap());
 
         Ok(20)
+    }
+
+    fn next_header(&self) -> Option<Box<dyn NetworkHeader>> {
+        match self.protocol {
+            IpProtocol::Icmp => Some(Box::new(IcmpHeaderAndData::default())),
+            _ => None,
+        }
     }
 }
 
