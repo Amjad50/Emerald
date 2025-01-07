@@ -1,10 +1,13 @@
+mod headers;
 pub mod socket;
+
+pub use headers::*;
 
 use core::{any::Any, fmt};
 
 use alloc::{boxed::Box, vec::Vec};
 
-use crate::{devices::net::MacAddress, testing};
+use crate::testing;
 
 /// Represent a part of a network stack, and will
 /// be written directly into the network DMA buffer
@@ -12,6 +15,9 @@ pub trait NetworkHeader: fmt::Debug + Any {
     fn write_into_buffer(&self, buffer: &mut [u8]) -> Result<(), NetworkError>;
     fn size(&self) -> usize;
     fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<usize, NetworkError>;
+    fn next_header(&self) -> Option<Box<dyn NetworkHeader>> {
+        None
+    }
     fn create() -> Self
     where
         Self: Default,
@@ -20,14 +26,31 @@ pub trait NetworkHeader: fmt::Debug + Any {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct NetworkPacket {
     headers: Vec<Box<dyn NetworkHeader>>,
     payload: Vec<u8>,
+    should_build: bool,
+}
+
+impl fmt::Debug for NetworkPacket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NetworkPacket")
+            .field("headers", &self.headers)
+            .field("payload", &self.payload)
+            .finish()
+    }
 }
 
 #[allow(dead_code)]
 impl NetworkPacket {
+    pub fn buildable() -> Self {
+        Self {
+            should_build: true,
+            ..Default::default()
+        }
+    }
+
     pub fn push<T: NetworkHeader + 'static>(&mut self, header: T) -> &mut Self {
         self.headers.push(Box::new(header));
         self
@@ -72,7 +95,7 @@ impl NetworkPacket {
         Ok(offset + payload_len)
     }
 
-    pub fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<(), NetworkError> {
+    fn read_from_buffer_into(&mut self, buffer: &[u8]) -> Result<(), NetworkError> {
         let mut offset = 0;
         for header in self.headers.iter_mut() {
             offset += header.read_from_buffer(&buffer[offset..])?;
@@ -84,10 +107,44 @@ impl NetworkPacket {
         Ok(())
     }
 
+    fn read_from_buffer_and_build(&mut self, buffer: &[u8]) -> Result<(), NetworkError> {
+        self.clear();
+
+        let mut ethernet = EthernetHeader::create();
+        let mut off = ethernet.read_from_buffer(buffer)?;
+
+        let mut next_header = ethernet.next_header();
+        self.push(ethernet);
+
+        while let Some(mut header) = next_header {
+            off += header.read_from_buffer(&buffer[off..])?;
+            next_header = header.next_header();
+            self.headers.push(header);
+        }
+
+        self.payload.extend_from_slice(&buffer[off..]);
+
+        Ok(())
+    }
+
+    pub fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<(), NetworkError> {
+        if self.should_build {
+            self.read_from_buffer_and_build(buffer)
+        } else {
+            self.read_from_buffer_into(buffer)
+        }
+    }
+
     pub fn header<T: NetworkHeader>(&self) -> Option<&T> {
         self.headers
             .iter()
             .find_map(|h| (h.as_ref() as &dyn Any).downcast_ref::<T>())
+    }
+
+    pub fn header_mut<T: NetworkHeader>(&mut self) -> Option<&mut T> {
+        self.headers
+            .iter_mut()
+            .find_map(|h| (h.as_mut() as &mut dyn Any).downcast_mut::<T>())
     }
 
     pub fn headers<T: NetworkHeader>(&self) -> impl Iterator<Item = &T> {
@@ -99,136 +156,101 @@ impl NetworkPacket {
     pub fn all_headers(&self) -> &[Box<dyn NetworkHeader>] {
         &self.headers
     }
+
+    pub fn clear(&mut self) {
+        self.headers.clear();
+        self.payload.clear();
+    }
 }
 
-#[repr(u16)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum EtherType {
-    #[default]
-    Unknown = 0x0000,
-    Ipv4 = 0x0800,
-    Arp = 0x0806,
-    WakeOnLan = 0x0842,
-    Srp = 0x22EA,
-    Avtp = 0x22F0,
-    IetfThrill = 0x22F3,
-    Rarp = 0x8035,
-    VlanFrame = 0x8100,
-    Slpp = 0x8102,
-    Vlacp = 0x8103,
-    Ipx = 0x8137,
-    QnxQnet = 0x8204,
-    Ipv6 = 0x86DD,
-    EthernetFlowControl = 0x8808,
-    PPPoEDiscovery = 0x8863,
-    PPPoESession = 0x8864,
-    AtaOverEthernet = 0x88A2,
-    Lldp = 0x88CC,
-    Mrp = 0x88E3,
-    Ptp = 0x88F7,
-    Prp = 0x88FB,
-}
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub struct MacAddress(pub [u8; 6]);
 
-impl EtherType {
-    pub fn to_be_bytes(self) -> [u8; 2] {
-        (self as u16).to_be_bytes()
+#[allow(dead_code)]
+impl MacAddress {
+    pub const BROADCAST: MacAddress = MacAddress([0xFF; 6]);
+
+    fn bytes(&self) -> &[u8] {
+        &self.0
     }
 
-    fn from_be_bytes(num: [u8; 2]) -> Result<Self, NetworkError> {
-        match u16::from_be_bytes(num) {
-            0x0800 => Ok(EtherType::Ipv4),
-            0x0806 => Ok(EtherType::Arp),
-            0x0842 => Ok(EtherType::WakeOnLan),
-            0x22EA => Ok(EtherType::Srp),
-            0x22F0 => Ok(EtherType::Avtp),
-            0x22F3 => Ok(EtherType::IetfThrill),
-            0x8035 => Ok(EtherType::Rarp),
-            0x8100 => Ok(EtherType::VlanFrame),
-            0x8102 => Ok(EtherType::Slpp),
-            0x8103 => Ok(EtherType::Vlacp),
-            0x8137 => Ok(EtherType::Ipx),
-            0x8204 => Ok(EtherType::QnxQnet),
-            0x86DD => Ok(EtherType::Ipv6),
-            0x8808 => Ok(EtherType::EthernetFlowControl),
-            0x8863 => Ok(EtherType::PPPoEDiscovery),
-            0x8864 => Ok(EtherType::PPPoESession),
-            0x88A2 => Ok(EtherType::AtaOverEthernet),
-            0x88CC => Ok(EtherType::Lldp),
-            0x88E3 => Ok(EtherType::Mrp),
-            0x88F7 => Ok(EtherType::Ptp),
-            0x88FB => Ok(EtherType::Prp),
-            num => Err(NetworkError::UnsupporedEtherType(num)),
+    pub fn parse(s: &str) -> Option<Self> {
+        let mut bytes = [0; 6];
+        let mut iter = s.split(':');
+        for b in &mut bytes {
+            *b = u8::from_str_radix(iter.next()?, 16).ok()?;
         }
+        Some(MacAddress(bytes))
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct EthernetHeader {
-    pub dest: MacAddress,
-    pub src: MacAddress,
-    pub ty: EtherType,
+impl fmt::Debug for MacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
+        )
+    }
 }
 
-impl NetworkHeader for EthernetHeader {
-    fn write_into_buffer(&self, buffer: &mut [u8]) -> Result<(), NetworkError> {
-        buffer[0..6].copy_from_slice(self.dest.bytes());
-        buffer[6..12].copy_from_slice(self.src.bytes());
-        buffer[12..14].copy_from_slice(&self.ty.to_be_bytes());
-        Ok(())
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub struct Ipv4Address(pub [u8; 4]);
+
+#[allow(dead_code)]
+impl Ipv4Address {
+    pub fn bytes(&self) -> &[u8; 4] {
+        &self.0
     }
 
-    fn size(&self) -> usize {
-        14
-    }
-
-    fn read_from_buffer(&mut self, buffer: &[u8]) -> Result<usize, NetworkError> {
-        if buffer.len() < 14 {
-            return Err(NetworkError::ReachedEndOfStream);
+    pub fn parse(s: &str) -> Option<Self> {
+        let mut bytes = [0; 4];
+        let mut iter = s.split('.');
+        for b in &mut bytes {
+            *b = str::parse(iter.next()?).ok()?;
         }
+        Some(Ipv4Address(bytes))
+    }
+}
 
-        self.dest = MacAddress::new(buffer[0..6].try_into().unwrap());
-        self.src = MacAddress::new(buffer[6..12].try_into().unwrap());
-        self.ty = EtherType::from_be_bytes(buffer[12..14].try_into().unwrap())?;
+impl fmt::Debug for Ipv4Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}.{}", self.0[0], self.0[1], self.0[2], self.0[3],)
+    }
+}
 
-        Ok(14)
+impl ArpProtocol for Ipv4Address {
+    const PROTOCOL: EtherType = EtherType::Ipv4;
+    const LENGTH: u8 = 4;
+
+    fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn new(bytes: &[u8]) -> Option<Self> {
+        Some(Ipv4Address(bytes.try_into().ok()?))
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum NetworkError {
     ReachedEndOfStream,
     NotEnoughSpace,
     UnsupporedEtherType(u16),
     PacketTooLarge(usize),
-}
-
-#[macro_rules_attribute::apply(testing::test)]
-fn test_parse_ethernet_header() {
-    let mut header = EthernetHeader::default();
-    let buffer = [
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, // dest
-        0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, // src
-        0x08, 0x00, // type
-    ];
-
-    assert_eq!(header.read_from_buffer(&buffer), Ok(14));
-    assert_eq!(
-        header.dest,
-        MacAddress::new([0x00, 0x01, 0x02, 0x03, 0x04, 0x05])
-    );
-    assert_eq!(
-        header.src,
-        MacAddress::new([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B])
-    );
-    assert_eq!(header.ty, EtherType::Ipv4);
+    InvalidHeader,
+    InvalidChecksum,
+    UnsupporedIpProtocol(u8),
+    UnsupporedArpOperation(u16),
 }
 
 #[macro_rules_attribute::apply(testing::test)]
 fn test_parse_packet() {
     let mut packet = NetworkPacket::default();
     packet.push(EthernetHeader {
-        dest: MacAddress::new([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]),
-        src: MacAddress::new([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]),
+        dest: MacAddress([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]),
+        src: MacAddress([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]),
         ty: EtherType::Ipv4,
     });
 
@@ -247,11 +269,8 @@ fn test_parse_packet() {
     assert_eq!(header, packet.header::<EthernetHeader>().unwrap());
     assert_eq!(
         header.dest,
-        MacAddress::new([0x00, 0x01, 0x02, 0x03, 0x04, 0x05])
+        MacAddress([0x00, 0x01, 0x02, 0x03, 0x04, 0x05])
     );
-    assert_eq!(
-        header.src,
-        MacAddress::new([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B])
-    );
+    assert_eq!(header.src, MacAddress([0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]));
     assert_eq!(header.ty, EtherType::Ipv4);
 }

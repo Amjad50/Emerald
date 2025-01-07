@@ -7,6 +7,7 @@ use desc::{Descriptor, DmaRing, ReceiveDescriptor, TransmitDescriptor};
 use tracing::{info, trace, warn};
 
 use crate::{
+    cmdline,
     cpu::{
         self,
         idt::{BasicInterruptHandler, InterruptStackFrame64},
@@ -14,7 +15,7 @@ use crate::{
     },
     devices::pci::PciDeviceConfig,
     memory_management::virtual_space::VirtualSpace,
-    net::{NetworkError, NetworkPacket},
+    net::{MacAddress, NetworkError, NetworkPacket},
     sync::{once::OnceLock, spin::mutex::Mutex},
     utils::{
         vcell::{RO, RW, WO},
@@ -22,7 +23,7 @@ use crate::{
     },
 };
 
-use super::{MacAddress, NetworkDevice};
+use super::NetworkDevice;
 
 static E1000: OnceLock<Arc<Mutex<E1000>>> = OnceLock::new();
 
@@ -47,6 +48,11 @@ pub mod flags {
     pub const CTRL_SPEED_100MB: u32 = 1 << 8;
     pub const CTRL_SPEED_1000MB: u32 = 2 << 8;
     pub const CRTL_FORCE_DPLX: u32 = 1 << 12;
+
+    // Receive Address
+    pub const RECV_ADDR_SELECT_DEST: u32 = 0 << 16;
+    pub const RECV_ADDR_SELECT_SRC: u32 = 1 << 16;
+    pub const RECV_ADDR_VALID: u32 = 1 << 31;
 
     // Receive Control
     pub const RCTL_EN: u32 = 1 << 1;
@@ -188,6 +194,8 @@ struct E1000 {
     recv_ring: DmaRing<ReceiveDescriptor, 128>,
     transmit_ring: DmaRing<TransmitDescriptor, 128>,
 
+    current_mac: MacAddress,
+
     received_queue: VecDeque<Vec<u8>>,
     in_middle_of_packet: bool,
 }
@@ -201,14 +209,18 @@ impl E1000 {
         let mut recv_ring = DmaRing::new();
         recv_ring.allocate_all_for_hw();
 
-        Self {
+        let mut s = Self {
             mmio,
             eeprom_size,
             recv_ring,
+            current_mac: MacAddress([0; 6]),
             transmit_ring: DmaRing::new(),
             received_queue: VecDeque::new(),
             in_middle_of_packet: false,
-        }
+        };
+
+        s.current_mac = s.read_eeprom_mac();
+        s
     }
 
     pub fn read_eeprom(&self, offset: u16) -> u16 {
@@ -225,7 +237,7 @@ impl E1000 {
         (self.mmio.eerd.read() >> flags::EERD_DATA_SHIFT) as u16
     }
 
-    pub fn read_mac_address(&self) -> MacAddress {
+    pub fn read_eeprom_mac(&self) -> MacAddress {
         let low = self.read_eeprom(0);
         let mid = self.read_eeprom(1);
         let high = self.read_eeprom(2);
@@ -238,6 +250,21 @@ impl E1000 {
             (high & 0xFF) as u8,
             (high >> 8) as u8,
         ])
+    }
+
+    /// change the MAC address filter to a different one from the EEPROM
+    pub fn set_mac_address(&mut self, mac: MacAddress) {
+        let lower_32 = u32::from_le_bytes(mac.0[0..4].try_into().unwrap());
+        let upper_16 = u16::from_le_bytes(mac.0[4..6].try_into().unwrap()) as u32;
+
+        unsafe {
+            self.mmio.receive_addresses[0].0.write(lower_32);
+            self.mmio.receive_addresses[0]
+                .1
+                .write(upper_16 | flags::RECV_ADDR_VALID | flags::RECV_ADDR_SELECT_DEST);
+        };
+        info!("Set MAC address to {:?}", mac);
+        self.current_mac = mac;
     }
 
     pub fn init_recv(&self) {
@@ -430,7 +457,7 @@ impl E1000 {
 
 impl NetworkDevice for Arc<Mutex<E1000>> {
     fn mac_address(&self) -> MacAddress {
-        self.lock().read_mac_address()
+        self.lock().current_mac
     }
 
     fn send(&self, data: &NetworkPacket) -> Result<(), NetworkError> {
@@ -495,10 +522,13 @@ pub fn try_register(pci_device: &PciDeviceConfig) -> bool {
         cpu::cpu(),
     );
 
-    let e1000 = E1000.get().lock();
+    let mut e1000 = E1000.get().lock();
 
-    info!("MAC address: {:?}", e1000.read_mac_address());
+    info!("MAC address: {:?}", e1000.read_eeprom_mac());
 
+    if let Some(mac_addr) = cmdline::cmdline().mac_address {
+        e1000.set_mac_address(mac_addr);
+    }
     e1000.enable_interrupts();
     e1000.init_recv();
     e1000.init_transmit();

@@ -2,7 +2,7 @@ use parser::{CmdlineParse, ParseError, ParseErrorKind, Result};
 use tokenizer::Tokenizer;
 use tracing::{error, info};
 
-use crate::{multiboot2::MultiBoot2Info, sync::once::OnceLock};
+use crate::{multiboot2::MultiBoot2Info, net::MacAddress, sync::once::OnceLock};
 
 mod macros;
 mod parser;
@@ -23,6 +23,7 @@ const fn default_cmdline() -> Cmd<'static> {
         log_file: "/kernel.log",
         allow_hpet: true,
         log_aml: LogAml::Off,
+        mac_address: None,
     }
 }
 
@@ -76,6 +77,8 @@ pub struct Cmd<'a> {
     /// Log the AML content as ASL code on boot from ACPI tables
     #[default = LogAml::Off]
     pub log_aml: LogAml,
+    #[default = None]
+    pub mac_address: Option<MacAddress>,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -165,5 +168,36 @@ impl<'a> CmdlineParse<'a> for LogAml {
                 loc,
             )),
         }
+    }
+}
+
+impl<'a, T> CmdlineParse<'a> for Option<T>
+where
+    T: CmdlineParse<'a>,
+{
+    fn parse_cmdline(tokenizer: &mut Tokenizer<'a>) -> Result<'a, Self> {
+        T::parse_cmdline(tokenizer).map(Some)
+    }
+}
+
+impl<'a> CmdlineParse<'a> for MacAddress {
+    fn parse_cmdline(tokenizer: &mut Tokenizer<'a>) -> Result<'a, Self> {
+        let (loc, value) = tokenizer.next_value().ok_or_else(|| {
+            ParseError::new(
+                ParseErrorKind::Unexpected {
+                    need: "xx:xx:xx:xx:xx:xx",
+                    got: None,
+                },
+                tokenizer.current_index(),
+            )
+        })?;
+
+        let mut bytes = [0; 6];
+        for (i, byte) in value.split(':').enumerate() {
+            bytes[i] = u8::from_str_radix(byte, 16)
+                .map_err(|e| ParseError::new(ParseErrorKind::ParseIntError(e), loc))?;
+        }
+
+        Ok(Self(bytes))
     }
 }

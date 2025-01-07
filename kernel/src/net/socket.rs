@@ -1,4 +1,6 @@
-use super::{NetworkError, NetworkPacket};
+use crate::cpu;
+
+use super::{MacAddress, NetworkError, NetworkPacket};
 
 pub struct EthernetSocket {
     _private: (),
@@ -18,5 +20,16 @@ impl EthernetSocket {
         crate::devices::net::get_device()
             .unwrap()
             .receive_into(packet)
+    }
+
+    pub fn wait_and_receive(&self, packet: &mut NetworkPacket) -> Result<(), NetworkError> {
+        while !self.receive(packet)? {
+            unsafe { cpu::halt() };
+        }
+        Ok(())
+    }
+
+    pub fn mac_address(&self) -> MacAddress {
+        crate::devices::net::get_device().unwrap().mac_address()
     }
 }
