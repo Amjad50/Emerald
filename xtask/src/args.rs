@@ -37,6 +37,10 @@ pub struct RunKernel {
     #[argh(description = "disable graphics")]
     pub no_graphics: bool,
 
+    #[argh(switch, long = "no-disk")]
+    #[argh(description = "disable filesystem disk")]
+    pub no_disk: bool,
+
     #[argh(positional)]
     pub extra: Vec<String>,
 }

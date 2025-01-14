@@ -5,6 +5,7 @@ pub struct RunConfig {
     pub enable_debug_port: bool,
     pub enable_gdb: bool,
     pub enable_serial: bool,
+    pub enable_disk: bool,
     pub enable_graphics: bool,
 }
 
@@ -17,6 +18,7 @@ impl RunConfig {
             enable_gdb: false,
             enable_serial: false,
             enable_graphics: true,
+            enable_disk: true,
         }
     }
 
@@ -40,6 +42,11 @@ impl RunConfig {
         self
     }
 
+    pub fn with_disk(mut self, enable_disk: bool) -> Self {
+        self.enable_disk = enable_disk;
+        self
+    }
+
     pub fn run(self, extra_args: &[String]) -> anyhow::Result<i32> {
         let mut cmd = Command::new("qemu-system-x86_64");
 
@@ -48,9 +55,11 @@ impl RunConfig {
             .arg("-m")
             .arg("512")
             .arg("-boot")
-            .arg("d")
-            .arg("-drive")
-            .arg("format=raw,file=fat:rw:filesystem");
+            .arg("d");
+
+        if self.enable_disk {
+            cmd.arg("-drive").arg("format=raw,file=fat:rw:filesystem");
+        }
 
         if self.enable_serial {
             cmd.arg("-serial").arg("mon:stdio");
