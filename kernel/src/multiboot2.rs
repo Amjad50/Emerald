@@ -2,8 +2,8 @@ use core::{ffi, fmt, mem};
 
 use crate::{
     acpi::tables::{Rsdp, RsdpV1, RsdpV2},
-    io::NoDebug,
-    memory_management::memory_layout::{align_up, MemSize, PAGE_4K},
+    io::{HexArray, NoDebug},
+    memory_management::memory_layout::{align_up, physical2virtual, MemSize, PAGE_4K},
 };
 
 #[repr(u32)]
@@ -352,6 +352,10 @@ pub enum MultiBootTag<'a> {
     BootLoaderName {
         name: &'a str,
     },
+    BootModule {
+        string: &'a str,
+        data: HexArray<&'a [u8]>,
+    },
     BasicMemoryInfo(&'a BasicMemoryInfo),
     AdvancedPowerManagementTable(&'a AdvancedPowerManagementTable),
     ImageLoadBasePhysical {
@@ -366,12 +370,24 @@ pub enum MultiBootTag<'a> {
         sub_partition: u32,
     },
     FrameBufferInfo(Framebuffer),
+    SMBiosTables {
+        major: u8,
+        minor: u8,
+        tables: HexArray<&'a [u8]>,
+    },
     OldRsdp(Rsdp),
     NewRsdp(Rsdp),
+    DhcpAck(HexArray<&'a [u8]>),
+    Efi32SystemTablePtr {
+        ptr: u32,
+    },
     Efi64SystemTablePtr {
         ptr: u64,
     },
     EfiBootServicesNotTerminated,
+    Efi32ImageHandle {
+        ptr: u32,
+    },
     Efi64ImageHandle {
         ptr: u64,
     },
@@ -414,6 +430,32 @@ impl<'a> Iterator for MultiBootTagIter<'a> {
                 let str_ptr = unsafe { ptr.add(1) as *const i8 };
                 let name = unsafe { ffi::CStr::from_ptr(str_ptr).to_str().expect("invalid utf8") };
                 MultiBootTag::BootLoaderName { name }
+            }
+            3 => {
+                let after_header = unsafe { ptr.add(1) as *const u32 };
+                let mod_start_phy = unsafe { *after_header };
+                let mod_end_phy = unsafe { *after_header.add(1) };
+                let str_ptr = unsafe { after_header.add(2) as *const i8 };
+                let string =
+                    unsafe { ffi::CStr::from_ptr(str_ptr).to_str().expect("invalid utf8") };
+
+                let len = if mod_end_phy > mod_start_phy {
+                    (mod_end_phy - mod_start_phy) as usize
+                } else {
+                    0
+                };
+
+                let data = unsafe {
+                    core::slice::from_raw_parts(
+                        physical2virtual(mod_start_phy as u64) as *const u8,
+                        len,
+                    )
+                };
+
+                MultiBootTag::BootModule {
+                    string,
+                    data: HexArray(data),
+                }
             }
             4 => {
                 let tag = unsafe { &*(ptr.add(1) as *const BasicMemoryInfo) };
@@ -471,9 +513,31 @@ impl<'a> Iterator for MultiBootTagIter<'a> {
                 let tag = unsafe { &*(ptr.add(1) as *const AdvancedPowerManagementTable) };
                 MultiBootTag::AdvancedPowerManagementTable(tag)
             }
+            11 => {
+                let efi32_ptr = unsafe { &*(ptr.add(1) as *const u32) };
+                MultiBootTag::Efi32SystemTablePtr { ptr: *efi32_ptr }
+            }
             12 => {
                 let efi64_ptr = unsafe { &*(ptr.add(1) as *const u64) };
                 MultiBootTag::Efi64SystemTablePtr { ptr: *efi64_ptr }
+            }
+            13 => {
+                let after_header = unsafe { ptr.add(1) as *const u8 };
+                let major = unsafe { *after_header };
+                let minor = unsafe { *after_header.add(1) };
+                let tables = unsafe {
+                    core::slice::from_raw_parts(
+                        // `6` reserved bytes
+                        after_header.add(2 + 6),
+                        tag.size as usize - mem::size_of::<MultiBootTagRaw>() - 2 - 6,
+                    )
+                };
+
+                MultiBootTag::SMBiosTables {
+                    major,
+                    minor,
+                    tables: HexArray(tables),
+                }
             }
             14 => {
                 let old_rsdp = unsafe { &*(ptr.add(1) as *const RsdpV1) };
@@ -493,6 +557,13 @@ impl<'a> Iterator for MultiBootTagIter<'a> {
 
                 MultiBootTag::NewRsdp(Rsdp::from_v2(new_rsdp))
             }
+            16 => {
+                let size = tag.size as usize - mem::size_of::<MultiBootTagRaw>();
+                let data = unsafe { core::slice::from_raw_parts(ptr.add(1) as *const u8, size) };
+
+                // TODO: parse dhcp ack
+                MultiBootTag::DhcpAck(HexArray(data))
+            }
             17 => {
                 let efi_mmap = unsafe { &*(ptr.add(1) as *const MemoryMapTagRaw) };
 
@@ -505,6 +576,12 @@ impl<'a> Iterator for MultiBootTagIter<'a> {
                 })
             }
             18 => MultiBootTag::EfiBootServicesNotTerminated,
+            19 => {
+                let efi32_image_handle = unsafe { &*(ptr.add(1) as *const u32) };
+                MultiBootTag::Efi32ImageHandle {
+                    ptr: *efi32_image_handle,
+                }
+            }
             20 => {
                 let efi64_image_handle = unsafe { &*(ptr.add(1) as *const u64) };
                 MultiBootTag::Efi64ImageHandle {
