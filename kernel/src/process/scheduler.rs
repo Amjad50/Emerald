@@ -284,9 +284,9 @@ pub fn schedule() {
                 }
                 scheduler.running_waiting_procs.insert(pid, top);
             }
-
-            current_cpu.pop_cli();
         }
+
+        current_cpu.pop_cli();
 
         if shutdown
             && scheduler.scheduled_processes.is_empty()
