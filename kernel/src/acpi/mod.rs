@@ -114,12 +114,8 @@ impl Acpi {
             .get_table::<tables::Facp>()
             .expect("No Facp");
 
-        if facp.is_acpi_enabled() {
-            warn!("ACPI already enabled");
-            assert!(apic::is_irq_assigned(facp.sci_interrupt()));
-
-            return;
-        }
+        // make sure we haven't already enabled ACPI
+        assert!(!apic::is_irq_assigned(facp.sci_interrupt()));
 
         // disable the events first
         facp.write_pm1_enable(0);
@@ -130,7 +126,11 @@ impl Acpi {
             cpu::cpu(),
         );
 
-        facp.enable_acpi();
+        if !facp.is_acpi_enabled() {
+            facp.enable_acpi();
+        } else {
+            warn!("ACPI already enabled");
+        }
 
         let mut i = 0;
         while !facp.is_acpi_enabled() && i < 10000 {
