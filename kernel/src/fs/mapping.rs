@@ -130,7 +130,7 @@ pub struct MappingNode {
 }
 
 impl MappingNode {
-    fn check_and_treverse(
+    fn check_and_traverse(
         &self,
         target: &Path,
         this_component: Component<'_>,
@@ -145,11 +145,11 @@ impl MappingNode {
 
         if components.peek().is_none() {
             for (name, node) in self.children.read().iter() {
-                node.treverse(name.into(), handler);
+                node.traverse(name.into(), handler);
             }
         } else {
             for (name, node) in self.children.read().iter() {
-                node.check_and_treverse(
+                node.check_and_traverse(
                     components.as_path(),
                     Component::Normal(name.as_ref()),
                     handler,
@@ -160,11 +160,11 @@ impl MappingNode {
         Ok(())
     }
 
-    fn treverse(&self, current_path: PathBuf, handler: &mut dyn FnMut(&Path, Arc<dyn FileSystem>)) {
+    fn traverse(&self, current_path: PathBuf, handler: &mut dyn FnMut(&Path, Arc<dyn FileSystem>)) {
         handler(&current_path, self.filesystem());
 
         for (name, node) in self.children.read().iter() {
-            node.treverse(current_path.join(name.as_ref()), handler);
+            node.traverse(current_path.join(name.as_ref()), handler);
         }
     }
 
@@ -267,7 +267,7 @@ impl FileSystemMapping {
         mut handler: impl FnMut(&Path, Arc<dyn FileSystem>),
     ) -> Result<(), FileSystemError> {
         self.root
-            .check_and_treverse(path, Component::RootDir, &mut handler)
+            .check_and_traverse(path, Component::RootDir, &mut handler)
     }
 
     fn mount<P: AsRef<Path>>(
@@ -297,7 +297,7 @@ impl FileSystemMapping {
 
         for (i, component) in components.enumerate() {
             let Component::Normal(component_path) = component else {
-                unreachable!("Already chacked all the components")
+                unreachable!("Already checked all the components")
             };
             let is_last = i == size - 1;
 

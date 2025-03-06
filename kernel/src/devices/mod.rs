@@ -5,7 +5,7 @@ use tracing::info;
 
 use crate::{
     fs::{
-        self, DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem, FileSystemError,
+        self, DirTraverse, DirectoryNode, FileAttributes, FileNode, FileSystem, FileSystemError,
         Node,
     },
     power,
@@ -100,7 +100,7 @@ impl FileSystem for DevicesFilesystem {
     fn read_dir(
         &self,
         inode: &DirectoryNode,
-        handler: &mut dyn FnMut(Node) -> DirTreverse,
+        handler: &mut dyn FnMut(Node) -> DirTraverse,
     ) -> Result<(), FileSystemError> {
         assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_ROOT_INODE_MAGIC);
 
@@ -108,7 +108,7 @@ impl FileSystem for DevicesFilesystem {
             for node in DEVICES.get().devices.read().iter().map(|(name, device)| {
                 FileNode::new_device(name.clone(), FileAttributes::EMPTY, device.clone()).into()
             }) {
-                if let DirTreverse::Stop = handler(node) {
+                if let DirTraverse::Stop = handler(node) {
                     break;
                 }
             }

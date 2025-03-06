@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::{
-    AccessHelper, BaseNode, DirTreverse, DirectoryNode, FileAttributes, FileNode, FileSystem,
+    AccessHelper, BaseNode, DirTraverse, DirectoryNode, FileAttributes, FileNode, FileSystem,
     FileSystemError, Node,
 };
 
@@ -2006,10 +2006,10 @@ impl FileSystem for Mutex<FatFilesystem> {
     fn read_dir(
         &self,
         inode: &DirectoryNode,
-        handler: &mut dyn FnMut(Node) -> DirTreverse,
+        handler: &mut dyn FnMut(Node) -> DirTraverse,
     ) -> Result<(), FileSystemError> {
         for node in self.lock().open_dir_inode(inode)? {
-            if let DirTreverse::Stop = handler(node.into()) {
+            if let DirTraverse::Stop = handler(node.into()) {
                 break;
             }
         }
@@ -2017,7 +2017,7 @@ impl FileSystem for Mutex<FatFilesystem> {
         Ok(())
     }
 
-    fn treverse_dir(&self, inode: &DirectoryNode, matcher: &str) -> Result<Node, FileSystemError> {
+    fn traverse_dir(&self, inode: &DirectoryNode, matcher: &str) -> Result<Node, FileSystemError> {
         for node in self.lock().open_dir_inode(inode)? {
             if node.matches(matcher) {
                 return Ok(node.into());
