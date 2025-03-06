@@ -190,7 +190,7 @@ impl MappingNode {
         let fs = core::mem::replace(&mut *self.filesystem.0.write(), Arc::new(EmptyFileSystem));
         assert_eq!(
             Arc::strong_count(&fs),
-            fs.number_global_refs() + 1, // number of global refs + this one
+            1, // this one
             "Filesystem still in use"
         );
         fs.unmount();

@@ -24,14 +24,38 @@ pub mod net;
 pub mod pci;
 pub mod pipe;
 
-static DEVICES: OnceLock<Arc<RwLock<Devices>>> = OnceLock::new();
+static DEVICES: OnceLock<Devices> = OnceLock::new();
 
 pub(crate) const DEVICES_FILESYSTEM_CLUSTER_MAGIC: u64 = 0xdef1ce5;
 pub(crate) const DEVICES_FILESYSTEM_ROOT_INODE_MAGIC: u64 = 0xdef1ce55007;
 
 #[derive(Debug)]
 struct Devices {
-    devices: BTreeMap<String, Arc<dyn Device>>,
+    devices: RwLock<BTreeMap<String, Arc<dyn Device>>>,
+}
+
+impl Devices {
+    fn register_device(&self, device: Arc<dyn Device>) {
+        let mut devices = self.devices.write();
+        assert!(
+            !devices.contains_key(device.name()),
+            "Device {} already registered",
+            device.name()
+        );
+        info!("Registered {} device", device.name());
+        devices.insert(String::from(device.name()), device);
+    }
+
+    fn unregister_all_devices(&self) {
+        let mut devices = self.devices.write();
+
+        devices.iter_mut().for_each(|(name, device)| {
+            let _ = device.close();
+            info!("Unregistering {} device", name);
+        });
+
+        devices.clear();
+    }
 }
 
 pub trait Device: Sync + Send + fmt::Debug {
@@ -62,7 +86,9 @@ pub trait Device: Sync + Send + fmt::Debug {
     }
 }
 
-impl FileSystem for RwLock<Devices> {
+struct DevicesFilesystem;
+
+impl FileSystem for DevicesFilesystem {
     fn open_root(&self) -> Result<DirectoryNode, FileSystemError> {
         Ok(DirectoryNode::without_parent(
             String::from("/"),
@@ -79,7 +105,7 @@ impl FileSystem for RwLock<Devices> {
         assert_eq!(inode.start_cluster(), DEVICES_FILESYSTEM_ROOT_INODE_MAGIC);
 
         if inode.name().is_empty() || inode.name() == "/" {
-            for node in self.read().devices.iter().map(|(name, device)| {
+            for node in DEVICES.get().devices.read().iter().map(|(name, device)| {
                 FileNode::new_device(name.clone(), FileAttributes::EMPTY, device.clone()).into()
             }) {
                 if let DirTreverse::Stop = handler(node) {
@@ -92,39 +118,27 @@ impl FileSystem for RwLock<Devices> {
         }
     }
 
-    fn number_global_refs(&self) -> usize {
-        // we have `DEVICES` mutex globally stored
-        1
-    }
-
     fn unmount(self: Arc<Self>) {
         // clean the devices
-        self.write().devices.clear();
+        DEVICES.get().unregister_all_devices();
     }
 }
 
 pub fn init_devices_mapping() {
     DEVICES
-        .set(Arc::new(RwLock::new(Devices {
-            devices: BTreeMap::new(),
-        })))
+        .set(Devices {
+            devices: RwLock::new(BTreeMap::new()),
+        })
         .expect("Devices already initialized");
 
     // initialize builtin devices
     register_device(Arc::new(power::PowerDevice));
 
-    fs::mapping::mount("/devices", DEVICES.get().clone()).expect("Mapping failed");
+    fs::mapping::mount("/devices", Arc::new(DevicesFilesystem)).expect("Mapping failed");
 }
 
 pub fn register_device(device: Arc<dyn Device>) {
-    let mut devices = DEVICES.get().write();
-    assert!(
-        !devices.devices.contains_key(device.name()),
-        "Device {} already registered",
-        device.name()
-    );
-    info!("Registered {} device", device.name());
-    devices.devices.insert(String::from(device.name()), device);
+    DEVICES.get().register_device(device);
 }
 
 pub fn probe_pci_devices() {

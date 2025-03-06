@@ -514,15 +514,6 @@ pub trait FileSystem: Send + Sync {
         }
     }
 
-    /// The expected number of strong refs in `Arc` by default
-    /// This is used to check if the filesystem is still in use before unmounting
-    /// This is here because for some filesystems, it could be stored globally in some `Mutex`
-    /// like `/devices` this reference should not be counted to know if its still in use
-    fn number_global_refs(&self) -> usize {
-        // no global refs by default
-        0
-    }
-
     /// Unmount the filesystem, this is called before the filesystem is dropped
     /// The reason we use this is that we can't force `Drop` to be implemented
     /// for `Arc<dyn FileSystem>`, so we have this instead
