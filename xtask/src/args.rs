@@ -120,26 +120,6 @@ pub struct Fmt {
 }
 
 #[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "userspace")]
-#[argh(description = "Build userspace programs into `./filesystem`")]
-pub struct BuildUserspace {}
-
-#[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "user-check")]
-#[argh(description = "Check the userspace")]
-pub struct UserCheck {}
-
-#[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "user-clippy")]
-#[argh(description = "Run clippy on the userspace")]
-pub struct UserClippy {}
-
-#[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "user-fmt-check")]
-#[argh(description = "Run fmt check on the userspace")]
-pub struct UserFmtCheck {}
-
-#[derive(FromArgs, Debug)]
 #[argh(subcommand, name = "toolchain")]
 #[argh(description = "Build the toolchain distribution")]
 pub struct Toolchain {
