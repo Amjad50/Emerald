@@ -60,7 +60,7 @@ impl VgaDisplayController {
         }
     }
 
-    pub fn lock_process(&self, pid: u64) -> Option<MutexGuard<VgaDisplay>> {
+    pub fn lock_process(&self, pid: u64) -> Option<MutexGuard<'_, VgaDisplay>> {
         if self.owner_process.load(Ordering::Relaxed) == pid as i64 {
             Some(self.display.lock())
         } else {
@@ -68,7 +68,7 @@ impl VgaDisplayController {
         }
     }
 
-    pub fn lock_kernel(&self) -> Option<MutexGuard<VgaDisplay>> {
+    pub fn lock_kernel(&self) -> Option<MutexGuard<'_, VgaDisplay>> {
         if self.owner_process.load(Ordering::Relaxed) == -1 {
             Some(self.display.lock())
         } else {
@@ -155,9 +155,9 @@ impl VgaDisplay {
         };
         assert_eq!(framebuffer.bpp % 8, 0, "Only byte aligned bpp is supported");
         assert!(
-            red_field_position % 8 == 0
-                && green_field_position % 8 == 0
-                && blue_field_position % 8 == 0,
+            red_field_position.is_multiple_of(8)
+                && green_field_position.is_multiple_of(8)
+                && blue_field_position.is_multiple_of(8),
             "Only byte aligned field position is supported"
         );
 
@@ -180,7 +180,7 @@ impl VgaDisplay {
                     blue_field_position / 8,
                 ),
                 mask: (red_mask as u8, green_mask as u8, blue_mask as u8),
-                byte_per_pixel: (framebuffer.bpp + 7) / 8,
+                byte_per_pixel: framebuffer.bpp.div_ceil(8),
             },
             memory,
         }

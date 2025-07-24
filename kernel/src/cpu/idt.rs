@@ -15,7 +15,7 @@ static mut REDIRECTED_INTERRUPTS: [Option<*const u8>; 256] = [None; 256];
 pub type BasicInterruptHandler = extern "x86-interrupt" fn(frame: InterruptStackFrame64);
 pub type InterruptHandlerWithError =
     extern "x86-interrupt" fn(frame: InterruptStackFrame64, error_code: u64);
-pub type InterruptHandlerWithAllState = extern "cdecl" fn(state: &mut InterruptAllSavedState);
+pub type InterruptHandlerWithAllState = extern "C" fn(state: &mut InterruptAllSavedState);
 
 #[repr(C, align(8))]
 #[derive(Default, Clone, Copy, Debug)]
@@ -299,7 +299,7 @@ pub(super) struct InterruptDescriptorTablePointer {
 }
 
 #[no_mangle]
-pub extern "cdecl" fn rust_interrupt_handler_for_all_state(mut state: InterruptAllSavedState) {
+pub extern "C" fn rust_interrupt_handler_for_all_state(mut state: InterruptAllSavedState) {
     let handler = unsafe { REDIRECTED_INTERRUPTS[state.number as usize] };
     if let Some(handler) = handler {
         let handler: InterruptHandlerWithAllState = unsafe { mem::transmute(handler) };

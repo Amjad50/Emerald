@@ -28,8 +28,8 @@ where
 impl fmt::Display for RegionSpace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Other(x) => write!(f, "0x{:02X}", x),
-            _ => write!(f, "{:?}", self),
+            Self::Other(x) => write!(f, "0x{x:02X}"),
+            _ => write!(f, "{self:?}"),
         }
     }
 }
@@ -178,7 +178,7 @@ impl fmt::Display for Buffer {
             .set_list(true);
 
         for element in self.data.iter() {
-            d.body_field(|f| write!(f, "0x{:02X}", element));
+            d.body_field(|f| write!(f, "0x{element:02X}"));
         }
 
         d.at_least_empty_body().finish()
@@ -187,7 +187,7 @@ impl fmt::Display for Buffer {
 
 impl fmt::Display for AccessType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)?;
+        write!(f, "{self:?}")?;
         f.write_str("Acc")
     }
 }
@@ -195,10 +195,10 @@ impl fmt::Display for AccessType {
 impl fmt::Display for AccessAttrib {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AccessAttrib::ByteValue(v) => write!(f, "0x{:02X}", v),
-            AccessAttrib::Bytes(v) => write!(f, "AttribBytes ({})", v),
-            AccessAttrib::RawBytes(v) => write!(f, "AttribRawBytes ({})", v),
-            AccessAttrib::RawProcessBytes(v) => write!(f, "AttribRawProcessBytes ({})", v),
+            AccessAttrib::ByteValue(v) => write!(f, "0x{v:02X}"),
+            AccessAttrib::Bytes(v) => write!(f, "AttribBytes ({v})"),
+            AccessAttrib::RawBytes(v) => write!(f, "AttribRawBytes ({v})"),
+            AccessAttrib::RawProcessBytes(v) => write!(f, "AttribRawProcessBytes ({v})"),
             AccessAttrib::Quick => f.write_str("AttribQuick"),
             AccessAttrib::SendRecv => f.write_str("AttribSendReceive"),
             AccessAttrib::Byte => f.write_str("AttribByte"),
@@ -212,7 +212,7 @@ impl fmt::Display for AccessAttrib {
 
 impl fmt::Display for FieldUpdateRule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -228,7 +228,7 @@ impl fmt::Display for FieldConnection {
 impl fmt::Display for FieldElement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FieldElement::Offset(offset) => write!(f, "Offset (0x{:02X})", offset),
+            FieldElement::Offset(offset) => write!(f, "Offset (0x{offset:02X})"),
             FieldElement::Named(name, len) => {
                 write!(
                     f,
@@ -253,8 +253,8 @@ impl fmt::Display for TermArg {
         match self {
             TermArg::Expression(term) => term.fmt(f),
             TermArg::DataObject(dataobj) => dataobj.fmt(f),
-            TermArg::Arg(arg) => write!(f, "Arg{:x}", arg),
-            TermArg::Local(local) => write!(f, "Local{:x}", local),
+            TermArg::Arg(arg) => write!(f, "Arg{arg:x}"),
+            TermArg::Local(local) => write!(f, "Local{local:x}"),
             TermArg::Name(name) => f.write_str(name),
         }
     }
@@ -264,8 +264,8 @@ impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Target::None => write!(f, "None"),
-            Target::Arg(arg) => write!(f, "Arg{:x}", arg),
-            Target::Local(local) => write!(f, "Local{:x}", local),
+            Target::Arg(arg) => write!(f, "Arg{arg:x}"),
+            Target::Local(local) => write!(f, "Local{local:x}"),
             Target::Name(name) => f.write_str(name),
             Target::Debug => f.write_str("Debug"),
             Target::DerefOf(term_arg) => AmlDisplayer::start(f, "DerefOf")
@@ -294,7 +294,7 @@ impl fmt::Display for UnresolvedDataObject {
             UnresolvedDataObject::ResourceTemplate(template) => template.fmt(f),
             UnresolvedDataObject::Package(size, elements) => {
                 let mut d = AmlDisplayer::start(f, "Package");
-                d.paren_arg(|f| write!(f, "0x{:02X}", size))
+                d.paren_arg(|f| write!(f, "0x{size:02X}"))
                     .finish_paren_arg()
                     .set_list(true);
 
@@ -319,7 +319,7 @@ impl fmt::Display for UnresolvedDataObject {
             UnresolvedDataObject::String(str) => {
                 write!(f, "\"{}\"", str.replace('\n', "\\n"))
             }
-            UnresolvedDataObject::EisaId(eisa_id) => write!(f, "EisaId ({:?})", eisa_id),
+            UnresolvedDataObject::EisaId(eisa_id) => write!(f, "EisaId ({eisa_id:?})"),
         }
     }
 }
@@ -330,10 +330,10 @@ impl fmt::Display for IntegerData {
             IntegerData::ConstZero => write!(f, "Zero"),
             IntegerData::ConstOne => write!(f, "One"),
             IntegerData::ConstOnes => write!(f, "0xFFFFFFFFFFFFFFFF"),
-            IntegerData::ByteConst(data) => write!(f, "0x{:02X}", data),
-            IntegerData::WordConst(data) => write!(f, "0x{:04X}", data),
-            IntegerData::DWordConst(data) => write!(f, "0x{:08X}", data),
-            IntegerData::QWordConst(data) => write!(f, "0x{:016X}", data),
+            IntegerData::ByteConst(data) => write!(f, "0x{data:02X}"),
+            IntegerData::WordConst(data) => write!(f, "0x{data:04X}"),
+            IntegerData::DWordConst(data) => write!(f, "0x{data:08X}"),
+            IntegerData::QWordConst(data) => write!(f, "0x{data:016X}"),
         }
     }
 }
@@ -388,7 +388,7 @@ impl fmt::Display for AmlTerm {
             AmlTerm::PowerResource(resource) => resource.fmt(f),
             AmlTerm::Method(method) => method.fmt(f),
             AmlTerm::NameObj(name, object) => AmlDisplayer::start(f, "Name")
-                .paren_arg(|f| write!(f, "{}", name))
+                .paren_arg(|f| write!(f, "{name}"))
                 .paren_arg(|f| object.fmt(f))
                 .finish(),
             AmlTerm::Alias(source, alias) => display_func_like(f, "Alias", &[source, alias]),
@@ -448,7 +448,7 @@ impl fmt::Display for AmlTerm {
                 display_target_assign(f, target, |f| display_binary_op(f, "^", term1, term2))
             }
             AmlTerm::Not(term, target) => {
-                display_target_assign(f, target, |f| write!(f, "~{}", term))
+                display_target_assign(f, target, |f| write!(f, "~{term}"))
             }
             AmlTerm::SizeOf(target) => display_func_like(f, "SizeOf", &[target]),
             AmlTerm::Store(term_arg, target) => {
@@ -492,7 +492,7 @@ impl fmt::Display for AmlTerm {
             AmlTerm::LAnd(term1, term2) => display_binary_op(f, "&&", term1, term2),
             AmlTerm::LOr(term1, term2) => display_binary_op(f, "||", term1, term2),
             AmlTerm::LNot(term) => {
-                write!(f, "!{}", term)
+                write!(f, "!{term}")
             }
             AmlTerm::LNotEqual(term1, term2) => display_binary_op(f, "!=", term1, term2),
             AmlTerm::LLessEqual(term1, term2) => display_binary_op(f, "<=", term1, term2),

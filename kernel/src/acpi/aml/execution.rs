@@ -37,6 +37,7 @@ impl Package {
 /// A version of [UnresolvedDataObject] that is after execution
 /// so it doesn't have dynamic contents, references, or expressions
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum DataObject {
     Integer(IntegerData),
     ResourceTemplate(ResourceTemplate),
@@ -64,6 +65,7 @@ impl DataObject {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum AmlExecutionError {
     LableNotFound(String),
     StructuredAmlError(StructuredAmlError),

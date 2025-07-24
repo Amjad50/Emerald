@@ -124,7 +124,7 @@ impl Tsc {
         assert!(granularity > 0);
 
         // at least 1ms (1000_000ns), and no more than 1s (1_000_000_000ns)
-        let sleep_time = (granularity * 1000).max(1_000_000).min(NANOS_PER_SEC);
+        let sleep_time = (granularity * 1000).clamp(1_000_000, NANOS_PER_SEC);
         info!("Calibrating TSC with sleep time: {}ns", sleep_time);
 
         let start_point = self.get_sync_time_point(base, device_latency);

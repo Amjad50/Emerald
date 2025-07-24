@@ -350,7 +350,7 @@ impl ResourceSource {
     fn display<'a, 'b, 'r>(&self, d: &'r mut AmlDisplayer<'a, 'b>) -> &'r mut AmlDisplayer<'a, 'b> {
         d.paren_arg(|f| {
             if let Some(index) = self.index {
-                write!(f, "{}", index)
+                write!(f, "{index}")
             } else {
                 Ok(())
             }
@@ -829,7 +829,7 @@ impl AddressWidth for u16 {
     }
 
     fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:04X}", self)
+        write!(f, "0x{self:04X}")
     }
 
     fn from_parser(parser: &mut Parser) -> Result<Self, AmlParseError> {
@@ -843,7 +843,7 @@ impl AddressWidth for u32 {
     }
 
     fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:08X}", self)
+        write!(f, "0x{self:08X}")
     }
 
     fn from_parser(parser: &mut Parser) -> Result<Self, AmlParseError> {
@@ -857,7 +857,7 @@ impl AddressWidth for u64 {
     }
 
     fn fmt_hex(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:016X}", self)
+        write!(f, "0x{self:016X}")
     }
 
     fn from_parser(parser: &mut Parser) -> Result<Self, AmlParseError> {
@@ -989,7 +989,7 @@ impl<W: AddressWidth> fmt::Display for AddressSpace<W> {
         let mut d = AmlDisplayer::start(f, "");
 
         if let AddressSpaceType::VendorDefined { value, .. } = self.ty {
-            d.paren_arg(|f| write!(f, "0x{:02X}", value));
+            d.paren_arg(|f| write!(f, "0x{value:02X}"));
         }
         d.paren_arg(|f| {
             f.write_str(if self.is_consumer {
@@ -1030,7 +1030,7 @@ impl<W: AddressWidth> fmt::Display for AddressSpace<W> {
                 d.paren_arg(write_decode);
                 d.paren_arg(write_min_fixed);
                 d.paren_arg(write_max_fixed);
-                d.paren_arg(|f| write!(f, "0x{:02X}", flags));
+                d.paren_arg(|f| write!(f, "0x{flags:02X}"));
             }
         }
 
@@ -1045,7 +1045,7 @@ impl<W: AddressWidth> fmt::Display for AddressSpace<W> {
                 resource_source.display(&mut d);
             }
             ResourceSourceOrTypeSpecificAttrs::TypeSpecificAttrs(type_attrs) => {
-                d.paren_arg(|f| write!(f, "0x{:8X}", type_attrs));
+                d.paren_arg(|f| write!(f, "0x{type_attrs:8X}"));
             }
         }
 
@@ -1134,7 +1134,7 @@ impl fmt::Display for ResourceMacro {
 
                 for i in 0..15 {
                     if irqs_mask & (1 << i) != 0 {
-                        d.body_field(|f| write!(f, "{}", i));
+                        d.body_field(|f| write!(f, "{i}"));
                     }
                 }
 
@@ -1161,7 +1161,7 @@ impl fmt::Display for ResourceMacro {
 
                 for i in 0..7 {
                     if channels_mask & (1 << i) != 0 {
-                        d.body_field(|f| write!(f, "{}", i));
+                        d.body_field(|f| write!(f, "{i}"));
                     }
                 }
 
@@ -1172,8 +1172,8 @@ impl fmt::Display for ResourceMacro {
                 compatibility_priority,
                 performance_priority,
             } => AmlDisplayer::start(f, "StartDependentFn")
-                .paren_arg(|f| write!(f, "{}", compatibility_priority))
-                .paren_arg(|f| write!(f, "{}", performance_priority))
+                .paren_arg(|f| write!(f, "{compatibility_priority}"))
+                .paren_arg(|f| write!(f, "{performance_priority}"))
                 .finish(),
             ResourceMacro::EndDependentFunctions => AmlDisplayer::start(f, "EndDependentFn")
                 .at_least_empty_paren_arg()
@@ -1192,22 +1192,22 @@ impl fmt::Display for ResourceMacro {
                         "Decode10"
                     })
                 })
-                .paren_arg(|f| write!(f, "0x{:04X}", min_addr))
-                .paren_arg(|f| write!(f, "0x{:04X}", max_addr))
-                .paren_arg(|f| write!(f, "0x{:02X}", alignment))
-                .paren_arg(|f| write!(f, "0x{:02X}", len))
+                .paren_arg(|f| write!(f, "0x{min_addr:04X}"))
+                .paren_arg(|f| write!(f, "0x{max_addr:04X}"))
+                .paren_arg(|f| write!(f, "0x{alignment:02X}"))
+                .paren_arg(|f| write!(f, "0x{len:02X}"))
                 .finish(),
             ResourceMacro::FixedIo { base, len } => AmlDisplayer::start(f, "FixedIO")
-                .paren_arg(|f| write!(f, "0x{:04X}", base))
-                .paren_arg(|f| write!(f, "0x{:02X}", len))
+                .paren_arg(|f| write!(f, "0x{base:04X}"))
+                .paren_arg(|f| write!(f, "0x{len:02X}"))
                 .finish(),
             ResourceMacro::FixedDma {
                 dma_req,
                 channel,
                 transfer_width,
             } => AmlDisplayer::start(f, "FixedDMA")
-                .paren_arg(|f| write!(f, "0x{:04X}", dma_req))
-                .paren_arg(|f| write!(f, "0x{:04X}", channel))
+                .paren_arg(|f| write!(f, "0x{dma_req:04X}"))
+                .paren_arg(|f| write!(f, "0x{channel:04X}"))
                 .paren_arg(|f| transfer_width.fmt(f))
                 .finish(),
             ResourceMacro::VendorShort { data, len } => {
@@ -1215,7 +1215,7 @@ impl fmt::Display for ResourceMacro {
                 d.at_least_empty_paren_arg().set_list(true);
 
                 for e in data.iter().take(*len as usize) {
-                    d.body_field(|f| write!(f, "0x{:02X}", e));
+                    d.body_field(|f| write!(f, "0x{e:02X}"));
                 }
 
                 d.at_least_empty_body().finish()
@@ -1225,7 +1225,7 @@ impl fmt::Display for ResourceMacro {
                 d.at_least_empty_paren_arg().set_list(true);
 
                 for e in data {
-                    d.body_field(|f| write!(f, "0x{:02X}", e));
+                    d.body_field(|f| write!(f, "0x{e:02X}"));
                 }
 
                 d.at_least_empty_body().finish()
@@ -1286,7 +1286,7 @@ impl fmt::Display for ResourceMacro {
                 .set_list(true);
 
                 for i in interrupts {
-                    d.body_field(|f| write!(f, "0x{:08X}", i));
+                    d.body_field(|f| write!(f, "0x{i:08X}"));
                 }
 
                 d.at_least_empty_body().finish()
@@ -1299,9 +1299,9 @@ impl fmt::Display for ResourceMacro {
                 access_size,
             } => AmlDisplayer::start(f, "Register")
                 .paren_arg(|f| address_space.fmt(f))
-                .paren_arg(|f| write!(f, "0x{:02X}", bit_width))
-                .paren_arg(|f| write!(f, "0x{:02X}", offset))
-                .paren_arg(|f| write!(f, "0x{:08X}", address))
+                .paren_arg(|f| write!(f, "0x{bit_width:02X}"))
+                .paren_arg(|f| write!(f, "0x{offset:02X}"))
+                .paren_arg(|f| write!(f, "0x{address:08X}"))
                 .paren_arg(|f| write!(f, "{}", access_size.clone() as u8))
                 .finish(),
             ResourceMacro::AddressSpaceWord(address_space) => address_space.fmt(f),

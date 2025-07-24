@@ -300,7 +300,7 @@ impl GlobalDescriptorTable {
         let index = self.index;
         self.index += 1;
         // SAFETY: This is valid because its 8 bytes and
-        self.data[index] = core::mem::transmute::<_, u64>(entry);
+        self.data[index] = core::mem::transmute::<UserDescriptorEntry, u64>(entry);
         index
     }
 
@@ -308,7 +308,7 @@ impl GlobalDescriptorTable {
     unsafe fn push_system(&mut self, entry: SystemDescriptorEntry) -> usize {
         assert_eq!(mem::size_of::<SystemDescriptorEntry>(), 16);
         // SAFETY: This is valid because its 16 bytes and
-        let data = core::mem::transmute::<_, [u64; 2]>(entry);
+        let data = core::mem::transmute::<SystemDescriptorEntry, [u64; 2]>(entry);
         let index = self.index;
         self.index += 2;
         self.data[index] = data[0];

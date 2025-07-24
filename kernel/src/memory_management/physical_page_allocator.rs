@@ -198,7 +198,8 @@ impl PhysicalPageAllocator {
     /// - `page` is null
     /// - `page` is not in the range of the allocator
     /// - `page` is not aligned to 4K
-    /// with `None`, otherwise, `Some(())`
+    ///
+    /// The failure is with `None`, otherwise, `Some(())`
     #[must_use]
     unsafe fn free(&mut self, page: *mut u8) -> Option<()> {
         let page = page.cast::<FreePage>();

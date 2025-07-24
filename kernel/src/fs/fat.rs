@@ -212,7 +212,7 @@ fn increment_short_name(short_name: &mut [u8; 11]) {
         panic!("Short name exceeded limit 999999");
     }
 
-    let new_num_str = format!("{}", new_num);
+    let new_num_str = format!("{new_num}");
     if new_num_str.len() > current_num_size {
         telda_pos -= 1;
     }
@@ -516,9 +516,8 @@ impl FatBootSector {
     }
 
     pub fn root_dir_sectors(&self) -> u32 {
-        ((self.boot_sector.root_entry_count as u32 * DIRECTORY_ENTRY_SIZE)
-            + (self.boot_sector.bytes_per_sector as u32 - 1))
-            / self.boot_sector.bytes_per_sector as u32
+        (self.boot_sector.root_entry_count as u32 * DIRECTORY_ENTRY_SIZE)
+            .div_ceil(self.boot_sector.bytes_per_sector as u32)
     }
 
     pub fn root_dir_start_sector(&self) -> u32 {
@@ -659,7 +658,7 @@ enum DirectoryEntry<'a> {
 }
 
 impl<'a> DirectoryEntry<'a> {
-    pub fn from_raw(raw: &mut [u8]) -> DirectoryEntry {
+    pub fn from_raw(raw: &mut [u8]) -> DirectoryEntry<'_> {
         assert_eq!(raw.len(), DIRECTORY_ENTRY_SIZE as usize);
         let normal = unsafe {
             raw.as_mut_ptr()
@@ -830,7 +829,7 @@ impl DirectoryIterator<'_> {
     fn new(
         filesystem: &FatFilesystem,
         dir: Directory,
-    ) -> Result<DirectoryIterator, FileSystemError> {
+    ) -> Result<DirectoryIterator<'_>, FileSystemError> {
         let (sector_index, current_cluster, current_sector) = match dir {
             Directory::RootFat12_16 { start_sector, .. } => (
                 start_sector,
@@ -882,7 +881,8 @@ impl DirectoryIterator<'_> {
             }
             Directory::Normal { .. } => {
                 // did we exceed cluster boundary?
-                if next_sector_index % self.filesystem.boot_sector.sectors_per_cluster() as u32 == 0
+                if next_sector_index
+                    .is_multiple_of(self.filesystem.boot_sector.sectors_per_cluster() as u32)
                 {
                     // get next cluster
                     let next_cluster = self.filesystem.fat.next_cluster(self.current_cluster);
@@ -911,7 +911,7 @@ impl DirectoryIterator<'_> {
         Ok(true)
     }
 
-    fn get_next_entry(&mut self) -> Result<DirectoryEntry, FileSystemError> {
+    fn get_next_entry(&mut self) -> Result<DirectoryEntry<'_>, FileSystemError> {
         let entry_start = self.entry_index_in_sector as usize * DIRECTORY_ENTRY_SIZE as usize;
         let entry_end = entry_start + DIRECTORY_ENTRY_SIZE as usize;
         if entry_end > self.current_sector.len() {
@@ -1269,7 +1269,7 @@ impl Fat {
             sector_size: filesystem.boot_sector.bytes_per_sector(),
             fat_type,
             dirty: false,
-            dirty_bitmap: vec![0; (fats_size_in_sectors as usize + 63) / 64],
+            dirty_bitmap: vec![0; (fats_size_in_sectors as usize).div_ceil(64)],
         })
     }
 
@@ -1675,7 +1675,7 @@ impl FatFilesystem {
     pub fn open_dir_inode(
         &self,
         inode: &DirectoryNode,
-    ) -> Result<DirectoryIterator, FileSystemError> {
+    ) -> Result<DirectoryIterator<'_>, FileSystemError> {
         let dir = match self.fat_type() {
             FatType::Fat12 | FatType::Fat16 => {
                 // try to see if this is the root
@@ -1926,8 +1926,8 @@ impl FatFilesystem {
 
     fn set_file_size(&mut self, inode: &mut FileNode, size: u64) -> Result<(), FileSystemError> {
         let bytes_per_cluster = self.boot_sector.bytes_per_cluster() as u64;
-        let current_size_in_clusters = (inode.size() + bytes_per_cluster - 1) / bytes_per_cluster;
-        let new_size_in_clusters = (size + bytes_per_cluster - 1) / bytes_per_cluster;
+        let current_size_in_clusters = inode.size().div_ceil(bytes_per_cluster);
+        let new_size_in_clusters = size.div_ceil(bytes_per_cluster);
 
         // at least 1 cluster at any point
         let current_size_in_clusters = current_size_in_clusters.max(1);

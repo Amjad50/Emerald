@@ -65,6 +65,7 @@ impl VgaText {
         }
     }
 
+    #[allow(dead_code)]
     fn clear(&mut self) {
         for i in 0..self.height {
             self.clear_line(i);

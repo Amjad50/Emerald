@@ -163,6 +163,7 @@ impl EtherType {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(unused)]
 pub struct EthernetHeader {
     pub dest: MacAddress,
     pub src: MacAddress,
@@ -195,6 +196,7 @@ impl NetworkHeader for EthernetHeader {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(unused)]
 pub enum NetworkError {
     ReachedEndOfStream,
     NotEnoughSpace,

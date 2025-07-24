@@ -684,16 +684,16 @@ impl fmt::Display for MultiBoot2Info {
                 MultiBootTag::MemoryMap(mmap) => {
                     writeln!(f, "  MemoryMap:")?;
                     for memory in mmap {
-                        writeln!(f, "    {}", memory)?;
+                        writeln!(f, "    {memory}")?;
                     }
                 }
                 MultiBootTag::EfiMemoryMap(mmap) => {
                     writeln!(f, "  EfiMemoryMap:")?;
                     for memory in mmap {
-                        writeln!(f, "    {}", memory)?;
+                        writeln!(f, "    {memory}")?;
                     }
                 }
-                t => writeln!(f, "  {:X?}", t)?,
+                t => writeln!(f, "  {t:X?}")?,
             }
         }
         Ok(())

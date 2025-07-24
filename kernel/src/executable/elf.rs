@@ -7,6 +7,7 @@ use crate::{fs, memory_management::virtual_memory_mapper};
 #[derive(Debug)]
 pub enum ElfLoadError {
     InvalidMagic,
+    #[allow(dead_code)]
     FileSystemError(fs::FileSystemError),
     InvalidElfOrNotSupported,
     UnexpectedEndOfFile,
@@ -222,6 +223,7 @@ impl fmt::Debug for ElfHeader {
 }
 
 #[derive(Copy, Clone, Debug)]
+#[allow(dead_code)]
 pub enum ElfProgramType {
     // Unused
     Null,

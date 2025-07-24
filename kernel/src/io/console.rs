@@ -154,6 +154,7 @@ impl Default for VideoConsoleAttribute {
 }
 
 trait VideoConsole: Send + Sync {
+    #[allow(dead_code)]
     fn init(&mut self);
     fn set_attrib(&mut self, attrib: VideoConsoleAttribute);
     fn write_byte(&mut self, c: u8);

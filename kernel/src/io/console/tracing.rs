@@ -339,6 +339,6 @@ impl tracing::field::Visit for Visitor<'_> {
                 .err();
         }
 
-        self.result = self.console.write_fmt(format_args!("{:?}", value)).err();
+        self.result = self.console.write_fmt(format_args!("{value:?}")).err();
     }
 }

@@ -535,7 +535,7 @@ fn sys_get_cwd(all_state: &mut InterruptAllSavedState) -> SyscallResult {
 
     let needed_bytes = with_current_process(|process| -> Result<usize, SyscallError> {
         let cwd = process.get_current_dir().path();
-        let needed_bytes = cwd.as_str().as_bytes().len();
+        let needed_bytes = cwd.as_str().len();
         if needed_bytes > len {
             return Err(SyscallError::BufferTooSmall);
         }

@@ -10,7 +10,7 @@ mod tokenizer;
 
 static CMDLINE: OnceLock<Cmd> = OnceLock::new();
 
-fn parse_cmdline(inp: &str) -> Result<Cmd> {
+fn parse_cmdline(inp: &str) -> Result<'_, Cmd<'_>> {
     let mut tokenizer = Tokenizer::new(inp);
     Cmd::parse_cmdline(&mut tokenizer)
 }
