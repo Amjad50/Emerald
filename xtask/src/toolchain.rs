@@ -35,7 +35,6 @@ pub fn dist(meta: &GlobalMeta, opts: &Toolchain) -> anyhow::Result<()> {
     let mut cmd = std::process::Command::new("python");
 
     cmd.current_dir(meta.root_path.join("extern/rust"))
-        .env("GITHUB_ACTIONS", "true") // Use CI environment to download correct LLVM
         .arg("x.py")
         .arg("dist")
         .arg("rustfmt")
