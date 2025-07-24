@@ -9,9 +9,6 @@ pub struct Args {
     #[argh(switch, long = "release")]
     #[argh(description = "build in release mode")]
     pub release: bool,
-
-    #[argh(positional)]
-    pub extra: Vec<String>,
 }
 
 #[derive(FromArgs, Debug)]

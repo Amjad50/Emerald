@@ -3,7 +3,7 @@ use core::hint;
 use crate::{cmdline, cpu};
 
 #[repr(u32)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum UartPort {
     COM1 = 0x3F8,
 }
@@ -117,7 +117,7 @@ fn init_port(port_addr: UartPort) -> bool {
     val == 0xAA
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Uart {
     port_addr: UartPort,
     is_enabled: bool,

@@ -126,6 +126,7 @@ impl<T> ReMutex<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.data
     }
