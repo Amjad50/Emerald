@@ -135,7 +135,7 @@ impl Scheduler {
         // First, check waiting processes
         let extracted = self
             .running_waiting_procs
-            .extract_if(|_, process| {
+            .extract_if(|_, process: &mut SchedulerProcess| {
                 let mut remove = false;
                 let mut inner_proc = process.process.borrow_mut();
                 match process.state {

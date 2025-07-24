@@ -2,10 +2,8 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 #![feature(linked_list_cursors)]
-#![feature(const_binary_heap_constructor)]
 #![feature(btree_extract_if)]
 #![feature(custom_test_frameworks)]
-#![feature(byte_slice_trim_ascii)]
 #![test_runner(crate::testing::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 // fix warnings when testing (since we are not using the normal `kernel_main`)
