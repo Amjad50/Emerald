@@ -1,5 +1,8 @@
+#![feature(trim_prefix_suffix)]
+
 mod args;
 mod kernel;
+mod profiler;
 mod toolchain;
 mod userspace;
 mod utils;
@@ -110,6 +113,9 @@ fn main() -> anyhow::Result<()> {
         },
         Command::Toolchain(toolchain) => {
             toolchain::dist(&meta, &toolchain)?;
+        }
+        Command::Profiler(sampler) => {
+            profiler::run(&meta, &sampler)?;
         }
     }
 

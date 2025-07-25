@@ -20,6 +20,7 @@ pub enum Command {
     Kernel(Kernel),
     Userspace(Userspace),
     Toolchain(Toolchain),
+    Profiler(Profiler),
 }
 
 #[derive(FromArgs, Debug)]
@@ -127,4 +128,37 @@ pub struct Toolchain {
     #[argh(option, long = "out", short = 'o')]
     #[argh(description = "output folder to copy the dist files into")]
     pub out: Option<String>,
+}
+
+#[derive(FromArgs, Debug)]
+#[argh(subcommand, name = "profiler")]
+#[argh(description = "Profile the kernel using QMP")]
+pub struct Profiler {
+    #[argh(option, long = "qmp-socket")]
+    #[argh(description = "QMP socket to connect to")]
+    pub qmp_socket: String,
+
+    #[argh(option, long = "interval", default = "10")]
+    #[argh(description = "sampling interval in milliseconds  (default: 10)")]
+    pub interval_ms: u64,
+
+    #[argh(option, long = "duration", default = "5")]
+    #[argh(description = "sampling duration in seconds (default: 5)")]
+    pub duration_sec: u64,
+
+    #[argh(option, long = "output", short = 'o')]
+    #[argh(description = "output file for folded stack samples (for flamegraph generation)")]
+    pub output: Option<String>,
+
+    #[argh(switch, long = "verbose", short = 'v')]
+    #[argh(description = "enable verbose output")]
+    pub verbose: bool,
+
+    #[argh(switch, long = "show-addresses")]
+    #[argh(description = "show raw addresses alongside symbols")]
+    pub show_addresses: bool,
+
+    #[argh(switch, long = "one-shot")]
+    #[argh(description = "collect a single stack trace and exit")]
+    pub one_shot: bool,
 }
