@@ -161,4 +161,8 @@ pub struct Profiler {
     #[argh(switch, long = "one-shot")]
     #[argh(description = "collect a single stack trace and exit")]
     pub one_shot: bool,
+
+    #[argh(option, long = "user-program", short = 'u')]
+    #[argh(description = "userspace program that you want to profile (not accurate for now...)")]
+    pub user_program: Option<String>,
 }

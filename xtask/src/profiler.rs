@@ -14,7 +14,99 @@ use framehop::{
 };
 use qapi::{qmp, Qmp, Stream};
 
-use crate::{args::Profiler, GlobalMeta};
+use crate::{args::Profiler, userspace::userspace_output_path, GlobalMeta};
+
+fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module<Vec<u8>>)> {
+    let file_data = std::fs::read(path.as_ref())?.into_boxed_slice();
+    let file_data_slice = &file_data[..];
+
+    let elf_file = elf::ElfBytes::<LittleEndian>::minimal_parse(file_data_slice)
+        .map_err(|e| anyhow::anyhow!("Failed to parse ELF file: {}", e))?;
+
+    let text_section = elf_file
+        .section_header_by_name(".text")?
+        .ok_or_else(|| anyhow::anyhow!("ELF file does not contain a .text section"))?;
+    let eh_frame_section = elf_file
+        .section_header_by_name(".eh_frame")?
+        .ok_or_else(|| anyhow::anyhow!("ELF file does not contain a .eh_frame section"))?;
+
+    println!(
+        "Found .text section at {:#x} with size {}",
+        text_section.sh_addr, text_section.sh_size
+    );
+    println!(
+        "Found .eh_frame section at {:#x} with size {}",
+        eh_frame_section.sh_addr, eh_frame_section.sh_size
+    );
+
+    let mut vma_base = 0xFFFFFFFFFFFFFFFF;
+    let mut vma_end = 0;
+
+    for section in elf_file
+        .section_headers()
+        .ok_or_else(|| anyhow::anyhow!("Failed to read section headers"))?
+    {
+        if section.sh_addr < vma_base && section.sh_size > 0 && section.sh_addr != 0 {
+            vma_base = section.sh_addr;
+        }
+        let section_end = section.sh_addr + section.sh_size;
+        if section_end > vma_end {
+            vma_end = section_end;
+        }
+    }
+
+    println!("VMA range: {:#x}..{:#x}", vma_base, vma_end);
+
+    let module = Module::new(
+        path.as_ref().to_string_lossy().to_string(),
+        vma_base..vma_end,
+        vma_base,
+        ExplicitModuleSectionInfo {
+            base_svma: text_section.sh_addr,
+            text_svma: Some(text_section.sh_addr..(text_section.sh_addr + text_section.sh_size)),
+            text: Some(
+                file_data_slice[text_section.sh_offset as usize
+                    ..(text_section.sh_offset + text_section.sh_size) as usize]
+                    .to_vec(),
+            ),
+            eh_frame_svma: Some(
+                eh_frame_section.sh_addr..(eh_frame_section.sh_addr + eh_frame_section.sh_size),
+            ),
+            eh_frame: Some(
+                file_data_slice[eh_frame_section.sh_offset as usize
+                    ..(eh_frame_section.sh_offset + eh_frame_section.sh_size) as usize]
+                    .to_vec(),
+            ),
+            ..Default::default()
+        },
+    );
+
+    // Initialize symbols
+    let mut symbols = Vec::new();
+    if let Some(symbol_table) = elf_file.symbol_table()? {
+        for symbol in symbol_table.0.iter() {
+            if symbol.st_shndx != 0 && symbol.st_size > 0 {
+                let start_addr = symbol.st_value;
+                let end_addr = start_addr + symbol.st_size;
+
+                let name = symbol_table.1.get(symbol.st_name as usize)?;
+                symbols.push(SymbolCacheEntry {
+                    address_range: start_addr..end_addr,
+                    symbol: rustc_demangle::demangle(name).to_string(),
+                });
+            }
+        }
+    }
+
+    symbols.sort_by_key(|entry| entry.address_range.start);
+    Ok((
+        ElfSymbolsCache {
+            symbols,
+            vma_range: vma_base..vma_end,
+        },
+        module,
+    ))
+}
 
 #[derive(Debug)]
 struct SymbolCacheEntry {
@@ -22,92 +114,56 @@ struct SymbolCacheEntry {
     symbol: String,
 }
 
-struct StackUnwinder {
-    // file_data: Box<[u8]>,
+struct ElfSymbolsCache {
     symbols: Vec<SymbolCacheEntry>,
+    vma_range: Range<u64>,
+}
+
+impl ElfSymbolsCache {
+    pub fn contains(&self, address: u64) -> bool {
+        self.vma_range.contains(&address)
+    }
+
+    pub fn get(&self, address: u64) -> Option<&SymbolCacheEntry> {
+        if !self.contains(address) {
+            return None;
+        }
+
+        self.symbols
+            .iter()
+            .find(|entry| entry.address_range.contains(&address))
+    }
+}
+
+struct StackUnwinder {
+    symbols: Vec<ElfSymbolsCache>,
     unwinder: UnwinderX86_64<Vec<u8>>,
     cache: CacheX86_64,
 }
 
 impl StackUnwinder {
     pub fn new<P: AsRef<Path>>(kernel_file: P) -> anyhow::Result<Self> {
-        let file_data = std::fs::read(kernel_file)?.into_boxed_slice();
-        let file_data_slice = &file_data[..];
-
-        let elf_file = elf::ElfBytes::<LittleEndian>::minimal_parse(file_data_slice)
-            .map_err(|e| anyhow::anyhow!("Failed to parse ELF file: {}", e))?;
-
-        let text_section = elf_file
-            .section_header_by_name(".text")?
-            .ok_or_else(|| anyhow::anyhow!("ELF file does not contain a .text section"))?;
-        let eh_frame_section = elf_file
-            .section_header_by_name(".eh_frame")?
-            .ok_or_else(|| anyhow::anyhow!("ELF file does not contain a .eh_frame section"))?;
-
-        println!(
-            "Found .text section at {:#x} with size {}",
-            text_section.sh_addr, text_section.sh_size
-        );
-
-        println!(
-            "Found .eh_frame section at {:#x} with size {}",
-            eh_frame_section.sh_addr, eh_frame_section.sh_size
-        );
-
-        let module = Module::new(
-            String::from("kernel"),
-            0xFFFFFFFF80100000..0xffffffff80FFFFFF,
-            0xFFFFFFFF80100000,
-            ExplicitModuleSectionInfo {
-                base_svma: 0xFFFFFFFF80100000,
-                text_svma: Some(
-                    text_section.sh_addr as u64
-                        ..(text_section.sh_addr + text_section.sh_size) as u64,
-                ),
-                text: Some(
-                    file_data_slice[text_section.sh_offset as usize
-                        ..(text_section.sh_offset + text_section.sh_size) as usize]
-                        .to_vec(),
-                ),
-                eh_frame_svma: Some(
-                    eh_frame_section.sh_addr as u64
-                        ..(eh_frame_section.sh_addr + eh_frame_section.sh_size) as u64,
-                ),
-                eh_frame: Some(
-                    file_data_slice[eh_frame_section.sh_offset as usize
-                        ..(eh_frame_section.sh_offset + eh_frame_section.sh_size) as usize]
-                        .to_vec(),
-                ),
-                ..Default::default()
-            },
-        );
+        let (symbols, module) = parse_elf(kernel_file)?;
 
         let cache = CacheX86_64::new();
         let mut unwinder: UnwinderX86_64<Vec<u8>> = UnwinderX86_64::new();
         unwinder.add_module(module);
 
-        // Initialize symbols
-        let mut symbols = Vec::new();
-        if let Some(symbol_table) = elf_file.symbol_table()? {
-            for symbol in symbol_table.0.iter() {
-                if symbol.st_shndx != 0 && symbol.st_size > 0 {
-                    let start_addr = symbol.st_value;
-                    let end_addr = start_addr + symbol.st_size;
-
-                    let name = symbol_table.1.get(symbol.st_name as usize)?;
-                    symbols.push(SymbolCacheEntry {
-                        address_range: start_addr..end_addr,
-                        symbol: rustc_demangle::demangle(name).to_string(),
-                    });
-                }
-            }
-        }
-
         Ok(StackUnwinder {
-            symbols,
+            symbols: vec![symbols],
             unwinder,
             cache,
         })
+    }
+
+    pub fn add_userspace_module<P: AsRef<Path>>(
+        &mut self,
+        userspace_file: P,
+    ) -> anyhow::Result<()> {
+        let (symbols, module) = parse_elf(userspace_file)?;
+        self.unwinder.add_module(module);
+        self.symbols.push(symbols);
+        Ok(())
     }
 
     pub fn unwind_stack<F>(&mut self, rip: u64, rsp: u64, rbp: u64, read_stack: &mut F) -> Vec<u64>
@@ -127,8 +183,8 @@ impl StackUnwinder {
     }
 
     pub fn resolve_symbol(&self, address: u64) -> anyhow::Result<String> {
-        for entry in &self.symbols {
-            if entry.address_range.contains(&address) {
+        for symbols in &self.symbols {
+            if let Some(entry) = symbols.get(address) {
                 return Ok(entry.symbol.clone());
             }
         }
@@ -240,7 +296,20 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
         .join("kernel");
     assert!(kernel_path.exists(), "Kernel ELF file does not exist");
 
-    let unwinder = StackUnwinder::new(&kernel_path)?;
+    let mut unwinder = StackUnwinder::new(&kernel_path)?;
+
+    if let Some(user_program_name) = &args.user_program {
+        let user_program_path = userspace_output_path(meta, user_program_name);
+
+        if user_program_name.is_empty() || !user_program_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Userspace program '{user_program_name}' does not exist in '{}'",
+                user_program_path.display()
+            ));
+        }
+
+        unwinder.add_userspace_module(user_program_path)?;
+    }
 
     let socket = UnixStream::connect(&args.qmp_socket)
         .map_err(|e| anyhow::anyhow!("Failed to connect to socket: {}", e))?;
