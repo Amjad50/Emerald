@@ -1,0 +1,1 @@
+searchState.loadedDescShard("increasing_heap_allocator", 0, "Safety\nReturn the start address of the new allocated heap\nSafety\nDeallocate pages from the end of the heap Return true if …\nReturns the argument unchanged.\nReturns the argument unchanged.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.")

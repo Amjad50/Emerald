@@ -1,0 +1,1 @@
+searchState.loadedDescShard("thiserror_no_std", 0, "github crates-io docs-rs")
