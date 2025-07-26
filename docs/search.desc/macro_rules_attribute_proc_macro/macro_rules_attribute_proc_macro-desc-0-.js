@@ -1,1 +1,0 @@
-searchState.loadedDescShard("macro_rules_attribute_proc_macro", 0, "Do not use this crate directly. Instead, use …")

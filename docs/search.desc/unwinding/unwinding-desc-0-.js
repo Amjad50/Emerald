@@ -1,1 +1,0 @@
-searchState.loadedDescShard("unwinding", 0, "Unwinding library in Rust and for Rust\nReturns the argument unchanged.\nReturns the argument unchanged.\nReturns the argument unchanged.\nReturns the argument unchanged.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.")
