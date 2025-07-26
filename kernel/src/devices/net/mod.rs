@@ -29,6 +29,7 @@ impl fmt::Debug for MacAddress {
     }
 }
 
+#[allow(dead_code)]
 pub trait NetworkDevice {
     fn mac_address(&self) -> MacAddress;
     fn send(&self, data: &NetworkPacket) -> Result<(), NetworkError>;

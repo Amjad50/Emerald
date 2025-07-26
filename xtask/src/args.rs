@@ -9,9 +9,6 @@ pub struct Args {
     #[argh(switch, long = "release")]
     #[argh(description = "build in release mode")]
     pub release: bool,
-
-    #[argh(positional)]
-    pub extra: Vec<String>,
 }
 
 #[derive(FromArgs, Debug)]
@@ -36,6 +33,10 @@ pub struct RunKernel {
     #[argh(switch, long = "no-graphics")]
     #[argh(description = "disable graphics")]
     pub no_graphics: bool,
+
+    #[argh(switch, long = "no-disk")]
+    #[argh(description = "disable filesystem disk")]
+    pub no_disk: bool,
 
     #[argh(positional)]
     pub extra: Vec<String>,
@@ -114,26 +115,6 @@ pub struct Fmt {
     #[argh(positional)]
     pub extra: Vec<String>,
 }
-
-#[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "userspace")]
-#[argh(description = "Build userspace programs into `./filesystem`")]
-pub struct BuildUserspace {}
-
-#[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "user-check")]
-#[argh(description = "Check the userspace")]
-pub struct UserCheck {}
-
-#[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "user-clippy")]
-#[argh(description = "Run clippy on the userspace")]
-pub struct UserClippy {}
-
-#[derive(FromArgs, Debug)]
-#[argh(subcommand, name = "user-fmt-check")]
-#[argh(description = "Run fmt check on the userspace")]
-pub struct UserFmtCheck {}
 
 #[derive(FromArgs, Debug)]
 #[argh(subcommand, name = "toolchain")]

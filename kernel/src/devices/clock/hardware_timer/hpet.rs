@@ -332,7 +332,7 @@ impl ClockDevice for Mutex<Hpet> {
     }
 }
 
-extern "cdecl" fn timer0_handler(_all_state: &mut InterruptAllSavedState) {
+extern "C" fn timer0_handler(_all_state: &mut InterruptAllSavedState) {
     let mut clock = HPET_CLOCK.get().as_ref().lock();
 
     // if we are level triggered, we must clear the interrupt bit

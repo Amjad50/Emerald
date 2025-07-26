@@ -21,6 +21,7 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum StructuredAmlError {
     QueryPathMustBeAbsolute,
     /// This is a very stupid error, its a bit annoying to return `\\` scope element, since its not
@@ -129,7 +130,7 @@ impl Scope {
                     // recurse
                     handle_add(parent, this, root, rest, element);
                 } else {
-                    let full_path = format!("{}.{}", parent, rest);
+                    let full_path = format!("{parent}.{rest}");
                     root.add_child(full_path.trim_start_matches('\\'), element);
                 }
             } else {

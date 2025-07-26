@@ -107,7 +107,7 @@ where
             if c.is_ascii_graphic() || c == b' ' {
                 write!(f, "{}", c as char)?;
             } else {
-                write!(f, "\\x{:02X}", c)?;
+                write!(f, "\\x{c:02X}")?;
             }
         }
         write!(f, "\"")
@@ -144,9 +144,9 @@ pub fn hexdump(buf: &[u8]) {
         if remaining != 0 {
             let remaining_start = (buf.len() / 16) * 16;
 
-            write!(inner, "{:08X}:  ", remaining_start)?;
+            write!(inner, "{remaining_start:08X}:  ")?;
             for c in buf[remaining_start..].iter() {
-                write!(inner, "{:02X} ", c)?;
+                write!(inner, "{c:02X} ")?;
             }
             for _ in 0..(16 - remaining) {
                 write!(inner, "   ")?;

@@ -199,11 +199,7 @@ where
             // assert that we are not in the middle of a block
             assert!(
                 (freeing_block_end <= block_addr) || (freeing_block_start >= block_end),
-                "Free block at {:x}..{:x} is in the middle of another block at {:x}..{:x}",
-                freeing_block_start,
-                freeing_block_end,
-                block_addr,
-                block_end
+                "Free block at {freeing_block_start:x}..{freeing_block_end:x} is in the middle of another block at {block_addr:x}..{block_end:x}",
             );
 
             if block_end == freeing_block_start {

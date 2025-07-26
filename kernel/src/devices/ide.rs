@@ -266,7 +266,7 @@ impl IdeIo {
 
         // read data
         for i in 0..data.len() / 2 {
-            if i % 256 == 0 {
+            if i.is_multiple_of(256) {
                 self.wait_until_free();
             }
 
@@ -291,7 +291,7 @@ impl IdeIo {
 
         // write data
         for i in 0..data.len() / 2 {
-            if i % 256 == 0 {
+            if i.is_multiple_of(256) {
                 self.wait_until_free();
             }
 
@@ -674,7 +674,7 @@ pub enum IdeError {
 impl fmt::Display for IdeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            IdeError::DeviceError(err) => write!(f, "IDE device error: {}", err),
+            IdeError::DeviceError(err) => write!(f, "IDE device error: {err}"),
             IdeError::UnalignedSize => write!(f, "unaligned size"),
             IdeError::BoundsExceeded => write!(f, "bounds exceeded"),
         }
@@ -727,7 +727,7 @@ impl IdeDevice {
         let sector_size = self.sector_size as u64;
         let buffer_len = data.len() as u64;
 
-        if buffer_len % sector_size != 0 {
+        if !buffer_len.is_multiple_of(sector_size) {
             return Err(IdeError::UnalignedSize);
         }
         let mut number_of_sectors = buffer_len / sector_size;
@@ -771,7 +771,7 @@ impl IdeDevice {
         let sector_size = self.sector_size as u64;
         let buffer_len = data.len() as u64;
 
-        if buffer_len % sector_size != 0 {
+        if !buffer_len.is_multiple_of(sector_size) {
             return Err(IdeError::UnalignedSize);
         }
         let mut number_of_sectors = buffer_len / sector_size;

@@ -118,7 +118,7 @@ fn key_type_from_device(value: u8) -> Option<KeyType> {
             // not extended.
             // we know that we are mapping the not extended keys directly
             // so we can just cast it
-            let k = unsafe { core::mem::transmute(value) };
+            let k = unsafe { core::mem::transmute::<u8, KeyType>(value) };
             if k == KeyType::_None1
                 || k == KeyType::_None2
                 || k == KeyType::_None3

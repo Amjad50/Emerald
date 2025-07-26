@@ -155,7 +155,7 @@ pub struct DmaRing<T: Descriptor + 'static, const N: usize> {
 #[allow(dead_code)]
 impl<T: Descriptor, const N: usize> DmaRing<T, N> {
     pub fn new() -> Self {
-        assert!(N % 8 == 0); // ring must be multiple of 8
+        assert!(N.is_multiple_of(8)); // ring must be multiple of 8
         assert!(N * 16 < 4096); // less than physical page
 
         let ring: &mut [T] = unsafe {

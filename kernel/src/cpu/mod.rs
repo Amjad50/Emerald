@@ -267,12 +267,12 @@ unsafe fn ltr(tr: SegmentSelector) {
 unsafe fn set_cs(cs: SegmentSelector) {
     core::arch::asm!(
         "push {0:r}",
-        // this is not 0x1f, it is `1-forward`,
-        // which gives the offset of the nearest `1:` label
-        "lea {tmp}, [rip + 1f]",
+        // this is not 0x1f, it is `2-forward`,
+        // which gives the offset of the nearest `2:` label
+        "lea {tmp}, [rip + 2f]",
         "push {tmp}",
         "retfq",
-        "1:",
+        "2:",
         in(reg) cs.0, tmp=lateout(reg) _, options(preserves_flags));
 }
 

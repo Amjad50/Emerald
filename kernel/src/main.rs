@@ -2,10 +2,8 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 #![feature(linked_list_cursors)]
-#![feature(const_binary_heap_constructor)]
 #![feature(btree_extract_if)]
 #![feature(custom_test_frameworks)]
-#![feature(byte_slice_trim_ascii)]
 #![test_runner(crate::testing::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 // fix warnings when testing (since we are not using the normal `kernel_main`)
@@ -57,7 +55,7 @@ use kernel_user_link::{
 use memory_management::virtual_memory_mapper;
 use multiboot2::MultiBoot2Info;
 use process::scheduler;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     devices::clock,
@@ -172,11 +170,21 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
     graphics::vga::init(multiboot_info.framebuffer());
     console::init_late_device(multiboot_info.framebuffer());
     devices::probe_pci_devices();
-    fs::create_disk_mapping(0).expect("Could not load filesystem");
+    let disk_load_success = match fs::create_disk_mapping(0) {
+        Ok(()) => true,
+        Err(e) => {
+            error!("Could not create disk mapping: {:?}", e);
+            false
+        }
+    };
     finish_boot();
     // -- BOOT FINISHED --
 
-    load_init_process();
+    if disk_load_success {
+        load_init_process();
+    } else {
+        info!("No disk is available, so can't load `init` process, the system will just wait like this...");
+    }
 
     // this will return on shutdown, the sequence is initiated by `power::start_shutdown`
     scheduler::schedule();

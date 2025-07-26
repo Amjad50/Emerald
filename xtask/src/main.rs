@@ -66,6 +66,7 @@ fn main() -> anyhow::Result<()> {
                 .with_gdb(run.gdb)
                 .with_debug_port(true)
                 .with_graphics(!run.no_graphics)
+                .with_disk(!run.no_disk)
                 .run(&run.extra)?;
 
             std::process::exit(result);
@@ -77,6 +78,7 @@ fn main() -> anyhow::Result<()> {
                 .with_gdb(test.gdb)
                 .with_debug_port(true)
                 .with_graphics(false)
+                .with_disk(false)
                 .run(&test.extra)?;
 
             let code = result >> 1;

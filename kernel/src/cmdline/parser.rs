@@ -3,6 +3,7 @@ use core::num::ParseIntError;
 use super::tokenizer::Tokenizer;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ParseErrorKind<'a> {
     Unexpected { need: &'a str, got: Option<&'a str> },
     ParseIntError(ParseIntError),

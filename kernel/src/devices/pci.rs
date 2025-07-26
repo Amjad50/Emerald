@@ -162,8 +162,7 @@ impl fmt::Display for PciDeviceType {
             Self::Reserved(class, subclass, prog, rev) => {
                 write!(
                     f,
-                    "Reserved({:02X}.{:02X}.{:02X}.{:02X})",
-                    class, subclass, prog, rev
+                    "Reserved({class:02X}.{subclass:02X}.{prog:02X}.{rev:02X})"
                 )
             }
             Self::Unassigned(subclass, prog, rev) => {
@@ -475,5 +474,6 @@ pub trait PciDevice {
     fn probe_init(config: &PciDeviceConfig, extra: ProbeExtra) -> Option<Self>
     where
         Self: Sized;
+    #[allow(dead_code)]
     fn device_name(&self) -> &'static str;
 }

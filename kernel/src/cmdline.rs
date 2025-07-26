@@ -10,7 +10,7 @@ mod tokenizer;
 
 static CMDLINE: OnceLock<Cmd> = OnceLock::new();
 
-fn parse_cmdline(inp: &str) -> Result<Cmd> {
+fn parse_cmdline(inp: &str) -> Result<'_, Cmd<'_>> {
     let mut tokenizer = Tokenizer::new(inp);
     Cmd::parse_cmdline(&mut tokenizer)
 }
@@ -136,8 +136,8 @@ pub enum LogAml {
     Off,
     /// Print the ASL content as parsed, without moving anything
     Normal,
-    /// Reorgnize the content of the ASL code to be in an easier structure
-    /// to work with and treverse
+    /// Reorganize the content of the ASL code to be in an easier structure
+    /// to work with and traverse
     Structured,
 }
 

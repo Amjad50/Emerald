@@ -357,10 +357,12 @@ pub enum DescriptorTableBody {
     Bgrt(Box<Bgrt>),
     Waet(Box<Waet>),
     Srat(Box<Srat>),
+    #[allow(dead_code)]
     Unknown(HexArray<Vec<u8>>),
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Apic {
     pub local_apic_address: u32,
     pub flags: u32,
@@ -397,6 +399,7 @@ impl Apic {
 
 #[repr(u8)]
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum InterruptControllerStruct {
     ProcessorLocalApic(ProcessorLocalApic) = 0,
     IoApic(IoApic) = 1,

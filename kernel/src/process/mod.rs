@@ -33,6 +33,7 @@ const DEFAULT_MAX_HEAP_SIZE: usize = 1 * GB;
 
 #[derive(Debug)]
 pub enum ProcessError {
+    #[allow(unused)]
     CouldNotLoadElf(fs::FileSystemError),
 }
 

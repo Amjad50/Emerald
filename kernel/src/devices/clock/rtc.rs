@@ -42,8 +42,9 @@ impl RtcTime {
             return None;
         }
 
-        let is_year_leap =
-            self.month > 2 && self.year % 4 == 0 && (self.year % 100 != 0 || self.year % 400 == 0);
+        let is_year_leap = self.month > 2
+            && self.year.is_multiple_of(4)
+            && (!self.year.is_multiple_of(100) || self.year.is_multiple_of(400));
 
         let last_year = (self.year - 1) as u64;
         let days_in_last_years =

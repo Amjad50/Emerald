@@ -146,7 +146,7 @@ impl<'a, 'b: 'a> AmlDisplayer<'a, 'b> {
                 let mut writer = PadAdapter::wrap(self.fmt, &mut state);
                 let fmt_holder = FmtHolder::new(value_fmt);
 
-                writer.write_fmt(format_args!("{:#}", fmt_holder))
+                writer.write_fmt(format_args!("{fmt_holder:#}"))
             } else {
                 let prefix = if self.in_body {
                     if self.is_list {

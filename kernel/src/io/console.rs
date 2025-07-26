@@ -17,7 +17,7 @@ use crate::{
     },
     fs::FileSystemError,
     multiboot2::{self, FramebufferColorInfo},
-    sync::spin::remutex::ReMutex,
+    sync::{once::OnceLock, spin::remutex::ReMutex},
 };
 
 use self::{vga_graphics::VgaGraphics, vga_text::VgaText};
@@ -25,7 +25,7 @@ use self::{vga_graphics::VgaGraphics, vga_text::VgaText};
 use super::uart::{Uart, UartPort};
 
 // SAFETY: the console is only used inside a lock or mutex
-static mut CONSOLE: ConsoleController = ConsoleController::empty_early();
+static CONSOLE: OnceLock<ConsoleController> = OnceLock::new();
 
 /// # SAFETY
 /// the caller must assure that this is not called while not being initialized
@@ -34,17 +34,14 @@ pub(super) fn run_with_console<F, U>(mut f: F) -> U
 where
     F: FnMut(&mut dyn core::fmt::Write) -> U,
 {
-    // SAFETY: printing is done after initialization steps and not at the same time
-    //  look at `io::_print`
-    unsafe { CONSOLE.run_with(|c| f(c)) }
+    CONSOLE.get().run_with(|c| f(c))
 }
 
 /// Create an early console, this is used before the kernel heap is initialized
 pub fn early_init() {
-    // SAFETY: we are running this initialization at the very startup,
-    // without printing anything at the same time since we are only
-    // running 1 CPU at the  time
-    unsafe { CONSOLE.init_early() };
+    CONSOLE
+        .set(ConsoleController::early())
+        .expect("Console should only be initialized once");
 }
 
 /// Create a late console, this is used after the kernel heap is initialized
@@ -55,9 +52,9 @@ pub fn init_late_device(framebuffer: Option<multiboot2::Framebuffer>) {
     //  running 1 CPU at the  time
     //  We are also sure that no one is printing at this time
     let device = unsafe {
-        CONSOLE.init_late(framebuffer);
+        CONSOLE.get().init_late(framebuffer);
         // Must have a device
-        CONSOLE.late_device().unwrap()
+        CONSOLE.get().late_device().unwrap()
     };
 
     devices::register_device(device);
@@ -65,14 +62,12 @@ pub fn init_late_device(framebuffer: Option<multiboot2::Framebuffer>) {
 
 #[allow(dead_code)]
 pub fn start_capture() -> Option<String> {
-    // SAFETY: we are sure that the console is initialized
-    unsafe { CONSOLE.run_with(|c| c.start_capture()) }
+    CONSOLE.get().run_with(|c| c.start_capture())
 }
 
 #[allow(dead_code)]
 pub fn stop_capture() -> Option<String> {
-    // SAFETY: we are sure that the console is initialized
-    unsafe { CONSOLE.run_with(|c| c.stop_capture()) }
+    CONSOLE.get().run_with(|c| c.stop_capture())
 }
 
 fn create_video_console(framebuffer: Option<multiboot2::Framebuffer>) -> Box<dyn VideoConsole> {
@@ -154,6 +149,7 @@ impl Default for VideoConsoleAttribute {
 }
 
 trait VideoConsole: Send + Sync {
+    #[allow(dead_code)]
     fn init(&mut self);
     fn set_attrib(&mut self, attrib: VideoConsoleAttribute);
     fn write_byte(&mut self, c: u8);
@@ -168,86 +164,56 @@ trait Console: Write {
     fn stop_capture(&mut self) -> Option<String>;
 }
 
-#[allow(clippy::large_enum_variant)]
-pub(super) enum ConsoleController {
-    Early(ReMutex<RefCell<EarlyConsole>>),
-    Late(Arc<ReMutex<RefCell<LateConsole>>>),
+#[derive(Debug)]
+pub(super) struct ConsoleController {
+    early: ReMutex<RefCell<EarlyConsole>>,
+    late: OnceLock<Arc<ReMutex<RefCell<LateConsole>>>>,
 }
 
 impl ConsoleController {
-    const fn empty_early() -> Self {
-        // SAFETY: this is only called once on static context so nothing is running
-        Self::Early(ReMutex::new(RefCell::new(EarlyConsole::empty())))
-    }
-
-    fn init_early(&self) {
-        match self {
-            Self::Early(console) => {
-                let console = console.lock();
-                console.borrow_mut().init();
-            }
-            Self::Late(_) => {
-                panic!("Unexpected late console");
-            }
+    fn early() -> Self {
+        let mut early = EarlyConsole::empty();
+        early.init();
+        Self {
+            early: ReMutex::new(RefCell::new(early)),
+            late: OnceLock::new(),
         }
     }
 
     /// # SAFETY
     /// Must ensure that there is no console is being printed to/running at the same time
-    unsafe fn init_late(&mut self, framebuffer: Option<multiboot2::Framebuffer>) {
-        match self {
-            Self::Early(console) => {
-                let video_console = create_video_console(framebuffer);
-
-                // take the uart, replace the old one with dummy uart
-                let uart = core::mem::replace(
-                    &mut console.get_mut().get_mut().uart,
-                    Uart::new(UartPort::COM1),
-                );
-                // SAFETY: we are relying on the caller calling this function alone
-                //  since we are taking ownership of the early console, and we are sure that
-                //  it's not being used anywhere, this is fine
-                let late_console = LateConsole::new(uart, video_console);
-                *self = Self::Late(Arc::new(ReMutex::new(RefCell::new(late_console))));
-            }
-            Self::Late(_) => {
-                panic!("Unexpected late console");
-            }
-        }
+    unsafe fn init_late(&self, framebuffer: Option<multiboot2::Framebuffer>) {
+        let video_console = create_video_console(framebuffer);
+        let late_console = LateConsole::new(self.early.lock().borrow().uart.clone(), video_console);
+        self.late
+            .set(Arc::new(ReMutex::new(RefCell::new(late_console))))
+            .expect("Late console should only be initialized once");
     }
 
     fn late_device(&self) -> Option<Arc<ReMutex<RefCell<LateConsole>>>> {
-        match self {
-            Self::Early(_) => None,
-            Self::Late(console) => Some(console.clone()),
-        }
+        self.late.try_get().cloned()
     }
 
     fn run_with<F, U>(&self, mut f: F) -> U
     where
         F: FnMut(&mut dyn Console) -> U,
     {
-        let ret = match self {
-            ConsoleController::Early(console) => {
-                let console = console.lock();
-                let x = if let Ok(mut c) = console.try_borrow_mut() {
-                    Some(f(&mut *c))
-                } else {
-                    None
-                };
-                x
-            }
-            // we have to use another branch because the types are different
-            // even though we use same function calls
-            ConsoleController::Late(console) => {
-                let console = console.lock();
-                let x = if let Ok(mut c) = console.try_borrow_mut() {
-                    Some(f(&mut *c))
-                } else {
-                    None
-                };
-                x
-            }
+        let ret = if let Some(console) = self.late.try_get() {
+            let console = console.lock();
+            let x = if let Ok(mut c) = console.try_borrow_mut() {
+                Some(f(&mut *c))
+            } else {
+                None
+            };
+            x
+        } else {
+            let console = self.early.lock();
+            let x = if let Ok(mut c) = console.try_borrow_mut() {
+                Some(f(&mut *c))
+            } else {
+                None
+            };
+            x
         };
 
         if let Some(ret) = ret {
@@ -261,7 +227,7 @@ impl ConsoleController {
         }
     }
 }
-
+#[derive(Debug)]
 pub(super) struct EarlyConsole {
     uart: Uart,
     capture: Option<String>,

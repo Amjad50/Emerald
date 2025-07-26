@@ -9,7 +9,7 @@ use crate::{
 
 use super::apic;
 
-pub extern "cdecl" fn apic_timer_handler(all_state: &mut InterruptAllSavedState) {
+pub extern "C" fn apic_timer_handler(all_state: &mut InterruptAllSavedState) {
     // make sure its initialized
     clock::clocks().tick_system_time();
     // flush log file if needed

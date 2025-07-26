@@ -67,7 +67,7 @@ impl<T> ReMutex<T> {
         }
     }
 
-    pub fn lock(&self) -> ReMutexGuard<T> {
+    pub fn lock(&self) -> ReMutexGuard<'_, T> {
         let cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
@@ -96,7 +96,7 @@ impl<T> ReMutex<T> {
         }
     }
 
-    pub fn try_lock(&self) -> Option<ReMutexGuard<T>> {
+    pub fn try_lock(&self) -> Option<ReMutexGuard<'_, T>> {
         let cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
@@ -126,6 +126,7 @@ impl<T> ReMutex<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.data
     }

@@ -12,6 +12,7 @@ use resource_template::ResourceTemplate;
 use tracing::trace;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum AmlParseError {
     UnexpectedEndOfCode,
     InvalidPkgLengthLead,
@@ -619,7 +620,7 @@ impl<'a> State<'a> {
     }
 
     /// Renamed to not be confused with `Clone::clone`
-    fn clone_state(&mut self) -> State {
+    fn clone_state(&mut self) -> State<'_> {
         State {
             methods: self.methods,
             names: self.names,
@@ -724,7 +725,7 @@ impl Parser<'_> {
         Ok(length - following_bytes as usize - 1)
     }
 
-    fn get_inner_parser(&mut self) -> Result<Parser, AmlParseError> {
+    fn get_inner_parser(&mut self) -> Result<Parser<'_>, AmlParseError> {
         let pkg_length = self.get_pkg_length()?;
         trace!("inner pkg length: {:x}", pkg_length);
 
@@ -738,7 +739,7 @@ impl Parser<'_> {
     }
 
     /// Renamed to not be confused with `Clone::clone`
-    fn clone_parser(&mut self) -> Parser {
+    fn clone_parser(&mut self) -> Parser<'_> {
         Parser {
             code: self.code,
             pos: self.pos,
@@ -1370,7 +1371,7 @@ impl Parser<'_> {
             b'\\' => {
                 self.forward(1)?;
                 let name = self.parse_name()?;
-                Ok(Some(format!("\\{}", name)))
+                Ok(Some(format!("\\{name}")))
             }
             // parent prefix
             b'^' => {
@@ -1516,7 +1517,7 @@ impl Parser<'_> {
                     trace!("reserved field element pkg length: {:x}", pkg_length);
                     // add 1 since we are not using it as normal pkg length
                     fields_pos_bits += pkg_length + 1;
-                    if fields_pos_bits % 8 != 0 {
+                    if !fields_pos_bits.is_multiple_of(8) {
                         return Err(AmlParseError::UnalignedFieldElementOffset);
                     }
                     FieldElement::Offset(fields_pos_bits / 8)

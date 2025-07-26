@@ -92,7 +92,7 @@ impl<T> RwLock<T> {
 
 #[allow(dead_code)]
 impl<T: ?Sized> RwLock<T> {
-    pub fn read(&self) -> RwLockReadGuard<T> {
+    pub fn read(&self) -> RwLockReadGuard<'_, T> {
         self.lock.read_lock();
         // must be -1, i.e. no owner
         self.owner_cpu.store(-1, Ordering::Relaxed);
@@ -103,7 +103,7 @@ impl<T: ?Sized> RwLock<T> {
         }
     }
 
-    pub fn try_read(&self) -> Option<RwLockReadGuard<T>> {
+    pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
         if self.lock.try_read_lock() {
             // must be -1, i.e. no owner
             self.owner_cpu.store(-1, Ordering::Relaxed);
@@ -117,7 +117,7 @@ impl<T: ?Sized> RwLock<T> {
         }
     }
 
-    pub fn write(&self) -> RwLockWriteGuard<T> {
+    pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         let cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
@@ -134,7 +134,7 @@ impl<T: ?Sized> RwLock<T> {
         }
     }
 
-    pub fn try_write(&self) -> Option<RwLockWriteGuard<T>> {
+    pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
         let cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;

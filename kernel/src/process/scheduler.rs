@@ -135,7 +135,7 @@ impl Scheduler {
         // First, check waiting processes
         let extracted = self
             .running_waiting_procs
-            .extract_if(|_, process| {
+            .extract_if(.., |_, process: &mut SchedulerProcess| {
                 let mut remove = false;
                 let mut inner_proc = process.process.borrow_mut();
                 match process.state {
@@ -284,9 +284,9 @@ pub fn schedule() {
                 }
                 scheduler.running_waiting_procs.insert(pid, top);
             }
-
-            current_cpu.pop_cli();
         }
+
+        current_cpu.pop_cli();
 
         if shutdown
             && scheduler.scheduled_processes.is_empty()
@@ -519,7 +519,7 @@ pub fn swap_context(context: &mut ProcessContext, all_state: &mut InterruptAllSa
     mem::swap(&mut all_state.rest.r15, &mut context.r15);
 }
 
-extern "cdecl" fn scheduler_interrupt_handler(all_state: &mut InterruptAllSavedState) {
+extern "C" fn scheduler_interrupt_handler(all_state: &mut InterruptAllSavedState) {
     assert_eq!(all_state.frame.cs & 0x3, 0, "must be from kernel only");
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
@@ -532,7 +532,7 @@ extern "cdecl" fn scheduler_interrupt_handler(all_state: &mut InterruptAllSavedS
     swap_context(current_cpu.context.as_mut().unwrap(), all_state);
 }
 
-extern "cdecl" fn syscall_interrupt_handler(all_state: &mut InterruptAllSavedState) {
+extern "C" fn syscall_interrupt_handler(all_state: &mut InterruptAllSavedState) {
     assert_eq!(all_state.frame.cs & 0x3, 3, "must be from user only");
     let current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());

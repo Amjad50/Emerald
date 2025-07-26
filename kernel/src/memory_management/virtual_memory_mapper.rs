@@ -751,7 +751,7 @@ impl VirtualMemoryMapper {
 
         let present = |entry: &&mut u64| **entry & flags::PTE_PRESENT != 0;
 
-        fn as_page_directory_table_flat(entry: &mut u64) -> IterMut<u64> {
+        fn as_page_directory_table_flat(entry: &mut u64) -> IterMut<'_, u64> {
             let page_directory_table = PageDirectoryTablePtr::entries_from_mut_entry(entry);
             page_directory_table.entries.iter_mut()
         }

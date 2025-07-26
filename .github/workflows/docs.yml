@@ -28,7 +28,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         if: steps.docs-changes.outputs.any_changed == 'true'
         with:
-          toolchain: nightly-2024-01-04
+          toolchain: nightly-2025-07-23
           components: rust-src
       
       - name: Setup mdBook
