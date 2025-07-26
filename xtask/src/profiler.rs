@@ -99,6 +99,7 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module
     }
 
     symbols.sort_by_key(|entry| entry.address_range.start);
+
     Ok((
         ElfSymbolsCache {
             symbols,
@@ -311,7 +312,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
         unwinder.add_userspace_module(user_program_path)?;
     }
 
-    let socket = UnixStream::connect(&args.qmp_socket)
+    let socket = UnixStream::connect(args.qmp_socket.as_deref().unwrap_or("./qmp-socket"))
         .map_err(|e| anyhow::anyhow!("Failed to connect to socket: {}", e))?;
 
     let mut qmp = qapi::Qmp::from_stream(&socket);
@@ -328,7 +329,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
         let (stack, took) = sampler.sample_with_timing(args.verbose)?;
         let symbols = sampler.get_stack_symbols(&stack, args.show_addresses)?;
 
-        println!("Current stack trace (took {took:?}:");
+        println!("Current stack trace (took {took:?}):");
         for (i, symbol) in symbols.iter().enumerate() {
             println!("{:>3}: {}", i, symbol);
         }

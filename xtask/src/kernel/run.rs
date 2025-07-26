@@ -7,6 +7,7 @@ pub struct RunConfig {
     pub enable_serial: bool,
     pub enable_disk: bool,
     pub enable_graphics: bool,
+    pub enable_qmp_socket: bool,
 }
 
 #[allow(dead_code)]
@@ -19,6 +20,7 @@ impl RunConfig {
             enable_serial: false,
             enable_graphics: true,
             enable_disk: true,
+            enable_qmp_socket: false,
         }
     }
 
@@ -44,6 +46,11 @@ impl RunConfig {
 
     pub fn with_disk(mut self, enable_disk: bool) -> Self {
         self.enable_disk = enable_disk;
+        self
+    }
+
+    pub fn with_qmp_socket(mut self, enable_qmp_socket: bool) -> Self {
+        self.enable_qmp_socket = enable_qmp_socket;
         self
     }
 
@@ -76,6 +83,10 @@ impl RunConfig {
 
         if !self.enable_graphics {
             cmd.arg("-display").arg("none");
+        }
+
+        if self.enable_qmp_socket {
+            cmd.arg("-qmp").arg("unix:./qmp-socket,server,nowait");
         }
 
         cmd.args(extra_args);

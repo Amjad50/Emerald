@@ -9,6 +9,10 @@ pub struct Args {
     #[argh(switch, long = "release")]
     #[argh(description = "build in release mode")]
     pub release: bool,
+
+    #[argh(switch, long = "profile")]
+    #[argh(description = "use profile mode (and run qmp socket when running qemu)")]
+    pub profile: bool,
 }
 
 #[derive(FromArgs, Debug)]
@@ -135,8 +139,8 @@ pub struct Toolchain {
 #[argh(description = "Profile the kernel using QMP")]
 pub struct Profiler {
     #[argh(option, long = "qmp-socket")]
-    #[argh(description = "QMP socket to connect to")]
-    pub qmp_socket: String,
+    #[argh(description = "QMP socket to connect to (default ./qmp-socket)")]
+    pub qmp_socket: Option<String>,
 
     #[argh(option, long = "interval", default = "10")]
     #[argh(description = "sampling interval in milliseconds  (default: 10)")]
@@ -165,4 +169,10 @@ pub struct Profiler {
     #[argh(option, long = "user-program", short = 'u')]
     #[argh(description = "userspace program that you want to profile (not accurate for now...)")]
     pub user_program: Option<String>,
+
+    #[argh(option, long = "profile", short = 'p')]
+    #[argh(
+        description = "by default we will check for `--profile` runs, but if you want to profile `release` or `debug`, put it here"
+    )]
+    pub profile_mode: Option<String>,
 }
