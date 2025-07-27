@@ -1,6 +1,8 @@
 # Summary
 
 - [Introduction](./index.md)
+- [xtask](./xtask/index.md)
+    - [Profiler](./xtask/profiler.md)
 - [Kernel](./kernel/index.md)
     - [Boot](./kernel/boot/index.md)
         - [Command Line](./kernel/boot/cmdline.md)

@@ -4,14 +4,14 @@
         {
             "name": "Debug QEMU",
             "type": "lldb",
-            "request": "custom",
+            "request": "launch",
             "targetCreateCommands": [
                 "target create ${workspaceFolder}/target/x86-64-os/debug/kernel",
                 // ignore first interrupt on startup because its annoying, just jump directly into the kernel
                 "process handle -p true -s false SIGTRAP",
             ],
             "processCreateCommands": ["gdb-remote localhost:1234"],
-            "preLaunchTask": "build and run",
+            "preLaunchTask": "build and run"
         }
     ]
 }

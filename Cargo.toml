@@ -16,3 +16,9 @@ jpeg-decoder = { git = "https://github.com/Amjad50/jpeg-decoder", branch = "mast
 
 [profile.test]
 opt-level = 2
+
+[profile.profile]
+inherits = "dev"
+opt-level = 2
+debug = true
+

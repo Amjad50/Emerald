@@ -9,6 +9,10 @@ pub struct Args {
     #[argh(switch, long = "release")]
     #[argh(description = "build in release mode")]
     pub release: bool,
+
+    #[argh(switch, long = "profile")]
+    #[argh(description = "use profile mode (and run qmp socket when running qemu)")]
+    pub profile: bool,
 }
 
 #[derive(FromArgs, Debug)]
@@ -20,6 +24,7 @@ pub enum Command {
     Kernel(Kernel),
     Userspace(Userspace),
     Toolchain(Toolchain),
+    Profiler(Profiler),
 }
 
 #[derive(FromArgs, Debug)]
@@ -127,4 +132,55 @@ pub struct Toolchain {
     #[argh(option, long = "out", short = 'o')]
     #[argh(description = "output folder to copy the dist files into")]
     pub out: Option<String>,
+}
+
+#[derive(FromArgs, Debug)]
+#[argh(subcommand, name = "profiler")]
+#[argh(description = "Profile the kernel using QMP")]
+pub struct Profiler {
+    #[argh(option, long = "qmp-socket")]
+    #[argh(description = "QMP socket to connect to (default ./qmp-socket)")]
+    pub qmp_socket: Option<String>,
+
+    #[argh(option, long = "interval", default = "10")]
+    #[argh(description = "sampling interval in milliseconds  (default: 10)")]
+    pub interval_ms: u64,
+
+    #[argh(option, long = "duration", default = "5")]
+    #[argh(description = "sampling duration in seconds (default: 5)")]
+    pub duration_sec: u64,
+
+    #[argh(option, long = "output", short = 'o')]
+    #[argh(description = "output file for folded stack samples (for flamegraph generation)")]
+    pub output: Option<String>,
+
+    #[argh(switch, long = "verbose", short = 'v')]
+    #[argh(description = "enable verbose output")]
+    pub verbose: bool,
+
+    #[argh(switch, long = "show-addresses")]
+    #[argh(description = "show raw addresses alongside symbols")]
+    pub show_addresses: bool,
+
+    #[argh(switch, long = "one-shot")]
+    #[argh(description = "collect a single stack trace and exit")]
+    pub one_shot: bool,
+
+    #[argh(option, long = "profile", short = 'p')]
+    #[argh(
+        description = "by default we will check for `--profile` runs, but if you want to profile `release` or `debug`, put it here"
+    )]
+    pub profile_mode: Option<String>,
+
+    #[argh(switch, long = "kernel-only", short = 'k')]
+    #[argh(
+        description = "only profile the kernel, not userspace programs (default: false, profiles both kernel and userspace)"
+    )]
+    pub kernel_only: bool,
+
+    #[argh(switch, long = "user-only", short = 'u')]
+    #[argh(
+        description = "only profile userspace programs, not the kernel (default: false, profiles both kernel and userspace)"
+    )]
+    pub user_only: bool,
 }

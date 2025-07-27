@@ -3,9 +3,9 @@ pub mod check;
 use cargo_metadata::Package;
 
 use crate::{
+    GlobalMeta,
     args::Build,
     utils::{copy_files, has_changed, run_cmd},
-    GlobalMeta,
 };
 
 const TARGET: &str = "x86_64-unknown-emerald";
@@ -34,7 +34,7 @@ fn check_toolchain_installed(meta: &GlobalMeta) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn userspace_output_path(meta: &GlobalMeta, name: &str) -> std::path::PathBuf {
+pub(crate) fn userspace_output_path(meta: &GlobalMeta, name: &str) -> std::path::PathBuf {
     meta.target_path
         .join(TARGET)
         .join(meta.profile_path())

@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use crate::{
+    GlobalMeta,
     args::Build,
     utils::{has_changed, run_cmd},
-    GlobalMeta,
 };
 
 pub fn build_kernel(meta: &GlobalMeta, build: Build) -> anyhow::Result<PathBuf> {

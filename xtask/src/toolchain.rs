@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use crate::{
+    GlobalMeta,
     args::Toolchain,
     utils::{copy_files, run_cmd},
-    GlobalMeta,
 };
 
 // make sure we have the submodule checked out

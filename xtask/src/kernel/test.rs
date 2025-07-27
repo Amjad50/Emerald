@@ -17,7 +17,7 @@ pub fn build_test_kernel(meta: &GlobalMeta) -> anyhow::Result<PathBuf> {
         .arg("--message-format=json-render-diagnostics")
         .stdout(Stdio::piped());
 
-    println!("[+] Running: {:?}", cmd);
+    println!("[+] Running: {cmd:?}");
 
     let mut child = cmd.spawn()?;
 
@@ -33,7 +33,7 @@ pub fn build_test_kernel(meta: &GlobalMeta) -> anyhow::Result<PathBuf> {
                     .unwrap_or_default()
                     .lines()
                     .for_each(|line| {
-                        println!("{}", line);
+                        println!("{line}");
                     });
             }
             Message::CompilerArtifact(artifact) => {
