@@ -12,7 +12,6 @@ Qemu has an interface to communicate and analyze the guest system from outside, 
 It allows us to send commands to the Qemu instance and get the results back.
 
 Such as:
-- `query-cpus`: Get the current state of the CPUs.
 - `stop`: Pause the Qemu instance.
 - `cont`: Continue the Qemu instance.
 - `human-monitor`: Send gdb like commands to the Qemu instance.
@@ -35,6 +34,18 @@ Using all of that we have built a profiler in `xtask` that does the following:
 - Collect all collapsed stack traces and their counts into one file.
 
 The collected collapsed stacks are then used to generate flamegraph ([https://www.speedscope.app](https://www.speedscope.app) is a good tool for viewing these files).
+
+## How to use
+
+In order to profile the OS, the easiest way is to use `xtask` with profiling commands:
+
+```sh
+# Run the kernel in profiling mode
+cargo xtask --profile run
+
+# In another terminal, run the profiler
+cargo xtask profiler -o stack.folded
+```
 
 ## Features
 
@@ -92,6 +103,8 @@ cargo xtask --profile profiler --verbose --show-addresses --one-shot
 - `--show-addresses`: Show raw addresses alongside symbols (only in `--one-shot` mode)
 - `--one-shot`: Capture single stack trace and exit
 - `--profile <mode>`: Override profile mode (debug/release/profile)
+- `--kernel-only`: Only profile kernel execution, skip userspace
+- `--user-only`: Only profile userspace execution, skip kernel
 
 ## Implementation Details
 

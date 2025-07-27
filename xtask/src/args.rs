@@ -171,4 +171,16 @@ pub struct Profiler {
         description = "by default we will check for `--profile` runs, but if you want to profile `release` or `debug`, put it here"
     )]
     pub profile_mode: Option<String>,
+
+    #[argh(switch, long = "kernel-only", short = 'k')]
+    #[argh(
+        description = "only profile the kernel, not userspace programs (default: false, profiles both kernel and userspace)"
+    )]
+    pub kernel_only: bool,
+
+    #[argh(switch, long = "user-only", short = 'u')]
+    #[argh(
+        description = "only profile userspace programs, not the kernel (default: false, profiles both kernel and userspace)"
+    )]
+    pub user_only: bool,
 }

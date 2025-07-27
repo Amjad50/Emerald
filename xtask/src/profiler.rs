@@ -482,20 +482,28 @@ impl<'a> Sampler<'a> {
 
     pub fn sample_with_timing(
         &mut self,
-        verbose: bool,
+        args: &Profiler,
     ) -> anyhow::Result<(Vec<u64>, Option<u64>, Duration)> {
         let start_time = Instant::now();
 
         self.qmp.execute(&qmp::stop {})?;
 
-        let (rip, rsp, rbp) = self.get_registers(verbose)?;
+        let (rip, rsp, rbp) = self.get_registers(args.verbose)?;
 
         // userspace
         let pid = if rip < KERNEL_START {
+            if args.kernel_only {
+                self.qmp.execute(&qmp::cont {})?;
+                return Ok((Vec::new(), None, start_time.elapsed()));
+            }
             let process_meta = self.get_process_meta()?;
             self.set_process(&process_meta)?;
             Some(process_meta.pid)
         } else {
+            if args.user_only {
+                self.qmp.execute(&qmp::cont {})?;
+                return Ok((Vec::new(), None, start_time.elapsed()));
+            }
             None
         };
 
@@ -645,7 +653,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
 
     // Handle single sample case (when duration is 0 or very short)
     if args.duration_sec < 1 || args.one_shot {
-        let (stack, pid, took) = sampler.sample_with_timing(args.verbose)?;
+        let (stack, pid, took) = sampler.sample_with_timing(args)?;
         let symbols = sampler.get_stack_symbols(&stack, args.show_addresses, pid)?;
 
         println!(
@@ -690,7 +698,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
         let interval_start = Instant::now();
 
         // Take a sample
-        match sampler.sample_with_timing(args.verbose) {
+        match sampler.sample_with_timing(args) {
             Ok((stack, pid, sample_time)) => {
                 total_sample_time += sample_time;
 
