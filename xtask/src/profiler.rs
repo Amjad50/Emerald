@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io::{BufReader, Write},
     ops::Range,
     os::unix::net::UnixStream,
@@ -7,6 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::Context;
 use elf::endian::LittleEndian;
 use framehop::{
     x86_64::{CacheX86_64, UnwindRegsX86_64, UnwinderX86_64},
@@ -16,7 +17,37 @@ use qapi::{qmp, Qmp, Stream};
 
 use crate::{args::Profiler, userspace::userspace_output_path, GlobalMeta};
 
-fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module<Vec<u8>>)> {
+fn get_elf_symbols(
+    elf_file: &elf::ElfBytes<LittleEndian>,
+) -> anyhow::Result<Vec<SymbolCacheEntry>> {
+    // Initialize symbols
+    let mut symbols = Vec::new();
+    if let Some(symbol_table) = elf_file.symbol_table()? {
+        for symbol in symbol_table.0.iter() {
+            if symbol.st_shndx != 0 {
+                let start_addr = symbol.st_value;
+                let end_addr = start_addr
+                    + if symbol.st_size == 0 {
+                        1 // Ensure at least one byte for symbols with zero size
+                    } else {
+                        symbol.st_size
+                    };
+
+                let name = symbol_table.1.get(symbol.st_name as usize)?;
+                symbols.push(SymbolCacheEntry {
+                    address_range: start_addr..end_addr,
+                    symbol: rustc_demangle::demangle(name).to_string(),
+                });
+            }
+        }
+    }
+
+    symbols.sort_by_key(|entry| entry.address_range.start);
+
+    Ok(symbols)
+}
+
+fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ModuleSymbols, Module<Vec<u8>>)> {
     let file_data = std::fs::read(path.as_ref())?.into_boxed_slice();
     let file_data_slice = &file_data[..];
 
@@ -81,37 +112,84 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module
         },
     );
 
-    // Initialize symbols
-    let mut symbols = Vec::new();
-    if let Some(symbol_table) = elf_file.symbol_table()? {
-        for symbol in symbol_table.0.iter() {
-            if symbol.st_shndx != 0 {
-                let start_addr = symbol.st_value;
-                let end_addr = start_addr
-                    + if symbol.st_size == 0 {
-                        1 // Ensure at least one byte for symbols with zero size
-                    } else {
-                        symbol.st_size
-                    };
-
-                let name = symbol_table.1.get(symbol.st_name as usize)?;
-                symbols.push(SymbolCacheEntry {
-                    address_range: start_addr..end_addr,
-                    symbol: rustc_demangle::demangle(name).to_string(),
-                });
-            }
-        }
-    }
-
-    symbols.sort_by_key(|entry| entry.address_range.start);
-
     Ok((
-        ElfSymbolsCache {
-            symbols,
+        ModuleSymbols {
+            symbols: get_elf_symbols(&elf_file)?,
             vma_range: vma_base..vma_end,
+            pid: None,
         },
         module,
     ))
+}
+
+fn parse_userspace_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ModuleSymbols, u64)> {
+    let file_data = std::fs::read(path.as_ref())?.into_boxed_slice();
+    let file_data_slice = &file_data[..];
+
+    let elf_file = elf::ElfBytes::<LittleEndian>::minimal_parse(file_data_slice)
+        .map_err(|e| anyhow::anyhow!("Failed to parse ELF file: {}", e))?;
+
+    let text_section = elf_file
+        .section_header_by_name(".text")?
+        .ok_or_else(|| anyhow::anyhow!("ELF file does not contain a .text section"))?;
+    let eh_frame_section = elf_file
+        .section_header_by_name(".eh_frame")?
+        .ok_or_else(|| anyhow::anyhow!("ELF file does not contain a .eh_frame section"))?;
+
+    println!(
+        "Found .text section at {:#x} with size {:#x}",
+        text_section.sh_addr, text_section.sh_size
+    );
+    println!(
+        "Found .eh_frame section at {:#x} with size {:#x}",
+        eh_frame_section.sh_addr, eh_frame_section.sh_size
+    );
+
+    let mut vma_base = 0xFFFFFFFFFFFFFFFF;
+    let mut vma_end = 0;
+
+    for section in elf_file
+        .segments()
+        .ok_or_else(|| anyhow::anyhow!("Failed to read section headers"))?
+    {
+        if section.p_vaddr < vma_base && section.p_memsz > 0 && section.p_vaddr != 0 {
+            vma_base = section.p_vaddr;
+        }
+        let section_end = section.p_vaddr + section.p_memsz;
+        if section_end > vma_end {
+            vma_end = section_end;
+        }
+    }
+
+    let text = &file_data_slice
+        [text_section.sh_offset as usize..(text_section.sh_offset + text_section.sh_size) as usize];
+
+    Ok((
+        ModuleSymbols {
+            symbols: get_elf_symbols(&elf_file)?,
+            vma_range: vma_base..vma_end,
+            pid: None,
+        },
+        xxhash_rust::xxh3::xxh3_64(text),
+    ))
+}
+
+fn read_memory_qmp(
+    qmp: &mut Qmp<Stream<BufReader<&UnixStream>, &UnixStream>>,
+    address: u64,
+    size: u64,
+) -> anyhow::Result<Vec<u8>> {
+    qmp.execute(&qmp::memsave {
+        cpu_index: Some(0),
+        val: address,
+        size,
+        filename: "/dev/shm/emerald-profile-memory-dump".to_string(),
+    })?;
+
+    let content = std::fs::read("/dev/shm/emerald-profile-memory-dump")
+        .map_err(|e| anyhow::anyhow!("Failed to read memory dump: {}", e))?;
+
+    Ok(content)
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -121,31 +199,32 @@ struct ProcessMetadata {
     pub image_base: usize,
     pub image_size: usize,
     pub program_headers_offset: usize,
-    pub eh_frame_size: usize,
     pub eh_frame_address: usize,
+    pub eh_frame_size: usize,
     pub text_address: usize,
     pub text_size: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SymbolCacheEntry {
     address_range: Range<u64>,
     symbol: String,
 }
 
-struct ElfSymbolsCache {
+#[derive(Debug, Clone)]
+struct ModuleSymbols {
     symbols: Vec<SymbolCacheEntry>,
     vma_range: Range<u64>,
+    pid: Option<u64>,
 }
 
-impl ElfSymbolsCache {
-    pub fn contains(&self, address: u64) -> bool {
-        self.vma_range.contains(&address)
-    }
-
-    pub fn get(&self, address: u64) -> Option<&SymbolCacheEntry> {
-        if !self.contains(address) {
+impl ModuleSymbols {
+    pub fn get(&self, address: u64, pid: Option<u64>) -> Option<&SymbolCacheEntry> {
+        if !self.vma_range.contains(&address) {
             return None;
+        }
+        if self.pid.is_some() && self.pid != pid {
+            return None; // If PID is set, we only match the same PID
         }
 
         self.symbols.iter().rfind(|entry| {
@@ -156,8 +235,63 @@ impl ElfSymbolsCache {
     }
 }
 
+struct UserSymbolsCache {
+    // based on `.text` section hash
+    entries: HashMap<u64, (ModuleSymbols, String)>,
+}
+
+impl UserSymbolsCache {
+    pub fn load_programs<P: AsRef<Path>>(dir: P) -> anyhow::Result<Self> {
+        let mut entries = HashMap::new();
+        // parse all ELF files in the directory
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            if entry.path().is_file() {
+                println!("[+] Loading userspace ELF file: {:?}", entry.path());
+                match parse_userspace_elf(&entry.path()) {
+                    Ok((symbols, text_hash)) => {
+                        if symbols.symbols.is_empty() {
+                            println!("[-] No symbols found in {:?}, skipping", entry.path());
+                            continue;
+                        }
+                        // Store the symbols with the hash of the .text section as the key
+                        if entries
+                            .insert(
+                                text_hash,
+                                (symbols, entry.file_name().to_string_lossy().to_string()),
+                            )
+                            .is_some()
+                        {
+                            println!(
+                                "Warning: Duplicate symbols for hash {:#x} in {:?}",
+                                text_hash,
+                                entry.path()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        println!("[-] Failed to parse {:?}: {}", entry.path(), e);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        println!(
+            "Loaded {} userspace ELF files into symbols cache",
+            entries.len()
+        );
+
+        Ok(UserSymbolsCache { entries })
+    }
+
+    pub fn get(&self, hash: u64) -> Option<&(ModuleSymbols, String)> {
+        self.entries.get(&hash)
+    }
+}
+
 struct StackUnwinder {
-    symbols: Vec<ElfSymbolsCache>,
+    symbols: Vec<ModuleSymbols>,
     unwinder: UnwinderX86_64<Vec<u8>>,
     cache: CacheX86_64,
 }
@@ -177,14 +311,13 @@ impl StackUnwinder {
         })
     }
 
-    pub fn add_userspace_module<P: AsRef<Path>>(
-        &mut self,
-        userspace_file: P,
-    ) -> anyhow::Result<()> {
-        let (symbols, module) = parse_elf(userspace_file)?;
-        self.unwinder.add_module(module);
-        self.symbols.push(symbols);
-        Ok(())
+    fn add_userspace_process(&mut self, process_state: &ProcessState) {
+        self.unwinder.add_module(process_state.module.clone());
+        self.symbols.push(process_state.symbols.clone());
+    }
+
+    fn detach_userspace_module(&mut self, image_base: u64) {
+        self.unwinder.remove_module(image_base);
     }
 
     pub fn unwind_stack<F>(&mut self, rip: u64, rsp: u64, rbp: u64, read_stack: &mut F) -> Vec<u64>
@@ -203,9 +336,9 @@ impl StackUnwinder {
         frames
     }
 
-    pub fn resolve_symbol(&self, address: u64) -> anyhow::Result<String> {
+    pub fn resolve_symbol(&self, address: u64, pid: Option<u64>) -> anyhow::Result<String> {
         for symbols in &self.symbols {
-            if let Some(entry) = symbols.get(address) {
+            if let Some(entry) = symbols.get(address, pid) {
                 return Ok(entry.symbol.clone());
             }
         }
@@ -214,9 +347,20 @@ impl StackUnwinder {
     }
 }
 
+struct ProcessState {
+    meta: ProcessMetadata,
+    module: Module<Vec<u8>>,
+    symbols: ModuleSymbols,
+    name: String,
+}
+
 struct Sampler<'a> {
     qmp: Qmp<Stream<BufReader<&'a UnixStream>, &'a UnixStream>>,
     unwinder: StackUnwinder,
+    processes: HashMap<u64, ProcessState>,
+    current_process: Option<u64>,
+    current_process_name: String,
+    user_programs_cache: UserSymbolsCache,
 }
 
 fn hex_to_u64(hex_str: &str) -> anyhow::Result<u64> {
@@ -228,8 +372,16 @@ impl<'a> Sampler<'a> {
     pub fn new(
         qmp: Qmp<Stream<BufReader<&'a UnixStream>, &'a UnixStream>>,
         unwinder: StackUnwinder,
+        user_symbols_cache: UserSymbolsCache,
     ) -> Self {
-        Sampler { qmp, unwinder }
+        Sampler {
+            qmp,
+            unwinder,
+            processes: HashMap::new(),
+            current_process: None,
+            current_process_name: String::new(),
+            user_programs_cache: user_symbols_cache,
+        }
     }
 
     pub fn get_registers(&mut self, verbose: bool) -> anyhow::Result<(u64, u64, u64)> {
@@ -288,22 +440,28 @@ impl<'a> Sampler<'a> {
             image_base: next_value("image_base")? as usize,
             image_size: next_value("image_size")? as usize,
             program_headers_offset: next_value("program_headers_offset")? as usize,
-            eh_frame_size: next_value("eh_frame_size")? as usize,
             eh_frame_address: next_value("eh_frame_address")? as usize,
+            eh_frame_size: next_value("eh_frame_size")? as usize,
             text_address: next_value("text_address")? as usize,
             text_size: next_value("text_size")? as usize,
         })
+    }
+
+    pub fn read_memory(&mut self, address: u64, size: u64) -> anyhow::Result<Vec<u8>> {
+        read_memory_qmp(&mut self.qmp, address, size)
+            .with_context(|| format!("Failed to read memory at {:#x} with size {}", address, size))
     }
 
     pub fn get_stack_symbols(
         &self,
         stack: &[u64],
         show_addresses: bool,
+        pid: Option<u64>,
     ) -> anyhow::Result<Vec<String>> {
         let mut symbols = Vec::new();
 
         for &address in stack {
-            let symbol = self.unwinder.resolve_symbol(address)?;
+            let symbol = self.unwinder.resolve_symbol(address, pid)?;
 
             if show_addresses {
                 symbols.push(format!("{} [0x{:x}]", symbol, address));
@@ -328,6 +486,7 @@ impl<'a> Sampler<'a> {
         // userspace
         let pid = if rip < 0xffffffff80000000 {
             let process_meta = self.get_process_meta()?;
+            self.set_process(&process_meta)?;
             Some(process_meta.pid)
         } else {
             None
@@ -352,6 +511,101 @@ impl<'a> Sampler<'a> {
 
         Ok((result, pid, total_time))
     }
+
+    fn set_process(&mut self, process_meta: &ProcessMetadata) -> anyhow::Result<()> {
+        if self.current_process == Some(process_meta.pid) {
+            return Ok(()); // Process already set
+        }
+
+        if !self.processes.contains_key(&process_meta.pid) {
+            println!(
+                "Adding userspace process: PID={}, Image Base={:#x}, Image Size={:#x}",
+                process_meta.pid, process_meta.image_base, process_meta.image_size
+            );
+            println!(
+                "Text: {:#x}..{:#x}, EH Frame: {:#x}..{:#x}",
+                process_meta.text_address,
+                process_meta.text_address + process_meta.text_size,
+                process_meta.eh_frame_address,
+                process_meta.eh_frame_address + process_meta.eh_frame_size
+            );
+
+            let text = self.read_memory(
+                process_meta.text_address as u64,
+                process_meta.text_size as u64,
+            )?;
+            let eh_frame = self.read_memory(
+                process_meta.eh_frame_address as u64,
+                process_meta.eh_frame_size as u64,
+            )?;
+
+            let (symbols, program_name) = self
+                .user_programs_cache
+                .get(xxhash_rust::xxh3::xxh3_64(&text))
+                .cloned()
+                .unwrap_or_else(|| {
+                    println!(
+                        "No symbols found for userspace process PID={}, using empty symbols",
+                        process_meta.pid
+                    );
+                    (
+                        ModuleSymbols {
+                            symbols: Vec::new(),
+                            vma_range: process_meta.image_base as u64
+                                ..(process_meta.image_base as u64 + process_meta.image_size as u64),
+                            pid: Some(process_meta.pid),
+                        },
+                        "<unknown>".to_string(),
+                    )
+                });
+
+            let module = Module::new(
+                format!("userspace-{}", process_meta.pid),
+                process_meta.image_base as u64
+                    ..(process_meta.image_base as u64 + process_meta.image_size as u64),
+                process_meta.image_base as u64,
+                ExplicitModuleSectionInfo {
+                    base_svma: process_meta.image_base as u64,
+                    text_svma: Some(
+                        process_meta.text_address as u64
+                            ..(process_meta.text_address as u64 + process_meta.text_size as u64),
+                    ),
+                    text: Some(text),
+                    eh_frame_svma: Some(
+                        process_meta.eh_frame_address as u64
+                            ..(process_meta.eh_frame_address as u64
+                                + process_meta.eh_frame_size as u64),
+                    ),
+                    eh_frame: Some(eh_frame),
+                    ..Default::default()
+                },
+            );
+
+            self.processes.insert(
+                process_meta.pid,
+                ProcessState {
+                    meta: *process_meta,
+                    module: module.clone(),
+                    symbols,
+                    name: program_name.clone(),
+                },
+            );
+        }
+
+        if let Some(pid) = self.current_process {
+            self.unwinder
+                .detach_userspace_module(self.processes[&pid].meta.image_base as u64);
+        }
+
+        self.unwinder
+            .add_userspace_process(&self.processes[&process_meta.pid]);
+
+        self.current_process = Some(process_meta.pid);
+        self.current_process_name = self.processes[&process_meta.pid].name.clone();
+        println!("Switched to userspace process: PID={}", process_meta.pid);
+
+        Ok(())
+    }
 }
 
 pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
@@ -363,20 +617,16 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
         .join("kernel");
     assert!(kernel_path.exists(), "Kernel ELF file does not exist");
 
-    let mut unwinder = StackUnwinder::new(&kernel_path)?;
+    let unwinder = StackUnwinder::new(&kernel_path)?;
 
-    if let Some(user_program_name) = &args.user_program {
-        let user_program_path = userspace_output_path(meta, user_program_name);
+    let user_programs = userspace_output_path(meta, "");
+    assert!(
+        user_programs.exists(),
+        "Userspace output path does not exist: {}",
+        user_programs.display()
+    );
 
-        if user_program_name.is_empty() || !user_program_path.exists() {
-            return Err(anyhow::anyhow!(
-                "Userspace program '{user_program_name}' does not exist in '{}'",
-                user_program_path.display()
-            ));
-        }
-
-        unwinder.add_userspace_module(user_program_path)?;
-    }
+    let user_symbols_cache = UserSymbolsCache::load_programs(&user_programs)?;
 
     let socket = UnixStream::connect(args.qmp_socket.as_deref().unwrap_or("./qmp-socket"))
         .map_err(|e| anyhow::anyhow!("Failed to connect to socket: {}", e))?;
@@ -388,16 +638,19 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
         println!("QMP Info: {:?}", info);
     }
 
-    let mut sampler = Sampler::new(qmp, unwinder);
+    let mut sampler = Sampler::new(qmp, unwinder, user_symbols_cache);
 
     // Handle single sample case (when duration is 0 or very short)
     if args.duration_sec < 1 || args.one_shot {
         let (stack, pid, took) = sampler.sample_with_timing(args.verbose)?;
-        let symbols = sampler.get_stack_symbols(&stack, args.show_addresses)?;
+        let symbols = sampler.get_stack_symbols(&stack, args.show_addresses, pid)?;
 
         println!(
             "Current stack trace (took {took:?}) ({}):",
-            pid.map_or("kernel".to_string(), |p| format!("User PID={p}"))
+            pid.map_or("kernel".to_string(), |p| format!(
+                "User PID={p} ({})",
+                sampler.current_process_name
+            ))
         );
         for (i, symbol) in symbols.iter().enumerate() {
             println!("{:>3}: {}", i, symbol);
@@ -407,6 +660,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
 
     // Continuous or timed sampling
     let mut sample_counts: HashMap<String, usize> = HashMap::new();
+    let mut processes: HashSet<Option<u64>> = HashSet::new();
     let mut total_samples = 0;
     let mut failed_samples = 0;
     let mut total_sample_time = Duration::ZERO;
@@ -439,10 +693,14 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
 
                 if !stack.is_empty() {
                     let symbol_start = Instant::now();
-                    match sampler.get_stack_symbols(&stack, false) {
+                    match sampler.get_stack_symbols(&stack, false, pid) {
                         Ok(mut symbols) => {
+                            processes.insert(pid);
                             if let Some(pid) = pid {
-                                symbols.push(format!("User PID={pid}"));
+                                symbols.push(format!(
+                                    "User PID={pid} ({})",
+                                    sampler.current_process_name
+                                ));
                             } else {
                                 symbols.push("Kernel".to_string());
                             }
@@ -498,6 +756,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
     println!("Total samples: {}", total_samples);
     println!("Failed samples: {}", failed_samples);
     println!("Unique stacks: {}", sample_counts.len());
+    println!("Unique processes (with kernel): {}", processes.len());
     println!("Total time: {:?}", total_elapsed);
     if total_samples > 0 {
         println!(

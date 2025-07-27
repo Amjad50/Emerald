@@ -166,10 +166,6 @@ pub struct Profiler {
     #[argh(description = "collect a single stack trace and exit")]
     pub one_shot: bool,
 
-    #[argh(option, long = "user-program", short = 'u')]
-    #[argh(description = "userspace program that you want to profile (not accurate for now...)")]
-    pub user_program: Option<String>,
-
     #[argh(option, long = "profile", short = 'p')]
     #[argh(
         description = "by default we will check for `--profile` runs, but if you want to profile `release` or `debug`, put it here"

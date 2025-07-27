@@ -14,3 +14,5 @@ qapi = { version = "0.15", features = ["qapi-qmp", "qapi-qga"] }
 framehop = "0.14"
 elf = "0.8"
 rustc-demangle = "0.1"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
