@@ -31,11 +31,11 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module
         .ok_or_else(|| anyhow::anyhow!("ELF file does not contain a .eh_frame section"))?;
 
     println!(
-        "Found .text section at {:#x} with size {}",
+        "Found .text section at {:#x} with size {:#x}",
         text_section.sh_addr, text_section.sh_size
     );
     println!(
-        "Found .eh_frame section at {:#x} with size {}",
+        "Found .eh_frame section at {:#x} with size {:#x}",
         eh_frame_section.sh_addr, eh_frame_section.sh_size
     );
 
@@ -43,13 +43,13 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module
     let mut vma_end = 0;
 
     for section in elf_file
-        .section_headers()
+        .segments()
         .ok_or_else(|| anyhow::anyhow!("Failed to read section headers"))?
     {
-        if section.sh_addr < vma_base && section.sh_size > 0 && section.sh_addr != 0 {
-            vma_base = section.sh_addr;
+        if section.p_vaddr < vma_base && section.p_memsz > 0 && section.p_vaddr != 0 {
+            vma_base = section.p_vaddr;
         }
-        let section_end = section.sh_addr + section.sh_size;
+        let section_end = section.p_vaddr + section.p_memsz;
         if section_end > vma_end {
             vma_end = section_end;
         }
@@ -62,7 +62,7 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module
         vma_base..vma_end,
         vma_base,
         ExplicitModuleSectionInfo {
-            base_svma: text_section.sh_addr,
+            base_svma: vma_base,
             text_svma: Some(text_section.sh_addr..(text_section.sh_addr + text_section.sh_size)),
             text: Some(
                 file_data_slice[text_section.sh_offset as usize
@@ -85,9 +85,14 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module
     let mut symbols = Vec::new();
     if let Some(symbol_table) = elf_file.symbol_table()? {
         for symbol in symbol_table.0.iter() {
-            if symbol.st_shndx != 0 && symbol.st_size > 0 {
+            if symbol.st_shndx != 0 {
                 let start_addr = symbol.st_value;
-                let end_addr = start_addr + symbol.st_size;
+                let end_addr = start_addr
+                    + if symbol.st_size == 0 {
+                        1 // Ensure at least one byte for symbols with zero size
+                    } else {
+                        symbol.st_size
+                    };
 
                 let name = symbol_table.1.get(symbol.st_name as usize)?;
                 symbols.push(SymbolCacheEntry {
@@ -107,6 +112,19 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ElfSymbolsCache, Module
         },
         module,
     ))
+}
+
+#[derive(Debug, Copy, Clone)]
+#[allow(dead_code)]
+struct ProcessMetadata {
+    pub pid: u64,
+    pub image_base: usize,
+    pub image_size: usize,
+    pub program_headers_offset: usize,
+    pub eh_frame_size: usize,
+    pub eh_frame_address: usize,
+    pub text_address: usize,
+    pub text_size: usize,
 }
 
 #[derive(Debug)]
@@ -130,9 +148,11 @@ impl ElfSymbolsCache {
             return None;
         }
 
-        self.symbols
-            .iter()
-            .find(|entry| entry.address_range.contains(&address))
+        self.symbols.iter().rfind(|entry| {
+            // Check if the address is within the range of the symbol (some symbols have zero size, so let's not check the end)
+            // we are checking from reverse to find the first symbol that contains the address
+            entry.address_range.start <= address
+        })
     }
 }
 
@@ -240,6 +260,41 @@ impl<'a> Sampler<'a> {
         Ok((rip, rsp, rbp))
     }
 
+    pub fn get_process_meta(&mut self) -> anyhow::Result<ProcessMetadata> {
+        let meta_read = self.qmp.execute(&qmp::human_monitor_command {
+            cpu_index: Some(0),
+            command_line: format!("x/10gx {:#x}", 0xFFFF_FF7F_FFFF_E000u64),
+        })?;
+
+        // parse the process metadata
+        let mut values = meta_read
+            .lines()
+            .map(|line| {
+                line.split_once(':')
+                    .map(|s| s.1.trim())
+                    .expect("Invalid format")
+            })
+            .flat_map(|s| s.split_whitespace());
+
+        let mut next_value = |name: &str| -> anyhow::Result<u64> {
+            values
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Failed to find {name} in process metadata"))
+                .map(|v| hex_to_u64(v))?
+        };
+
+        Ok(ProcessMetadata {
+            pid: next_value("pid")?,
+            image_base: next_value("image_base")? as usize,
+            image_size: next_value("image_size")? as usize,
+            program_headers_offset: next_value("program_headers_offset")? as usize,
+            eh_frame_size: next_value("eh_frame_size")? as usize,
+            eh_frame_address: next_value("eh_frame_address")? as usize,
+            text_address: next_value("text_address")? as usize,
+            text_size: next_value("text_size")? as usize,
+        })
+    }
+
     pub fn get_stack_symbols(
         &self,
         stack: &[u64],
@@ -260,12 +315,23 @@ impl<'a> Sampler<'a> {
         Ok(symbols)
     }
 
-    pub fn sample_with_timing(&mut self, verbose: bool) -> anyhow::Result<(Vec<u64>, Duration)> {
+    pub fn sample_with_timing(
+        &mut self,
+        verbose: bool,
+    ) -> anyhow::Result<(Vec<u64>, Option<u64>, Duration)> {
         let start_time = Instant::now();
 
         self.qmp.execute(&qmp::stop {})?;
 
         let (rip, rsp, rbp) = self.get_registers(verbose)?;
+
+        // userspace
+        let pid = if rip < 0xffffffff80000000 {
+            let process_meta = self.get_process_meta()?;
+            Some(process_meta.pid)
+        } else {
+            None
+        };
 
         let result = self.unwinder.unwind_stack(rip, rsp, rbp, &mut |addr| {
             let register_read = self
@@ -284,7 +350,7 @@ impl<'a> Sampler<'a> {
         self.qmp.execute(&qmp::cont {})?;
         let total_time = start_time.elapsed();
 
-        Ok((result, total_time))
+        Ok((result, pid, total_time))
     }
 }
 
@@ -326,10 +392,13 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
 
     // Handle single sample case (when duration is 0 or very short)
     if args.duration_sec < 1 || args.one_shot {
-        let (stack, took) = sampler.sample_with_timing(args.verbose)?;
+        let (stack, pid, took) = sampler.sample_with_timing(args.verbose)?;
         let symbols = sampler.get_stack_symbols(&stack, args.show_addresses)?;
 
-        println!("Current stack trace (took {took:?}):");
+        println!(
+            "Current stack trace (took {took:?}) ({}):",
+            pid.map_or("kernel".to_string(), |p| format!("User PID={p}"))
+        );
         for (i, symbol) in symbols.iter().enumerate() {
             println!("{:>3}: {}", i, symbol);
         }
@@ -365,13 +434,18 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
 
         // Take a sample
         match sampler.sample_with_timing(args.verbose) {
-            Ok((stack, sample_time)) => {
+            Ok((stack, pid, sample_time)) => {
                 total_sample_time += sample_time;
 
                 if !stack.is_empty() {
                     let symbol_start = Instant::now();
                     match sampler.get_stack_symbols(&stack, false) {
                         Ok(mut symbols) => {
+                            if let Some(pid) = pid {
+                                symbols.push(format!("User PID={pid}"));
+                            } else {
+                                symbols.push("Kernel".to_string());
+                            }
                             // Create folded stack format (root to leaf)
                             symbols.reverse();
                             let folded_stack = symbols.join(";");
