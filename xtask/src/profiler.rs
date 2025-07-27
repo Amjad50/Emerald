@@ -49,9 +49,9 @@ fn get_elf_symbols(
     Ok(symbols)
 }
 
-fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ModuleSymbols, Module<Vec<u8>>)> {
+fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ModuleSymbols, Module<&'static [u8]>)> {
     let file_data = std::fs::read(path.as_ref())?.into_boxed_slice();
-    let file_data_slice = &file_data[..];
+    let file_data_slice = Box::leak(file_data);
 
     let elf_file = elf::ElfBytes::<LittleEndian>::minimal_parse(file_data_slice)
         .map_err(|e| anyhow::anyhow!("Failed to parse ELF file: {}", e))?;
@@ -98,17 +98,15 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ModuleSymbols, Module<V
             base_svma: vma_base,
             text_svma: Some(text_section.sh_addr..(text_section.sh_addr + text_section.sh_size)),
             text: Some(
-                file_data_slice[text_section.sh_offset as usize
-                    ..(text_section.sh_offset + text_section.sh_size) as usize]
-                    .to_vec(),
+                &file_data_slice[text_section.sh_offset as usize
+                    ..(text_section.sh_offset + text_section.sh_size) as usize],
             ),
             eh_frame_svma: Some(
                 eh_frame_section.sh_addr..(eh_frame_section.sh_addr + eh_frame_section.sh_size),
             ),
             eh_frame: Some(
-                file_data_slice[eh_frame_section.sh_offset as usize
-                    ..(eh_frame_section.sh_offset + eh_frame_section.sh_size) as usize]
-                    .to_vec(),
+                &file_data_slice[eh_frame_section.sh_offset as usize
+                    ..(eh_frame_section.sh_offset + eh_frame_section.sh_size) as usize],
             ),
             ..Default::default()
         },
@@ -293,19 +291,19 @@ impl UserSymbolsCache {
 }
 
 struct StackUnwinder {
-    unwinder: UnwinderX86_64<Vec<u8>>,
+    unwinder: UnwinderX86_64<&'static [u8]>,
     cache: CacheX86_64,
 }
 
 impl StackUnwinder {
     pub fn new() -> Self {
         let cache = CacheX86_64::new();
-        let unwinder: UnwinderX86_64<Vec<u8>> = UnwinderX86_64::new();
+        let unwinder = UnwinderX86_64::new();
 
         StackUnwinder { unwinder, cache }
     }
 
-    fn add_module(&mut self, module: Module<Vec<u8>>) {
+    fn add_module(&mut self, module: Module<&'static [u8]>) {
         self.unwinder.add_module(module);
     }
 
@@ -332,7 +330,7 @@ impl StackUnwinder {
 
 struct ProcessState {
     meta: ProcessMetadata,
-    module: Module<Vec<u8>>,
+    module: Module<&'static [u8]>,
     symbols: Option<ModuleSymbols>,
     name: String,
 }
@@ -539,14 +537,20 @@ impl<'a> Sampler<'a> {
                 process_meta.eh_frame_address + process_meta.eh_frame_size
             );
 
-            let text = self.read_memory(
-                process_meta.text_address as u64,
-                process_meta.text_size as u64,
-            )?;
-            let eh_frame = self.read_memory(
-                process_meta.eh_frame_address as u64,
-                process_meta.eh_frame_size as u64,
-            )?;
+            let text = Box::leak(
+                self.read_memory(
+                    process_meta.text_address as u64,
+                    process_meta.text_size as u64,
+                )?
+                .into_boxed_slice(),
+            );
+            let eh_frame = Box::leak(
+                self.read_memory(
+                    process_meta.eh_frame_address as u64,
+                    process_meta.eh_frame_size as u64,
+                )?
+                .into_boxed_slice(),
+            );
 
             let (symbols, program_name) = self
                 .user_programs_cache
@@ -571,13 +575,13 @@ impl<'a> Sampler<'a> {
                         process_meta.text_address as u64
                             ..(process_meta.text_address as u64 + process_meta.text_size as u64),
                     ),
-                    text: Some(text),
+                    text: Some(&text[..]),
                     eh_frame_svma: Some(
                         process_meta.eh_frame_address as u64
                             ..(process_meta.eh_frame_address as u64
                                 + process_meta.eh_frame_size as u64),
                     ),
-                    eh_frame: Some(eh_frame),
+                    eh_frame: Some(&eh_frame[..]),
                     ..Default::default()
                 },
             );
