@@ -192,16 +192,39 @@ impl Graphics {
         assert!(self.framebuffer_info.width as i32 >= pos.0 + size.0 as i32);
         assert!(self.framebuffer_info.height as i32 >= pos.1 + size.1 as i32);
 
+        let pos = (pos.0 as usize, pos.1 as usize);
+
         for y in 0..size.1 {
-            for x in 0..size.0 {
-                let i = (y * size.0 + x) * 3;
-                let color = Pixel {
-                    r: img_bytes[i],
-                    g: img_bytes[i + 1],
-                    b: img_bytes[i + 2],
-                };
-                self.write_pixel((pos.0 as usize + x, pos.1 as usize + y), color)
-                    .unwrap();
+            // copy one row at once
+            let fb_start_i = pos.0 * self.framebuffer_info.byte_per_pixel as usize
+                + (pos.1 + y) * self.framebuffer_info.pitch;
+            let fb_end_i = fb_start_i + size.0 * self.framebuffer_info.byte_per_pixel as usize;
+            let img_start_i = y * size.0 * 3;
+            let img_end_i = img_start_i + size.0 * 3;
+
+            // fastest
+            if self.framebuffer_info.field_pos == (0, 1, 2)
+                && self.framebuffer_info.byte_per_pixel == 3
+                && self.framebuffer_info.mask != (0xFF, 0xFF, 0xFF)
+            {
+                self.framebuffer[fb_start_i..fb_end_i]
+                    .copy_from_slice(&img_bytes[img_start_i..img_end_i]);
+            } else {
+                let r = self.framebuffer_info.field_pos.0 as usize;
+                let g = self.framebuffer_info.field_pos.1 as usize;
+                let b = self.framebuffer_info.field_pos.2 as usize;
+                let mask_r = self.framebuffer_info.mask.0;
+                let mask_g = self.framebuffer_info.mask.1;
+                let mask_b = self.framebuffer_info.mask.2;
+
+                self.framebuffer[fb_start_i..fb_end_i]
+                    .chunks_mut(self.framebuffer_info.byte_per_pixel as usize)
+                    .zip(img_bytes[img_start_i..img_end_i].chunks(3))
+                    .for_each(|(fb_chunk, img_chunk)| {
+                        fb_chunk[r] = img_chunk[0] & mask_r;
+                        fb_chunk[g] = img_chunk[1] & mask_g;
+                        fb_chunk[b] = img_chunk[2] & mask_b;
+                    });
             }
         }
 
