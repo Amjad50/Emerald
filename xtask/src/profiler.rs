@@ -17,6 +17,8 @@ use qapi::{Qmp, Stream, qmp};
 
 use crate::{GlobalMeta, args::Profiler, userspace::userspace_output_path};
 
+const KERNEL_START: u64 = 0xFFFFFFFF80000000;
+
 fn get_elf_symbols(
     elf_file: &elf::ElfBytes<LittleEndian>,
 ) -> anyhow::Result<Vec<SymbolCacheEntry>> {
@@ -441,7 +443,7 @@ impl<'a> Sampler<'a> {
     }
 
     pub fn resolve_symbol(&self, address: u64, pid: Option<u64>) -> anyhow::Result<String> {
-        if address >= 0xFFFFFFFF80000000 {
+        if address >= KERNEL_START {
             // Kernel address
             if let Some(entry) = self.kernel_symbols.get(address, pid) {
                 return Ok(entry.symbol.clone());
@@ -491,7 +493,7 @@ impl<'a> Sampler<'a> {
         let (rip, rsp, rbp) = self.get_registers(verbose)?;
 
         // userspace
-        let pid = if rip < 0xffffffff80000000 {
+        let pid = if rip < KERNEL_START {
             let process_meta = self.get_process_meta()?;
             self.set_process(&process_meta)?;
             Some(process_meta.pid)
