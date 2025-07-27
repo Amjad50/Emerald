@@ -1,6 +1,6 @@
 use crate::{
-    args::{Check, Clippy, Fmt},
     GlobalMeta,
+    args::{Check, Clippy, Fmt},
 };
 
 use super::{check_toolchain_installed, run_for_all_userspace_members};

@@ -91,7 +91,7 @@ impl RunConfig {
 
         cmd.args(extra_args);
 
-        println!("[+] Running the kernel: {:?}", cmd);
+        println!("[+] Running the kernel: {cmd:?}");
 
         cmd.status()
             .map(|status| status.code().unwrap_or(1))

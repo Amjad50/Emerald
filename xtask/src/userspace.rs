@@ -3,9 +3,9 @@ pub mod check;
 use cargo_metadata::Package;
 
 use crate::{
+    GlobalMeta,
     args::Build,
     utils::{copy_files, has_changed, run_cmd},
-    GlobalMeta,
 };
 
 const TARGET: &str = "x86_64-unknown-emerald";

@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
-    utils::{copy_files, has_changed, run_cmd},
     GlobalMeta,
+    utils::{copy_files, has_changed, run_cmd},
 };
 
 use super::{build::build_kernel, test::build_test_kernel};

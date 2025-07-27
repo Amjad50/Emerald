@@ -1,7 +1,7 @@
 use crate::{
+    GlobalMeta,
     args::{Check, Clippy, Fmt},
     utils::run_cmd,
-    GlobalMeta,
 };
 
 fn kernel_run_cargo(

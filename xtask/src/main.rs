@@ -113,7 +113,7 @@ fn main() -> anyhow::Result<()> {
                 println!("Test succeeded!");
                 std::process::exit(0);
             } else {
-                println!("Test failed! code: {}", code);
+                println!("Test failed! code: {code}");
                 std::process::exit(1);
             }
         }

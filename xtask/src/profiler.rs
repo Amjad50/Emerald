@@ -10,12 +10,12 @@ use std::{
 use anyhow::Context;
 use elf::endian::LittleEndian;
 use framehop::{
-    x86_64::{CacheX86_64, UnwindRegsX86_64, UnwinderX86_64},
     ExplicitModuleSectionInfo, Module, Unwinder,
+    x86_64::{CacheX86_64, UnwindRegsX86_64, UnwinderX86_64},
 };
-use qapi::{qmp, Qmp, Stream};
+use qapi::{Qmp, Stream, qmp};
 
-use crate::{args::Profiler, userspace::userspace_output_path, GlobalMeta};
+use crate::{GlobalMeta, args::Profiler, userspace::userspace_output_path};
 
 fn get_elf_symbols(
     elf_file: &elf::ElfBytes<LittleEndian>,
@@ -86,7 +86,7 @@ fn parse_elf<P: AsRef<Path>>(path: P) -> anyhow::Result<(ModuleSymbols, Module<V
         }
     }
 
-    println!("VMA range: {:#x}..{:#x}", vma_base, vma_end);
+    println!("VMA range: {vma_base:#x}..{vma_end:#x}");
 
     let module = Module::new(
         path.as_ref().to_string_lossy().to_string(),
@@ -248,7 +248,7 @@ impl UserSymbolsCache {
             let entry = entry?;
             if entry.path().is_file() {
                 println!("[+] Loading userspace ELF file: {:?}", entry.path());
-                match parse_userspace_elf(&entry.path()) {
+                match parse_userspace_elf(entry.path()) {
                     Ok((symbols, text_hash)) => {
                         if symbols.symbols.is_empty() {
                             println!("[-] No symbols found in {:?}, skipping", entry.path());
@@ -375,11 +375,11 @@ impl<'a> Sampler<'a> {
     pub fn get_registers(&mut self, verbose: bool) -> anyhow::Result<(u64, u64, u64)> {
         let regs = self.qmp.execute(&qmp::human_monitor_command {
             cpu_index: Some(0),
-            command_line: format!("info registers"),
+            command_line: "info registers".to_string(),
         })?;
 
         if verbose {
-            println!("Registers: {}", regs);
+            println!("Registers: {regs}");
         }
 
         let get_reg = |name: &str| -> anyhow::Result<u64> {
@@ -420,7 +420,7 @@ impl<'a> Sampler<'a> {
             values
                 .next()
                 .ok_or_else(|| anyhow::anyhow!("Failed to find {name} in process metadata"))
-                .map(|v| hex_to_u64(v))?
+                .map(hex_to_u64)?
         };
 
         Ok(ProcessMetadata {
@@ -437,7 +437,7 @@ impl<'a> Sampler<'a> {
 
     pub fn read_memory(&mut self, address: u64, size: u64) -> anyhow::Result<Vec<u8>> {
         read_memory_qmp(&mut self.qmp, address, size)
-            .with_context(|| format!("Failed to read memory at {:#x} with size {}", address, size))
+            .with_context(|| format!("Failed to read memory at {address:#x} with size {size}"))
     }
 
     pub fn resolve_symbol(&self, address: u64, pid: Option<u64>) -> anyhow::Result<String> {
@@ -448,16 +448,15 @@ impl<'a> Sampler<'a> {
             }
         } else if let Some(pid) = pid {
             // Userspace address
-            if let Some(process) = self.processes.get(&pid) {
-                if let Some(symbols) = &process.symbols {
-                    if let Some(entry) = symbols.get(address, Some(pid)) {
-                        return Ok(entry.symbol.clone());
-                    }
-                }
+            if let Some(process) = self.processes.get(&pid)
+                && let Some(symbols) = &process.symbols
+                && let Some(entry) = symbols.get(address, Some(pid))
+            {
+                return Ok(entry.symbol.clone());
             }
         }
 
-        Ok(format!("<unknown:0x{:x}>", address))
+        Ok(format!("<unknown:0x{address:x}>"))
     }
 
     pub fn get_stack_symbols(
@@ -472,7 +471,7 @@ impl<'a> Sampler<'a> {
             let symbol = self.resolve_symbol(address, pid)?;
 
             if show_addresses {
-                symbols.push(format!("{} [0x{:x}]", symbol, address));
+                symbols.push(format!("{symbol} [0x{address:x}]"));
             } else {
                 symbols.push(symbol);
             }
@@ -505,7 +504,7 @@ impl<'a> Sampler<'a> {
                 .qmp
                 .execute(&qmp::human_monitor_command {
                     cpu_index: Some(0),
-                    command_line: format!("x/1gx {:#x}", addr),
+                    command_line: format!("x/1gx {addr:#x}"),
                 })
                 .map_err(|_| ())?;
 
@@ -633,7 +632,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
 
     let info = qmp.handshake()?;
     if args.verbose {
-        println!("QMP Info: {:?}", info);
+        println!("QMP Info: {info:?}");
     }
 
     let mut sampler = Sampler::new(qmp, user_symbols_cache, &kernel_path);
@@ -651,7 +650,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
             ))
         );
         for (i, symbol) in symbols.iter().enumerate() {
-            println!("{:>3}: {}", i, symbol);
+            println!("{i:>3}: {symbol}");
         }
         return Ok(());
     }
@@ -715,7 +714,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
                         Err(e) => {
                             failed_samples += 1;
                             if args.verbose {
-                                println!("Failed to resolve symbols: {}", e);
+                                println!("Failed to resolve symbols: {e}");
                             }
                         }
                     }
@@ -730,7 +729,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
             Err(e) => {
                 failed_samples += 1;
                 if args.verbose {
-                    println!("Failed to sample stack: {}", e);
+                    println!("Failed to sample stack: {e}");
                 }
             }
         }
@@ -741,8 +740,7 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
             std::thread::sleep(interval_duration - elapsed);
         } else if args.verbose {
             println!(
-                "Warning: Sampling took longer than interval ({:?} > {:?})",
-                elapsed, interval_duration
+                "Warning: Sampling took longer than interval ({elapsed:?} > {interval_duration:?})"
             );
         }
     }
@@ -751,22 +749,22 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
 
     // Print statistics
     println!("\n=== Sampling Statistics ===");
-    println!("Total samples: {}", total_samples);
-    println!("Failed samples: {}", failed_samples);
+    println!("Total samples: {total_samples}");
+    println!("Failed samples: {failed_samples}");
     println!("Unique stacks: {}", sample_counts.len());
     println!("Unique processes (with kernel): {}", processes.len());
-    println!("Total time: {:?}", total_elapsed);
+    println!("Total time: {total_elapsed:?}");
     if total_samples > 0 {
         println!(
             "Average sample time: {:?}",
             total_sample_time / total_samples as u32
         );
-        println!("Total sample time: {:?}", total_sample_time);
+        println!("Total sample time: {total_sample_time:?}");
         println!(
             "Average symbol resolution time: {:?}",
             total_symbol_time / total_samples as u32
         );
-        println!("Total symbol resolution time: {:?}", total_symbol_time);
+        println!("Total symbol resolution time: {total_symbol_time:?}");
         println!(
             "Success rate: {:.1}%",
             (total_samples as f64 / (total_samples + failed_samples) as f64) * 100.0
@@ -779,14 +777,11 @@ pub fn run(meta: &GlobalMeta, args: &Profiler) -> anyhow::Result<()> {
 
         let mut file = std::fs::File::create(output_path)?;
         for (stack, count) in sample_counts.iter() {
-            writeln!(file, "{} {}", stack, count)?;
+            writeln!(file, "{stack} {count}")?;
         }
 
-        println!("Folded stack samples written to: {}", output_path);
-        println!(
-            "Generate flamegraph with: flamegraph.pl {} > flamegraph.svg",
-            output_path
-        );
+        println!("Folded stack samples written to: {output_path}");
+        println!("Generate flamegraph with: flamegraph.pl {output_path} > flamegraph.svg");
     } else {
         // Print top stacks
         let mut sorted_stacks: Vec<_> = sample_counts.iter().collect();

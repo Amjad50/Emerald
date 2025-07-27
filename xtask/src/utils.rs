@@ -49,8 +49,8 @@ pub fn copy_files(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Resul
     let src = src.as_ref();
     let mut dst = dst.as_ref().to_owned();
 
-    assert!(src.exists(), "Source path does not exist: {:?}", src);
-    assert!(!src.is_dir(), "Source path is not a file: {:?}", src);
+    assert!(src.exists(), "Source path does not exist: {src:?}");
+    assert!(!src.is_dir(), "Source path is not a file: {src:?}");
 
     if dst.is_dir() {
         let file_name = src.file_name().unwrap();
@@ -65,14 +65,14 @@ pub fn copy_files(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Resul
         return Ok(());
     }
 
-    println!("[+] Copying {:?} to {:?}", src, dst);
+    println!("[+] Copying {src:?} to {dst:?}");
     std::fs::copy(src, dst)?;
 
     Ok(())
 }
 
 pub fn run_cmd(mut cmd: std::process::Command) -> anyhow::Result<()> {
-    println!("[+] Running: {:?}", cmd);
+    println!("[+] Running: {cmd:?}");
 
     let status = cmd.status()?;
 
