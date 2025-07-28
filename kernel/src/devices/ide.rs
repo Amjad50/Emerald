@@ -1085,12 +1085,12 @@ impl PciDevice for IdeDevice {
                 apic::assign_io_irq(
                     ide_interrupt_primary as BasicInterruptHandler,
                     pci_cfg::DEFAULT_PRIMARY_INTERRUPT,
-                    cpu::cpu(),
+                    &cpu::cpu(),
                 );
                 apic::assign_io_irq(
                     ide_interrupt_secondary as BasicInterruptHandler,
                     pci_cfg::DEFAULT_SECONDARY_INTERRUPT,
-                    cpu::cpu(),
+                    &cpu::cpu(),
                 );
             }
 

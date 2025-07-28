@@ -237,7 +237,7 @@ impl Hpet {
         apic::assign_io_irq(
             timer0_handler as InterruptHandlerWithAllState,
             chosen_route,
-            cpu::cpu(),
+            &cpu::cpu(),
         );
 
         s.set_enabled(true);

@@ -118,7 +118,7 @@ impl<T: ?Sized> RwLock<T> {
     }
 
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
-        let cpu = cpu::cpu();
+        let mut cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
 
@@ -135,7 +135,7 @@ impl<T: ?Sized> RwLock<T> {
     }
 
     pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
-        let cpu = cpu::cpu();
+        let mut cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
 
