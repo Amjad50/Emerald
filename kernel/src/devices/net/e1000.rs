@@ -492,7 +492,7 @@ pub fn try_register(pci_device: &PciDeviceConfig) -> bool {
     apic::assign_io_irq(
         interrupt as BasicInterruptHandler,
         pci_device.interrupt_line,
-        cpu::cpu(),
+        &cpu::cpu(),
     );
 
     let e1000 = E1000.get().lock();

@@ -1,19 +1,15 @@
-use core::{mem, ptr::addr_of};
+use core::{mem, pin::Pin, ptr::addr_of};
 
 use crate::{
+    cpu,
     memory_management::{
         memory_layout::{
             is_aligned, INTR_STACK_BASE, INTR_STACK_EMPTY_SIZE, INTR_STACK_ENTRY_SIZE,
-            INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, PAGE_4K, PROCESS_KERNEL_STACK_END,
+            INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, PAGE_4K,
         },
-        virtual_memory_mapper::{self, VirtualMemoryMapEntry},
+        virtual_memory_mapper::{self, ProcessKernelStack, VirtualMemoryMapEntry},
     },
-    sync::spin::mutex::Mutex,
 };
-
-static GDT: Mutex<GlobalDescriptorManager> = Mutex::new(GlobalDescriptorManager::empty());
-/// SAFETY: TSS is only used when `GDT` is locked, so its safe to use as `static mut`
-static mut TSS: TaskStateSegment = TaskStateSegment::empty();
 
 pub const KERNEL_RING: u8 = 0;
 pub const USER_RING: u8 = 3;
@@ -29,108 +25,18 @@ impl SegmentSelector {
     }
 }
 
-/// This should be called only once, otherwise, it will crash
-pub fn init_kernel_gdt() {
-    let mut manager = GDT.lock();
-    if manager.gdt.index != 1 {
-        panic!("GDT already initialized");
-    }
-
-    manager.kernel_code_seg = SegmentSelector::from_index(unsafe {
-        manager.gdt.push_user(UserDescriptorEntry {
-            access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(KERNEL_RING),
-            flags_and_limit: flags::LONG_MODE,
-            ..UserDescriptorEntry::empty()
-        })
-    });
-    manager.user_code_seg = SegmentSelector::from_index(unsafe {
-        manager.gdt.push_user(UserDescriptorEntry {
-            access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(USER_RING),
-            flags_and_limit: flags::LONG_MODE,
-            ..UserDescriptorEntry::empty()
-        })
-    });
-    manager.kernel_data_seg = SegmentSelector::from_index(unsafe {
-        manager.gdt.push_user(UserDescriptorEntry {
-            access: flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(KERNEL_RING),
-            ..UserDescriptorEntry::empty()
-        })
-    });
-    manager.user_data_seg = SegmentSelector::from_index(unsafe {
-        manager.gdt.push_user(UserDescriptorEntry {
-            access: flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(USER_RING),
-            ..UserDescriptorEntry::empty()
-        })
-    });
-
-    // setup TSS
-
-    // setup stacks, for each use `INTR_STACK_SIZE` bytes, but also allocate another one of these
-    // and use as padding between the stacks, so that we can detect stack overflows
-    for i in 0..7 {
-        unsafe {
-            // allocate after an empty offset, so that we can detect stack overflows
-            let stack_start_virtual =
-                INTR_STACK_BASE + (i * INTR_STACK_ENTRY_SIZE) + INTR_STACK_EMPTY_SIZE;
-            let stack_end_virtual = stack_start_virtual + INTR_STACK_SIZE;
-            assert!(stack_end_virtual <= INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
-            if i == 6 {
-                // make sure we have allocated everything
-                assert_eq!(stack_end_virtual, INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
-            }
-            // make sure that the stack is aligned, so we can easily allocate pages
-            assert!(
-                is_aligned(INTR_STACK_SIZE, PAGE_4K) && is_aligned(stack_start_virtual, PAGE_4K)
-            );
-
-            // map the stack
-            virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
-                virtual_address: stack_start_virtual,
-                physical_address: None,
-                size: INTR_STACK_SIZE,
-                flags: virtual_memory_mapper::flags::PTE_WRITABLE,
-            });
-
-            // set the stack pointer
-            // subtract 8, since the boundary is not mapped
-            TSS.ist[i] = stack_end_virtual as u64 - 8;
-        }
-
-        // A kernel stack for this process
-        // this will be used on transitions from user to kernel
-        unsafe { TSS.rsp[KERNEL_RING as usize] = PROCESS_KERNEL_STACK_END as u64 - 8 };
-    }
-
-    let tss_ptr = addr_of!(TSS) as u64;
-
-    manager.tss_seg = SegmentSelector::from_index(unsafe {
-        manager.gdt.push_system(SystemDescriptorEntry {
-            limit: (mem::size_of::<TaskStateSegment>() - 1) as u16,
-            access: flags::PRESENT | flags::TSS_TYPE,
-            base_low: (tss_ptr & 0xFFFF) as u16,
-            base_middle: ((tss_ptr >> 16) & 0xFF) as u8,
-            base_high: ((tss_ptr >> 24) & 0xFF) as u8,
-            base_upper: ((tss_ptr >> 32) & 0xFFFFFFFF) as u32,
-            ..SystemDescriptorEntry::empty()
-        })
-    });
-    drop(manager);
-    // call the special `run_with` so that we get the `static` lifetime
-    GDT.run_with(|manager| {
-        manager.gdt.apply_lgdt();
-
-        manager.load_kernel_segments();
-        manager.load_tss();
-    });
-}
-
 pub fn get_user_code_seg_index() -> SegmentSelector {
-    GDT.run_with(|manager| manager.user_code_seg)
+    // TODO: for now, we use the segment from the current CPU
+    //       technically, its all would be the same
+    cpu::cpu().gdt.user_code_seg
 }
 
 pub fn get_user_data_seg_index() -> SegmentSelector {
-    GDT.run_with(|manager| manager.user_data_seg)
+    // TODO: for now, we use the segment from the current CPU
+    //       technically, its all would be the same
+    cpu::cpu().gdt.user_data_seg
 }
+
 mod flags {
     // this is in the flags byte
     pub const LONG_MODE: u8 = 1 << 5;
@@ -208,7 +114,8 @@ impl SystemDescriptorEntry {
 ///
 /// This is the structure that is pointed to by the `TSS` descriptor
 #[repr(C, packed(4))]
-struct TaskStateSegment {
+#[derive(Debug, Clone, Copy)]
+pub struct TaskStateSegment {
     reserved: u32,
     rsp: [u64; 3],
     reserved2: u64,
@@ -238,8 +145,10 @@ pub(super) struct GlobalDescriptorTablePointer {
     base: *const GlobalDescriptorTable,
 }
 
-struct GlobalDescriptorManager {
+#[derive(Debug, Clone, Copy)]
+pub struct GlobalDescriptorManager {
     gdt: GlobalDescriptorTable,
+    tss: TaskStateSegment,
     kernel_code_seg: SegmentSelector,
     user_code_seg: SegmentSelector,
     // there is only one data segment and its not even used, as we are using
@@ -253,12 +162,112 @@ impl GlobalDescriptorManager {
     pub const fn empty() -> Self {
         Self {
             gdt: GlobalDescriptorTable::empty(),
+            tss: TaskStateSegment::empty(),
             kernel_code_seg: SegmentSelector::from_index(0),
             kernel_data_seg: SegmentSelector::from_index(0),
             user_code_seg: SegmentSelector::from_index(0),
             user_data_seg: SegmentSelector::from_index(0),
             tss_seg: SegmentSelector::from_index(0),
         }
+    }
+
+    fn gdt(self: Pin<&Self>) -> Pin<&GlobalDescriptorTable> {
+        // SAFETY: This is safe because we are using `Pin<&Self>` which guarantees that
+        // the GDT is not moved, and we are accessing it in a read-only manner.
+        unsafe { self.map_unchecked(|s| &s.gdt) }
+    }
+
+    pub fn init_segments(mut self: Pin<&'static mut Self>) {
+        if self.gdt.index != 1 {
+            panic!("GDT already initialized");
+        }
+
+        self.kernel_code_seg = SegmentSelector::from_index(unsafe {
+            self.gdt.push_user(UserDescriptorEntry {
+                access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(KERNEL_RING),
+                flags_and_limit: flags::LONG_MODE,
+                ..UserDescriptorEntry::empty()
+            })
+        });
+        self.user_code_seg = SegmentSelector::from_index(unsafe {
+            self.gdt.push_user(UserDescriptorEntry {
+                access: flags::PRESENT | flags::CODE | flags::USER | flags::dpl(USER_RING),
+                flags_and_limit: flags::LONG_MODE,
+                ..UserDescriptorEntry::empty()
+            })
+        });
+        self.kernel_data_seg = SegmentSelector::from_index(unsafe {
+            self.gdt.push_user(UserDescriptorEntry {
+                access: flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(KERNEL_RING),
+                ..UserDescriptorEntry::empty()
+            })
+        });
+        self.user_data_seg = SegmentSelector::from_index(unsafe {
+            self.gdt.push_user(UserDescriptorEntry {
+                access: flags::PRESENT | flags::USER | flags::WRITE | flags::dpl(USER_RING),
+                ..UserDescriptorEntry::empty()
+            })
+        });
+
+        // setup TSS
+
+        // setup stacks, for each use `INTR_STACK_SIZE` bytes, but also allocate another one of these
+        // and use as padding between the stacks, so that we can detect stack overflows
+        for i in 0..7 {
+            // allocate after an empty offset, so that we can detect stack overflows
+            let stack_start_virtual =
+                INTR_STACK_BASE + (i * INTR_STACK_ENTRY_SIZE) + INTR_STACK_EMPTY_SIZE;
+            let stack_end_virtual = stack_start_virtual + INTR_STACK_SIZE;
+            assert!(stack_end_virtual <= INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
+            if i == 6 {
+                // make sure we have allocated everything
+                assert_eq!(stack_end_virtual, INTR_STACK_BASE + INTR_STACK_TOTAL_SIZE);
+            }
+            // make sure that the stack is aligned, so we can easily allocate pages
+            assert!(
+                is_aligned(INTR_STACK_SIZE, PAGE_4K) && is_aligned(stack_start_virtual, PAGE_4K)
+            );
+
+            // map the stack
+            virtual_memory_mapper::map_kernel(&VirtualMemoryMapEntry {
+                virtual_address: stack_start_virtual,
+                physical_address: None,
+                size: INTR_STACK_SIZE,
+                flags: virtual_memory_mapper::flags::PTE_WRITABLE,
+            });
+
+            // set the stack pointer
+            // subtract 8, since the boundary is not mapped
+            self.tss.ist[i] = stack_end_virtual as u64 - 8;
+
+            // // A kernel stack for this process
+            // // this will be used on transitions from user to kernel
+            // self.tss.rsp[KERNEL_RING as usize] = PROCESS_KERNEL_STACK_END as u64 - 8;
+        }
+
+        let tss_ptr = addr_of!(self.tss) as u64;
+
+        self.tss_seg = SegmentSelector::from_index(unsafe {
+            self.gdt.push_system(SystemDescriptorEntry {
+                limit: (mem::size_of::<TaskStateSegment>() - 1) as u16,
+                access: flags::PRESENT | flags::TSS_TYPE,
+                base_low: (tss_ptr & 0xFFFF) as u16,
+                base_middle: ((tss_ptr >> 16) & 0xFF) as u8,
+                base_high: ((tss_ptr >> 24) & 0xFF) as u8,
+                base_upper: ((tss_ptr >> 32) & 0xFFFFFFFF) as u32,
+                ..SystemDescriptorEntry::empty()
+            })
+        });
+        // convert to ref at this point and do the actual loading
+        let s = self.into_ref();
+        s.gdt().apply_lgdt(); // apply the GDT
+        s.load_kernel_segments();
+        s.load_tss();
+    }
+
+    pub fn load_process_kernel_stack(&mut self, stack: &ProcessKernelStack) {
+        // set the process kernel stack in the TSS
+        self.tss.rsp[KERNEL_RING as usize] = stack.end_address() as u64 - 8;
     }
 
     pub fn load_kernel_segments(&self) {
@@ -281,6 +290,7 @@ impl GlobalDescriptorManager {
 }
 
 #[repr(C, packed(16))]
+#[derive(Debug, Clone, Copy)]
 struct GlobalDescriptorTable {
     data: [u64; 8],
     index: usize,
@@ -316,11 +326,12 @@ impl GlobalDescriptorTable {
         index
     }
 
-    pub fn apply_lgdt(&'static self) {
+    pub fn apply_lgdt(self: Pin<&'static Self>) {
         let size_used = self.index * mem::size_of::<u64>() - 1;
+        let base: &'static Self = self.get_ref();
         let gdt_ptr = GlobalDescriptorTablePointer {
             limit: size_used as u16,
-            base: self,
+            base,
         };
 
         unsafe {

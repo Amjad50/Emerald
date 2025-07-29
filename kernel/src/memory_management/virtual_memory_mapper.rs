@@ -9,18 +9,17 @@ use crate::{
     cpu,
     memory_management::{
         memory_layout::{
-            align_range, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
+            self, align_range, align_up, is_aligned, kernel_elf_rodata_end, physical2virtual,
             virtual2physical, MemSize, EXTENDED_OFFSET, KERNEL_BASE, KERNEL_END, KERNEL_LINK,
-            KERNEL_MAPPED_SIZE, PAGE_2M, PAGE_4K,
+            KERNEL_MAPPED_SIZE, PAGE_2M, PAGE_4K, PROCESSES_KERNEL_STACKS_USED_BITMAP_ADDRESS,
+            PROCESSES_KERNEL_STACKS_USED_BITMAP_SIZE,
         },
         physical_page_allocator,
     },
     sync::{once::OnceLock, spin::mutex::Mutex},
 };
 
-use super::memory_layout::{
-    stack_guard_page_ptr, PROCESS_KERNEL_STACK_BASE, PROCESS_KERNEL_STACK_SIZE,
-};
+use super::memory_layout::stack_guard_page_ptr;
 
 // TODO: replace by some sort of bitfield
 #[allow(dead_code)]
@@ -44,16 +43,13 @@ const ADDR_MASK: u64 = 0x0000_0000_FFFF_F000;
 const KERNEL_L4_INDEX: usize = 0x1FF;
 
 // The L3 positions are used for the non-moving kernel code/data
-const KERNEL_L3_INDEX_START: usize = 0x1FE;
+const KERNEL_L3_INDEX_START: usize = 0;
 #[allow(dead_code)]
 const KERNEL_L3_INDEX_END: usize = 0x1FF;
 
-const KERNEL_L3_PROCESS_INDEX_START: usize = 0;
-const KERNEL_L3_PROCESS_INDEX_END: usize = KERNEL_L3_INDEX_START - 1;
-
-pub const KERNEL_PROCESS_VIRTUAL_ADDRESS_START: usize =
+pub const PROCESSES_KERNEL_STACKS_START: usize =
     // sign extension
-    0xFFFF_0000_0000_0000 | KERNEL_L4_INDEX << 39 | KERNEL_L3_PROCESS_INDEX_START << 30;
+    0xFFFF_0000_0000_0000 | KERNEL_L4_INDEX << 39 | KERNEL_L3_INDEX_START << 30;
 
 // the user can use all the indexes except the last one
 const NUM_USER_L4_INDEXES: usize = KERNEL_L4_INDEX;
@@ -162,7 +158,7 @@ impl PageDirectoryTablePtr {
     }
 }
 
-static KERNEL_VIRTUAL_MEMORY_MANAGER: OnceLock<Mutex<VirtualMemoryMapper>> = OnceLock::new();
+static KERNEL_VIRTUAL_MEMORY_MANAGER: OnceLock<Mutex<KernelVirtualMemoryManager>> = OnceLock::new();
 
 pub fn init_kernel_vm() {
     if KERNEL_VIRTUAL_MEMORY_MANAGER.try_get().is_some() {
@@ -170,23 +166,31 @@ pub fn init_kernel_vm() {
     }
 
     let manager = KERNEL_VIRTUAL_MEMORY_MANAGER
-        .get_or_init(|| Mutex::new(VirtualMemoryMapper::new_kernel_vm()))
+        .get_or_init(|| Mutex::new(KernelVirtualMemoryManager::new_kernel_vm()))
         .lock();
 
     // // SAFETY: this is the start VM, so we are sure that we are not inside a process, so its safe to switch
-    unsafe { manager.switch_to_this() };
+    unsafe { manager.kernel_vm.switch_to_this() };
 }
 /// # Safety
 /// This must never be called while we are in a process context
 /// and using any process specific memory regions
 pub unsafe fn switch_to_kernel() {
-    KERNEL_VIRTUAL_MEMORY_MANAGER.get().lock().switch_to_this();
+    KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get()
+        .lock()
+        .kernel_vm
+        .switch_to_this();
 }
 
 pub fn map_kernel(entry: &VirtualMemoryMapEntry) {
     // make sure we are only mapping to kernel memory
     assert!(entry.virtual_address >= KERNEL_BASE);
-    KERNEL_VIRTUAL_MEMORY_MANAGER.get().lock().map(entry);
+    KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get()
+        .lock()
+        .kernel_vm
+        .map(entry);
 }
 
 /// `is_allocated` is used to indicate if the physical pages were allocated by the caller
@@ -199,6 +203,7 @@ pub fn unmap_kernel(entry: &VirtualMemoryMapEntry, is_allocated: bool) {
     KERNEL_VIRTUAL_MEMORY_MANAGER
         .get()
         .lock()
+        .kernel_vm
         .unmap(entry, is_allocated);
 }
 
@@ -207,6 +212,7 @@ pub fn is_address_mapped_in_kernel(addr: usize) -> bool {
     KERNEL_VIRTUAL_MEMORY_MANAGER
         .get()
         .lock()
+        .kernel_vm
         .is_address_mapped(addr)
 }
 
@@ -221,108 +227,67 @@ pub fn clone_current_vm_as_user() -> VirtualMemoryMapper {
 }
 
 pub fn get_current_vm() -> VirtualMemoryMapper {
-    VirtualMemoryMapper::get_current_vm()
+    let kernel_vm_addr = KERNEL_VIRTUAL_MEMORY_MANAGER
+        .get()
+        .lock()
+        .kernel_vm
+        .page_map_l4
+        .as_physical();
+    let cr3 = unsafe { cpu::get_cr3() }; // cr3 is physical address
+    let is_user = cr3 != kernel_vm_addr;
+    VirtualMemoryMapper {
+        page_map_l4: PageDirectoryTablePtr::from_entry(cr3),
+        is_user,
+    }
 }
 
-pub struct VirtualMemoryMapper {
-    page_map_l4: PageDirectoryTablePtr,
-    is_user: bool,
-}
+/// A process kernel stack, this is just a handler containing the index of the stack.
+#[derive(Debug)]
+pub struct ProcessKernelStack(u32);
 
-impl VirtualMemoryMapper {
-    fn new() -> Self {
-        Self {
-            page_map_l4: PageDirectoryTablePtr::alloc_new(),
-            is_user: false,
-        }
-    }
-
-    // create a new virtual memory that maps the kernel only
-    pub fn clone_kernel_mem(&self) -> Self {
-        let this_kernel_l4 =
-            PageDirectoryTablePtr::from_entry(self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX]);
-
-        let mut new_vm = Self::new();
-
-        let mut new_kernel_l4 = PageDirectoryTablePtr::alloc_new();
-
-        // copy the whole kernel mapping (process specific will be replaced later)
-        for i in 0..=0x1FF {
-            new_kernel_l4.as_mut().entries[i] = this_kernel_l4.as_ref().entries[i];
-        }
-
-        new_vm.page_map_l4.as_mut().entries[KERNEL_L4_INDEX] =
-            new_kernel_l4.as_physical() | flags::PTE_PRESENT | flags::PTE_WRITABLE;
-
-        new_vm
-    }
-
-    /// # Safety
-    ///
-    /// After this call, the VM must never be switched to unless
-    /// its from the scheduler or we are sure that the previous kernel regions are not used
-    pub unsafe fn add_process_specific_mappings(&mut self) {
-        let mut this_kernel_l4 =
-            PageDirectoryTablePtr::from_entry(self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX]);
-
-        // clear out the process specific mappings if we have cloned another process
-        // but of course don't deallocate, just remove the mappings
-        for i in KERNEL_L3_PROCESS_INDEX_START..=KERNEL_L3_PROCESS_INDEX_END {
-            this_kernel_l4.as_mut().entries[i] = 0;
-        }
-        // set it temporarily so we can map kernel range
-        // TODO: fix this hack
-        self.is_user = false;
-        // load new kernel stack for this process
-        self.map(&VirtualMemoryMapEntry {
-            virtual_address: PROCESS_KERNEL_STACK_BASE,
-            physical_address: None, // allocate
-            size: PROCESS_KERNEL_STACK_SIZE,
-            flags: flags::PTE_WRITABLE,
-        });
-        self.is_user = true;
-    }
-
-    fn load_vm(base: &PageDirectoryTablePtr) {
-        trace!(
-            "Switching to new page map: {:p}",
-            base.as_physical() as *const u8
-        );
-        unsafe { cpu::set_cr3(base.as_physical()) }
-    }
-
-    fn get_current_vm() -> Self {
-        let kernel_vm_addr = KERNEL_VIRTUAL_MEMORY_MANAGER
+impl ProcessKernelStack {
+    pub fn allocate() -> Self {
+        KERNEL_VIRTUAL_MEMORY_MANAGER
             .get()
             .lock()
-            .page_map_l4
-            .as_physical();
-        let cr3 = unsafe { cpu::get_cr3() }; // cr3 is physical address
-        let is_user = cr3 != kernel_vm_addr;
-        Self {
-            page_map_l4: PageDirectoryTablePtr::from_entry(cr3),
-            is_user,
-        }
+            .allocate_process_kernel_stack()
     }
 
-    /// Return `true` if the current VM is used by the current cpu
-    pub fn is_used_by_me(&self) -> bool {
-        let cr3 = unsafe { cpu::get_cr3() };
-        cr3 == self.page_map_l4.as_physical()
+    pub const fn start_address(&self) -> usize {
+        memory_layout::processes_kernel_stack_start(self.0 as usize)
     }
 
-    /// # Safety
-    /// This must be used with caution, it must never be switched while we are using
-    /// memory from the same regions, i.e. kernel stack while we are in an interrupt
-    pub unsafe fn switch_to_this(&self) {
-        Self::load_vm(&self.page_map_l4);
+    pub const fn end_address(&self) -> usize {
+        memory_layout::processes_kernel_stack_end(self.0 as usize)
     }
 
+    pub const fn size(&self) -> usize {
+        self.end_address() - self.start_address()
+    }
+}
+
+impl Drop for ProcessKernelStack {
+    fn drop(&mut self) {
+        // free the stack when dropped
+        KERNEL_VIRTUAL_MEMORY_MANAGER
+            .get()
+            .lock()
+            .free_process_kernel_stack(self);
+    }
+}
+
+pub struct KernelVirtualMemoryManager {
+    kernel_vm: VirtualMemoryMapper,
+    // on each bit, a value of 1 means that the stack is used and allocated
+    processes_kernel_stacks_bitmap: &'static mut [u8; PROCESSES_KERNEL_STACKS_USED_BITMAP_SIZE],
+}
+
+impl KernelVirtualMemoryManager {
     // This replicate what is done in the assembly code
     // but it will be stored
     fn new_kernel_vm() -> Self {
         let data_start = align_up(kernel_elf_rodata_end(), PAGE_4K);
-        let kernel_vm = [
+        let kernel_vm_entries = [
             // Low memory (has some BIOS stuff): mapped to kernel space
             VirtualMemoryMapEntry {
                 virtual_address: KERNEL_BASE,
@@ -349,14 +314,14 @@ impl VirtualMemoryMapper {
 
         // create a new fresh page map
         // SAFETY: we are calling the virtual memory manager after initializing the physical page allocator
-        let mut s = Self::new();
+        let mut kernel_vm = VirtualMemoryMapper::new();
 
-        for entry in kernel_vm.iter() {
-            s.map(entry);
+        for entry in kernel_vm_entries.iter() {
+            kernel_vm.map(entry);
         }
 
         // unmap stack guard
-        s.unmap(
+        kernel_vm.unmap(
             &VirtualMemoryMapEntry {
                 virtual_address: stack_guard_page_ptr(),
                 physical_address: None,
@@ -366,7 +331,126 @@ impl VirtualMemoryMapper {
             false,
         );
 
-        s
+        // map the processes kernel stacks bitmap
+        kernel_vm.map(&VirtualMemoryMapEntry {
+            virtual_address: PROCESSES_KERNEL_STACKS_USED_BITMAP_ADDRESS,
+            physical_address: None,
+            size: PROCESSES_KERNEL_STACKS_USED_BITMAP_SIZE,
+            flags: flags::PTE_WRITABLE,
+        });
+
+        Self {
+            kernel_vm,
+            processes_kernel_stacks_bitmap: unsafe {
+                (PROCESSES_KERNEL_STACKS_USED_BITMAP_ADDRESS as *mut u8
+                    as *mut [u8; PROCESSES_KERNEL_STACKS_USED_BITMAP_SIZE])
+                    .as_mut()
+                    .expect("This can't be null")
+            },
+        }
+    }
+
+    fn allocate_process_kernel_stack(&mut self) -> ProcessKernelStack {
+        // find the first free stack
+        let index = self
+            .processes_kernel_stacks_bitmap
+            .iter_mut()
+            .position(|x| *x != 0xFF)
+            .expect("No free kernel stacks available");
+
+        for i in 0..8 {
+            if self.processes_kernel_stacks_bitmap[index] & (1 << i) == 0 {
+                // set it to used
+                self.processes_kernel_stacks_bitmap[index] |= 1 << i;
+
+                let stack_index =
+                    ProcessKernelStack((index * 8 + i).try_into().expect("Stack index too large"));
+
+                self.kernel_vm.map(&VirtualMemoryMapEntry {
+                    virtual_address: stack_index.start_address(),
+                    physical_address: None,
+                    size: stack_index.size(),
+                    flags: flags::PTE_WRITABLE | flags::PTE_USER,
+                });
+
+                return stack_index;
+            }
+        }
+
+        unreachable!("This should never happen, as we checked for free stack above");
+    }
+
+    fn free_process_kernel_stack(&mut self, stack: &mut ProcessKernelStack) {
+        let index = stack.0 as usize / 8;
+        let bit = stack.0 as usize % 8;
+
+        // clear the bit
+        self.processes_kernel_stacks_bitmap[index] &= !(1 << bit);
+
+        // unmap the stack
+        self.kernel_vm.unmap(
+            &VirtualMemoryMapEntry {
+                virtual_address: stack.start_address(),
+                physical_address: None,
+                size: stack.size(),
+                flags: flags::PTE_WRITABLE | flags::PTE_USER,
+            },
+            false,
+        );
+    }
+}
+
+pub struct VirtualMemoryMapper {
+    page_map_l4: PageDirectoryTablePtr,
+    is_user: bool,
+}
+
+impl VirtualMemoryMapper {
+    fn new() -> Self {
+        Self {
+            page_map_l4: PageDirectoryTablePtr::alloc_new(),
+            is_user: false,
+        }
+    }
+
+    // create a new virtual memory that maps the kernel only
+    pub fn clone_kernel_mem(&self) -> Self {
+        let mut new_vm = Self::new();
+
+        assert_ne!(
+            self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX] & flags::PTE_PRESENT,
+            0
+        );
+        assert_ne!(
+            self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX] & flags::PTE_WRITABLE,
+            0
+        );
+
+        new_vm.page_map_l4.as_mut().entries[KERNEL_L4_INDEX] =
+            self.page_map_l4.as_ref().entries[KERNEL_L4_INDEX];
+
+        new_vm
+    }
+
+    fn load_vm(base: &PageDirectoryTablePtr) {
+        trace!(
+            "Switching to new page map: {:p}",
+            base.as_physical() as *const u8
+        );
+        unsafe { cpu::set_cr3(base.as_physical()) }
+    }
+
+    /// Return `true` if the current VM is used by the current cpu
+    pub fn is_used_by_me(&self) -> bool {
+        let cr3 = unsafe { cpu::get_cr3() };
+        cr3 == self.page_map_l4.as_physical()
+    }
+
+    /// # Safety
+    /// This must be used with caution, it must never be switched while we are using
+    /// memory from the same regions, references and pointers might be invalidated
+    pub unsafe fn switch_to_this(&self) {
+        Self::load_vm(&self.page_map_l4);
     }
 
     pub fn map(&mut self, entry: &VirtualMemoryMapEntry) {
@@ -813,15 +897,6 @@ impl VirtualMemoryMapper {
         self.do_for_ranges_entries(0..NUM_USER_L4_INDEXES, 0..=0x1FF, f)
     }
 
-    // the handler function definition is `fn(page_entry: &mut u64)`
-    fn do_for_kernel_process_entry(&mut self, f: impl FnMut(&mut u64)) {
-        self.do_for_ranges_entries(
-            KERNEL_L4_INDEX..=KERNEL_L4_INDEX,
-            KERNEL_L3_PROCESS_INDEX_START..=KERNEL_L3_PROCESS_INDEX_END,
-            f,
-        );
-    }
-
     // search for all the pages that are mapped to the user ranges and unmap them and free their memory
     // also unmap any process specific kernel memory
     pub fn unmap_process_memory(&mut self) {
@@ -837,6 +912,5 @@ impl VirtualMemoryMapper {
         };
 
         self.do_for_every_user_entry(free_page);
-        self.do_for_kernel_process_entry(free_page);
     }
 }

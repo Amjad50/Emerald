@@ -26,16 +26,20 @@ The process structure [`Process`][process_structure] contain all the information
 - `priority`: The priority of the process, this is used by the scheduler. see [`PriorityLevel`](https://docs.rs/emerald_kernel_user_link/latest/emerald_kernel_user_link/process/enum.PriorityLevel.html).)
 - `exit_code`: The exit code of the process, if the process is exited, this will be set to the exit code.
 - `children_exits`: A list of the children processes that have exited, with their exit code (see #process-exit later for more information).
+- `process_kernel_stack`: The kernel stack identifier of the process, this is a 252KB stack that is used when the process is in kernel mode (i.e. when an interrupt happens while the process is in user mode). This stack is shared between all processes, but each process has its own segment to use.
 
 ## Process Creation
 
 Process creation (structure creation) is as follows:
+- Creates a new `VirtualMemoryMapper` instance, which is a clone of the current kernel's virtual memory.
+- Allocates new `ProcessKernelStack` which is a 252KB stack for the process to use when
+  its in kernel mode (interrupts, syscalls, etc...), this memory is mapped and accessible by all
+  processes, but each process has its own stack segment to use.
 - Load the `ELF` file, this doesn't load the whole thing, just the header to make sure its valid.
 - Maps the stack region.
 - Loads argv into the stack (check [argv structure](#argv-structure) for more information).
 - Load `ELF` regions into memory.
 - Load the `Process Metadata` structure (check [Process Metadata](#process-metadata-structure) for more information).
-- Add process-specific kernel memory regions, like the kernel stack (**this must be done after loading the ELF, and last modification to the VM manually, because we can't switch to this VM after this point unless its by the scheduler, see the comments `process/mod.rs::allocate_process` for more details**)
 - Add data about the heap, with size `0` and max size `1GB`, i.e. no memory allocated yet.
 - Default `context` is created, everything is `0`, except for:
     - `rip`: The entry point of the `ELF` file.

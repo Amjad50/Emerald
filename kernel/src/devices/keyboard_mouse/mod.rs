@@ -39,12 +39,12 @@ pub fn init_device() {
     apic::assign_io_irq(
         ps2_interrupt_handler as BasicInterruptHandler,
         KEYBOARD_INT_NUM,
-        cpu::cpu(),
+        &cpu::cpu(),
     );
     apic::assign_io_irq(
         ps2_interrupt_handler as BasicInterruptHandler,
         MOUSE_INT_NUM,
-        cpu::cpu(),
+        &cpu::cpu(),
     );
 }
 

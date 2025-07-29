@@ -9,7 +9,8 @@ This is the structure of the memory for any process running in the system.
 ## Layout
 ```txt
 0000_0000_0000_0000 .. FFFF_FF7F_FFFF_FFFF - User   (15.99~ EB)
-FFFF_FF80_0000_0000 .. FFFF_FFFF_7FFF_FFFF - Process specific kernel (510 GB)
+FFFF_FF80_0000_0000 .. FFFF_FF82_0000_0000 - Processes kernel stacks (2 GB, 32768, each 256 KB)
+FFFF_FF82_0000_0000 .. FFFF_FF82_0000_1000 - Processes kernel stacks bitmap (4 KB)
 FFFF_FFFF_8000_0000 .. FFFF_FFFF_FFFF_FFFF - Kernel (2 GB)
 ```
 
@@ -40,10 +41,34 @@ This is useful for reading structures that are in specific location in physical 
 
 Its very simple, it will take memory from the `kernel extra` space, and map it to the physical address.
 
-### Process specific kernel layout
+### Processes kernel stacks layout
 ```txt
-FFFF_FF80_0000_0000..FFFF_FF80_0000_1000          process kernel stack guard page (4KB) *not mapped by purpose*
-FFFF_FF80_0000_1000..FFFF_FF80_0004_1000          process kernel stack (64 * 4KB = 256KB)
+FFFF_FF80_0000_0000 .. FFFF_FF80_0000_1000 - process kernel stack 0 guard page (4KB) *not mapped by purpose*
+FFFF_FF80_0000_1000 .. FFFF_FF80_0004_0000 - process kernel stack 0 (63 * 4KB = 252KB)
+FFFF_FF80_0000_1000 .. FFFF_FF80_0004_1000 - process kernel stack 1 guard page (4KB) *not mapped by purpose*
+FFFF_FF80_0004_1000 .. FFFF_FF80_0008_0000 - process kernel stack 1 (63 * 4KB = 252KB)
+...
+```
+
+We have capacity to have `32768` kernel stacks, each of size `256KB`, which is `8GB` in total.
+
+This space is mapped for each process, but each process have its own segment, but it can still
+access all the rest of the kernel stacks.
+
+This allows us to switch to a process from another process (while in kernel mode), without the need
+to switch completely to the kernel stack (used by the kernel).
+
+See below for the previous design, where each process had its own mapped space that other processes can't access.
+
+The issue that this new design solves is that, we have to be very careful about when and how to change the context (going to user mode or switching to another process), for example, we can't switch to another process from a syscall, we have to switch
+first to kernel mode, and then let the scheduler schedule another process. i.e. scheduler only work on kernel-only stack.
+
+#### [Outdated] Process specific kernel layout
+```txt
+FFFF_FF80_0000_0000 .. FFFF_FFFF_7FFF_FFFF - Process specific kernel (510 GB)
+---
+FFFF_FF80_0000_0000 .. FFFF_FF80_0000_1000 - process kernel stack guard page (4KB) *not mapped by purpose*
+FFFF_FF80_0000_1000 .. FFFF_FF80_0004_1000 - process kernel stack (64 * 4KB = 256KB)
 ```
 
 This is a space specific to each process, but reside in kernel space.

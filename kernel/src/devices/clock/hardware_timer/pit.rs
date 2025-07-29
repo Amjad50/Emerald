@@ -131,7 +131,7 @@ impl Pit {
         apic::assign_io_irq(
             pit_interrupt as BasicInterruptHandler,
             pit_io::DEFAULT_INTERRUPT,
-            cpu::cpu(),
+            &cpu::cpu(),
         );
 
         Pit {

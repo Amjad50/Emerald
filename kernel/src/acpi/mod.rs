@@ -123,7 +123,7 @@ impl Acpi {
         apic::assign_io_irq(
             acpi_handler as BasicInterruptHandler,
             facp.sci_interrupt(),
-            cpu::cpu(),
+            &cpu::cpu(),
         );
 
         if !facp.is_acpi_enabled() {

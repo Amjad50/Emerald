@@ -67,7 +67,7 @@ impl<T> Mutex<T> {
 
 impl<T: ?Sized> Mutex<T> {
     pub fn lock(&self) -> MutexGuard<'_, T> {
-        let cpu = cpu::cpu();
+        let mut cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
 
@@ -84,7 +84,7 @@ impl<T: ?Sized> Mutex<T> {
     }
 
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
-        let cpu = cpu::cpu();
+        let mut cpu = cpu::cpu();
         cpu.push_cli(); // disable interrupts to avoid deadlock
         let cpu_id = cpu.id as i64;
 

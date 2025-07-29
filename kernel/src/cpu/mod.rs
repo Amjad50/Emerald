@@ -1,4 +1,9 @@
-use crate::process::ProcessContext;
+use core::pin::Pin;
+
+use crate::{
+    cpu::gdt::GlobalDescriptorManager,
+    memory_management::virtual_memory_mapper::ProcessKernelStack, process::ProcessContext,
+};
 
 use self::{
     gdt::{GlobalDescriptorTablePointer, SegmentSelector},
@@ -73,6 +78,9 @@ pub struct Cpu {
     // the process id of the current process
     pub process_id: u64,
     pub scheduling: bool,
+
+    /// GDT
+    gdt: GlobalDescriptorManager,
 }
 
 impl Cpu {
@@ -85,6 +93,7 @@ impl Cpu {
             context: None,
             process_id: 0,
             scheduling: false,
+            gdt: GlobalDescriptorManager::empty(),
         }
     }
 
@@ -125,11 +134,25 @@ impl Cpu {
     pub fn n_cli(&self) -> usize {
         self.n_cli
     }
+
+    fn gdt(self: Pin<&'static mut Self>) -> Pin<&'static mut GlobalDescriptorManager> {
+        // SAFETY: we are guaranteed that `self` is static and never changes
+        unsafe { self.map_unchecked_mut(|s| &mut s.gdt) }
+    }
+
+    pub fn init_kernel_gdt(self: Pin<&'static mut Self>) {
+        // initialize the GDT
+        self.gdt().init_segments();
+    }
+
+    pub fn load_process_kernel_stack(&mut self, stack: &ProcessKernelStack) {
+        self.gdt.load_process_kernel_stack(stack);
+    }
 }
 
-pub fn cpu() -> &'static mut Cpu {
+pub fn cpu() -> Pin<&'static mut Cpu> {
     // TODO: use thread local to get the current cpu
-    unsafe { &mut CPUS[0] }
+    Pin::static_mut(unsafe { &mut CPUS[0] })
 }
 
 pub unsafe fn rflags() -> u64 {

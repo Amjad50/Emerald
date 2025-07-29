@@ -41,10 +41,7 @@ mod testing;
 mod utils;
 
 use alloc::vec::Vec;
-use cpu::{
-    gdt,
-    interrupts::{self, apic},
-};
+use cpu::interrupts::{self, apic};
 use executable::elf::Elf;
 use increasing_heap_allocator::HeapStats;
 use io::console;
@@ -152,7 +149,8 @@ pub extern "C" fn kernel_main(multiboot_info: &'static MultiBoot2Info) -> ! {
     // require heap allocation
     console::tracing::move_to_dynamic_buffer();
     // must be called before interrupts
-    gdt::init_kernel_gdt();
+    // -- the current/first CPU gdt
+    cpu::cpu().init_kernel_gdt();
     interrupts::init_interrupts();
     // mount devices map before initializing them
     devices::init_devices_mapping();

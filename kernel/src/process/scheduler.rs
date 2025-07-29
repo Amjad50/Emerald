@@ -236,7 +236,7 @@ pub fn schedule() {
     SCHEDULER.lock().init_interrupt();
 
     loop {
-        let current_cpu = cpu::cpu();
+        let mut current_cpu = cpu::cpu();
         assert!(current_cpu.context.is_none());
 
         let mut scheduler = SCHEDULER.lock();
@@ -275,12 +275,13 @@ pub fn schedule() {
                     top.priority_counter -= decrement;
 
                     scheduler.max_priority = top.priority_counter;
-                    // SAFETY: we are the scheduler and running in kernel space, so it's safe to switch to this vm
-                    // as it has clones of our kernel mappings
+                    // SAFETY: we are the scheduler and running in kernel space that is shared by al processes,
+                    //         so it's safe to switch to this vm as it has clones of our kernel mappings
                     unsafe { inner_proc.switch_to_this_vm() };
                     current_cpu.process_id = inner_proc.id;
                     current_cpu.context = Some(inner_proc.context);
                     current_cpu.scheduling = true;
+                    current_cpu.load_process_kernel_stack(&inner_proc.process_kernel_stack);
                 }
                 scheduler.running_waiting_procs.insert(pid, top);
             }
@@ -373,7 +374,7 @@ where
 /// The caller of this function (i.e. interrupt) will use the `all_state` to go back to the scheduler.
 /// This function will remove the context from the CPU, and thus the value in `all_state` will be dropped.
 pub fn exit_current_process(exit_code: i32, all_state: &mut InterruptAllSavedState) {
-    let current_cpu = cpu::cpu();
+    let mut current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
     current_cpu.push_cli();
 
@@ -399,7 +400,7 @@ pub fn exit_current_process(exit_code: i32, all_state: &mut InterruptAllSavedSta
 }
 
 pub fn sleep_current_process(time: ClockTime, all_state: &mut InterruptAllSavedState) {
-    let current_cpu = cpu::cpu();
+    let mut current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
 
     let deadline = clock::clocks().time_since_startup() + time;
@@ -423,7 +424,7 @@ pub fn sleep_current_process(time: ClockTime, all_state: &mut InterruptAllSavedS
 }
 
 pub fn yield_current_if_any(all_state: &mut InterruptAllSavedState) {
-    let current_cpu = cpu::cpu();
+    let mut current_cpu = cpu::cpu();
     // do not yield if we don't have context, or we are in the middle of scheduling
     if current_cpu.context.is_none() || current_cpu.scheduling {
         return;
@@ -455,7 +456,7 @@ pub fn is_process_running(pid: u64) -> bool {
 }
 
 pub fn wait_for_pid(all_state: &mut InterruptAllSavedState, pid: u64) -> bool {
-    let current_cpu = cpu::cpu();
+    let mut current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
 
     // we can't wait for a process that doesn't exist now, unless we are a parent of a process that has exited
@@ -521,7 +522,7 @@ pub fn swap_context(context: &mut ProcessContext, all_state: &mut InterruptAllSa
 
 extern "C" fn scheduler_interrupt_handler(all_state: &mut InterruptAllSavedState) {
     assert_eq!(all_state.frame.cs & 0x3, 0, "must be from kernel only");
-    let current_cpu = cpu::cpu();
+    let mut current_cpu = cpu::cpu();
     assert!(current_cpu.context.is_some());
     assert!(current_cpu.scheduling);
     assert!(current_cpu.interrupts_disabled());
