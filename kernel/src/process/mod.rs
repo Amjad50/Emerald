@@ -17,7 +17,8 @@ use crate::{
     memory_management::{
         memory_layout::{align_down, align_up, is_aligned, GB, KERNEL_BASE, MB, PAGE_2M, PAGE_4K},
         virtual_memory_mapper::{
-            self, VirtualMemoryMapEntry, VirtualMemoryMapper, MAX_USER_VIRTUAL_ADDRESS,
+            self, ProcessKernelStack, VirtualMemoryMapEntry, VirtualMemoryMapper,
+            MAX_USER_VIRTUAL_ADDRESS,
         },
     },
 };
@@ -128,6 +129,8 @@ pub struct Process {
     // split from the state, so that we can keep it as a simple enum
     exit_code: i32,
     children_exits: BTreeMap<u64, i32>,
+
+    process_kernel_stack: ProcessKernelStack,
 }
 
 impl Process {
@@ -140,6 +143,8 @@ impl Process {
     ) -> Result<Self, ProcessError> {
         let id = PROCESS_ID_ALLOCATOR.allocate();
         let mut vm = virtual_memory_mapper::clone_current_vm_as_user();
+
+        let process_kernel_stack = ProcessKernelStack::allocate();
 
         let mut process_meta = ProcessMetadata::empty();
         process_meta.pid = id;
@@ -168,15 +173,10 @@ impl Process {
         let (new_rsp, argc, argv_ptr) =
             Self::prepare_stack(&mut vm, &argv, rsp, stack_start as u64);
 
-        // SAFETY: we know that the vm passed is an exact kernel copy of this vm, so its safe to switch to it
         // TODO: maybe it would be best to create the new vm inside this function?
-        let (_min_addr, max_addr) =
-            unsafe { load_elf_to_vm(elf, file, &mut process_meta, &mut vm)? };
+        let (_min_addr, max_addr) = load_elf_to_vm(elf, file, &mut process_meta, &mut vm)?;
 
         Self::write_process_meta(&mut vm, process_meta_addr, process_meta);
-
-        // SAFETY: we know that the vm is never used after this point until scheduling
-        unsafe { vm.add_process_specific_mappings() };
 
         // set it quite a distance from the elf and align it to 2MB pages (we are not using 2MB virtual memory, so its not related)
         let heap_start = align_up(max_addr + HEAP_OFFSET_FROM_ELF_END, PAGE_2M);
@@ -217,6 +217,7 @@ impl Process {
             priority: PriorityLevel::Normal,
             exit_code: 0,
             children_exits: BTreeMap::new(),
+            process_kernel_stack,
         })
     }
 

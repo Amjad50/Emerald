@@ -1,6 +1,9 @@
 use core::pin::Pin;
 
-use crate::{cpu::gdt::GlobalDescriptorManager, process::ProcessContext};
+use crate::{
+    cpu::gdt::GlobalDescriptorManager,
+    memory_management::virtual_memory_mapper::ProcessKernelStack, process::ProcessContext,
+};
 
 use self::{
     gdt::{GlobalDescriptorTablePointer, SegmentSelector},
@@ -140,6 +143,10 @@ impl Cpu {
     pub fn init_kernel_gdt(self: Pin<&'static mut Self>) {
         // initialize the GDT
         self.gdt().init_segments();
+    }
+
+    pub fn load_process_kernel_stack(&mut self, stack: &ProcessKernelStack) {
+        self.gdt.load_process_kernel_stack(stack);
     }
 }
 

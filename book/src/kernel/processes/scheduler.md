@@ -23,6 +23,7 @@ here, since we can't do it while the process is running (still handling the `exi
 Running the process is simple:
 - copy the `context` of the `process` to the saved `context` of the `CPU`, see [processor saved state](../processor/index.md#saved-cpu-state), which will be used by the [scheduler interrupt](#scheduler-interrupt) to jump to it.
 - Set the `pid` of the `process` to the `process_id` of the `CPU`.
+- Load the `process kernel stack` into the `RSP[KERNEL_RING]` of the `TSS`, this is the stack that will be used when the process is in kernel mode, i.e. when an interrupt happens while the process is in user mode. (see [TSS](../processor/gdt.md#task-state-segment-tss)).
 - Mark the `process` as `ProcessState::Running`, and move it to the `running_and_waiting` list as mentioned.
 
 ## Yielding

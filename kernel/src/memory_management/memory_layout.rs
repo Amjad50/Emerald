@@ -48,17 +48,31 @@ pub const KERNEL_EXTRA_MEMORY_BASE: usize = INTR_STACK_BASE + INTR_STACK_TOTAL_S
 pub const KERNEL_LAST_POSSIBLE_ADDR: usize = 0xFFFF_FFFF_FFFF_F000;
 pub const KERNEL_EXTRA_MEMORY_SIZE: usize = KERNEL_LAST_POSSIBLE_ADDR - KERNEL_EXTRA_MEMORY_BASE;
 
-// Kernel Data specific to each process (will be mapped differently for each process)
-pub const KERNEL_PROCESS_VIRTUAL_ADDRESS_START: usize =
-    virtual_memory_mapper::KERNEL_PROCESS_VIRTUAL_ADDRESS_START;
-pub const PROCESS_KERNEL_STACK_GUARD: usize = PAGE_4K;
-// process specific kernel stack, this will be where the process is running while in the kernel
-// the process can be interrupted while in the kernel, so we want to save it into a specific stack
-// space so that other processes don't override it when being run
-pub const PROCESS_KERNEL_STACK_BASE: usize =
-    KERNEL_PROCESS_VIRTUAL_ADDRESS_START + PROCESS_KERNEL_STACK_GUARD;
-pub const PROCESS_KERNEL_STACK_SIZE: usize = PAGE_4K * 64;
-pub const PROCESS_KERNEL_STACK_END: usize = PROCESS_KERNEL_STACK_BASE + PROCESS_KERNEL_STACK_SIZE;
+// Kernel stacks for userspace processes, each process will allocate and take a segment of these
+// these belong to kernel space, and all process will have a copy of these mappings
+pub const PROCESSES_KERNEL_STACKS_START: usize =
+    virtual_memory_mapper::PROCESSES_KERNEL_STACKS_START;
+// each of the stacks is 63 pages, and the first page is used for guard page, i.e. not mapped
+pub const PROCESSES_KERNEL_STACKS_SIZE_TOTAL: usize = PAGE_4K * 64;
+pub const PROCESSES_KERNEL_STACKS_SIZE_MAPPED: usize = PAGE_4K * 63;
+pub const MAX_PROCESSES_KERNEL_STACKS: usize = 4096 * 8; // max number of concurrent processes, 1 page of bitmaps
+pub const PROCESSES_KERNEL_STACKS_SIZE: usize =
+    PROCESSES_KERNEL_STACKS_SIZE_TOTAL * MAX_PROCESSES_KERNEL_STACKS;
+pub const PROCESSES_KERNEL_STACKS_END: usize =
+    PROCESSES_KERNEL_STACKS_START + PROCESSES_KERNEL_STACKS_SIZE;
+// After the last stack
+pub const PROCESSES_KERNEL_STACKS_USED_BITMAP_ADDRESS: usize = PROCESSES_KERNEL_STACKS_END;
+pub const PROCESSES_KERNEL_STACKS_USED_BITMAP_SIZE: usize = MAX_PROCESSES_KERNEL_STACKS / 8; // 1 bit per stack, 4096 stacks, so 512 bytes
+
+/// Returns the start address of the kernel stack for a process at the given index.
+pub const fn processes_kernel_stack_start(index: usize) -> usize {
+    PROCESSES_KERNEL_STACKS_START + index * PROCESSES_KERNEL_STACKS_SIZE_TOTAL + PAGE_4K
+}
+/// Returns the end address of the kernel stack for a process at the given index.
+/// This is the address after the last mapped page of the stack.
+pub const fn processes_kernel_stack_end(index: usize) -> usize {
+    processes_kernel_stack_start(index) + PROCESSES_KERNEL_STACKS_SIZE_MAPPED
+}
 
 #[allow(dead_code)]
 pub const KB: usize = 0x400;

@@ -62,8 +62,8 @@ A value of `None` means to use the default stack.
 The default stack will be the current stack if the privilege level is the same as the current privilege level, 
 otherwise it will change to the stack specified in the [TSS] based on the target privilege level.
 
-Currently, we only have 1 stack for `KERNEL_RING`, which is at `Process kernel stack` in the [memory layout](../memory/memory_layout.md).
-I.e. this is a stack specific to each process, as this will only be used when transitioning from user to kernel mode, and inside user mode, we will always be inside a process.
+For the `RSP` values, we only use the `KERNEL_RING`, and its being set to the `ProcessKernelStack` of a process before switching to it, i.e. it will change for each process.
+This stack is one of the `Processes kernel stacks` (see [memory layout](../memory/memory_layout.md)).
 
 
 [IDT]: https://wiki.osdev.org/Interrupt_Descriptor_Table

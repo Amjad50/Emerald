@@ -5,9 +5,9 @@ use crate::{
     memory_management::{
         memory_layout::{
             is_aligned, INTR_STACK_BASE, INTR_STACK_EMPTY_SIZE, INTR_STACK_ENTRY_SIZE,
-            INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, PAGE_4K, PROCESS_KERNEL_STACK_END,
+            INTR_STACK_SIZE, INTR_STACK_TOTAL_SIZE, PAGE_4K,
         },
-        virtual_memory_mapper::{self, VirtualMemoryMapEntry},
+        virtual_memory_mapper::{self, ProcessKernelStack, VirtualMemoryMapEntry},
     },
 };
 
@@ -240,9 +240,9 @@ impl GlobalDescriptorManager {
             // subtract 8, since the boundary is not mapped
             self.tss.ist[i] = stack_end_virtual as u64 - 8;
 
-            // A kernel stack for this process
-            // this will be used on transitions from user to kernel
-            self.tss.rsp[KERNEL_RING as usize] = PROCESS_KERNEL_STACK_END as u64 - 8;
+            // // A kernel stack for this process
+            // // this will be used on transitions from user to kernel
+            // self.tss.rsp[KERNEL_RING as usize] = PROCESS_KERNEL_STACK_END as u64 - 8;
         }
 
         let tss_ptr = addr_of!(self.tss) as u64;
@@ -263,6 +263,11 @@ impl GlobalDescriptorManager {
         s.gdt().apply_lgdt(); // apply the GDT
         s.load_kernel_segments();
         s.load_tss();
+    }
+
+    pub fn load_process_kernel_stack(&mut self, stack: &ProcessKernelStack) {
+        // set the process kernel stack in the TSS
+        self.tss.rsp[KERNEL_RING as usize] = stack.end_address() as u64 - 8;
     }
 
     pub fn load_kernel_segments(&self) {

@@ -7,8 +7,7 @@ pub mod elf;
 
 /// # Safety
 /// The `vm` passed must be an exact kernel clone to the current vm
-/// without loading new process specific mappings
-pub unsafe fn load_elf_to_vm(
+pub fn load_elf_to_vm(
     elf: &elf::Elf,
     file: &mut fs::File,
     process_meta: &mut ProcessMetadata,
@@ -21,7 +20,7 @@ pub unsafe fn load_elf_to_vm(
     // switch temporarily so we can map the elf
     // SAFETY: this must be called while the current vm and this new vm must share the same
     //         kernel regions
-    vm.switch_to_this();
+    unsafe { vm.switch_to_this() };
 
     let mut min_address = usize::MAX;
     let mut max_address = 0;
@@ -85,7 +84,7 @@ pub unsafe fn load_elf_to_vm(
     }
 
     // switch back to the old vm
-    old_vm.switch_to_this();
+    unsafe { old_vm.switch_to_this() };
     // we can be interrupted again
     cpu::cpu().pop_cli();
 

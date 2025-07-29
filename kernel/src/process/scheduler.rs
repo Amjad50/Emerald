@@ -275,12 +275,13 @@ pub fn schedule() {
                     top.priority_counter -= decrement;
 
                     scheduler.max_priority = top.priority_counter;
-                    // SAFETY: we are the scheduler and running in kernel space, so it's safe to switch to this vm
-                    // as it has clones of our kernel mappings
+                    // SAFETY: we are the scheduler and running in kernel space that is shared by al processes,
+                    //         so it's safe to switch to this vm as it has clones of our kernel mappings
                     unsafe { inner_proc.switch_to_this_vm() };
                     current_cpu.process_id = inner_proc.id;
                     current_cpu.context = Some(inner_proc.context);
                     current_cpu.scheduling = true;
+                    current_cpu.load_process_kernel_stack(&inner_proc.process_kernel_stack);
                 }
                 scheduler.running_waiting_procs.insert(pid, top);
             }
